@@ -3,18 +3,19 @@ requires = ["flit_core>=3.2"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "python-skeleton"
+name = "muFFTTO"
 description = "Python skeleton project"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [
-    { name = "Lars Pastewka", email = "lars.pastewka@imtek.uni-freiburg.de" }
+    { name = "Lars Pastewka", email = "lars.pastewka@imtek.uni-freiburg.de" },
+    { name = "Martin Ladecky", email = "martin.ladecky@gmail.com" }
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python"
 ]
-requires-python = ">=3.7.0"
+requires-python = ">=3.8.0"
 dynamic = [ "version" ]
 dependencies = [
     "numpy",
@@ -30,6 +31,6 @@ test = [
 ]
 
 [project.urls]
-documentation = "https://imtek-simulation.github.io/python-skeleton/"
-repository = "https://github.com/imtek-simulation/python-skeleton"
-changelog = "https://github.com/imtek-simulation/python-skeleton/blob/master/CHANGELOG.md"
+documentation = "https://imtek-simulation.github.io/muFFTTO/"
+repository = "https://github.com/imtek-simulation/muFFTTO"
+changelog = "https://github.com/imtek-simulation/muFFTTO/blob/master/CHANGELOG.md"
