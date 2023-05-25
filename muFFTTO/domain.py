@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 
 
 class PeriodicUnitCell:
@@ -82,13 +83,30 @@ class Discretization:
 
         for e in range(0, self.nb_element_per_pixel):
             for q in range(0, self.nb_quad_points_per_element):
-                print(e,q)
+                print(e, q)
                 quad_points_coordinates[:, q, e] = np.meshgrid(
                     *[np.arange(0 + self.quad_points_coord[d, q, e], self.domain_size[d], self.pixel_size[d]) for d in
                       range(0, self.domain_dimension)],
                     indexing='ij')
 
         return quad_points_coordinates
+
+    def apply_gradient_operator(self, u, Du):
+        u_at_pixel = np.zeros([*self.cell.unknown_shape, 4])
+# TODO Remove possibility of tilled grid  and change the meaning of number of nodes
+        for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
+            for n in np.arange(self.nb_nodes_per_pixel):
+                # pixel_index=(n,)+pixel_index
+                pixel_index = np.asarray(pixel_index)
+                for corner in np.arange(2**self.domain_dimension):
+                    u_at_pixel[:,corner] = u[(..., *((n,) + tuple(pixel_index+self.offsets[:,corner])))] # TODO add periodic conditions!!!!!
+                    for e in np.arange(self.nb_element_per_pixel):  # iteration over elements
+                        B_for_element = self.B_gradient[:, :, :, e]
+                        for q in np.arange(self.nb_quad_points_per_element):  # iteration over quad points
+                            B_for_quad = B_for_element[:, :, q]
+                            Du[:, q, e, pixel_index] = np.matmul(B_for_quad, u_at_pixel.transpose())
+
+        return Du
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
@@ -122,6 +140,9 @@ class Discretization:
                 self.nb_quad_points_per_element = 1
                 self.nb_element_per_pixel = 2
                 self.nb_nodes_per_pixel = 1  # left bottom corner belong to pixel.
+                # nodal points offsets
+                self.offsets = np.array([[0, 1, 1, 0],
+                                         [0, 0, 1, 1]])
                 """  Structure of B matrix: 
                      B(:,:,q,e) --> is B matrix evaluate gradient at point q in  element e
                      B(:,:,q,e) has size [dim,nb_of_nodes/basis_functions] 
@@ -185,7 +206,9 @@ class Discretization:
                 #  pixel sizes for better readability
                 h_x = self.pixel_size[0]
                 h_y = self.pixel_size[1]
-
+                # nodal points offsets
+                self.offsets = np.array([[0, 1, 1, 0],
+                                         [0, 0, 1, 1]])
                 coord_helper = np.zeros(2)
                 coord_helper[0] = -1. / (np.sqrt(3))
                 coord_helper[1] = +1. / (np.sqrt(3))
@@ -227,10 +250,14 @@ class Discretization:
                 self.quad_points_coord = np.zeros(
                     [self.domain_dimension, self.nb_quad_points_per_element, self.nb_element_per_pixel])
 
-                self.quad_points_coord[:, 0, 0] = [h_x/ 2 +h_x*coord_helper[0] / 2, h_y/ 2+  h_y*coord_helper[0]/ 2]
-                self.quad_points_coord[:, 1, 0] = [h_x/ 2 +h_x*coord_helper[1] / 2, h_y/ 2+  h_y*coord_helper[0]/ 2]
-                self.quad_points_coord[:, 2, 0] = [h_x/ 2 +h_x*coord_helper[1] / 2, h_y/ 2+  h_y*coord_helper[1]/ 2]
-                self.quad_points_coord[:, 3, 0] = [h_x/ 2 +h_x*coord_helper[0] / 2, h_y/ 2+  h_y*coord_helper[1]/ 2]
+                self.quad_points_coord[:, 0, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
+                                                   h_y / 2 + h_y * coord_helper[0] / 2]
+                self.quad_points_coord[:, 1, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
+                                                   h_y / 2 + h_y * coord_helper[0] / 2]
+                self.quad_points_coord[:, 2, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
+                                                   h_y / 2 + h_y * coord_helper[1] / 2]
+                self.quad_points_coord[:, 3, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
+                                                   h_y / 2 + h_y * coord_helper[1] / 2]
 
             case _:
                 raise ValueError('Element type {} is not implemented yet'.format(element_type))
