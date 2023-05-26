@@ -39,7 +39,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
     def test_gradients(self):
         domain_size = [3, 4]
-        problem_type = 'elasticity'
+        problem_type = 'conductivity' #'elasticity'#,'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
 

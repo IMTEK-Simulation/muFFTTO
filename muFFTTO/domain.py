@@ -100,25 +100,37 @@ class Discretization:
         #                        *self.domain_dimension * (2,), self.nb_quad_points_per_element,
         #                        self.nb_elements_per_pixel])
 
-        B_at_pixel = self.B_gradient.reshape(self.domain_dimension,
-                                             self.nb_nodes_per_pixel,
-                                             *self.domain_dimension * (2,),
-                                             self.nb_quad_points_per_element,
-                                             self.nb_elements_per_pixel)
-
-        B_at_pixel = np.swapaxes(B_at_pixel, 2, 3)
+        B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
+                                                     self.nb_nodes_per_pixel,
+                                                     *self.domain_dimension * (2,),
+                                                     self.nb_quad_points_per_element,
+                                                     self.nb_elements_per_pixel)
+        if self.domain_dimension == 2:
+            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+        elif self.domain_dimension == 3:
+            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+            warnings.warn('Swapaxes for 3D is not tested.')
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
             pixel_index = np.asarray(pixel_index)
-            vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
-            print(pixel_index)
-            print(vertices_indices)
-            u_at_pixel = u[(..., *vertices_indices)]
+            # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
+            vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                                 range(0, self.domain_dimension)]
+            pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                             range(0, self.domain_dimension)]
+          #  pixel_indices_np = np.asarray(pixel_indices)
+          ##  test_i=u[0,0] # u[(..., *np.ix_([0, 1], [0, 1]))]
+           # u[(..., *np.ix_(*pixel_indices))]
+            #print(pixel_index)
+           # print(vertices_indices)
+           # print(vertices_indices_2)
+            # n1[:, None], n2[None, :]    u[(..., pixel_indices[0],pixel_indices[1])]
+            u_at_pixel = u[(..., *np.ix_(*pixel_indices))]# u[(..., *pixel_indices)]
             # aaaaa = np.einsum('dnijqe,fnij-->fdqe', self.B_gradient, u_at_pixel)
-            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel, u_at_pixel)  # TODO
+            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
 
             # for n in np.arange(self.nb_nodes_per_pixel):
             #
