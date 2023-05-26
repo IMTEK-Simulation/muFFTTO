@@ -1,5 +1,6 @@
 import numpy as np
 import itertools
+import warnings
 
 
 class PeriodicUnitCell:
@@ -52,9 +53,10 @@ class Discretization:
 
         # pixel properties
         self.pixel_size = self.domain_size / self.nb_of_pixels
-        self.nb_element_per_pixel = None
+        self.nb_elements_per_pixel = None
         self.nb_nodes_per_pixel = None
         self.nodal_points_coordinates = None
+        self.nb_vertices_per_pixel = 2 ** self.domain_dimension
 
         if discretization_type == 'finite_element':
             # finite element properties
@@ -64,9 +66,9 @@ class Discretization:
             self.get_discretization_info(element_type)
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_element,
-                                  self.nb_element_per_pixel, *self.nb_of_pixels]
+                                  self.nb_elements_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_element,
-                                       self.nb_element_per_pixel, *self.nb_of_pixels]
+                                       self.nb_elements_per_pixel, *self.nb_of_pixels]
 
     def get_nodal_points_coordinates(self):
         # TODO[more then one nodal point] add coords for more than one nodal point
@@ -79,9 +81,9 @@ class Discretization:
 
     def get_quad_points_coordinates(self):
         quad_points_coordinates = np.zeros([self.domain_dimension, self.nb_quad_points_per_element,
-                                            self.nb_element_per_pixel, *self.nb_of_pixels])
+                                            self.nb_elements_per_pixel, *self.nb_of_pixels])
 
-        for e in range(0, self.nb_element_per_pixel):
+        for e in range(0, self.nb_elements_per_pixel):
             for q in range(0, self.nb_quad_points_per_element):
                 print(e, q)
                 quad_points_coordinates[:, q, e] = np.meshgrid(
@@ -92,19 +94,41 @@ class Discretization:
         return quad_points_coordinates
 
     def apply_gradient_operator(self, u, Du):
-        u_at_pixel = np.zeros([*self.cell.unknown_shape, 4])
-# TODO Remove possibility of tilled grid  and change the meaning of number of nodes
+        u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
+                               *self.domain_dimension * (2,)])
+        # B_at_pixel = np.zeros([self.domain_dimension, self.nb_nodes_per_pixel,
+        #                        *self.domain_dimension * (2,), self.nb_quad_points_per_element,
+        #                        self.nb_elements_per_pixel])
+
+        B_at_pixel = self.B_gradient.reshape(self.domain_dimension,
+                                             self.nb_nodes_per_pixel,
+                                             *self.domain_dimension * (2,),
+                                             self.nb_quad_points_per_element,
+                                             self.nb_elements_per_pixel)
+
+        B_at_pixel = np.swapaxes(B_at_pixel, 2, 3)
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
+
         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-            for n in np.arange(self.nb_nodes_per_pixel):
-                # pixel_index=(n,)+pixel_index
-                pixel_index = np.asarray(pixel_index)
-                for corner in np.arange(2**self.domain_dimension):
-                    u_at_pixel[:,corner] = u[(..., *((n,) + tuple(pixel_index+self.offsets[:,corner])))] # TODO add periodic conditions!!!!!
-                    for e in np.arange(self.nb_element_per_pixel):  # iteration over elements
-                        B_for_element = self.B_gradient[:, :, :, e]
-                        for q in np.arange(self.nb_quad_points_per_element):  # iteration over quad points
-                            B_for_quad = B_for_element[:, :, q]
-                            Du[:, q, e, pixel_index] = np.matmul(B_for_quad, u_at_pixel.transpose())
+            pixel_index = np.asarray(pixel_index)
+            vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
+            print(pixel_index)
+            print(vertices_indices)
+            u_at_pixel = u[(..., *vertices_indices)]
+            # aaaaa = np.einsum('dnijqe,fnij-->fdqe', self.B_gradient, u_at_pixel)
+            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel, u_at_pixel)  # TODO
+
+            # for n in np.arange(self.nb_nodes_per_pixel):
+            #
+            #     u_at_pixel[:, corner] = u[(..., *((n,) + tuple(pixel_index + self.offsets[:, corner])))]
+            #     # TODO add periodic conditions!!!!!
+            #     for e in np.arange(self.nb_elements_per_pixel):  # iteration over elements
+            #         B_for_element = self.B_gradient[:, :, :, e]
+            #         for q in np.arange(self.nb_quad_points_per_element):  # iteration over quad points
+            #             B_for_quad = B_for_element[:, :, q]
+            #             Du[:, q, e, pixel_index] = np.matmul(B_for_quad, u_at_pixel.transpose())
 
         return Du
 
@@ -130,7 +154,7 @@ class Discretization:
                 if self.domain_dimension != 2:
                     raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))
                 """ Geometry for 2 linear triangular elements in pixel
-                    x_4_______________x_3
+                    x_3_______________x_4
                       |  \     e = 2  |
                       |     \  q = 1  |
                       | e = 1  \      |
@@ -138,7 +162,7 @@ class Discretization:
                     x_1_______________x_2
                 """
                 self.nb_quad_points_per_element = 1
-                self.nb_element_per_pixel = 2
+                self.nb_elements_per_pixel = 2
                 self.nb_nodes_per_pixel = 1  # left bottom corner belong to pixel.
                 # nodal points offsets
                 self.offsets = np.array([[0, 1, 1, 0],
@@ -151,28 +175,29 @@ class Discretization:
                                     ∂φ_1/∂x_2  ∂φ_2/∂x_2  ∂φ_3/∂x_2 ∂φ_4/∂x_2]   at (q)
                 """
                 self.B_gradient = np.zeros([self.domain_dimension, 4,
-                                            self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                                            self.nb_quad_points_per_element, self.nb_elements_per_pixel])
                 h_x = self.pixel_size[0]
                 h_y = self.pixel_size[1]
 
                 self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_elements_per_pixel])
                 self.quad_points_coord[:, 0, 0] = [h_x / 3, h_y / 3]
                 self.quad_points_coord[:, 0, 1] = [h_x * 2 / 3, h_y * 2 / 3]
 
                 # @formatter:off
                 self.B_gradient[:, :, 0, 0] = [[-1 / h_x,   1 / h_x,    0,          0],
-                                               [-1 / h_y,         0,    0,    1 / h_y]]
-                self.B_gradient[:, :, 0, 1] = [[0,         0, 1 / h_x, - 1 / h_x],
-                                               [0, - 1 / h_y, 1 / h_y,         0]]
+                                               [-1 / h_y,         0,    1 / h_y,    0]]
+                self.B_gradient[:, :, 0, 1] = [[0,         0, - 1 / h_x, 1 / h_x],
+                                               [0, - 1 / h_y,         0, 1 / h_y]]
                 # @formatter:on
-                self.quadrature_weights = np.zeros([self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                self.quadrature_weights = np.zeros([self.nb_quad_points_per_element, self.nb_elements_per_pixel])
                 self.quadrature_weights[0, 0] = h_x * h_y / 2
                 self.quadrature_weights[0, 1] = h_x * h_y / 2
 
                 return
             case 'bilinear_rectangle':
-
+                if self.domain_dimension != 2:
+                    raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))
                 """ 
                     %   x_4____e=1__x_3
                     %   |            |
@@ -200,7 +225,7 @@ class Discretization:
                     * ∂N₄ / ∂ξ = - (1 + η) / 4, ∂N₄ / ∂η = + (1 - ξ) / 4
                 """
                 self.nb_quad_points_per_element = 4
-                self.nb_element_per_pixel = 1
+                self.nb_elements_per_pixel = 1
                 self.nb_nodes_per_pixel = 1  # x1 is the only pixel assigned node, x2 belongs to pixel +1
 
                 #  pixel sizes for better readability
@@ -214,7 +239,7 @@ class Discretization:
                 coord_helper[1] = +1. / (np.sqrt(3))
 
                 self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_elements_per_pixel])
 
                 self.quad_points_coord[:, 0, 0] = [coord_helper[0], coord_helper[0]]
                 self.quad_points_coord[:, 1, 0] = [coord_helper[1], coord_helper[0]]
@@ -222,7 +247,7 @@ class Discretization:
                 self.quad_points_coord[:, 3, 0] = [coord_helper[0], coord_helper[1]]
 
                 self.B_gradient = np.zeros([self.domain_dimension, 4,
-                                            self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                                            self.nb_quad_points_per_element, self.nb_elements_per_pixel])
                 # Jacobian matrix of transformation from iso-element to current size
 
                 det_jacobian = h_x * h_y / 4
@@ -241,14 +266,14 @@ class Discretization:
                     self.B_gradient[:,:, qp, 0] = np.matmul(inv_jacobian,self.B_gradient[:,:, qp, 0])
                     # @formatter:on
 
-                self.quadrature_weights = np.zeros([self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                self.quadrature_weights = np.zeros([self.nb_quad_points_per_element, self.nb_elements_per_pixel])
                 self.quadrature_weights[0, 0] = h_x * h_y / 4
                 self.quadrature_weights[1, 0] = h_x * h_y / 4
                 self.quadrature_weights[2, 0] = h_x * h_y / 4
                 self.quadrature_weights[3, 0] = h_x * h_y / 4
                 # we have to recompute positions base on the size of current pixel !!!
                 self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_element_per_pixel])
+                    [self.domain_dimension, self.nb_quad_points_per_element, self.nb_elements_per_pixel])
 
                 self.quad_points_coord[:, 0, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
                                                    h_y / 2 + h_y * coord_helper[0] / 2]

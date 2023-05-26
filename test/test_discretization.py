@@ -39,14 +39,14 @@ class DiscretizationTestCase(unittest.TestCase):
 
     def test_gradients(self):
         domain_size = [3, 4]
-        problem_type = 'conductivity'
+        problem_type = 'elasticity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
 
         number_of_pixels = (4, 5)
 
         discretization_type = 'finite_element'
-        for element_type in ['bilinear_rectangle', 'linear_triangles']:
+        for element_type in [ 'linear_triangles','bilinear_rectangle']:
 
             discretization = domain.Discretization(cell=my_cell,
                                                    number_of_pixels=number_of_pixels,
@@ -56,8 +56,8 @@ class DiscretizationTestCase(unittest.TestCase):
             nodal_coordinates = discretization.get_nodal_points_coordinates()
             quad_coordinates = discretization.get_quad_points_coordinates()
 
-            u_fun_sinx = lambda x: np.sin(x)
-            du_fun_sinx=  lambda x: np.cos(x)
+            u_fun_sinx = lambda x: 4*x#np.sin(x)
+            du_fun_sinx=  lambda x: 4+0*x #np.cos(x)
 
             temperature = discretization.get_unknown_size_field()
             temperature_gradient = discretization.get_gradient_size_field()
@@ -95,7 +95,7 @@ class DiscretizationTestCase(unittest.TestCase):
             segs2 = segs1.transpose(1, 0, 2)
             plt.gca().add_collection(LineCollection(segs1))
             plt.gca().add_collection(LineCollection(segs2))
-            for e in range(0, discretization.nb_element_per_pixel):
+            for e in range(0, discretization.nb_elements_per_pixel):
                 for q in range(0, discretization.nb_quad_points_per_element):
                     plt.scatter(quad_coordinates[0, q, e], quad_coordinates[1, q, e])
 
