@@ -85,7 +85,6 @@ class Discretization:
 
         for e in range(0, self.nb_elements_per_pixel):
             for q in range(0, self.nb_quad_points_per_element):
-                print(e, q)
                 quad_points_coordinates[:, q, e] = np.meshgrid(
                     *[np.arange(0 + self.quad_points_coord[d, q, e], self.domain_size[d], self.pixel_size[d]) for d in
                       range(0, self.domain_dimension)],
@@ -96,9 +95,6 @@ class Discretization:
     def apply_gradient_operator(self, u, Du):
         u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
                                *self.domain_dimension * (2,)])
-        # B_at_pixel = np.zeros([self.domain_dimension, self.nb_nodes_per_pixel,
-        #                        *self.domain_dimension * (2,), self.nb_quad_points_per_element,
-        #                        self.nb_elements_per_pixel])
 
         B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
                                                      self.nb_nodes_per_pixel,
@@ -116,31 +112,16 @@ class Discretization:
 
         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
             pixel_index = np.asarray(pixel_index)
-            # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
-            vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-                                 range(0, self.domain_dimension)]
+            # # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
+            # vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+            #                      range(0, self.domain_dimension)]
+            # indices of nodes, that contribute to gradients in the pixel/voxel
             pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
                              range(0, self.domain_dimension)]
-          #  pixel_indices_np = np.asarray(pixel_indices)
-          ##  test_i=u[0,0] # u[(..., *np.ix_([0, 1], [0, 1]))]
-           # u[(..., *np.ix_(*pixel_indices))]
-            #print(pixel_index)
-           # print(vertices_indices)
-           # print(vertices_indices_2)
-            # n1[:, None], n2[None, :]    u[(..., pixel_indices[0],pixel_indices[1])]
-            u_at_pixel = u[(..., *np.ix_(*pixel_indices))]# u[(..., *pixel_indices)]
-            # aaaaa = np.einsum('dnijqe,fnij-->fdqe', self.B_gradient, u_at_pixel)
-            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
+            # take nodal (dofs) values at the pixel
+            u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
-            # for n in np.arange(self.nb_nodes_per_pixel):
-            #
-            #     u_at_pixel[:, corner] = u[(..., *((n,) + tuple(pixel_index + self.offsets[:, corner])))]
-            #     # TODO add periodic conditions!!!!!
-            #     for e in np.arange(self.nb_elements_per_pixel):  # iteration over elements
-            #         B_for_element = self.B_gradient[:, :, :, e]
-            #         for q in np.arange(self.nb_quad_points_per_element):  # iteration over quad points
-            #             B_for_quad = B_for_element[:, :, q]
-            #             Du[:, q, e, pixel_index] = np.matmul(B_for_quad, u_at_pixel.transpose())
+            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
 
         return Du
 
