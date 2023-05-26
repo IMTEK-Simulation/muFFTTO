@@ -211,14 +211,14 @@ class Discretization:
                 if self.domain_dimension != 2:
                     raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))
                 """ 
-                    %   x_4____e=1__x_3
+                    %   x_3____e=1__x_4
                     %   |            |
                     %   |  q=4   q=3 |
                     %   |            |
                     %   |  q=1   q=2 |
-                    %   x_1_________x_2
+                    %   x_1_________x_2 - --------x
                     *(-1, 1) | (1, 1)
-                    *x       - --------x
+                    *x       
                     * | | |
                     * | | |
                     *-- | --------- | ----->  ξ
@@ -244,7 +244,7 @@ class Discretization:
                 h_x = self.pixel_size[0]
                 h_y = self.pixel_size[1]
                 # nodal points offsets
-                self.offsets = np.array([[0, 1, 1, 0],
+                self.offsets = np.array([[0, 1, 0, 1],
                                          [0, 0, 1, 1]])
                 coord_helper = np.zeros(2)
                 coord_helper[0] = -1. / (np.sqrt(3))
@@ -255,8 +255,8 @@ class Discretization:
 
                 self.quad_points_coord[:, 0, 0] = [coord_helper[0], coord_helper[0]]
                 self.quad_points_coord[:, 1, 0] = [coord_helper[1], coord_helper[0]]
-                self.quad_points_coord[:, 2, 0] = [coord_helper[1], coord_helper[1]]
-                self.quad_points_coord[:, 3, 0] = [coord_helper[0], coord_helper[1]]
+                self.quad_points_coord[:, 2, 0] = [coord_helper[0], coord_helper[1]]
+                self.quad_points_coord[:, 3, 0] = [coord_helper[1], coord_helper[1]]
 
                 self.B_gradient = np.zeros([self.domain_dimension, 4,
                                             self.nb_quad_points_per_element, self.nb_elements_per_pixel])
@@ -272,8 +272,8 @@ class Discretization:
                     xi = x_q[0]
                     eta = x_q[1]
                     # @formatter:off
-                    self.B_gradient[:,:, qp, 0]=np.array( [[(eta - 1) / 4, (-eta + 1) / 4, (eta + 1) / 4, (-eta - 1) / 4],
-                                                                         [(xi  - 1) / 4, (-xi  - 1) / 4, (xi  + 1) / 4, (-xi  + 1) / 4]])
+                    self.B_gradient[:,:, qp, 0]=np.array( [[(eta - 1) / 4, (-eta + 1) / 4, (-eta - 1) / 4, (eta + 1) / 4],
+                                                           [(xi  - 1) / 4, (-xi  - 1) / 4, (-xi  + 1) / 4, (xi  + 1) / 4]])
 
                     self.B_gradient[:,:, qp, 0] = np.matmul(inv_jacobian,self.B_gradient[:,:, qp, 0])
                     # @formatter:on
@@ -291,9 +291,9 @@ class Discretization:
                                                    h_y / 2 + h_y * coord_helper[0] / 2]
                 self.quad_points_coord[:, 1, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                    h_y / 2 + h_y * coord_helper[0] / 2]
-                self.quad_points_coord[:, 2, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
+                self.quad_points_coord[:, 2, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
                                                    h_y / 2 + h_y * coord_helper[1] / 2]
-                self.quad_points_coord[:, 3, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
+                self.quad_points_coord[:, 3, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                    h_y / 2 + h_y * coord_helper[1] / 2]
 
             case _:
