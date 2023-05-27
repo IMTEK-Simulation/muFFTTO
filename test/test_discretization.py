@@ -89,8 +89,8 @@ class DiscretizationTestCase(unittest.TestCase):
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
-    def test_2D_gradients_quadratice_conductivity(self):
-        domain_size = [2 , 3]
+    def test_2D_gradients_bilinear_conductivity(self):
+        domain_size = [4, 5]
         problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
@@ -98,7 +98,7 @@ class DiscretizationTestCase(unittest.TestCase):
         number_of_pixels = (4, 5)
 
         discretization_type = 'finite_element'
-        for element_type in ['bilinear_rectangle','linear_triangles']:
+        for element_type in [  'bilinear_rectangle' ]:
             discretization = domain.Discretization(cell=my_cell,
                                                    number_of_pixels=number_of_pixels,
                                                    discretization_type=discretization_type,
@@ -107,9 +107,9 @@ class DiscretizationTestCase(unittest.TestCase):
             nodal_coordinates = discretization.get_nodal_points_coordinates()
             quad_coordinates = discretization.get_quad_points_coordinates()
 
-            u_fun_4x3y = lambda x, y:  x * y #+ 3 * y ** 2  # np.sin(x)
-            du_fun_4 = lambda x:   x  # np.cos(x)
-            du_fun_3 = lambda y:  y
+            u_fun_4x3y = lambda x, y: x * y  # + 4 * y  # + 3 * y ** 2  # np.sin(x)
+            du_fun_4 = lambda y: y  # np.cos(x)
+            du_fun_3 = lambda x: x
 
             temperature = discretization.get_unknown_size_field()
             temperature_gradient = discretization.get_gradient_size_field()
@@ -117,8 +117,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
-            temperature_gradient_anal[1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, :, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[1, :, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
@@ -138,7 +138,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     temperature_gradient[dir, ..., 0:-1, 0:-1] - temperature_gradient_anal[dir, ..., 0:-1, 0:-1])
                 value = np.allclose(temperature_gradient[dir, ..., 0:-1, 0:-1],
                                     temperature_gradient_anal[dir, ..., 0:-1, 0:-1],
-                                    rtol=1e-12, atol=1e-12)
+                                    rtol=1e-12, atol=1e-14)
                 self.assertTrue(value,
                                 'Gradient is not equal to analytical expression in direction {} for 2D element {} in {} '
                                 ' problem. Difference is {}'.format(

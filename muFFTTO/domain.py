@@ -92,7 +92,7 @@ class Discretization:
 
         return quad_points_coordinates
 
-    def apply_gradient_operator(self, u, Du):
+    def apply_gradient_operator(self, u, gradient_of_u):
         u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
                                *self.domain_dimension * (2,)])
 
@@ -121,9 +121,9 @@ class Discretization:
             # take nodal (dofs) values at the pixel
             u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
-            Du[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
+            gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
 
-        return Du
+        return gradient_of_u
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
@@ -177,7 +177,7 @@ class Discretization:
                 self.quad_points_coord[:, 0, 0] = [h_x / 3, h_y / 3]
                 self.quad_points_coord[:, 0, 1] = [h_x * 2 / 3, h_y * 2 / 3]
 
-                # @formatter:off
+                # @formatter:off   B(dim,number of nodal values,quad point ,element)
                 self.B_gradient[:, :, 0, 0] = [[-1 / h_x,   1 / h_x,    0,          0],
                                                [-1 / h_y,         0,    1 / h_y,    0]]
                 self.B_gradient[:, :, 0, 1] = [[0,         0, - 1 / h_x, 1 / h_x],
