@@ -19,7 +19,7 @@ class PeriodicUnitCell:
 
         if problem_type == 'conductivity':
             self.unknown_shape = np.array([1], dtype=int)  # temperature is a single scalar
-            self.gradient_shape = np.array([self.domain_dimension],
+            self.gradient_shape = np.array([1,self.domain_dimension],
                                            dtype=int)  # temp. gradient is a vector of d components
             self.material_data_shape = np.array([self.domain_dimension, self.domain_dimension],
                                                 dtype=int)  # mat. data matrix a vector of d components
@@ -95,8 +95,8 @@ class Discretization:
         return quad_points_coordinates
 
     def apply_gradient_operator(self, u, gradient_of_u):
-        u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
-                               *self.domain_dimension * (2,)])
+        # u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
+        #                        *self.domain_dimension * (2,)])
 
         B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
                                                      self.nb_nodes_per_pixel,
@@ -125,7 +125,7 @@ class Discretization:
                 u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
                 gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
-                                                               u_at_pixel)  # TODO
+                                                               u_at_pixel)
         elif self.cell.problem_type == 'elasticity':
             for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
                 pixel_index = np.asarray(pixel_index)
@@ -137,11 +137,9 @@ class Discretization:
                 u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
                 gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
-                                                               u_at_pixel)  # TODO
+                                                               u_at_pixel)
 
-
-
-            warnings.warn('Gradient   operator is not tested for  elasticity.')
+            warnings.warn('Gradient operator is not tested for elasticity.')
         return gradient_of_u
 
     def apply_gradient_transposed_operator(self, gradient_of_u_dnxyzqe, div_u_fnxyz):
@@ -162,6 +160,7 @@ class Discretization:
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient transposed operator is not tested for multiple nodal points per pixel.')
+
         if self.cell.problem_type == 'conductivity':
             for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
                 pixel_index = np.asarray(pixel_index)
@@ -171,7 +170,7 @@ class Discretization:
                                  range(0, self.domain_dimension)]
 
                 gradient_of_u_at_pixel_dnijkqe = gradient_of_u_dnxyzqe[(..., *pixel_index)]
-                #print(gradient_of_u_at_pixel_dnijkqe)
+                # print(gradient_of_u_at_pixel_dnijkqe)
                 # take nodal (dofs) values at the pixel
                 # u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
@@ -180,11 +179,8 @@ class Discretization:
                 # div_u_nijk = np.einsum('dnijqe,dqe->nij', B_at_pixel_dnijkqe,
                 #                        gradient_of_u_at_pixel_dnijkqe)
 
-                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,dqe->nij', B_at_pixel_dnijkqe,
-                                                                        gradient_of_u_at_pixel_dnijkqe)
-               # print(div_u_fnxyz[0,0,:,:])
-
-
+                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
+                                                                         gradient_of_u_at_pixel_dnijkqe)
 
         elif self.cell.problem_type == 'elasticity':
             for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
@@ -199,7 +195,7 @@ class Discretization:
                 # take nodal (dofs) values at the pixel
 
                 div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
-                                                                        gradient_of_u_at_pixel_dnijkqe)
+                                                                         gradient_of_u_at_pixel_dnijkqe)
 
         return div_u_fnxyz
 
@@ -226,7 +222,7 @@ class Discretization:
                 'Cell problem type is {}. But temperature gradient  sized field  is returned !!!'.format(
                     self.cell.problem_type))
 
-        return np.zeros([self.domain_dimension, self.nb_quad_points_per_element,
+        return np.zeros([1,self.domain_dimension, self.nb_quad_points_per_element,
                          self.nb_elements_per_pixel, *self.nb_of_pixels])
 
     def get_displacement_sized_field(self):
