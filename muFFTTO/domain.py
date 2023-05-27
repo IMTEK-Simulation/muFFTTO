@@ -127,6 +127,20 @@ class Discretization:
                 gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
                                                                u_at_pixel)  # TODO
         elif self.cell.problem_type == 'elasticity':
+            for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
+                pixel_index = np.asarray(pixel_index)
+
+                # indices of nodes, that contribute to gradients in the pixel/voxel
+                pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                                 range(0, self.domain_dimension)]
+                # take nodal (dofs) values at the pixel
+                u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
+
+                gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
+                                                               u_at_pixel)  # TODO
+
+
+
             warnings.warn('Gradient   operator is not tested for  elasticity.')
         return gradient_of_u
 
@@ -184,7 +198,7 @@ class Discretization:
 
                 # take nodal (dofs) values at the pixel
 
-                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] = np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
+                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
                                                                         gradient_of_u_at_pixel_dnijkqe)
 
         return div_u_fnxyz
