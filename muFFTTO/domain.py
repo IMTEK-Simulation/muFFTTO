@@ -9,7 +9,9 @@ class PeriodicUnitCell:
         self.name = name
         self.domain_dimension = domain_size.__len__()  # dimension of problem
         self.domain_size = np.asarray(domain_size, dtype=float)  # physical dimension of domain 1,2, or 3 Dim
+        self.problem_type = problem_type
         # TODO[Martin] left bottom corner of domain is in [0,0,0] should we change it?
+
         if not problem_type in ['conductivity', 'elasticity']:
             raise ValueError(
                 'Unrecognised physical problem type {}. Choose from ' \
@@ -110,20 +112,82 @@ class Discretization:
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
-        for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-            pixel_index = np.asarray(pixel_index)
-            # # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
-            # vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-            #                      range(0, self.domain_dimension)]
-            # indices of nodes, that contribute to gradients in the pixel/voxel
-            pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-                             range(0, self.domain_dimension)]
-            # take nodal (dofs) values at the pixel
-            u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
+        if self.cell.problem_type == 'conductivity':
+            for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
+                pixel_index = np.asarray(pixel_index)
+                # # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
+                # vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                #                      range(0, self.domain_dimension)]
+                # indices of nodes, that contribute to gradients in the pixel/voxel
+                pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                                 range(0, self.domain_dimension)]
+                # take nodal (dofs) values at the pixel
+                u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
 
-            gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
-
+                gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
+                                                               u_at_pixel)  # TODO
+        elif self.cell.problem_type == 'elasticity':
+            warnings.warn('Gradient   operator is not tested for  elasticity.')
         return gradient_of_u
+
+    def apply_gradient_transposed_operator(self, gradient_of_u_dnxyzqe, div_u_fnxyz):
+        div_u_at_pixel_fnijk = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
+                                         *self.domain_dimension * (2,)])
+
+        B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
+                                                     self.nb_nodes_per_pixel,
+                                                     *self.domain_dimension * (2,),
+                                                     self.nb_quad_points_per_element,
+                                                     self.nb_elements_per_pixel)
+
+        if self.domain_dimension == 2:
+            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+        elif self.domain_dimension == 3:
+            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+            warnings.warn('Swapaxes for 3D is not tested.')
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Gradient transposed operator is not tested for multiple nodal points per pixel.')
+        if self.cell.problem_type == 'conductivity':
+            for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
+                pixel_index = np.asarray(pixel_index)
+
+                # indices of nodes, that contribute to gradients in the pixel/voxel
+                pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                                 range(0, self.domain_dimension)]
+
+                gradient_of_u_at_pixel_dnijkqe = gradient_of_u_dnxyzqe[(..., *pixel_index)]
+                #print(gradient_of_u_at_pixel_dnijkqe)
+                # take nodal (dofs) values at the pixel
+                # u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
+
+                # gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)  # TODO
+
+                # div_u_nijk = np.einsum('dnijqe,dqe->nij', B_at_pixel_dnijkqe,
+                #                        gradient_of_u_at_pixel_dnijkqe)
+
+                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,dqe->nij', B_at_pixel_dnijkqe,
+                                                                        gradient_of_u_at_pixel_dnijkqe)
+               # print(div_u_fnxyz[0,0,:,:])
+
+
+
+        elif self.cell.problem_type == 'elasticity':
+            for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
+                pixel_index = np.asarray(pixel_index)
+
+                # indices of nodes, that contribute to gradients in the pixel/voxel
+                pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
+                                 range(0, self.domain_dimension)]
+
+                gradient_of_u_at_pixel_dnijkqe = gradient_of_u_dnxyzqe[(..., *pixel_index)]
+
+                # take nodal (dofs) values at the pixel
+
+                div_u_fnxyz[(..., *np.ix_(*pixel_indices))] = np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
+                                                                        gradient_of_u_at_pixel_dnijkqe)
+
+        return div_u_fnxyz
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
@@ -132,6 +196,42 @@ class Discretization:
     def get_gradient_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature/displacement
         return np.zeros(self.gradient_size)
+
+    def get_temperature_sized_field(self):
+        # return zero field with the shape of discretized temperature field
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature sized field  is returned !!!'.format(self.cell.problem_type))
+
+        return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+    def get_temperature_gradient_size_field(self):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature gradient  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+
+        return np.zeros([self.domain_dimension, self.nb_quad_points_per_element,
+                         self.nb_elements_per_pixel, *self.nb_of_pixels])
+
+    def get_displacement_sized_field(self):
+        # return zero field with the shape of discretized displacement field
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement sized field  is returned !!!'.format(self.cell.problem_type))
+
+        return np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+    def get_displacement_gradient_size_field(self):
+        # return zero field for  the  (discretized)  gradient of  displacement field / strain
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement gradient  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+
+        return np.zeros([self.domain_dimension, self.domain_dimension, self.nb_quad_points_per_element,
+                         self.nb_elements_per_pixel, *self.nb_of_pixels])
 
     def get_material_data_size_field(self):
         # return zero field for the (discretized) material data
