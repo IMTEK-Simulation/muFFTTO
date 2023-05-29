@@ -144,7 +144,7 @@ class Discretization:
 
     def apply_gradient_operator_rolled_implementation(self, u, gradient_of_u):
         #  TODO Redmove elements, keed only quadrature points
-        # TODO change shape of B array into (d,q,n,i,j,k)
+        # TODO change shape of B array into (d,q,n,i,j,k)  at creation
         B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
                                                      self.nb_nodes_per_pixel,
                                                      *self.domain_dimension * (2,),
@@ -188,26 +188,26 @@ class Discretization:
                                        np.roll(u, [-1, -1], axis=(2, 3)))
 
 
-            gradient_of_u_new = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 0],
+            gradient_of_u_new = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 0],
                                        np.roll(u, [0, 0], axis=(2, 3)))
             print(gradient_of_u_new)
             print(0)
-            gradient_of_u_new1 = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 0],
+            gradient_of_u_new1 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 0],
                                        np.roll(u, [-1, 0], axis=(2, 3)))
             print(gradient_of_u_new1)
             print(1)
-            gradient_of_u_new2 = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 1],
+            gradient_of_u_new2 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 1],
                                        np.roll(u, [0, -1], axis=(2, 3)))
-            gradient_of_u_new3 = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 1],
+            gradient_of_u_new3 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 1],
                                        np.roll(u, [-1, -1], axis=(2, 3)))
 
 
-            for pixel_node in np.ndindex(*np.ones([self.domain_dimension],dtype=int)):
+            for pixel_node in np.ndindex(*np.ones([self.domain_dimension],dtype=int)*2):
                 pixel_node = np.asarray(pixel_node)
                 print(pixel_node)
                 gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
                                            np.roll(u, -1*pixel_node, axis=(2, 3)))
-
+                print(gradient_of_u)
                 print(pixel_node)
             # gradient_of_u += np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)
 
