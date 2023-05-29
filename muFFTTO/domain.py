@@ -144,13 +144,12 @@ class Discretization:
 
     def apply_gradient_operator_rolled_implementation(self, u, gradient_of_u):
         #  TODO Redmove elements, keed only quadrature points
-        # TODO change shape of B array into (d,q,n,i,j,k)  at creation
+        # TODO change shape of B array into (f,d,q,n,i,j,k)  at creation
         B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
                                                      self.nb_nodes_per_pixel,
                                                      *self.domain_dimension * (2,),
                                                      self.nb_quad_points_per_element,
                                                      self.nb_elements_per_pixel)
-
 
         if self.domain_dimension == 2:
             B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
@@ -166,64 +165,12 @@ class Discretization:
         gradient_of_u.fill(0)
 
         if self.cell.problem_type == 'conductivity':
-            n = 0
-            # # for ofset in self.offsets:# asis (u,1,axis=(2)) ,(u,1,axis=(3)), (u,[1, 1],axis=(2,3)
-            # #                                 n  x  y
-            # u00 = np.roll(u, [n, 0, 0], axis=(1, 2, 3))
-            # u10 = np.roll(u, [n, -1, 0], axis=(1, 2, 3))
-            # u01 = np.roll(u, [n, 0, -1], axis=(1, 2, 3))
-            # u11 = np.roll(u, [n, -1, -1], axis=(1, 2, 3))
-            gradient_of_u_old= np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dnijkqe[..., 0, 0, :, :],
-                                        np.roll(u, [0, 0], axis=(2, 3)))
-            print(gradient_of_u_old)
-            print(0)
-
-            gradient_of_u_old1 = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dnijkqe[..., 1, 0, :, :],
-                                       np.roll(u, [-1, 0], axis=(2, 3)))
-            print(gradient_of_u_old1)
-            print(1)
-            gradient_of_u_old2  = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dnijkqe[..., 0, 1, :, :],
-                                       np.roll(u, [0, -1], axis=(2, 3)))
-            gradient_of_u_old3  = np.einsum('dnqe,fnxy->fdqexy', B_at_pixel_dnijkqe[..., 1, 1, :, :],
-                                       np.roll(u, [-1, -1], axis=(2, 3)))
-
-
-            gradient_of_u_new = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 0],
-                                       np.roll(u, [0, 0], axis=(2, 3)))
-            print(gradient_of_u_new)
-            print(0)
-            gradient_of_u_new1 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 0],
-                                       np.roll(u, [-1, 0], axis=(2, 3)))
-            print(gradient_of_u_new1)
-            print(1)
-            gradient_of_u_new2 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 0, 1],
-                                       np.roll(u, [0, -1], axis=(2, 3)))
-            gradient_of_u_new3 = np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[..., 1, 1],
-                                       np.roll(u, [-1, -1], axis=(2, 3)))
-
-
-            for pixel_node in np.ndindex(*np.ones([self.domain_dimension],dtype=int)*2):
+            for pixel_node in np.ndindex(*np.ones([self.domain_dimension], dtype=int) * 2):
                 pixel_node = np.asarray(pixel_node)
-                print(pixel_node)
-                gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
-                                           np.roll(u, -1*pixel_node, axis=(2, 3)))
-                print(gradient_of_u)
-                print(pixel_node)
-            # gradient_of_u += np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe, u_at_pixel)
 
-            # for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-            #     pixel_index = np.asarray(pixel_index)
-            #     # # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
-            #     # vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-            #     #                      range(0, self.domain_dimension)]
-            #     # indices of nodes, that contribute to gradients in the pixel/voxel
-            #     pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-            #                      range(0, self.domain_dimension)]
-            #     # take nodal (dofs) values at the pixel
-            #     u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
-            #
-            #     gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
-            #                                                    u_at_pixel)
+                gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
+                                           np.roll(u, -1 * pixel_node, axis=(2, 3)))
+
         elif self.cell.problem_type == 'elasticity':
 
             warnings.warn('Gradient operator is not tested for elasticity.')

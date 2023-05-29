@@ -66,12 +66,12 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0,0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
-            temperature_gradient_anal[0,1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-            temperature_gradient_rolled=discretization.apply_gradient_operator_rolled_implementation(temperature, temperature_gradient)
-
+            temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
+                                                                                                       temperature_gradient)
 
             # test 1
             average = np.ndarray.sum(temperature_gradient)
@@ -119,14 +119,14 @@ class DiscretizationTestCase(unittest.TestCase):
             du_fun_4 = lambda y: y  # np.cos(x)
             du_fun_3 = lambda x: x
 
-            temperature = discretization.get_unknown_size_field()
-            temperature_gradient = discretization.get_gradient_size_field()
-            temperature_gradient_anal = discretization.get_gradient_size_field()
+            temperature = discretization.get_temperature_sized_field()
+            temperature_gradient = discretization.get_temperature_gradient_size_field()
+            temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, :, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :, :])
-            temperature_gradient_anal[1, :, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
@@ -141,11 +141,11 @@ class DiscretizationTestCase(unittest.TestCase):
 
             for dir in range(domain_size.__len__()):
                 value_1 = np.alltrue(
-                    temperature_gradient[dir, ..., 0:-1, 0:-1] == temperature_gradient_anal[dir, ..., 0:-1, 0:-1])
+                    temperature_gradient[0, dir, ..., 0:-1, 0:-1] == temperature_gradient_anal[0, dir, ..., 0:-1, 0:-1])
                 diff = np.ndarray.sum(
-                    temperature_gradient[dir, ..., 0:-1, 0:-1] - temperature_gradient_anal[dir, ..., 0:-1, 0:-1])
-                value = np.allclose(temperature_gradient[dir, ..., 0:-1, 0:-1],
-                                    temperature_gradient_anal[dir, ..., 0:-1, 0:-1],
+                    temperature_gradient[0, dir, ..., 0:-1, 0:-1] - temperature_gradient_anal[0, dir, ..., 0:-1, 0:-1])
+                value = np.allclose(temperature_gradient[0,dir, ..., 0:-1, 0:-1],
+                                    temperature_gradient_anal[0, dir, ..., 0:-1, 0:-1],
                                     rtol=1e-12, atol=1e-14)
                 self.assertTrue(value,
                                 'Gradient is not equal to analytical expression in direction {} for 2D element {} in {} '
@@ -362,8 +362,7 @@ class DiscretizationTestCase(unittest.TestCase):
             displacement = np.random.rand(*displacement.shape)
 
             strain = discretization.get_displacement_gradient_size_field()
-            strain = discretization.apply_gradient_operator(displacement,strain)
-
+            strain = discretization.apply_gradient_operator(displacement, strain)
 
             material_data = discretization.get_material_data_size_field()
 
@@ -371,12 +370,12 @@ class DiscretizationTestCase(unittest.TestCase):
             i = np.eye(discretization.domain_dimension)
             # identity tensors                                            [grid of tensors]
             I = np.einsum('ij,xy', i, np.ones(discretization.nb_of_pixels))
-            I4 = np.einsum('ijkl,qexy->ijklqexy', np.einsum('il,jk', i, i), np.ones(np.array([1,2,*discretization.nb_of_pixels])))
+            I4 = np.einsum('ijkl,qexy->ijklqexy', np.einsum('il,jk', i, i),
+                           np.ones(np.array([1, 2, *discretization.nb_of_pixels])))
             # I4rt = np.einsum('ijkl,xy->ijklxy', np.einsum('ik,jl', i, i), np.ones(discretization.nb_of_pixels))
             # I4s = (I4 + I4rt) / 2.
             # dyad22 = lambda A2, B2: np.einsum('ijxy  ,klxy  ->ijklxy', A2, B2)
             # II = dyad22(I, I)
-
 
             stress = discretization.apply_material_data(I4, strain)
 
