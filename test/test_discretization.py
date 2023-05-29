@@ -71,6 +71,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
             temperature_gradient_rolled=discretization.apply_gradient_operator_rolled_implementation(temperature, temperature_gradient)
+
+
             # test 1
             average = np.ndarray.sum(temperature_gradient)
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
@@ -86,6 +88,12 @@ class DiscretizationTestCase(unittest.TestCase):
             value = np.allclose(temperature_gradient[..., 0:-1, 0:-1], temperature_gradient_anal[..., 0:-1, 0:-1],
                                 rtol=1e-16, atol=1e-14)
             self.assertTrue(value,
+                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                                element_type, problem_type, diff))
+
+            value_roll = np.alltrue(
+                temperature_gradient == temperature_gradient_rolled)
+            self.assertTrue(value_roll,
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
