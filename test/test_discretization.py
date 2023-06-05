@@ -130,7 +130,7 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :, :])
             temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :, :])
 
-            temperature_gradient  = discretization.apply_gradient_operator(temperature, temperature_gradient)
+            temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
             temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
                                                                                                        temperature_gradient_rolled)
@@ -163,7 +163,8 @@ class DiscretizationTestCase(unittest.TestCase):
                                      rtol=1e-12, atol=1e-14)
 
                 self.assertTrue(value2,
-                                'Rolled Gradient is not equal to looped implementation in direction {} for 2D element {} in {} '
+                                'Rolled gradient is not equal to looped implementation in direction {} for 2D element '
+                                '{} in {}'
                                 ' problem. Difference is {}'.format(
                                     dir,
                                     element_type, problem_type, diff))
@@ -195,6 +196,8 @@ class DiscretizationTestCase(unittest.TestCase):
                 # displacement = discretization.get_unknown_size_field()
                 displacement = discretization.get_displacement_sized_field()
                 displacement_gradient = discretization.get_displacement_gradient_size_field()
+                displacement_gradient_rolled = discretization.get_displacement_gradient_size_field()
+
                 displacement_gradient_anal = discretization.get_displacement_gradient_size_field()
 
                 displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
@@ -204,6 +207,10 @@ class DiscretizationTestCase(unittest.TestCase):
                 displacement_gradient_anal[direction, 1, :, :, :, :] = du_fun_3(quad_coordinates[0, 0])
 
                 displacement_gradient = discretization.apply_gradient_operator(displacement, displacement_gradient)
+
+                displacement_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(
+                    displacement,
+                    displacement_gradient_rolled)
 
                 for dir in range(domain_size.__len__()):
                     # test 1
@@ -226,6 +233,13 @@ class DiscretizationTestCase(unittest.TestCase):
                                         rtol=1e-16, atol=1e-14)
                     self.assertTrue(value,
                                     'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                                        element_type, problem_type, diff))
+
+                    value = np.allclose(displacement_gradient[direction, dir, :, :, 0:-1, 0:-1],
+                                        displacement_gradient_rolled[direction, dir, :, :, 0:-1, 0:-1],
+                                        rtol=1e-16, atol=1e-14)
+                    self.assertTrue(value,
+                                    'Rolled gradient do not coincide with looped gradient {} in {} problem. Difference is {}'.format(
                                         element_type, problem_type, diff))
 
     def test_2D_gradients_transposed_linear_conductivity(self):
@@ -253,6 +267,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature = discretization.get_temperature_sized_field()
             temperature_gradient = discretization.get_temperature_gradient_size_field()
+            temperature_gradient_rolled = discretization.get_temperature_gradient_size_field()
+
             temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
@@ -261,9 +277,17 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
+            temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
+                                                                                                       temperature_gradient_rolled)
 
             div_flux = discretization.get_unknown_size_field()
+            div_flux_rolled = discretization.get_unknown_size_field()
+
             div_flux = discretization.apply_gradient_transposed_operator(temperature_gradient, div_flux)
+            div_flux_rolled = discretization.apply_gradient_transposed_operator_rolled_implementation(
+                temperature_gradient_rolled,
+                div_flux_rolled)
+
             # test 1
             average = np.ndarray.sum(temperature_gradient)
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
@@ -289,6 +313,12 @@ class DiscretizationTestCase(unittest.TestCase):
                                 rtol=1e-16, atol=1e-13)
             self.assertTrue(value,
                             'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
+                                element_type, problem_type, diff))
+
+            value_roll = np.allclose(solution, div_flux_rolled,
+                                rtol=1e-16, atol=1e-13)
+            self.assertTrue(value_roll,
+                            'Rolled gradient transposed do not coincide with looped gradient transposed : 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
     def test_2D_gradients_transposed_linear_elasticity(self):
