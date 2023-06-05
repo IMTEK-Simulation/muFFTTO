@@ -92,70 +92,7 @@ class Discretization:
 
         return quad_points_coordinates
 
-    # def apply_gradient_operator(self, u, gradient_of_u):
-    #     # u_at_pixel = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
-    #     #                        *self.domain_dimension * (2,)])
-    #
-    #     B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-    #                                                  self.nb_nodes_per_pixel,
-    #                                                  *self.domain_dimension * (2,),
-    #                                                  self.nb_quad_points_per_pixel,
-    #                                                  self.nb_elements_per_pixel)
-    #     if self.domain_dimension == 2:
-    #         B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
-    #     elif self.domain_dimension == 3:
-    #         B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
-    #         warnings.warn('Swapaxes for 3D is not tested.')
-    #
-    #     if self.nb_nodes_per_pixel > 1:
-    #         warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
-    #
-    #     if self.cell.problem_type == 'conductivity':
-    #         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-    #             pixel_index = np.asarray(pixel_index)
-    #             # # vertices_indices = [slice(pixel_index[d], pixel_index[d] + 2) for d in range(0, self.domain_dimension)]
-    #             # vertices_indices2 = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-    #             #                      range(0, self.domain_dimension)]
-    #             # indices of nodes, that contribute to gradients in the pixel/voxel
-    #             pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-    #                              range(0, self.domain_dimension)]
-    #             # take nodal (dofs) values at the pixel
-    #             u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
-    #
-    #             gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
-    #                                                            u_at_pixel)
-    #     elif self.cell.problem_type == 'elasticity':
-    #         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-    #             pixel_index = np.asarray(pixel_index)
-    #
-    #             # indices of nodes, that contribute to gradients in the pixel/voxel
-    #             pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-    #                              range(0, self.domain_dimension)]
-    #             # take nodal (dofs) values at the pixel
-    #             u_at_pixel = u[(..., *np.ix_(*pixel_indices))]  # u[(..., *pixel_indices)]
-    #
-    #             gradient_of_u[(..., *pixel_index)] = np.einsum('dnijqe,fnij->fdqe', B_at_pixel_dnijkqe,
-    #                                                            u_at_pixel)
-    #
-    #         warnings.warn('Gradient operator is not tested for elasticity.')
-    #     return gradient_of_u
-
     def apply_gradient_operator(self, u, gradient_of_u):
-        #  TODO Redmove elements, keed only quadrature points
-        # TODO change shape of B array into (f,d,q,n,i,j,k)  at creation
-        # B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-        #                                              self.nb_nodes_per_pixel,
-        #                                              *self.domain_dimension * (2,),
-        #                                              self.nb_quad_points_per_pixel,
-        #                                              self.nb_elements_per_pixel)
-        #
-        # if self.domain_dimension == 2:
-        #     B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
-        # elif self.domain_dimension == 3:
-        #     B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
-        #     warnings.warn('Swapaxes for 3D is not tested.')
-        #
-        # B_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -211,56 +148,6 @@ class Discretization:
                 warnings.warn('Gradient transposed is not tested for 3D.')
 
         return div_u_fnxyz
-
-    # def apply_gradient_transposed_operator(self, gradient_of_u_fdqexyz, div_u_fnxyz):
-    #
-    #
-    #
-    #
-    #     B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-    #                                                  self.nb_nodes_per_pixel,
-    #                                                  *self.domain_dimension * (2,),
-    #                                                  self.nb_quad_points_per_pixel,
-    #                                                  self.nb_elements_per_pixel)
-    #
-    #     if self.domain_dimension == 2:
-    #         B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
-    #     elif self.domain_dimension == 3:
-    #         B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
-    #         warnings.warn('Swapaxes for 3D is not tested.')
-    #
-    #     if self.nb_nodes_per_pixel > 1:
-    #         warnings.warn('Gradient transposed operator is not tested for multiple nodal points per pixel.')
-    #
-    #     if self.cell.problem_type == 'conductivity':
-    #         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-    #             pixel_index = np.asarray(pixel_index)
-    #
-    #             # indices of nodes, that contribute to gradients in the pixel/voxel
-    #             pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-    #                              range(0, self.domain_dimension)]
-    #
-    #             gradient_of_u_at_pixel_dnijkqe = gradient_of_u_fdqexyz[(..., *pixel_index)]
-    #
-    #             div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
-    #                                                                      gradient_of_u_at_pixel_dnijkqe)
-    #
-    #     elif self.cell.problem_type == 'elasticity':
-    #         for pixel_index in np.ndindex(*self.nb_of_pixels):  # iteration over pixels
-    #             pixel_index = np.asarray(pixel_index)
-    #
-    #             # indices of nodes, that contribute to gradients in the pixel/voxel
-    #             pixel_indices = [(pixel_index[d], (pixel_index[d] + 1) % self.nb_of_pixels[d]) for d in
-    #                              range(0, self.domain_dimension)]
-    #
-    #             gradient_of_u_at_pixel_fdqexyz = gradient_of_u_fdqexyz[(..., *pixel_index)]
-    #
-    #             # take nodal (dofs) values at the pixel
-    #
-    #             div_u_fnxyz[(..., *np.ix_(*pixel_indices))] += np.einsum('dnijqe,fdqe->fnij', B_at_pixel_dnijkqe,
-    #                                                                      gradient_of_u_at_pixel_fdqexyz)
-    #
-    #     return div_u_fnxyz
 
     def apply_material_data(self, material_data, gradient_field):
         stress = np.einsum('ijklqxy,ijqxy->klqxy', material_data, gradient_field)
@@ -428,7 +315,7 @@ class Discretization:
                     * ∂N₄ / ∂ξ = - (1 + η) / 4, ∂N₄ / ∂η = + (1 - ξ) / 4
                 """
                 self.nb_quad_points_per_pixel = 4
-                #self.nb_elements_per_pixel = 1
+                # self.nb_elements_per_pixel = 1
                 self.nb_nodes_per_pixel = 1  # x1 is the only pixel assigned node, x2 belongs to pixel +1
 
                 #  pixel sizes for better readability
