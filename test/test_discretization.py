@@ -356,7 +356,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 strain = discretization.apply_gradient_operator(displacement, strain)
 
                 div_flux = discretization.get_displacement_sized_field()
-                div_flux = discretization.apply_gradient_transposed_operator(strain, div_flux)
+                div_flux = discretization.apply_gradient_transposed_operator_rolled_implementation(strain, div_flux)
                 # test 1
                 average = np.ndarray.sum(strain)
                 message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,

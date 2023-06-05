@@ -222,7 +222,7 @@ class Discretization:
                 div_fnxyz_pixel_node = np.einsum('dqen,fdqexyz->fnxyz', B_at_pixel_dqenijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqexyz)
 
-                div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3,4))
+                div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
                 warnings.warn('Gradient transposed is not tested for 3D.')
 
         return div_u_fnxyz
