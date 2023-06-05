@@ -145,19 +145,19 @@ class Discretization:
     def apply_gradient_operator(self, u, gradient_of_u):
         #  TODO Redmove elements, keed only quadrature points
         # TODO change shape of B array into (f,d,q,n,i,j,k)  at creation
-        B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-                                                     self.nb_nodes_per_pixel,
-                                                     *self.domain_dimension * (2,),
-                                                     self.nb_quad_points_per_element,
-                                                     self.nb_elements_per_pixel)
-
-        if self.domain_dimension == 2:
-            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
-        elif self.domain_dimension == 3:
-            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
-            warnings.warn('Swapaxes for 3D is not tested.')
-
-        B_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
+        # B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
+        #                                              self.nb_nodes_per_pixel,
+        #                                              *self.domain_dimension * (2,),
+        #                                              self.nb_quad_points_per_element,
+        #                                              self.nb_elements_per_pixel)
+        #
+        # if self.domain_dimension == 2:
+        #     B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+        # elif self.domain_dimension == 3:
+        #     B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+        #     warnings.warn('Swapaxes for 3D is not tested.')
+        #
+        # B_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -169,7 +169,7 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
+                gradient_of_u += np.einsum('dqen,fnxy->fdqexy', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3)))
 
         elif self.domain_dimension == 3:
@@ -177,26 +177,12 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                gradient_of_u += np.einsum('dqen,fnxyz->fdqexyz', B_at_pixel_dqenijk[(..., *pixel_node)],
+                gradient_of_u += np.einsum('dqen,fnxyz->fdqexyz', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
         return gradient_of_u
 
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqexyz, div_u_fnxyz):
-
-        B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-                                                     self.nb_nodes_per_pixel,
-                                                     *self.domain_dimension * (2,),
-                                                     self.nb_quad_points_per_element,
-                                                     self.nb_elements_per_pixel)
-
-        if self.domain_dimension == 2:
-            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
-        elif self.domain_dimension == 3:
-            B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
-            warnings.warn('Swapaxes for 3D is not tested.')
-
-        B_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -209,7 +195,7 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                div_fnxyz_pixel_node = np.einsum('dqen,fdqexy->fnxy', B_at_pixel_dqenijk[(..., *pixel_node)],
+                div_fnxyz_pixel_node = np.einsum('dqen,fdqexy->fnxy', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqexyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
@@ -219,7 +205,7 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                div_fnxyz_pixel_node = np.einsum('dqen,fdqexyz->fnxyz', B_at_pixel_dqenijk[(..., *pixel_node)],
+                div_fnxyz_pixel_node = np.einsum('dqen,fdqexyz->fnxyz', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqexyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
@@ -402,6 +388,20 @@ class Discretization:
                 self.quadrature_weights[0, 0] = h_x * h_y / 2
                 self.quadrature_weights[0, 1] = h_x * h_y / 2
 
+                B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
+                                                             self.nb_nodes_per_pixel,
+                                                             *self.domain_dimension * (2,),
+                                                             self.nb_quad_points_per_element,
+                                                             self.nb_elements_per_pixel)
+
+                if self.domain_dimension == 2:
+                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+                elif self.domain_dimension == 3:
+                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+                    warnings.warn('Swapaxes for 3D is not tested.')
+
+                self.B_grad_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
+
                 return
             case 'bilinear_rectangle':
                 if self.domain_dimension != 2:
@@ -491,6 +491,22 @@ class Discretization:
                                                    h_y / 2 + h_y * coord_helper[1] / 2]
                 self.quad_points_coord[:, 3, 0] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                    h_y / 2 + h_y * coord_helper[1] / 2]
+
+                B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
+                                                             self.nb_nodes_per_pixel,
+                                                             *self.domain_dimension * (2,),
+                                                             self.nb_quad_points_per_element,
+                                                             self.nb_elements_per_pixel)
+
+                if self.domain_dimension == 2:
+                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+                elif self.domain_dimension == 3:
+                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+                    warnings.warn('Swapaxes for 3D is not tested.')
+
+                self.B_grad_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-2, -1], [1, 2])
+
+
 
             case _:
                 raise ValueError('Element type {} is not implemented yet'.format(element_type))
