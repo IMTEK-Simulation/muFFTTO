@@ -31,11 +31,10 @@ class DiscretizationTestCase(unittest.TestCase):
 
         self.assertTrue(hasattr(discretization, "quadrature_weights"), 'Discretization has no "quadrature_weights" ')
 
-        self.assertTrue(hasattr(discretization, "nb_quad_points_per_element"),
-                        'Discretization has no "nb_quad_points_per_element" ')
+        self.assertTrue(hasattr(discretization, "nb_quad_points_per_pixel"),
+                        'Discretization has no "nb_quad_points_per_pixel" ')
 
-        self.assertTrue(hasattr(discretization, "nb_elements_per_pixel"),
-                        'Discretization has no "nb_element_per_pixel"')
+
         self.assertTrue(hasattr(discretization, "nb_nodes_per_pixel"), 'Discretization has no "nb_nodes_per_pixel" ')
 
     def test_2D_gradients_linear_conductivity(self):
@@ -416,7 +415,7 @@ class DiscretizationTestCase(unittest.TestCase):
             # identity tensors                                            [grid of tensors]
             I = np.einsum('ij,xy', i, np.ones(discretization.nb_of_pixels))
             I4 = np.einsum('ijkl,qxy->ijklqxy', np.einsum('il,jk', i, i),
-                           np.ones(np.array([discretization.nb_quad_points_per_element, *discretization.nb_of_pixels])))
+                           np.ones(np.array([discretization.nb_quad_points_per_pixel, *discretization.nb_of_pixels])))
             # I4rt = np.einsum('ijkl,xy->ijklxy', np.einsum('ik,jl', i, i), np.ones(discretization.nb_of_pixels))
             # I4s = (I4 + I4rt) / 2.
             # dyad22 = lambda A2, B2: np.einsum('ijxy  ,klxy  ->ijklxy', A2, B2)
@@ -466,7 +465,7 @@ class DiscretizationTestCase(unittest.TestCase):
             segs2 = segs1.transpose(1, 0, 2)
             plt.gca().add_collection(LineCollection(segs1))
             plt.gca().add_collection(LineCollection(segs2))
-            for q in range(0, discretization.nb_quad_points_per_element):
+            for q in range(0, discretization.nb_quad_points_per_pixel):
                 plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
 
             plt.show()
