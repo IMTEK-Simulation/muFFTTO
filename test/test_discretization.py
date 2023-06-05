@@ -66,12 +66,12 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
-            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
             temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
-                                                                                                       temperature_gradient)
+                                                                                 temperature_gradient)
 
             # test 1
             average = np.ndarray.sum(temperature_gradient)
@@ -127,13 +127,13 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :, :])
-            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[1, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[0, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
             temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
-                                                                                                       temperature_gradient_rolled)
+                                                                                 temperature_gradient_rolled)
 
             # test 1
             average = np.ndarray.sum(temperature_gradient)
@@ -203,8 +203,8 @@ class DiscretizationTestCase(unittest.TestCase):
                 displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                               nodal_coordinates[1, 0, :, :])
 
-                displacement_gradient_anal[direction, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, 0])
-                displacement_gradient_anal[direction, 1, :, :, :, :] = du_fun_3(quad_coordinates[0, 0])
+                displacement_gradient_anal[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, 0])
+                displacement_gradient_anal[direction, 1, :, :, :] = du_fun_3(quad_coordinates[0, 0])
 
                 displacement_gradient = discretization.apply_gradient_operator(displacement, displacement_gradient)
 
@@ -223,20 +223,20 @@ class DiscretizationTestCase(unittest.TestCase):
                     # test 2
                     # compare values of gradient element wise --- without last-- periodic pixel that differs
                     value_1 = np.alltrue(
-                        displacement_gradient[direction, dir, :, :, 0:-1, 0:-1] == displacement_gradient_anal[direction,
-                                                                                   dir, :, :, 0:-1, 0:-1])
+                        displacement_gradient[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal[direction,
+                                                                                dir, :, 0:-1, 0:-1])
                     diff = np.ndarray.sum(
-                        displacement_gradient[direction, dir, :, :, 0:-1, 0:-1] - displacement_gradient_anal[direction,
-                                                                                  dir, :, :, 0:-1, 0:-1])
-                    value = np.allclose(displacement_gradient[direction, dir, :, :, 0:-1, 0:-1],
-                                        displacement_gradient_anal[direction, dir, :, :, 0:-1, 0:-1],
+                        displacement_gradient[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal[direction,
+                                                                               dir, :, 0:-1, 0:-1])
+                    value = np.allclose(displacement_gradient[direction, dir, :, 0:-1, 0:-1],
+                                        displacement_gradient_anal[direction, dir, :, 0:-1, 0:-1],
                                         rtol=1e-16, atol=1e-14)
                     self.assertTrue(value,
                                     'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                         element_type, problem_type, diff))
 
-                    value = np.allclose(displacement_gradient[direction, dir, :, :, 0:-1, 0:-1],
-                                        displacement_gradient_rolled[direction, dir, :, :, 0:-1, 0:-1],
+                    value = np.allclose(displacement_gradient[direction, dir, :, 0:-1, 0:-1],
+                                        displacement_gradient_rolled[direction, dir, :, 0:-1, 0:-1],
                                         rtol=1e-16, atol=1e-14)
                     self.assertTrue(value,
                                     'Rolled gradient do not coincide with looped gradient {} in {} problem. Difference is {}'.format(
@@ -273,12 +273,12 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
-            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
             temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
-                                                                                                       temperature_gradient_rolled)
+                                                                                 temperature_gradient_rolled)
 
             div_flux = discretization.get_unknown_size_field()
             div_flux_rolled = discretization.get_unknown_size_field()
@@ -316,7 +316,7 @@ class DiscretizationTestCase(unittest.TestCase):
                                 element_type, problem_type, diff))
 
             value_roll = np.allclose(solution, div_flux_rolled,
-                                rtol=1e-16, atol=1e-13)
+                                     rtol=1e-16, atol=1e-13)
             self.assertTrue(value_roll,
                             'Rolled gradient transposed do not coincide with looped gradient transposed : 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
@@ -350,8 +350,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                               nodal_coordinates[1, 0, :, :])
-                strain_anal[direction, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
-                strain_anal[direction, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+                strain_anal[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+                strain_anal[direction, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
                 strain = discretization.apply_gradient_operator(displacement, strain)
 
@@ -415,8 +415,8 @@ class DiscretizationTestCase(unittest.TestCase):
             i = np.eye(discretization.domain_dimension)
             # identity tensors                                            [grid of tensors]
             I = np.einsum('ij,xy', i, np.ones(discretization.nb_of_pixels))
-            I4 = np.einsum('ijkl,qexy->ijklqexy', np.einsum('il,jk', i, i),
-                           np.ones(np.array([1, 2, *discretization.nb_of_pixels])))
+            I4 = np.einsum('ijkl,qxy->ijklqxy', np.einsum('il,jk', i, i),
+                           np.ones(np.array([discretization.nb_quad_points_per_element, *discretization.nb_of_pixels])))
             # I4rt = np.einsum('ijkl,xy->ijklxy', np.einsum('ik,jl', i, i), np.ones(discretization.nb_of_pixels))
             # I4s = (I4 + I4rt) / 2.
             # dyad22 = lambda A2, B2: np.einsum('ijxy  ,klxy  ->ijklxy', A2, B2)
@@ -466,9 +466,8 @@ class DiscretizationTestCase(unittest.TestCase):
             segs2 = segs1.transpose(1, 0, 2)
             plt.gca().add_collection(LineCollection(segs1))
             plt.gca().add_collection(LineCollection(segs2))
-            for e in range(0, discretization.nb_elements_per_pixel):
-                for q in range(0, discretization.nb_quad_points_per_element):
-                    plt.scatter(quad_coordinates[0, q, e], quad_coordinates[1, q, e])
+            for q in range(0, discretization.nb_quad_points_per_element):
+                plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
 
             plt.show()
 
