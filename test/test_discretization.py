@@ -70,7 +70,7 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-            temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
+            temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
                                                                                                        temperature_gradient)
 
             # test 1
@@ -132,7 +132,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
-            temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
+            temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
                                                                                                        temperature_gradient_rolled)
 
             # test 1
@@ -208,7 +208,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 displacement_gradient = discretization.apply_gradient_operator(displacement, displacement_gradient)
 
-                displacement_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(
+                displacement_gradient_rolled = discretization.apply_gradient_operator(
                     displacement,
                     displacement_gradient_rolled)
 
@@ -277,14 +277,14 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-            temperature_gradient_rolled = discretization.apply_gradient_operator_rolled_implementation(temperature,
+            temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
                                                                                                        temperature_gradient_rolled)
 
             div_flux = discretization.get_unknown_size_field()
             div_flux_rolled = discretization.get_unknown_size_field()
 
             div_flux = discretization.apply_gradient_transposed_operator(temperature_gradient, div_flux)
-            div_flux_rolled = discretization.apply_gradient_transposed_operator_rolled_implementation(
+            div_flux_rolled = discretization.apply_gradient_transposed_operator(
                 temperature_gradient_rolled,
                 div_flux_rolled)
 
@@ -356,7 +356,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 strain = discretization.apply_gradient_operator(displacement, strain)
 
                 div_flux = discretization.get_displacement_sized_field()
-                div_flux = discretization.apply_gradient_transposed_operator_rolled_implementation(strain, div_flux)
+                div_flux = discretization.apply_gradient_transposed_operator(strain, div_flux)
                 # test 1
                 average = np.ndarray.sum(strain)
                 message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
