@@ -165,16 +165,53 @@ class Discretization:
         gradient_of_u.fill(0)
 
         if self.cell.problem_type == 'conductivity':
-            for pixel_node in np.ndindex(*np.ones([self.domain_dimension], dtype=int) * 2):
-                pixel_node = np.asarray(pixel_node)
+            if self.domain_dimension == 2: # TODO find the way how to make it dimensionles .. working for 3 as well
+                for pixel_node in np.ndindex(
+                        *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                    pixel_node = np.asarray(pixel_node)
 
-                gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
-                                           np.roll(u, -1 * pixel_node, axis=(2, 3)))
+                    gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
+                                               np.roll(u, -1 * pixel_node, axis=(2, 3)))
+
+
+            elif self.domain_dimension == 3:
+                for pixel_node in np.ndindex(
+                        *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                    pixel_node = np.asarray(pixel_node)
+
+                    gradient_of_u += np.einsum('dqen,fnxyz->fdqexyz', B_at_pixel_dqenijk[(..., *pixel_node)],
+                                               np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
         elif self.cell.problem_type == 'elasticity':
+            if self.domain_dimension == 2:  # TODO find the way how to make it dimensionles .. working for 3 as well
+                for pixel_node in np.ndindex(
+                        *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                    pixel_node = np.asarray(pixel_node)
+
+                    gradient_of_u += np.einsum('dqen,fnxy->fdqexy', B_at_pixel_dqenijk[(..., *pixel_node)],
+                                               np.roll(u, -1 * pixel_node, axis=(2, 3)))
+
+
+            elif self.domain_dimension == 3:
+                for pixel_node in np.ndindex(
+                        *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                    pixel_node = np.asarray(pixel_node)
+
+                    gradient_of_u += np.einsum('dqen,fnxyz->fdqexyz', B_at_pixel_dqenijk[(..., *pixel_node)],
+                                               np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
             warnings.warn('Gradient operator is not tested for elasticity.')
         return gradient_of_u
+
+
+
+
+
+
+
+
+
+
 
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqexyz, div_u_fnxyz):
         div_u_at_pixel_fnijk = np.zeros([*self.cell.unknown_shape, self.nb_nodes_per_pixel,
