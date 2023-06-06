@@ -1,6 +1,6 @@
-import numpy as np
-import itertools
 import warnings
+
+import numpy as np
 
 
 class PeriodicUnitCell:
@@ -104,7 +104,7 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
+                gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3)))
 
         elif self.domain_dimension == 3:
@@ -112,7 +112,7 @@ class Discretization:
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
+                gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
         return gradient_of_u
@@ -124,13 +124,13 @@ class Discretization:
 
         div_u_fnxyz.fill(0)
 
-        if self.domain_dimension == 2:  # TODO find the way how to make it dimensionles .. working for 3 as well
+        if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
 
             for pixel_node in np.ndindex(
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
 
-                div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
+                div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqexyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
@@ -141,7 +141,7 @@ class Discretization:
                 pixel_node = np.asarray(pixel_node)
 
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
-                                                 self.B_grad_at_pixel_dqenijk[(..., *pixel_node)],
+                                                 self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqexyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
@@ -149,9 +149,36 @@ class Discretization:
 
         return div_u_fnxyz
 
-    def apply_material_data(self, material_data, gradient_field):
-        stress = np.einsum('ijklqxy,ijqxy->klqxy', material_data, gradient_field)
+    # def get_einsum_path(self):
+    # TODO make a einsum optimization for repetitive run of Gradeint operator
+    #  self.einsum_path = np.einsum_path('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+    #                                       np.roll(u, -1 * pixel_node, axis=(2, 3)), optimize='optimal')[0]
+    # for iteration in range(500):
+    #     _ = np.einsum('ijk,ilm,njm,nlk,abc->',a,a,a,a,a, optimize=path)
+    #
+    def apply_quadrature_weights_elasticity(self, material_data):
+
+        weighted_material_data = np.einsum('ijklq...,q->ijklq...', material_data, self.quadrature_weights)
+
+        return weighted_material_data
+
+    def apply_quadrature_weights_conductivity(self, material_data):
+
+        weighted_material_data = np.einsum('ijq...,q->ijq...', material_data, self.quadrature_weights)
+
+        return weighted_material_data
+
+    def apply_material_data_elasticity(self, material_data, gradient_field):
+        # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
+        stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
+
         return stress
+
+    def apply_material_data_conductivity(self, material_data, gradient_field):
+        # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
+        flux = np.einsum('ij...,j...->ij...', material_data, gradient_field)
+
+        return flux
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
@@ -271,18 +298,18 @@ class Discretization:
                 self.quadrature_weights[0] = h_x * h_y / 2
                 self.quadrature_weights[1] = h_x * h_y / 2
 
-                B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-                                                             self.nb_nodes_per_pixel,
-                                                             *self.domain_dimension * (2,),
-                                                             self.nb_quad_points_per_pixel)
+                B_at_pixel_dnijkq = self.B_gradient.reshape(self.domain_dimension,
+                                                            self.nb_nodes_per_pixel,
+                                                            *self.domain_dimension * (2,),
+                                                            self.nb_quad_points_per_pixel)
 
                 if self.domain_dimension == 2:
-                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 3)
                 elif self.domain_dimension == 3:
-                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
                     warnings.warn('Swapaxes for 3D is not tested.')
 
-                self.B_grad_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-1], [1])
+                self.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
 
                 return
             case 'bilinear_rectangle':
@@ -373,19 +400,61 @@ class Discretization:
                                                 h_y / 2 + h_y * coord_helper[1] / 2]
                 self.quad_points_coord[:, 3] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                 h_y / 2 + h_y * coord_helper[1] / 2]
-
-                B_at_pixel_dnijkqe = self.B_gradient.reshape(self.domain_dimension,
-                                                             self.nb_nodes_per_pixel,
-                                                             *self.domain_dimension * (2,),
-                                                             self.nb_quad_points_per_pixel)
+                # TODO find proper way of creating B matrices
+                B_at_pixel_dnijkq = self.B_gradient.reshape(self.domain_dimension,
+                                                            self.nb_nodes_per_pixel,
+                                                            *self.domain_dimension * (2,),
+                                                            self.nb_quad_points_per_pixel)
 
                 if self.domain_dimension == 2:
-                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 3)
+                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 3)
                 elif self.domain_dimension == 3:
-                    B_at_pixel_dnijkqe = np.swapaxes(B_at_pixel_dnijkqe, 2, 4)
+                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
                     warnings.warn('Swapaxes for 3D is not tested.')
 
-                self.B_grad_at_pixel_dqenijk = np.moveaxis(B_at_pixel_dnijkqe, [-1], [1])
+                self.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
 
             case _:
                 raise ValueError('Element type {} is not implemented yet'.format(element_type))
+
+
+def compute_Vight_notation(C):
+    # function return Voigt notation of elastic tensor in quad. point
+    if len(C) == 2:
+        C_voigt = np.zeros([3, 3])
+        i_ind = [(0, 0), (1, 1), (0, 1)]
+        for i in np.arange(len(C_voigt[0])):
+            for j in np.arange(len(C_voigt[1])):
+                # print()
+                # print([i_ind[i]+quad_point+i_ind[j]+quad_point])
+                C_voigt[i, j] = C[i_ind[i] + i_ind[j]]
+
+    elif len(C) == 3:
+        C_voigt = np.zeros([6, 6])
+        i_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+        for i in np.arange(len(C_voigt[0])):
+            for j in np.arange(len(C_voigt[1])):
+                C_voigt[i, j] = C[i_ind[i] + i_ind[j]]
+                # print()
+    return C_voigt
+
+
+def get_bulk_and_shear_modulus(E, poison):
+    K = E / (3 * (1 - 2 * poison))
+    G = E / (2 * (1 + poison))
+    return K, G
+
+
+def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
+    shape = np.array(4 * [dim, ])
+    mat = np.zeros(shape)
+    kron = lambda a, b: 1 if a == b else 0
+
+    if kind in 'linear':
+        for alpha, beta, gamma, delta in np.ndindex(*shape):
+            mat[alpha, beta, gamma, delta] = (K * (kron(alpha, beta) * kron(gamma, delta))
+                                              + mu * (kron(alpha, gamma) * kron(beta, delta) +
+                                                      kron(alpha, delta) * kron(beta, gamma) -
+                                                      2 / 3 * kron(alpha, beta) * kron(gamma, delta)))
+            # https://en.wikipedia.org/wiki/Linear_elasticity
+    return mat
