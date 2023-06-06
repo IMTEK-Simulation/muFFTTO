@@ -92,7 +92,9 @@ class Discretization:
 
         return quad_points_coordinates
 
-    def apply_gradient_operator(self, u, gradient_of_u):
+    def apply_gradient_operator(self, u, gradient_of_u=None):
+        if gradient_of_u is None:
+            gradient_of_u = self.get_gradient_size_field()
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -117,7 +119,9 @@ class Discretization:
 
         return gradient_of_u
 
-    def apply_gradient_transposed_operator(self, gradient_of_u_fdqexyz, div_u_fnxyz):
+    def apply_gradient_transposed_operator(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
+        if div_u_fnxyz is None:
+            div_u_fnxyz = self.get_unknown_size_field()
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -131,7 +135,7 @@ class Discretization:
                 pixel_node = np.asarray(pixel_node)
 
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                                 gradient_of_u_fdqexyz)
+                                                 gradient_of_u_fdqxyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
 
@@ -142,7 +146,7 @@ class Discretization:
 
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
                                                  self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                                 gradient_of_u_fdqexyz)
+                                                 gradient_of_u_fdqxyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
                 warnings.warn('Gradient transposed is not tested for 3D.')
@@ -170,9 +174,34 @@ class Discretization:
 
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
-        stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
+        stress = np.einsum('ijklq...,lkq...->ijq...', material_data, gradient_field)
 
         return stress
+
+    def get_system_matrix(self, material_data):
+        # memory hungry process that returns
+        # loop over all possible unit impulses, to get all columns of system matrix
+        unit_impulse = self.get_unknown_size_field()
+        K_system_matrix = np.zeros([np.prod(unit_impulse.shape),np.prod(unit_impulse.shape)])
+        i = 0
+        for impuls_position in np.ndindex(unit_impulse.shape):
+            unit_impulse.fill(0)
+            unit_impulse[impuls_position] = 1
+            K_impuls = self.apply_system_matrix(material_data, displacement_field=unit_impulse)
+
+            K_system_matrix[i] = K_impuls.flatten()
+            i += 1
+
+        return K_system_matrix
+
+    def apply_system_matrix(self, material_data_field, displacement_field):
+
+        strain = self.apply_gradient_operator(displacement_field)
+        material_data_field = self.apply_quadrature_weights_elasticity(material_data_field)
+        stress = self.apply_material_data_elasticity(material_data_field, strain)
+        force = self.apply_gradient_transposed_operator(stress)
+
+        return force
 
     def apply_material_data_conductivity(self, material_data, gradient_field):
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
@@ -220,7 +249,6 @@ class Discretization:
         if not self.cell.problem_type == 'elasticity':
             warnings.warn(
                 'Cell problem type is {}. But displacement sized field  is returned !!!'.format(self.cell.problem_type))
-
         return np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
 
     def get_displacement_gradient_size_field(self):

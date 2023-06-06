@@ -420,8 +420,6 @@ class DiscretizationTestCase(unittest.TestCase):
             # dyad22 = lambda A2, B2: np.einsum('ijxy  ,klxy  ->ijklxy', A2, B2)
             # II = dyad22(I, I)
 
-
-
             K_1, G_1 = domain.get_bulk_and_shear_modulus(E=1, poison=0.0)
             K_2, G_2 = domain.get_bulk_and_shear_modulus(E=10, poison=0.3)
 
@@ -439,7 +437,7 @@ class DiscretizationTestCase(unittest.TestCase):
             stress_mat1 = discretization.apply_material_data_elasticity(material_data_field, strain)
             stress_I4 = discretization.apply_material_data_elasticity(I4, strain)
 
-            wq=discretization.apply_quadrature_weights_elasticity(material_data_field)
+            # wq=discretization.apply_quadrature_weights_elasticity(material_data_field)
             # test 2
             # compare values of gradient element wise --- without last-- periodic pixel that differs
 
@@ -452,8 +450,67 @@ class DiscretizationTestCase(unittest.TestCase):
                             'Stress is not equal to strain after apling I4 tensor: 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
+    def test_2D_conductivity_system_matrix(self):
+        domain_size = [3, 4]
+        problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (4, 5)
+        discretization_type = 'finite_element'
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   number_of_pixels=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
 
+            material_data = discretization.get_material_data_size_field()
 
+            # identity tensor                                               [single tensor]
+            i = np.eye(discretization.domain_dimension)
+            # identity tensors                                            [grid of tensors]
+            I = np.einsum('ij,xy', i, np.ones(discretization.nb_of_pixels))
+            I4 = np.einsum('ijkl,qxy->ijklqxy', np.einsum('il,jk', i, i),
+                           np.ones(np.array([discretization.nb_quad_points_per_pixel, *discretization.nb_of_pixels])))
+            I4rt = np.einsum('ijkl,qxy->ijklqxy', np.einsum('ik,jl', i, i),
+                             np.ones(np.array([discretization.nb_quad_points_per_pixel, *discretization.nb_of_pixels])))
+            I4s = (I4 + I4rt) / 2.
+            # dyad22 = lambda A2, B2: np.einsum('ijxy  ,klxy  ->ijklxy', A2, B2)
+            # II = dyad22(I, I)
+
+            K_1, G_1 = domain.get_bulk_and_shear_modulus(E=1, poison=0.0)
+            K_2, G_2 = domain.get_bulk_and_shear_modulus(E=10, poison=0.3)
+
+            mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                       kind='linear')
+            mat_2 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_2, mu=G_2,
+                                                       kind='linear')
+
+            material_data_field = discretization.get_elasticity_material_data_field()
+            #  material_data_field=mat_1[..., np.newaxis, np.newaxis]
+            material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                              *discretization.nb_of_pixels])))
+            K = discretization.get_system_matrix(material_data_field)
+            E = np.linalg.eigvals(K)
+            strain = discretization.get_displacement_gradient_size_field()
+            # strain = discretization.apply_gradient_operator(displacement, strain)
+
+            stress_I4s = discretization.apply_material_data_elasticity(I4s, strain)
+            stress_mat1 = discretization.apply_material_data_elasticity(material_data_field, strain)
+            stress_I4 = discretization.apply_material_data_elasticity(I4, strain)
+
+            # wq=discretization.apply_quadrature_weights_elasticity(material_data_field)
+            # test 2
+            # compare values of gradient element wise --- without last-- periodic pixel that differs
+
+            value_1 = np.alltrue(stress_I4 == strain)
+            diff = np.ndarray.sum(stress_I4 - strain)
+            value = np.allclose(stress_I4, strain,
+                                rtol=1e-16, atol=1e-13)
+
+            self.assertTrue(value,
+                            'Stress is not equal to strain after apling I4 tensor: 2D element {} in {} problem. Difference is {}'.format(
+                                element_type, problem_type, diff))
 
     def test_plot_2D_mesh(self):
         domain_size = [3, 4]
