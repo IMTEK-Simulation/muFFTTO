@@ -172,17 +172,36 @@ class Discretization:
 
         return weighted_material_data
 
+    def apply_quadrature_weights(self, material_data):
+        if self.cell.problem_type == 'conductivity':
+            return self.apply_quadrature_weights_conductivity(material_data)
+        elif self.cell.problem_type == 'elasticity':
+            return self.apply_quadrature_weights_elasticity(material_data)
+
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
-        stress = np.einsum('ijklq...,lkq...->ijq...', material_data, gradient_field)
+        stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
 
         return stress
+
+    def apply_material_data_conductivity(self, material_data, gradient_field):
+        # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
+        flux = np.einsum('ij...,uj...->ui...', material_data,
+                         gradient_field)  # 'u' just to keep the size of array consistent
+
+        return flux
+
+    def apply_material_data(self, material_data, gradient_field):
+        if self.cell.problem_type == 'conductivity':
+            return self.apply_material_data_conductivity(material_data, gradient_field)
+        elif self.cell.problem_type == 'elasticity':
+            return self.apply_material_data_elasticity(material_data, gradient_field)
 
     def get_system_matrix(self, material_data):
         # memory hungry process that returns
         # loop over all possible unit impulses, to get all columns of system matrix
         unit_impulse = self.get_unknown_size_field()
-        K_system_matrix = np.zeros([np.prod(unit_impulse.shape),np.prod(unit_impulse.shape)])
+        K_system_matrix = np.zeros([np.prod(unit_impulse.shape), np.prod(unit_impulse.shape)])
         i = 0
         for impuls_position in np.ndindex(unit_impulse.shape):
             unit_impulse.fill(0)
@@ -197,17 +216,11 @@ class Discretization:
     def apply_system_matrix(self, material_data_field, displacement_field):
 
         strain = self.apply_gradient_operator(displacement_field)
-        material_data_field = self.apply_quadrature_weights_elasticity(material_data_field)
-        stress = self.apply_material_data_elasticity(material_data_field, strain)
+        material_data_field = self.apply_quadrature_weights(material_data_field)
+        stress = self.apply_material_data(material_data_field, strain)
         force = self.apply_gradient_transposed_operator(stress)
 
         return force
-
-    def apply_material_data_conductivity(self, material_data, gradient_field):
-        # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
-        flux = np.einsum('ij...,j...->ij...', material_data, gradient_field)
-
-        return flux
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
