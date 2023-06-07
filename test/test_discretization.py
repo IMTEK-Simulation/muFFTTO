@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
 from muFFTTO import domain
+from muFFTTO import solvers
 
 
 class DiscretizationTestCase(unittest.TestCase):
@@ -450,9 +451,9 @@ class DiscretizationTestCase(unittest.TestCase):
                             'Stress is not equal to strain after apling I4 tensor: 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
-    def test_2D_conductivity_system_matrix(self):
+    def test_2D_system_matrix_symmetricity(self):
         domain_size = [3, 4]
-        for problem_type in ['conductivity','elasticity' ]:  # 'elasticity'#,'conductivity'
+        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (4, 5)
@@ -464,7 +465,6 @@ class DiscretizationTestCase(unittest.TestCase):
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
-                material_data = discretization.get_material_data_size_field()
                 if problem_type == 'elasticity':
                     K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
@@ -475,17 +475,81 @@ class DiscretizationTestCase(unittest.TestCase):
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
                 elif problem_type == 'conductivity':
-                    mat_1 = np.array([[2, 0.5], [0.5, 3]])
+                    mat_1 = np.array([[1, 0], [0, 1]])
                     material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                  *discretization.nb_of_pixels])))
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
 
                 K = discretization.get_system_matrix(material_data_field)
                 # test symmetricity
 
-                self.assertTrue(np.allclose(K, K.T, rtol=1e-05, atol=1e-08),
+                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
                                 'System matrix is not symmetric: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
+                # test column sum to be 0
+                for i in np.arange(K.shape[0]):
+                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-14),
+                                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
+                                        i,
+                                        element_type, problem_type))
+
+    def test_2D_homogenization_problem_solution(self):
+        domain_size = [3, 4]
+        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
+            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                              problem_type=problem_type)
+            number_of_pixels = (4, 5)
+            discretization_type = 'finite_element'
+
+            for element_type in ['linear_triangles', 'bilinear_rectangle']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       number_of_pixels=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+
+                nodal_coordinates = discretization.get_nodal_points_coordinates()
+                quad_coordinates = discretization.get_quad_points_coordinates()
+
+                u_fun_4x3y = lambda x: 1 * x  # np.sin(x)
+
+                if problem_type == 'elasticity':
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                               kind='linear')
+
+                    material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                                    quad_coordinates[0])
+                    macro_gradient = np.zeros([discretization.domain_dimension, discretization.domain_dimension])
+                    macro_gradient = np.array([[1, 0], [0, 1]])
+
+                elif problem_type == 'conductivity':
+                    mat_1 = np.array([[1, 0], [0, 1]])
+                    material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
+                                                    quad_coordinates[0])
+
+                    macro_gradient = np.zeros([1, discretization.domain_dimension])
+                    macro_gradient[0, :] = np.array([1, 0])
+
+                macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+                rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
+                K = discretization.get_system_matrix(material_data_field)
+
+                K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
+                M_fun = lambda x: 1 * x
+
+                solution = solvers.PCG(K_fun, rhs, x0=None, P=M_fun)
+                # test symmetricity
+
+                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
+                                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
+                                    element_type, problem_type))
+                # test column sum to be 0
+                for i in np.arange(K.shape[0]):
+                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-14),
+                                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
+                                        i,
+                                        element_type, problem_type))
 
     def test_plot_2D_mesh(self):
         domain_size = [3, 4]

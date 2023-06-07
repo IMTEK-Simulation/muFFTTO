@@ -160,6 +160,28 @@ class Discretization:
     # for iteration in range(500):
     #     _ = np.einsum('ijk,ilm,njm,nlk,abc->',a,a,a,a,a, optimize=path)
     #
+    def get_rhs(self, material_data_field, macro_gradient_field):
+        # macro_gradient_field    [f,d,q,x,y,z]
+        # material_data_field [d,d,d,d,q,x,y,z] - elasticity
+        # material_data_field     [d,d,q,x,y,z] - conductivity
+        # rhs                       [f,n,x,y,z]
+        #  rhs=-Dt*A*E
+        material_data_field = self.apply_quadrature_weights(material_data_field)
+        stress = self.apply_material_data(material_data_field, macro_gradient_field)
+        rhs = self.apply_gradient_transposed_operator(stress)
+
+        return -rhs
+
+    def get_macro_gradient_field(self, macro_gradient):
+        # return macro gradient field from single macro gradient vector ---
+        # macro_gradient_field [f,d,q,x,y,z]
+        # macro_gradient       [f,d]
+
+        macro_gradient_field = self.get_gradient_size_field()
+        macro_gradient_field[..., :] = macro_gradient[(...,) + (np.newaxis,) * (macro_gradient_field.ndim - 2)]
+
+        return macro_gradient_field
+
     def apply_quadrature_weights_elasticity(self, material_data):
 
         weighted_material_data = np.einsum('ijklq...,q->ijklq...', material_data, self.quadrature_weights)
