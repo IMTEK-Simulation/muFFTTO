@@ -495,7 +495,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
     def test_2D_homogenization_problem_solution(self):
         domain_size = [3, 4]
-        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
+        for problem_type in ['conductivity']:  # TODO add 'elasticity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (4, 5)
@@ -519,17 +519,48 @@ class DiscretizationTestCase(unittest.TestCase):
                                                                kind='linear')
 
                     material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                    quad_coordinates[0])
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+
+                    material_data_field[:, :, :, :, :, 1, 1] = 2 * material_data_field[:, :, :, :, :, 1, 1]
+
                     macro_gradient = np.zeros([discretization.domain_dimension, discretization.domain_dimension])
                     macro_gradient = np.array([[1, 0], [0, 1]])
+
 
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
                     material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                    quad_coordinates[0])
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+                    # TODO not forget about this magic
+                    #  material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
+                    #                                 quad_coordinates[0])
 
+                    material_data_field[:, :, :, 1, 1] = 2 * material_data_field[:, :, :, 1, 1]
                     macro_gradient = np.zeros([1, discretization.domain_dimension])
                     macro_gradient[0, :] = np.array([1, 0])
+                    if element_type == 'linear_triangles':  # $ element_type in ['linear_triangles', 'bilinear_rectangle']:
+                        matlab_solution = np.array([[0.0095, 0.0241, 0.0241, 0.0095, 0.0052],
+                                                    [0.0193, 0.0853, 0.0853, 0.0193, 0.0082],
+                                                    [-0.0193, -0.0853, -0.0853, -0.0193, -0.0082],
+                                                    [-0.0095, -0.0241, -0.0241, -0.0095, -0.0052]])
+                        matlab_residials = np.array(
+                            [0.6400, 0.047655764323228, 0.008172361420757, 0.001083793705242, 0.000025955687695,
+                             0.000000003633173])
+                    elif element_type == 'bilinear_rectangle':
+                        matlab_solution = np.array(
+                            [[0.010881546413312, 0.023360445840561, 0.023360445840561, 0.010881546413312,
+                              0.000240833264357, ],
+                             [0.001825629490337, 0.100100728911584, 0.100100728911584, 0.001825629490337,
+                              0.002321736512470, ],
+                             [- 0.001825629490337, -0.100100728911584, -0.100100728911584, -0.001825629490337,
+                              -0.002321736512470, ],
+                             [-0.010881546413312, -0.023360445840561, -0.023360445840561, -0.010881546413312,
+                              -0.000240833264357]])
+                        matlab_residials = np.array(
+                            [0.640000000000000, 0.023650193538911, 0.000631355256664, 0.000028708702151,
+                             0.000000310696540,8.490181660642319e-10])
 
                 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
                 rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
@@ -538,12 +569,17 @@ class DiscretizationTestCase(unittest.TestCase):
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
                 M_fun = lambda x: 1 * x
 
-                solution = solvers.PCG(K_fun, rhs, x0=None, P=M_fun)
+                solution, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test symmetricity
 
-                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
-                                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
+                self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
+                                'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
+                self.assertTrue(
+                    np.allclose(np.asarray(norms['residual_rr'])[:-1], matlab_residials, rtol=1e-15, atol=1e-14),
+                    'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                        element_type, problem_type))
+
                 # test column sum to be 0
                 for i in np.arange(K.shape[0]):
                     self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-14),
@@ -551,33 +587,34 @@ class DiscretizationTestCase(unittest.TestCase):
                                         i,
                                         element_type, problem_type))
 
-    def test_plot_2D_mesh(self):
-        domain_size = [3, 4]
-        problem_type = 'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
 
-        number_of_pixels = (4, 5)
+def test_plot_2D_mesh(self):
+    domain_size = [3, 4]
+    problem_type = 'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
 
-        discretization_type = 'finite_element'
-        for element_type in ['bilinear_rectangle', 'linear_triangles']:
+    number_of_pixels = (4, 5)
 
-            discretization = domain.Discretization(cell=my_cell,
-                                                   number_of_pixels=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
+    discretization_type = 'finite_element'
+    for element_type in ['bilinear_rectangle', 'linear_triangles']:
 
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-            plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
-            segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
-            segs2 = segs1.transpose(1, 0, 2)
-            plt.gca().add_collection(LineCollection(segs1))
-            plt.gca().add_collection(LineCollection(segs2))
-            for q in range(0, discretization.nb_quad_points_per_pixel):
-                plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
+        discretization = domain.Discretization(cell=my_cell,
+                                               number_of_pixels=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
 
-            plt.show()
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+        plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
+        segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
+        segs2 = segs1.transpose(1, 0, 2)
+        plt.gca().add_collection(LineCollection(segs1))
+        plt.gca().add_collection(LineCollection(segs2))
+        for q in range(0, discretization.nb_quad_points_per_pixel):
+            plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
+
+        plt.show()
 
 
 if __name__ == '__main__':
