@@ -3,6 +3,8 @@ import warnings
 import numpy as np
 
 
+# import pyfftw  TODO ask about FFTW or numpy FFT
+
 class PeriodicUnitCell:
     def __init__(self, name='my_unit_cell', domain_size=None, problem_type='conductivity'):
 
@@ -231,7 +233,7 @@ class Discretization:
         elif self.cell.problem_type == 'elasticity':
             return self.apply_material_data_elasticity(material_data, gradient_field)
 
-    def get_system_matrix(self, material_data):
+    def get_system_matrix(self, material_data_field):
         # memory hungry process that returns
         # loop over all possible unit impulses, to get all columns of system matrix
         unit_impulse = self.get_unknown_size_field()
@@ -240,12 +242,48 @@ class Discretization:
         for impuls_position in np.ndindex(unit_impulse.shape):
             unit_impulse.fill(0)
             unit_impulse[impuls_position] = 1
-            K_impuls = self.apply_system_matrix(material_data, displacement_field=unit_impulse)
+            K_impulse = self.apply_system_matrix(material_data_field, displacement_field=unit_impulse)
 
-            K_system_matrix[i] = K_impuls.flatten()
+            K_system_matrix[i] = K_impulse.flatten()
             i += 1
 
         return K_system_matrix
+
+    def get_preconditioner(self, reference_material_data_field):
+        # return diagonals of preconditioned matrix in Fourier space
+        # unit_impulse [f,n,x,y,z]
+        # for every type of degree of freedom, there is one diagonal of preconditioner matrix
+        # diagonals_in_Fourier_space [f,n][0,0,0]  # for convenience, we all type of DOFs in first pixel
+
+        unit_impulse = self.get_unknown_size_field()
+        M_system_matrix_diagonals = self.get_unknown_size_field()
+
+        # construct unit impulses responses for all type of DOFs
+        for impulse_position in np.ndindex(unit_impulse.shape[0:2]):  # loop over all types of degree of freedom [f,n]
+            unit_impulse.fill(0)
+            unit_impulse[impulse_position + (0,) * (unit_impulse.ndim - 2)] = 1
+            M_system_matrix_diagonals[impulse_position] = self.apply_system_matrix(reference_material_data_field,
+                                                                                   displacement_field=unit_impulse)
+
+            M_system_matrix_diagonals[impulse_position] = np.fft.fftn(M_system_matrix_diagonals[impulse_position])
+
+        # construct diagonals from unit impulses responses using FFT
+        M_system_matrix_diagonals = np.fft.rfftn(M_system_matrix_diagonals, axes=(0, 1))
+
+        # compute inverse of diagonals
+        for pixel_index in np.ndindex(unit_impulse.shape[2:]):  # TODO find the woy to avoid loops
+            if pixel_index == (0,) * self.domain_dimension:  # avoid  inversion of zeros
+                continue
+            M_system_matrix_diagonals[(..., *pixel_index)] = np.linalg.inv(
+                M_system_matrix_diagonals[(..., *pixel_index)])
+
+        # for impulse_position in np.ndindex(unit_impulse.shape[0:2]):  # TODO find better solution for setting this to 0
+        #     M_system_matrix_diagonals[impulse_position + (0,) * (unit_impulse.ndim - 2)] = 0
+
+        # # (inverse) Fourier transform (for each tensor component in each direction)
+        # fft = lambda x: np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(x), [Nx, Ny, Nz]))
+        # ifft = lambda x: np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(x), [Nx, Ny, Nz]))
+        return M_system_matrix_diagonals  # return diagonals of preconditioner in Fourier space
 
     def apply_system_matrix(self, material_data_field, displacement_field):
 

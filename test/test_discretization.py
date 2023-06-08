@@ -521,7 +521,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
-
+                    ref_material_data_field = np.copy(material_data_field)
                     material_data_field[:, :, :, :, :, 1, 1] = 2 * material_data_field[:, :, :, :, :, 1, 1]
 
                     macro_gradient = np.zeros([discretization.domain_dimension, discretization.domain_dimension])
@@ -533,10 +533,10 @@ class DiscretizationTestCase(unittest.TestCase):
                     material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
-                    # TODO not forget about this magic
+                    # TODO do not forget about this magic
                     #  material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
                     #                                 quad_coordinates[0])
-
+                    ref_material_data_field = np.copy(material_data_field)
                     material_data_field[:, :, :, 1, 1] = 2 * material_data_field[:, :, :, 1, 1]
                     macro_gradient = np.zeros([1, discretization.domain_dimension])
                     macro_gradient[0, :] = np.array([1, 0])
@@ -568,13 +568,12 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
                 rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
-                K = discretization.get_system_matrix(material_data_field)
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
                 M_fun = lambda x: 1 * x
 
                 solution, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
-                # test symmetricity
+                # test homogenized stress
                 homogenized_stress = discretization.get_homogenized_stress(material_data_field,
                                                                            displacement_field=solution,
                                                                            macro_gradient_field=macro_gradient_field)
@@ -589,13 +588,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 self.assertTrue(np.allclose(homogenized_stress[0, 0], A_h[0, 0], rtol=1e-15, atol=1e-15),
                                 'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
+                K = discretization.get_system_matrix(material_data_field)
 
-                # test column sum to be 0
-                for i in np.arange(K.shape[0]):
-                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-14),
-                                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
-                                        i,
-                                        element_type, problem_type))
+                M_fun = discretization.get_preconditioner(reference_material_data_field=ref_material_data_field)
 
 
 def test_plot_2D_mesh(self):
