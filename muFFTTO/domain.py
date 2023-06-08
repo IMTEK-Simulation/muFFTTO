@@ -9,6 +9,8 @@ class PeriodicUnitCell:
         self.name = name
         self.domain_dimension = domain_size.__len__()  # dimension of problem
         self.domain_size = np.asarray(domain_size, dtype=float)  # physical dimension of domain 1,2, or 3 Dim
+        self.domain_volume = np.prod(self.domain_size)
+
         self.problem_type = problem_type
         # TODO[Martin] left bottom corner of domain is in [0,0,0] should we change it?
 
@@ -43,7 +45,6 @@ class Discretization:
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size
-
         # number of pixels/voxels, without periodic nodes
         self.nb_of_pixels = np.asarray(number_of_pixels, dtype=np.intp)
 
@@ -187,6 +188,17 @@ class Discretization:
         weighted_material_data = np.einsum('ijklq...,q->ijklq...', material_data, self.quadrature_weights)
 
         return weighted_material_data
+
+    def get_homogenized_stress(self, material_data_field, displacement_field, macro_gradient_field):
+        # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
+        # A_h * macro_grad = int(A * (macro_grad + micro_grad))  dx / | domain |
+
+        strain = self.apply_gradient_operator(displacement_field)
+        strain = strain + macro_gradient_field
+        material_data_field = self.apply_quadrature_weights(material_data_field)
+        stress = self.apply_material_data(material_data_field, strain)
+        homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
+        return homogenized_stress
 
     def apply_quadrature_weights_conductivity(self, material_data):
 

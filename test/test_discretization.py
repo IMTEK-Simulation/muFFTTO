@@ -540,6 +540,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     material_data_field[:, :, :, 1, 1] = 2 * material_data_field[:, :, :, 1, 1]
                     macro_gradient = np.zeros([1, discretization.domain_dimension])
                     macro_gradient[0, :] = np.array([1, 0])
+
                     if element_type == 'linear_triangles':  # $ element_type in ['linear_triangles', 'bilinear_rectangle']:
                         matlab_solution = np.array([[0.0095, 0.0241, 0.0241, 0.0095, 0.0052],
                                                     [0.0193, 0.0853, 0.0853, 0.0193, 0.0082],
@@ -548,6 +549,8 @@ class DiscretizationTestCase(unittest.TestCase):
                         matlab_residials = np.array(
                             [0.6400, 0.047655764323228, 0.008172361420757, 0.001083793705242, 0.000025955687695,
                              0.000000003633173])
+                        A_h = np.array([[1.038629693814802, 0], [0, 1.038486005762097]])
+
                     elif element_type == 'bilinear_rectangle':
                         matlab_solution = np.array(
                             [[0.010881546413312, 0.023360445840561, 0.023360445840561, 0.010881546413312,
@@ -560,7 +563,8 @@ class DiscretizationTestCase(unittest.TestCase):
                               -0.000240833264357]])
                         matlab_residials = np.array(
                             [0.640000000000000, 0.023650193538911, 0.000631355256664, 0.000028708702151,
-                             0.000000310696540,8.490181660642319e-10])
+                             0.000000310696540, 8.490181660642319e-10])
+                        A_h = np.array([[1.036653236145122, 0], [0, 1.036742177950770]])
 
                 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
                 rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
@@ -571,6 +575,9 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 solution, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test symmetricity
+                homogenized_stress = discretization.get_homogenized_stress(material_data_field,
+                                                                           displacement_field=solution,
+                                                                           macro_gradient_field=macro_gradient_field)
 
                 self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
                                 'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
@@ -579,6 +586,9 @@ class DiscretizationTestCase(unittest.TestCase):
                     np.allclose(np.asarray(norms['residual_rr'])[:-1], matlab_residials, rtol=1e-15, atol=1e-14),
                     'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
+                self.assertTrue(np.allclose(homogenized_stress[0, 0], A_h[0, 0], rtol=1e-15, atol=1e-15),
+                                'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                                    element_type, problem_type))
 
                 # test column sum to be 0
                 for i in np.arange(K.shape[0]):
