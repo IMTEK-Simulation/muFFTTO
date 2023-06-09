@@ -295,7 +295,7 @@ class Discretization:
         force_field = np.fft.fftn(force_field)  # FFT of the input field
         force_field = np.einsum('fn...,fn...->...', preconditioner_Fourier_space, force_field)
         # TODO what if force_field = np.einsum('abfn...,fn...->...', preconditioner_Fourier_space, force_field)
-        force_field = np.real( np.fft.fftn(force_field))
+        force_field = np.real( np.fft.ifftn(force_field))
 
         return force_field
 

@@ -609,6 +609,85 @@ class DiscretizationTestCase(unittest.TestCase):
                     'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
 
+    def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
+        global material_data_field
+        domain_size = [3, 4]
+        for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
+            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                              problem_type=problem_type)
+            number_of_pixels = (4, 5)
+            discretization_type = 'finite_element'
+
+            for element_type in ['linear_triangles', 'bilinear_rectangle']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       number_of_pixels=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+
+                if problem_type == 'elasticity':
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                               kind='linear')
+
+                    material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+
+
+
+                elif problem_type == 'conductivity':
+                    mat_1 = np.array([[1, 0], [0, 1]])
+                    material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+                    if element_type == 'linear_triangles':
+                        matlab_M = np.array(
+                            [[0, 0.771847250933311, 0.294819415733356, 0.294819415733356, 0.771847250933311],
+                             [0.468750000000000, 0.291636466712144, 0.180987606728960, 0.180987606728960,
+                              0.291636466712144],
+                             [0.234375000000000, 0.179783044222786, 0.130572618508737, 0.130572618508737,
+                              0.179783044222786],
+                             [0.468750000000000, 0.291636466712144, 0.180987606728960, 0.180987606728960,
+                              0.291636466712144]])
+
+                    elif element_type == 'bilinear_rectangle':
+                        matlab_M = np.array(
+                            [
+                                [0, 0.771847250933311, 0.294819415733356, 0.294819415733356, 0.771847250933311],
+                                [0.468750000000000, 0.399090648415113, 0.321730395643978, 0.321730395643978,
+                                 0.399090648415113],
+                                [0.234375000000000, 0.269121075316603, 0.354047706546202, 0.354047706546202,
+                                 0.269121075316603],
+                                [0.468750000000000, 0.399090648415113, 0.321730395643978, 0.321730395643978,
+                                 0.399090648415113]])
+
+                        ref_material_data_field = np.copy(material_data_field)
+
+                        x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
+                        x_0-=x_0.mean()
+                        
+                        K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
+
+                        preconditioner = discretization.get_preconditioner(
+                            reference_material_data_field=ref_material_data_field)
+                        # check if M is equal to reference implementation
+                        if problem_type == 'conductivity':
+                            self.assertTrue(np.allclose(preconditioner, matlab_M, rtol=1e-15, atol=1e-15),
+                                            'Preconditioner is not equal to preconditioner from Matlab implementation: 2D element {} in {} problem.'.format(
+                                                element_type, problem_type))
+                        M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
+
+                        f_0 = K_fun(x_0)
+                        x_1 = M_fun(f_0)
+
+                        diff = x_0 - x_1
+                        print(np.sum(diff))
+                        self.assertTrue(np.allclose(x_0, x_1, rtol=1e-15, atol=1e-15),
+                                        'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem.'.format(
+                                            element_type, problem_type))
+
+
     def test_plot_2D_mesh(self):
         domain_size = [3, 4]
         problem_type = 'conductivity'
