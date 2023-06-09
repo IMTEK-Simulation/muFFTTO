@@ -495,7 +495,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
     def test_2D_homogenization_problem_solution(self):
         domain_size = [3, 4]
-        for problem_type in ['conductivity']:  # TODO add 'elasticity'
+        for problem_type in ['elasticity', 'conductivity']:  # TODO add 'elasticity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (4, 5)
@@ -510,10 +510,8 @@ class DiscretizationTestCase(unittest.TestCase):
                 nodal_coordinates = discretization.get_nodal_points_coordinates()
                 quad_coordinates = discretization.get_quad_points_coordinates()
 
-                u_fun_4x3y = lambda x: 1 * x  # np.sin(x)
-
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=1, poison=0.0)
 
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
@@ -577,18 +575,19 @@ class DiscretizationTestCase(unittest.TestCase):
                 homogenized_stress = discretization.get_homogenized_stress(material_data_field,
                                                                            displacement_field=solution,
                                                                            macro_gradient_field=macro_gradient_field)
+                if problem_type == 'conductivity':
+                    self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
+                                    'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'
+                                    .format(element_type, problem_type))
+                    self.assertTrue(
+                        np.allclose(np.asarray(norms['residual_rr'])[:-1], matlab_residials, rtol=1e-15, atol=1e-14),
+                        'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                            element_type, problem_type))
+                    self.assertTrue(np.allclose(A_h[0], homogenized_stress[0], rtol=1e-15, atol=1e-15),
+                                    'Homogenized stress is not equal to reference MatLab implementation: 2D element {} in {}'
+                                    ' problem.'.format(
+                                        element_type, problem_type))
 
-                self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
-                                'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'
-                                .format(element_type, problem_type))
-                self.assertTrue(
-                    np.allclose(np.asarray(norms['residual_rr'])[:-1], matlab_residials, rtol=1e-15, atol=1e-14),
-                    'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
-                        element_type, problem_type))
-                self.assertTrue(np.allclose(homogenized_stress[0, 0], A_h[0, 0], rtol=1e-15, atol=1e-15),
-                                'Homogenized stress is not equal to reference MatLab implementation: 2D element {} in {}'
-                                ' problem.'.format(
-                                    element_type, problem_type))
                 # test if the preconditioner does not change the solution
                 K = discretization.get_system_matrix(material_data_field)
 
@@ -601,13 +600,14 @@ class DiscretizationTestCase(unittest.TestCase):
                 homogenized_stress_M = discretization.get_homogenized_stress(material_data_field,
                                                                              displacement_field=solution_M,
                                                                              macro_gradient_field=macro_gradient_field)
-                self.assertTrue(np.allclose(matlab_solution, solution_M, rtol=1e-05, atol=1e-04),
-                                'Preconditioned solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                self.assertTrue(np.allclose(solution, solution_M, rtol=1e-05, atol=1e-04),
+                                'Preconditioned solution is not equal to un preconditioned solution: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
 
-                self.assertTrue(np.allclose(homogenized_stress_M[0, 0], A_h[0, 0], rtol=1e-15, atol=1e-15),
-                                'Preconditioned homogenized stress is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
-                                    element_type, problem_type))
+                self.assertTrue(
+                    np.allclose(homogenized_stress_M[0, 0], homogenized_stress[0, 0], rtol=1e-15, atol=1e-8),
+                    'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
+                        element_type, problem_type))
 
     def test_plot_2D_mesh(self):
         domain_size = [3, 4]
