@@ -272,7 +272,8 @@ class Discretization:
 
         # compute inverse of diagonals
         for pixel_index in np.ndindex(unit_impulse.shape[2:]):  # TODO find the woy to avoid loops
-            if pixel_index == (0,) * self.domain_dimension:  # avoid  inversion of zeros # TODO find better solution for setting this to 0
+            if pixel_index == (
+                    0,) * self.domain_dimension:  # avoid  inversion of zeros # TODO find better solution for setting this to 0
                 continue
             local_matrix = np.reshape(M_system_matrix_diagonals[(..., *pixel_index)],
                                       (np.prod(unit_impulse.shape[0:2]),
@@ -280,7 +281,7 @@ class Discretization:
             local_matrix = np.linalg.inv(local_matrix)
 
             M_system_matrix_diagonals[(..., *pixel_index)] = np.reshape(local_matrix, (
-                        unit_impulse.shape[0:2] + unit_impulse.shape[0:2]))
+                    unit_impulse.shape[0:2] + unit_impulse.shape[0:2]))
 
             # # (inverse) Fourier transform (for each tensor component in each direction)
             # fft = lambda x: np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(x), [Nx, Ny, Nz]))
@@ -295,7 +296,7 @@ class Discretization:
         force_field = np.fft.fftn(force_field)  # FFT of the input field
         force_field = np.einsum('fn...,fn...->...', preconditioner_Fourier_space, force_field)
         # TODO what if force_field = np.einsum('abfn...,fn...->...', preconditioner_Fourier_space, force_field)
-        force_field = np.real( np.fft.ifftn(force_field))
+        force_field = np.real(np.fft.ifftn(force_field))
 
         return force_field
 
@@ -307,6 +308,15 @@ class Discretization:
         force = self.apply_gradient_transposed_operator(stress)
 
         return force
+
+    def integrate_over_cell(self, stress_field):
+        # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
+
+        # stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
+        #
+        # integral = np.einsum('fdqxy...->fd', stress_field)
+
+        return integrate_field(stress_field, self.quadrature_weights)
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown
@@ -585,3 +595,24 @@ def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
                                                       2 / 3 * kron(alpha, beta) * kron(gamma, delta)))
             # https://en.wikipedia.org/wiki/Linear_elasticity
     return mat
+
+
+def compute_stress_difference(actual_stress, target_stress):
+    stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
+
+    return stress_difference
+
+
+def integrate_field(stress_field, quadrature_weights):
+    stress_field = np.einsum('ijq...,q->ijq...', stress_field, quadrature_weights)
+
+    integral = np.einsum('fdqxy...->fd', stress_field)
+
+    return integral
+
+def integrate_flux_field(flux_field, quadrature_weights):
+    stress_field = np.einsum('ijq...,q->ijq...', flux_field, quadrature_weights)
+
+    integral = np.einsum('fdqxy...->fd', stress_field)
+
+    return integral

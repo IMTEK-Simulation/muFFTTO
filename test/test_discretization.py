@@ -609,6 +609,112 @@ class DiscretizationTestCase(unittest.TestCase):
                     'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
 
+    def test_2D_integral_linearity(self):
+        global material_data_field
+        domain_size = [3, 4]
+        for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
+            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                              problem_type=problem_type)
+            number_of_pixels = (4, 5)
+            discretization_type = 'finite_element'
+
+            for element_type in ['linear_triangles', 'bilinear_rectangle']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       number_of_pixels=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+
+                if problem_type == 'elasticity':
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                               kind='linear')
+
+                    material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+
+                    target_stress = np.array([[1, 0.3], [0.3, 2]])
+                elif problem_type == 'conductivity':
+                    mat_1 = np.array([[1, 0], [0, 1]])
+                    material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
+                    target_stress = np.array([2, 0.5])
+                    target_stress = target_stress[np.newaxis,]
+
+                actual_stress = np.random.rand(*discretization.get_gradient_size_field().shape)
+                actual_stress_int = discretization.integrate_over_cell(actual_stress)
+
+                stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
+                stress_difference_int = discretization.integrate_over_cell(stress_difference)
+
+                integral_target_stress = discretization.cell.domain_volume * target_stress
+
+                self.assertTrue(
+                    np.allclose(stress_difference_int + integral_target_stress, actual_stress_int, rtol=1e-15,
+                                atol=1e-15),
+                    'Integral linearity violation: 2D element {} in {} problem.'.format(
+                        element_type, problem_type))
+
+                # ------------- this is something different ---- implementation for phase field #
+                def compute_df_sigma_du(actual_stress, target_stress, material_data_field):
+                    # df_sigma_du = int( 2*(Sigma-Sigma_target):C:grad_sym )d_Omega # TODO missing grad_sym operator
+                    stress_difference = 2 * actual_stress - target_stress[
+                        (...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
+
+                    stress_difference = discretization.apply_material_data(material_data=material_data_field,
+                                                                           gradient_field=stress_difference)
+
+                    df_sigma_du = discretization.integrate_over_cell(stress_difference)
+                    return df_sigma_du
+
+                df_sigma_du = compute_df_sigma_du(actual_stress, target_stress, material_data_field)
+
+                def compute_df_sigma_drho(actual_stress, target_stress, material_data_field, phase_field): # todo dadasdsadassdasdadasd
+                    # df_sigma_drho = int( 2*(Sigma-Sigma_target):dK/drho )d_Omega
+                    # dK/drho =
+
+                    stress_difference = 2 * actual_stress - target_stress[
+                        (...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
+
+                   # material_data_phase_field=
+
+                    stress_difference = discretization.apply_material_data(material_data=material_data_field,
+                                                                           gradient_field=stress_difference)
+
+
+                    integral = discretization.integrate_over_cell(stress_difference)
+                    return integral
+
+                phase_field = np.random.rand(*discretization.get_temperature_sized_field().shape)
+                def compute_gradient_of_double_well_potential(phase_field, w=1, eta=1):
+                    # Derivative of the double-well potential with respect to phase-field
+                    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
+                    # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
+                    # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
+
+                    # phase field gradient  =( |grad (rgo)|^2 ) *eta
+
+                    integrant = (2 * phase_field(2 * phase_field * phase_field - 3 * phase_field + 1))
+                    # INDRE  derivative = w / eta * 2 * phase * (1 - phase) * (1 - 2 * phase) * lengths[0] * lengths[1] / nb_pixels
+                    integral = discretization.integrate_over_cell(integrant)
+
+                    return integral
+
+                phase_field_potential=compute_gradient_of_double_well_potential(phase_field, w=1, eta=1)
+
+                stress_difference_squared_int = discretization.integrate_over_cell(
+                    stress_difference * stress_difference)
+
+                integral_difference = np.einsum('fdqxy...->fd', stress_difference)
+                integral_actual_stress = np.einsum('fdqxy...->fd', actual_stress)
+
+                integral_target_stress = np.einsum('fdqxy...->fd',
+                                                   target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)])
+                integral_actual_stress_W = np.einsum('ijq...,q->ijq...', actual_stress,
+                                                     discretization.quadrature_weights)
+
     def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
         global material_data_field
         domain_size = [3, 4]
@@ -665,8 +771,8 @@ class DiscretizationTestCase(unittest.TestCase):
                         ref_material_data_field = np.copy(material_data_field)
 
                         x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
-                        x_0-=x_0.mean()
-                        
+                        x_0 -= x_0.mean()
+
                         K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
                         preconditioner = discretization.get_preconditioner(
@@ -686,7 +792,6 @@ class DiscretizationTestCase(unittest.TestCase):
                         self.assertTrue(np.allclose(x_0, x_1, rtol=1e-15, atol=1e-15),
                                         'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem.'.format(
                                             element_type, problem_type))
-
 
     def test_plot_2D_mesh(self):
         domain_size = [3, 4]
