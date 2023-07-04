@@ -96,7 +96,7 @@ class Discretization:
         return quad_points_coordinates
 
     def apply_gradient_operator(self, u, gradient_of_u=None):
-        if gradient_of_u is None:
+        if gradient_of_u is None: ## TODO find the way to identify the size of phase field {scalar} in elasticity
             gradient_of_u = self.get_gradient_size_field()
 
         if self.nb_nodes_per_pixel > 1:
@@ -201,6 +201,15 @@ class Discretization:
         stress = self.apply_material_data(material_data_field, strain)
         homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
         return homogenized_stress
+
+    def get_stress_field(self, material_data_field, displacement_field, macro_gradient_field):
+        # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
+        #  stress = A * (macro_grad + micro_grad))
+
+        strain = self.apply_gradient_operator(displacement_field)
+        strain = strain + macro_gradient_field
+        stress = self.apply_material_data(material_data_field, strain)
+        return stress
 
     def apply_quadrature_weights_conductivity(self, material_data):
 
@@ -331,6 +340,11 @@ class Discretization:
         if not self.cell.problem_type == 'conductivity':
             warnings.warn(
                 'Cell problem type is {}. But temperature sized field  is returned !!!'.format(self.cell.problem_type))
+
+        return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+    def get_scalar_sized_field(self):
+        # return zero field with the shape of one scalar per nodal point
 
         return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
 
@@ -609,6 +623,7 @@ def integrate_field(stress_field, quadrature_weights):
     integral = np.einsum('fdqxy...->fd', stress_field)
 
     return integral
+
 
 def integrate_flux_field(flux_field, quadrature_weights):
     stress_field = np.einsum('ijq...,q->ijq...', flux_field, quadrature_weights)

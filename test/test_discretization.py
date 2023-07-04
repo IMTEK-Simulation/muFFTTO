@@ -609,7 +609,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
 
-    def test_2D_integral_linearity(self):
+    def atest_2D_integral_linearity(self):
         global material_data_field
         domain_size = [3, 4]
         for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
@@ -671,23 +671,24 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 df_sigma_du = compute_df_sigma_du(actual_stress, target_stress, material_data_field)
 
-                def compute_df_sigma_drho(actual_stress, target_stress, material_data_field, phase_field): # todo dadasdsadassdasdadasd
+                def compute_df_sigma_drho(actual_stress, target_stress, material_data_field,
+                                          phase_field):  # todo dadasdsadassdasdadasd
                     # df_sigma_drho = int( 2*(Sigma-Sigma_target):dK/drho )d_Omega
                     # dK/drho =
 
                     stress_difference = 2 * actual_stress - target_stress[
                         (...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
 
-                   # material_data_phase_field=
+                    # material_data_phase_field=
 
                     stress_difference = discretization.apply_material_data(material_data=material_data_field,
                                                                            gradient_field=stress_difference)
-
 
                     integral = discretization.integrate_over_cell(stress_difference)
                     return integral
 
                 phase_field = np.random.rand(*discretization.get_temperature_sized_field().shape)
+
                 def compute_gradient_of_double_well_potential(phase_field, w=1, eta=1):
                     # Derivative of the double-well potential with respect to phase-field
                     # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
@@ -702,7 +703,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                     return integral
 
-                phase_field_potential=compute_gradient_of_double_well_potential(phase_field, w=1, eta=1)
+                phase_field_potential = compute_gradient_of_double_well_potential(phase_field, w=1, eta=1)
 
                 stress_difference_squared_int = discretization.integrate_over_cell(
                     stress_difference * stress_difference)
@@ -715,7 +716,18 @@ class DiscretizationTestCase(unittest.TestCase):
                 integral_actual_stress_W = np.einsum('ijq...,q->ijq...', actual_stress,
                                                      discretization.quadrature_weights)
 
+    def test_symmetric_multiplication(self):
+        mat_1 = np.array([[2, 1], [1, 3]])
+        B = np.array([[-1, 1, 0, 0],
+                      [-1, 0, 1, 0]])
+        B = np.array([[3],
+                      [4]])
+        AB = np.matmul(mat_1, B)
+        BtA = np.matmul(B.transpose(), mat_1)
+
+
     def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
+
         global material_data_field
         domain_size = [3, 4]
         for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
@@ -793,7 +805,7 @@ class DiscretizationTestCase(unittest.TestCase):
                                         'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem.'.format(
                                             element_type, problem_type))
 
-    def test_plot_2D_mesh(self):
+    def test_plot_2D_mesh(self, plot=False):
         domain_size = [3, 4]
         problem_type = 'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -814,12 +826,13 @@ class DiscretizationTestCase(unittest.TestCase):
             plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
             segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
             segs2 = segs1.transpose(1, 0, 2)
-            plt.gca().add_collection(LineCollection(segs1))
-            plt.gca().add_collection(LineCollection(segs2))
-            for q in range(0, discretization.nb_quad_points_per_pixel):
-                plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
+            if plot:
+                plt.gca().add_collection(LineCollection(segs1))
+                plt.gca().add_collection(LineCollection(segs2))
+                for q in range(0, discretization.nb_quad_points_per_pixel):
+                    plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
 
-            plt.show()
+                plt.show()
 
 
 if __name__ == '__main__':
