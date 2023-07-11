@@ -20,7 +20,6 @@ def objective_function_small_strain(discretization, actual_stress, target_stress
     integrant = (phase_field ** 2) * (1 - phase_field) ** 2
     f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
 
-
     phase_field_gradient = discretization.apply_gradient_operator(phase_field)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
 
@@ -28,4 +27,20 @@ def objective_function_small_strain(discretization, actual_stress, target_stress
 
     f_rho = eta * f_rho_grad + f_dw / eta
 
-    return (f_sigma + w * f_rho)/discretization.cell.domain_volume
+    return (f_sigma + w * f_rho) / discretization.cell.domain_volume
+
+
+def solve_adjoint_problem(discretization, material_data_field, flux_difference):
+    # Solve adjoint problem ∂f/∂u=-∂g/∂u
+    # Dt C D lambda = -Dt: C : sigma_diff
+
+    # stress difference potential
+
+    df_du_field = 2 * discretization.get_rhs(material_data_field, flux_difference)  # minus sign is already there
+
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field, displacement_field=x)
+    M_fun = lambda x: 1 * x
+    # solve the system
+    adjoint_field, adjoint_norms = solvers.PCG(K_fun, df_du_field, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+
+    return adjoint_field

@@ -609,7 +609,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
 
-    def atest_2D_integral_linearity(self):
+    def unfinishedtest_2D_integral_linearity(self): #TODO
         global material_data_field
         domain_size = [3, 4]
         for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'

@@ -9,7 +9,7 @@ class PeriodicUnitCell:
     def __init__(self, name='my_unit_cell', domain_size=None, problem_type='conductivity'):
 
         self.name = name
-        self.domain_dimension = domain_size.__len__()  # dimension of problem
+        self.domain_dimension = len(domain_size)  # dimension of problem
         self.domain_size = np.asarray(domain_size, dtype=float)  # physical dimension of domain 1,2, or 3 Dim
         self.domain_volume = np.prod(self.domain_size)
 
@@ -50,11 +50,11 @@ class Discretization:
         # number of pixels/voxels, without periodic nodes
         self.nb_of_pixels = np.asarray(number_of_pixels, dtype=np.intp)
 
-        if not discretization_type in ['finite_element', 'finite_difference', 'Fourier']:
+        if not discretization_type in ['finite_element']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
-        self.discretization_type = discretization_type  # could be finite difference, Fourier or finite elements
+        self.discretization_type = discretization_type  # could be finite elements for now
 
         # pixel properties
         self.pixel_size = self.domain_size / self.nb_of_pixels
@@ -73,6 +73,12 @@ class Discretization:
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
                                        *self.nb_of_pixels]
+            # displacement [f, n, x, y, z]
+            # macro_gradient_field    [f,d,q,x,y,z]
+            # material_data_field [d,d,d,d,q,x,y,z] - elasticity
+            # material_data_field     [d,d,q,x,y,z] - conductivity
+            # rhs                       [f,n,x,y,z]
+            #  rhs=-Dt*A*E
 
     def get_nodal_points_coordinates(self):
         # TODO[more then one nodal point] add coords for more than one nodal point
@@ -95,9 +101,11 @@ class Discretization:
 
         return quad_points_coordinates
 
-    def apply_gradient_operator(self, u, gradient_of_u=None):
+    def apply_gradient_operator(self, u, gradient_of_u=None): ## TODO symmetric gradient operator """"""""""""""""""""
         if gradient_of_u is None: ## TODO find the way to identify the size of phase field {scalar} in elasticity
-            gradient_of_u = self.get_gradient_size_field()
+            gradient_of_u = self.get_gradient_size_field() #
+        # TODO new_shape = tuple(list(u.shape).insert(d, 1))
+      #  new_shape = (d, *u.shape)
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -108,7 +116,7 @@ class Discretization:
             for pixel_node in np.ndindex(
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
-
+                #TODO move if inside the loop
                 gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3)))
 

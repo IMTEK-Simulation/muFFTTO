@@ -46,7 +46,7 @@ class SensitivityTestCase(unittest.TestCase):
                                                                                      eta=1, w=1)
             # objective_stress_analytical = int_omega (actual_stress - target_stress) ^ 2 dx / size Omega
             objective_stress_analytical = discretization.cell.domain_volume * np.sum(
-                np.power((target_stress - actual_stress), 2))/discretization.cell.domain_volume
+                np.power((target_stress - actual_stress), 2)) / discretization.cell.domain_volume
 
             self.assertAlmostEqual(objective_stress, objective_stress_analytical, 13,
                                    'Objective_stress is not equal to analytical expression for 2D element {} in {} problem '.format(
@@ -59,7 +59,7 @@ class SensitivityTestCase(unittest.TestCase):
         # domain size independence is NOT preserved !!!
 
         # setup unit cell
-        domain_size =[15, 100] #[4, 5]  #  [10, 10]
+        domain_size = [15, 100]  # [4, 5]  #  [10, 10]
         problem_type = 'elasticity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
@@ -146,9 +146,9 @@ class SensitivityTestCase(unittest.TestCase):
         # TODO Test phase field gradient correctly
 
         discretization_type = 'finite_element'
-        for element_type in ['linear_triangles']:#, 'bilinear_rectangle'
-            for size in np.arange(2,8):  # for 10 random sizes it has to be equal
-                Nx = 2+ (size + 1)
+        for element_type in ['linear_triangles']:  # , 'bilinear_rectangle'
+            for size in np.arange(2, 8):  # for 10 random sizes it has to be equal
+                Nx = 2 + (size + 1)
                 number_of_pixels = [Nx, 5]
                 print('Nb pixels= {}'.format(number_of_pixels))
                 print('Nb pixels total = {}'.format(np.prod(number_of_pixels)))
@@ -188,29 +188,29 @@ class SensitivityTestCase(unittest.TestCase):
                     element_type,
                     problem_type)
 
-                #print(discretization.integrate_over_cell(phase_field_gradient))
-                #print(discretization.integrate_over_cell(phase_field_gradient ** 2))
-              #   print(discretization.integrate_over_cell(
-              #       (np.prod(discretization.pixel_size) ** 2 * phase_field_gradient) ** 2))
-              #   phase_field_gradient_exp = discretization.get_temperature_gradient_size_field()
-              #   phase_field_gradient_exp[0, 0] = discretization.pixel_size[0] *discretization.pixel_size[0] * phase_field_gradient[0, 0]
-              #   phase_field_gradient_exp[0, 1] = discretization.pixel_size[1] *discretization.pixel_size[1] * phase_field_gradient[0, 1]
-              #
-              # #  print('Pixel size= {}'.format(discretization.pixel_size))
-              #  print('Pixel volume= {}'.format(np.prod(discretization.pixel_size)))
-             #   print('Pixel volume **2 = {}'.format(np.prod(discretization.pixel_size)**2))
+                # print(discretization.integrate_over_cell(phase_field_gradient))
+                # print(discretization.integrate_over_cell(phase_field_gradient ** 2))
+                #   print(discretization.integrate_over_cell(
+                #       (np.prod(discretization.pixel_size) ** 2 * phase_field_gradient) ** 2))
+                #   phase_field_gradient_exp = discretization.get_temperature_gradient_size_field()
+                #   phase_field_gradient_exp[0, 0] = discretization.pixel_size[0] *discretization.pixel_size[0] * phase_field_gradient[0, 0]
+                #   phase_field_gradient_exp[0, 1] = discretization.pixel_size[1] *discretization.pixel_size[1] * phase_field_gradient[0, 1]
+                #
+                # #  print('Pixel size= {}'.format(discretization.pixel_size))
+                #  print('Pixel volume= {}'.format(np.prod(discretization.pixel_size)))
+                #   print('Pixel volume **2 = {}'.format(np.prod(discretization.pixel_size)**2))
 
-               # print(phase_field_gradient_exp[0, 0])
-              #  print('int (( Pixel_volume**2  grad rho)**2)= {}'.format(discretization.integrate_over_cell(phase_field_gradient_exp ** 2)))
+                # print(phase_field_gradient_exp[0, 0])
+                #  print('int (( Pixel_volume**2  grad rho)**2)= {}'.format(discretization.integrate_over_cell(phase_field_gradient_exp ** 2)))
 
                 f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
                 f_rho_grad_scaled = np.sum(discretization.integrate_over_cell(
                     (np.prod(discretization.pixel_size) * phase_field_gradient) ** 2))
-                #if size != 0:
-                 #   value = np.allclose(f_rho_grad, f_rho_grad_last, rtol=1e-16, atol=1e-14)
+                # if size != 0:
+                #   value = np.allclose(f_rho_grad, f_rho_grad_last, rtol=1e-16, atol=1e-14)
                 # print(phase_field_gradient[0, 0, 0,])
                 # print(phase_field_gradient[0, 1, 0])
-             #   print('sum (int ((grad rho)**2))= {}'.format(f_rho_grad))
+                #   print('sum (int ((grad rho)**2))= {}'.format(f_rho_grad))
                 #   print(f_rho_grad_scaled)
                 #  print(f_rho_grad_last)
                 # self.assertTrue(value,
@@ -230,6 +230,87 @@ class SensitivityTestCase(unittest.TestCase):
 
                 scal = np.sum(phase_field * DtwDphase_field)
 
-               #print(scal)
+            # print(scal)
 
-                #print('end loop')
+            # print('end loop')
+
+    def test_df_drho(self):
+        # test   df_drho   partial der of objective function with respect to density
+        # this has 3 parts
+        # df_stress__drho
+        # df_dw__drho
+        #   gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
+        # df_dw__drho
+
+        # setup unit cell
+        domain_size = [3, 4]  # [4, 5]  #  [10, 10]
+        problem_type = 'elasticity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        discretization_type = 'finite_element'
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
+            number_of_pixels = [4, 5]
+            discretization = domain.Discretization(cell=my_cell,
+                                                   number_of_pixels=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
+            K_1, G_1 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+
+            mat_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                       kind='linear')
+
+            material_data_field_0 = np.einsum('ijkl,qxy->ijklqxy', mat_0,
+                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                              *discretization.nb_of_pixels])))
+## TODO we have to evaluate phase field in quad points
+            # 1 Set random phase field
+            phase_field = np.random.rand(*discretization.get_temperature_sized_field().shape)
+
+            # material data respecting phase distribution
+
+            material_data_field_rho=material_data_field_0*phase_field
+#np.einsum('ijkl,kl->ij', mat_0,np.array([[1, 0], [0, 0]]))
+
+            target_stress = np.array([[2, 0], [0, 0.5]])
+            target_stress=(target_stress+target_stress.transpose())/2
+
+            macro_strain = np.array([[1, 0], [0, 0]])
+
+            ##### solve equilibrium constrain
+            # set up system
+            macro_strain_field = discretization.get_macro_gradient_field(macro_strain)
+            rhs = discretization.get_rhs(material_data_field_rho, macro_strain_field)
+
+            K_fun = lambda x: discretization.apply_system_matrix(material_data_field_rho, x)
+            M_fun = lambda x: 1 * x
+            # solve the system
+            solution_i, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+
+            # get homogenized flux
+            homogenized_stress = discretization.get_homogenized_stress(material_data_field_rho,
+                                                                     displacement_field=solution_i,
+                                                                     macro_gradient_field=macro_strain_field)
+            actual_stress = discretization.get_stress_field(material_data_field_rho,
+                                                          displacement_field=solution_i,
+                                                          macro_gradient_field=macro_strain_field)
+
+
+            actual_stress = target_stress
+            actual_stress_field = np.zeros(discretization.gradient_size)
+            actual_stress_field[..., :] = actual_stress[(...,) + (np.newaxis,) * (actual_stress_field.ndim - 2)]
+
+            # set phase_field constant such that gradient is zero
+
+            phase_field = phase_field = np.random.rand(*discretization.get_unknown_size_field().shape)
+
+
+
+            of= topology_optimization.objective_function_small_strain(discretization,
+                                                                                    actual_stress=actual_stress_field,
+                                                                                    target_stress=target_stress,
+                                                                                    phase_field=phase_field,
+                                                                                    eta=1, w=1)
+
+            # dfdw_drho_field = 2 * phase_field * (
+            #         2 * phase_field * phase_field - 3 * phase_field + 1)  # TODO check which one is valid
+            # int_dfdw_drho = ((dfdw_drho_field) / np.prod(dfdw_drho_field.shape)) * discretization.cell.domain_volume
