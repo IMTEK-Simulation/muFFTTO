@@ -19,7 +19,7 @@ class PeriodicUnitCell:
         if not problem_type in ['conductivity', 'elasticity']:
             raise ValueError(
                 'Unrecognised physical problem type {}. Choose from ' \
-                ' : conductivity, or elasticity'.format(problem_type))
+                ': conductivity, or elasticity'.format(problem_type))
 
         if problem_type == 'conductivity':
             self.unknown_shape = np.array([1], dtype=int)  # temperature is a single scalar
@@ -54,7 +54,7 @@ class Discretization:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
-        self.discretization_type = discretization_type  # could be finite elements for now
+        self.discretization_type = discretization_type  # only finite elements for now
 
         # pixel properties
         self.pixel_size = self.domain_size / self.nb_of_pixels
@@ -73,11 +73,11 @@ class Discretization:
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
                                        *self.nb_of_pixels]
-            # displacement [f, n, x, y, z]
-            # macro_gradient_field    [f,d,q,x,y,z]
-            # material_data_field [d,d,d,d,q,x,y,z] - elasticity
-            # material_data_field     [d,d,q,x,y,z] - conductivity
+            # displacement              [f,n,x,y,z]
             # rhs                       [f,n,x,y,z]
+            # macro_gradient_field    [f,d,q,x,y,z]
+            # material_data_field     [d,d,q,x,y,z] - conductivity
+            # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
 
     def get_nodal_points_coordinates(self):
@@ -86,13 +86,13 @@ class Discretization:
         nodal_points_coordinates[:, 0] = np.meshgrid(
             *[np.arange(0, self.domain_size[d], self.pixel_size[d]) for d in range(0, self.domain_dimension)],
             indexing='ij')
-
         return nodal_points_coordinates
 
+    # @property
     def get_quad_points_coordinates(self):
+        # creates a field with [x,y,z] coordinates of all quadrature points
         quad_points_coordinates = np.zeros([self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
 
-        #      for e in range(0, self.nb_elements_per_pixel):
         for q in range(0, self.nb_quad_points_per_pixel):
             quad_points_coordinates[:, q] = np.meshgrid(
                 *[np.arange(0 + self.quad_points_coord[d, q], self.domain_size[d], self.pixel_size[d]) for d in
@@ -101,59 +101,58 @@ class Discretization:
 
         return quad_points_coordinates
 
-    def apply_gradient_operator(self, u, gradient_of_u=None): ## TODO symmetric gradient operator """"""""""""""""""""
-        if gradient_of_u is None: ## TODO find the way to identify the size of phase field {scalar} in elasticity
-            gradient_of_u = self.get_gradient_size_field() #
-        # TODO new_shape = tuple(list(u.shape).insert(d, 1))
-      #  new_shape = (d, *u.shape)
+    def apply_gradient_operator(self, u, gradient_of_u=None):  ## TODO symmetric gradient operator """"""""""""""""""""
+        if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
+            #   u_field size :      [f,n,x,y,z]
+            #   u_gradient_field    [f,d,q,x,y,z]
+            gradient_of_u_shape = list(u.shape)  # [f,n,x,y,z]
+            gradient_of_u_shape.insert(1, self.domain_dimension)  # [f,d,n,x,y,z]
+            gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
+            gradient_of_u = np.zeros(gradient_of_u_shape)  # create gradient field
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
-        gradient_of_u.fill(0)
+        gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
 
-        if self.domain_dimension == 2:  # TODO find the way how to make it dimensionles .. working for 3 as well
-            for pixel_node in np.ndindex(
-                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-                pixel_node = np.asarray(pixel_node)
-                #TODO move if inside the loop
+        for pixel_node in np.ndindex(
+                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+            pixel_node = np.asarray(pixel_node)
+            if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless .. working for 3 as well
                 gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3)))
 
-        elif self.domain_dimension == 3:
-            for pixel_node in np.ndindex(
-                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-                pixel_node = np.asarray(pixel_node)
-
+            elif self.domain_dimension == 3:
                 gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
         return gradient_of_u
 
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
-        if div_u_fnxyz is None:
-            div_u_fnxyz = self.get_unknown_size_field()
+        if div_u_fnxyz is None:  # if div_u_fnxyz is not specified, determine the size
+            #   gradient_of_u_fdqxyz :   [f,d,q,x,y,z]
+            #   div_u_fnxyz size :      [f,n,x,y,z]
+            div_u_fnxyz_shape = list(gradient_of_u_fdqxyz.shape)  # [f,d,q,x,y,z]
+            div_u_fnxyz_shape.pop(1)  # [f,q,x,y,z]
+            div_u_fnxyz_shape[1] = self.nb_nodes_per_pixel  # [f,n,x,y,z]
+            div_u_fnxyz = np.zeros(div_u_fnxyz_shape)  # create div field
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
         div_u_fnxyz.fill(0)
 
-        if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
-
-            for pixel_node in np.ndindex(
-                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-                pixel_node = np.asarray(pixel_node)
+        for pixel_node in np.ndindex(
+                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+            pixel_node = np.asarray(pixel_node)
+            if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
 
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqxyz)
 
                 div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
 
-        elif self.domain_dimension == 3:
-            for pixel_node in np.ndindex(
-                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-                pixel_node = np.asarray(pixel_node)
+            elif self.domain_dimension == 3:
 
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
                                                  self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],

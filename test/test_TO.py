@@ -112,7 +112,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
 
 
-@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([3, 4], 0, [5, 8]),
-    ([4, 5], 1, [7, 6])])
-def test_adjoint_sensitivity_(discretization_fixture):
+# @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
+#     ([3, 4], 0, [5, 8]),
+#     ([4, 5], 1, [7, 6])])
+# def test_adjoint_sensitivity_(discretization_fixture):

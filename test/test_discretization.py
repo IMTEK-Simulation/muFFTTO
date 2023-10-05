@@ -352,7 +352,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 strain_anal[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
                 strain_anal[direction, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
-                strain = discretization.apply_gradient_operator(displacement, strain)
+                strain = discretization.apply_gradient_operator(displacement)
 
                 div_flux = discretization.get_displacement_sized_field()
                 div_flux = discretization.apply_gradient_transposed_operator(strain, div_flux)
