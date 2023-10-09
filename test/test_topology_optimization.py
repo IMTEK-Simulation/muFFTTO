@@ -192,25 +192,36 @@ def test_finite_difference_check_of_double_well_potential(discretization_fixture
         "Finite difference derivative do not corresponds to the analytical expression "
         "for partial derivative of double well potential ")
 
+
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [6, 8]),
-    ([3, 4], 1, [6, 8])])
+    ([2, 5], 0, [12, 7]),
+    ([3, 4], 1, [6, 8]),
+    ([2, 5], 1, [12, 7])])
 def test_finite_difference_check_of_gradient_of_phase_field_potential(discretization_fixture):
-    # epsilons = [1e0,1e-1,1e-2,1e-3,1e-4,1e-5,1e-6,1e-7,1e-8,1e-9,1e-10]:
-    epsilons = [1e-4]
-    fd_derivative = discretization_fixture.get_scalar_sized_field()
 
-    # compute double-well potential without perturbations
+    #epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+    epsilons = [1e-5]
+    fd_derivative = discretization_fixture.get_scalar_sized_field()
+    nodal_coordinates = discretization_fixture.get_nodal_points_coordinates()
+
+    # Compute phase field gradient potential without perturbations
     phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
     phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
 
-    # get analytical partial derivative of the double-well potential with respect to phase-field
-    partial_der_of_double_well_potential = topology_optimization.partial_der_of_double_well_potential_wrt_density(
+    # create a linear phase field
+    # u_fun_3 = lambda x,y: 0*x + 3 * y
+    # phase_field[0, 0, :, :] = u_fun_3(nodal_coordinates[0, 0, :, :],
+    #                                   nodal_coordinates[1, 0, :, :])
+
+    # phase field gradient potential for a phase field without perturbation
+    f_rho_grad_potential = topology_optimization.compute_gradient_of_phase_field_potential(discretization_fixture,
+                                                                                           phase_field, eta=1)
+
+    # get analytical partial derivative of phase field gradient potential for a phase field with respect to phase-field
+    partial_der_of_f_rho_grad_potential = topology_optimization.partial_derivative_of_gradient_of_phase_field_potential(
         discretization_fixture,
         phase_field)
-    # double_well_potential for a phase field without perturbation
-    double_well_potential = topology_optimization.compute_gradient_of_phase_field_potential(discretization_fixture,
-                                                                                phase_field, eta=1)
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
@@ -221,16 +232,20 @@ def test_finite_difference_check_of_gradient_of_phase_field_potential(discretiza
                 phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
                 phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
                 #
+                # phase_field[0, 0, :, :] = u_fun_3(nodal_coordinates[0, 0, :, :],
+                #                                   nodal_coordinates[1, 0, :, :])
                 phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon
 
-                double_well_potential_perturbed = topology_optimization.compute_double_well_potential(
+                f_rho_grad_potential_perturbed = topology_optimization.compute_gradient_of_phase_field_potential(
                     discretization_fixture,
                     phase_field, eta=1)
-                fd_derivative[0, 0, x, y] = (double_well_potential_perturbed - double_well_potential) / epsilon
-                # print(fd_derivative[0, 0])
+                fd_derivative[0, 0, x, y] = (f_rho_grad_potential_perturbed - f_rho_grad_potential) / epsilon
 
         error_fd_vs_analytical.append(
-            np.linalg.norm((fd_derivative - partial_der_of_double_well_potential)[0, 0], 'fro'))
+            np.linalg.norm((fd_derivative - partial_der_of_f_rho_grad_potential)[0, 0], 'fro'))
+
+    print(error_fd_vs_analytical)
+
     assert error_fd_vs_analytical[0] < 1e-3, (
         "Finite difference derivative do not corresponds to the analytical expression "
         "for partial derivative of double well potential ")

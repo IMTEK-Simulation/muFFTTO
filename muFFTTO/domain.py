@@ -230,6 +230,12 @@ class Discretization:
         elif self.cell.problem_type == 'elasticity':
             return self.apply_quadrature_weights_elasticity(material_data)
 
+    def apply_quadrature_weights_on_gradient_field(self, grad_field ):
+        # apply quadrature weights without material data
+        grad_field = np.einsum('ijq...,q->ijq...', grad_field, self.quadrature_weights)
+
+        return grad_field
+
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)

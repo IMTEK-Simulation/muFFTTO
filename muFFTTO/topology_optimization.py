@@ -61,7 +61,7 @@ def partial_der_of_double_well_potential_wrt_density(discretization, phase_field
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
-    integrant = eta * (2 * phase_field * (2 * phase_field * phase_field - 3 * phase_field + 1))
+    integrant = (2 * phase_field * (2 * phase_field * phase_field - 3 * phase_field + 1))
 
     integral = (integrant / np.prod(integrant.shape)) * discretization.cell.domain_volume
     # there is no sum here, as the
@@ -77,7 +77,12 @@ def compute_gradient_of_phase_field_potential(discretization, phase_field, eta=1
 
 def partial_derivative_of_gradient_of_phase_field_potential(discretization, phase_field, eta=1):
     # partial derivative of  phase field gradient potential = 2/eta int (  (grad(rho))^2 )    dx
-    # TODO: find a proper way how to computa       grad (rho). grad I without using I
+    # Compute       grad (rho). grad I  without using I
+    #  (D rho, D I) ==  ( D I, D rho) and thus  == I D_t D rho
+    # I try to implement it in the way = 2/eta (int I D_t D rho )
     phase_field_gradient = discretization.apply_gradient_operator(phase_field)
-    f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
-    return f_rho_grad / eta
+    phase_field_gradient = discretization.apply_quadrature_weights_on_gradient_field(phase_field_gradient)
+    Dt_D_rho = discretization.apply_gradient_transposed_operator(phase_field_gradient)
+
+    # integrated_Dt_D_rho =  #/ np.prod(Dt_D_rho.shape)) * discretization.cell.domain_volume
+    return 2 * Dt_D_rho / eta
