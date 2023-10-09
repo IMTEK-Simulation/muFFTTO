@@ -102,7 +102,7 @@ def compute_gradient_of_double_well_potential(phase_field, w=1, eta=1):
 
     # phase field gradient  =( |grad (rgo)|^2 ) *eta
 
-    integrant = (2 * phase_field(2 * phase_field * phase_field - 3 * phase_field + 1))
+    integrant = (2 * phase_field*(2 * phase_field * phase_field - 3 * phase_field + 1))
     # INDRE  derivative = w / eta * 2 * phase * (1 - phase) * (1 - 2 * phase) * lengths[0] * lengths[1] / nb_pixels
     integral = discretization.integrate_over_cell(integrant)
 

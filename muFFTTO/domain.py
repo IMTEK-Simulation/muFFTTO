@@ -175,7 +175,7 @@ class Discretization:
         # material_data_field [d,d,d,d,q,x,y,z] - elasticity
         # material_data_field     [d,d,q,x,y,z] - conductivity
         # rhs                       [f,n,x,y,z]
-        #  rhs=-Dt*A*E
+        #  rhs=-Dt*wA*E
         material_data_field = self.apply_quadrature_weights(material_data_field)
         stress = self.apply_material_data(material_data_field, macro_gradient_field)
         rhs = self.apply_gradient_transposed_operator(stress)
@@ -211,7 +211,7 @@ class Discretization:
 
     def get_stress_field(self, material_data_field, displacement_field, macro_gradient_field):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
-        #  stress = A * (macro_grad + micro_grad))
+        #  stress = A * (macro_grad + micro_grad)
 
         strain = self.apply_gradient_operator(displacement_field)
         strain = strain + macro_gradient_field
@@ -312,6 +312,7 @@ class Discretization:
         force_field = np.fft.fftn(force_field)  # FFT of the input field
         force_field = np.einsum('fn...,fn...->...', preconditioner_Fourier_space, force_field)
         # TODO what if force_field = np.einsum('abfn...,fn...->...', preconditioner_Fourier_space, force_field)
+        # np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
         force_field = np.real(np.fft.ifftn(force_field))
 
         return force_field
