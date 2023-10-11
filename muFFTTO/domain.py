@@ -128,6 +128,16 @@ class Discretization:
 
         return gradient_of_u
 
+    def apply_gradient_operator_symmetrized(self, u, gradient_of_u=None):
+        # computes symmetrized gradient (small-strain)  \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
+        #   u_field size :      [f,n,x,y,z]
+        #   u_gradient_field    [f,d,q,x,y,z]
+        # 1. compute gradient
+        gradient_of_u_ijqxyz = self.apply_gradient_operator(u)
+        # 2. symmetrize it
+        gradient_of_u_ijqxyz = (gradient_of_u_ijqxyz + np.swapaxes(gradient_of_u_ijqxyz, 0, 1)) / 2
+        return gradient_of_u_ijqxyz
+
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
         if div_u_fnxyz is None:  # if div_u_fnxyz is not specified, determine the size
             #   gradient_of_u_fdqxyz :   [f,d,q,x,y,z]
@@ -198,22 +208,27 @@ class Discretization:
 
         return weighted_material_data
 
-    def get_homogenized_stress(self, material_data_field, displacement_field, macro_gradient_field):
+    def get_homogenized_stress(self, material_data_field, displacement_field, macro_gradient_field, formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         # A_h * macro_grad = int(A * (macro_grad + micro_grad))  dx / | domain |
+        if formulation == 'small_strain':
+            strain = self.apply_gradient_operator_symmetrized(displacement_field)
+        else:
+            strain = self.apply_gradient_operator(displacement_field)
 
-        strain = self.apply_gradient_operator(displacement_field)
         strain = strain + macro_gradient_field
         material_data_field = self.apply_quadrature_weights(material_data_field)
         stress = self.apply_material_data(material_data_field, strain)
         homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
         return homogenized_stress
 
-    def get_stress_field(self, material_data_field, displacement_field, macro_gradient_field):
+    def get_stress_field(self, material_data_field, displacement_field, macro_gradient_field, formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         #  stress = A * (macro_grad + micro_grad)
-
-        strain = self.apply_gradient_operator(displacement_field)
+        if formulation == 'small_strain':
+            strain = self.apply_gradient_operator_symmetrized(displacement_field)
+        else:
+            strain = self.apply_gradient_operator(displacement_field)
         strain = strain + macro_gradient_field
         stress = self.apply_material_data(material_data_field, strain)
         return stress
@@ -230,7 +245,7 @@ class Discretization:
         elif self.cell.problem_type == 'elasticity':
             return self.apply_quadrature_weights_elasticity(material_data)
 
-    def apply_quadrature_weights_on_gradient_field(self, grad_field ):
+    def apply_quadrature_weights_on_gradient_field(self, grad_field):
         # apply quadrature weights without material data
         grad_field = np.einsum('ijq...,q->ijq...', grad_field, self.quadrature_weights)
 
@@ -323,9 +338,14 @@ class Discretization:
 
         return force_field
 
-    def apply_system_matrix(self, material_data_field, displacement_field):
+    def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):
 
-        strain = self.apply_gradient_operator(displacement_field)
+        if formulation == 'small_strain':
+            strain = self.apply_gradient_operator_symmetrized(displacement_field)
+
+        else:
+            strain = self.apply_gradient_operator(displacement_field)
+
         material_data_field = self.apply_quadrature_weights(material_data_field)
         stress = self.apply_material_data(material_data_field, strain)
         force = self.apply_gradient_transposed_operator(stress)
@@ -509,6 +529,7 @@ class Discretization:
                 self.nb_quad_points_per_pixel = 4
                 # self.nb_elements_per_pixel = 1
                 self.nb_nodes_per_pixel = 1  # x1 is the only pixel assigned node, x2 belongs to pixel +1
+                self.nb_unique_nodes_per_pixel = 1
 
                 #  pixel sizes for better readability
                 h_x = self.pixel_size[0]
