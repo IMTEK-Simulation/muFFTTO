@@ -160,9 +160,6 @@ def partial_derivative_of_objective_function_stress_equivalence(discretization,
     return partial_derivative_xyz
 
 
-
-
-
 def adjoint_potential(discretization, stress_field_ijqxyz, adjoint_field_inxyz):
     # g = (grad lambda, stress)
     # g = (grad lambda, C grad displacement)
@@ -187,14 +184,11 @@ def partial_derivative_of_adjoint_potential_wrt_displacement(discretization,
     # Input: adjoint_field_inxyz [f,n,x,y,z]
     #        material_data_field_C_0_ijklqxyz  [d,d,d,d,q,x,y,z]
 
-    # Output:  ∂ g/ ∂ u [f,n,x,y,z] == 0
+    # Output:  ∂ g/ ∂ u [f,n,x,y,z] = ( grad_transpose: C : grad lambda)
     # -- -- -- -- -- -- -- -- -- -- --
     # apply quadrature weights
 
     force_field_fnxyz = discretization.apply_system_matrix(material_data_field_ijklqxyz, adjoint_field_fnxyz,
-                                               formulation='small_strain')
+                                                           formulation='small_strain')
 
-
-
-    #TODO finish
     return force_field_fnxyz

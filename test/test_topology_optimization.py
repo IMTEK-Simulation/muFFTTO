@@ -464,8 +464,8 @@ def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
 def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretization_fixture, plot=False):
-    # epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
-    epsilons = [1e-4]
+    epsilons = [1e0,1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+    #epsilons = [1e-4]
     fd_derivative = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
 
     macro_gradient = np.array([[0.01, 0], [0, 0.01]])
@@ -494,16 +494,17 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
                                                                  formulation='small_strain')
     M_fun = lambda x: 1 * x
 
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
-
-    #
-    adjoint_field = np.random.rand(
-        *discretization_fixture.get_displacement_sized_field().shape)  # set random adjoint field
+    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
     # compute stress field corresponding to equilibrated displacement
     stress_field = discretization_fixture.get_stress_field(material_data_field_C_0, displacement_field,
                                                            macro_gradient_field)
 
+    # create random adjoint field
+    adjoint_field = np.random.rand(
+        *discretization_fixture.get_displacement_sized_field().shape)  # set random adjoint field
+
+    # compute adjoint_potential
     adjoint_potential = topology_optimization.adjoint_potential(discretization_fixture, stress_field, adjoint_field)
 
     dg_du_analytical = topology_optimization.partial_derivative_of_adjoint_potential_wrt_displacement(
@@ -513,9 +514,13 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
+        fd_norms = np.zeros(
+            [discretization_fixture.cell.unknown_shape[0], discretization_fixture.nb_unique_nodes_per_pixel])
+
         # loop over every single element of displacement field
         for f in np.arange(discretization_fixture.cell.unknown_shape[0]):
             for n in np.arange(discretization_fixture.nb_unique_nodes_per_pixel):
+
                 for x in np.arange(discretization_fixture.nb_of_pixels[0]):
                     for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                         displacement_field_fnxyz = np.copy(displacement_field)
@@ -526,12 +531,17 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
                                                                                macro_gradient_field)
 
                         adjoint_potential_perturbed = topology_optimization.adjoint_potential(discretization_fixture,
-                                                                                    stress_field, adjoint_field)
+                                                                                              stress_field,
+                                                                                              adjoint_field)
 
                         fd_derivative[f, n, x, y] = (adjoint_potential_perturbed - adjoint_potential) / epsilon
+            fd_norms[f, n] = np.sum(np.linalg.norm((fd_derivative[f, n] - dg_du_analytical[f, n]), 'fro'))
 
-            error_fd_vs_analytical.append(np.linalg.norm((fd_derivative[f, n] - dg_du_analytical[f, n]), 'fro'))
-    # TODO double check this test !!!!!
-    #print(fd_derivative[0, 0, 0, 0])
-    #print(dg_du_analytical[0, 0])
-    print(error_fd_vs_analytical)
+            # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
+            # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(dg_du_analytical[f, n], 'fro')))
+        #(error_fd_vs_analytical)
+
+        error_fd_vs_analytical.append(np.sum(fd_norms))
+        assert error_fd_vs_analytical[-1] < 1e-6, (
+            "Finite difference derivative  do not corresponds to the analytical expression "
+            "for partial derivative of adjoint potential  w.r.t. displacement ")
