@@ -6,6 +6,7 @@ from muFFTTO import solvers
 
 
 def objective_function_small_strain(discretization, actual_stress, target_stress, phase_field, eta, w):
+    # TODO this is not correct
     # evaluate objective functions
     # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
     # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
@@ -192,3 +193,24 @@ def partial_derivative_of_adjoint_potential_wrt_displacement(discretization,
                                                            formulation='small_strain')
 
     return force_field_fnxyz
+
+
+def partial_der_of_objective_function_wrt_displacement_small_strain(discretization,
+                                                                    material_data_field_ijklqxyz,
+                                                                    stress_diff_ij,
+                                                                    eta=1,
+                                                                    w=1):
+    # Input: material_data_field [d,d,d,d,q,x,y,z] - elasticity
+    #        stress_diff_ij [d,d]
+    #
+    # Output: ∂ f_sigma/ ∂ u  = - (2 / |domain size|) int  grad_transpose : C: sigma_diff dx [f,n,x,y,z]
+    # TODO : finish commetnts
+    stress_difference_ij = stress_diff_ij[
+        (...,) + (np.newaxis,) * (stress_diff_ij.ndim - 2)]
+
+    stress_field_ijqxyz = discretization.apply_material_data(material_data_field_ijklqxyz, stress_difference_ij)
+    stress_field_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz)
+
+    force_field_fnxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
+
+    return -2*force_field_fnxyz/discretization.cell.domain_volume

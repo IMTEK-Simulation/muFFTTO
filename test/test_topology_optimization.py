@@ -464,8 +464,8 @@ def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
 def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretization_fixture, plot=False):
-    epsilons = [1e0,1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
-    #epsilons = [1e-4]
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+    # epsilons = [1e-4]
     fd_derivative = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
 
     macro_gradient = np.array([[0.01, 0], [0, 0.01]])
@@ -539,9 +539,135 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
 
             # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
             # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(dg_du_analytical[f, n], 'fro')))
-        #(error_fd_vs_analytical)
+        # (error_fd_vs_analytical)
 
         error_fd_vs_analytical.append(np.sum(fd_norms))
         assert error_fd_vs_analytical[-1] < 1e-6, (
             "Finite difference derivative  do not corresponds to the analytical expression "
             "for partial derivative of adjoint potential  w.r.t. displacement ")
+
+
+@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
+    ([3, 4], 0, [6, 8]),
+    ([3, 4], 1, [6, 8])])
+def test_finite_difference_check_of_pd_whole_objective_function_wrt_displacement(discretization_fixture):
+    # TODO NOT FINISHED
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+    #epsilons = [1e-2]
+    fd_derivative = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
+
+    # set stress difference to zero
+    target_stress = np.array([[1, 0.5], [0.5, 2]])
+    macro_gradient = np.array([[1, 0], [0, 1]])
+
+    ## compute objective function without perturbations
+    phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
+    phase_field[0, 0, 2:4, 2:4] = phase_field[0, 0, 2:4, 2:4] / 2  # for
+    #
+    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+    mat_1 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension, K=K_1, mu=G_1,
+                                               kind='linear')
+
+    material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                    np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
+                                                      *discretization_fixture.nb_of_pixels])))
+
+    # Update material data based on current Phase-field
+    material_data_field_i = (phase_field) * material_data_field
+
+    ##### solve equilibrium constrain
+    # set up system
+    macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient)
+    rhs = discretization_fixture.get_rhs(material_data_field_i, macro_gradient_field)
+
+    K_fun = lambda x: discretization_fixture.apply_system_matrix(material_data_field_i, x)
+    M_fun = lambda x: 1 * x
+
+    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+
+    # test homogenized stress
+    homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_i,
+                                                                       displacement_field=displacement_field,
+                                                                       macro_gradient_field=macro_gradient_field,
+                                                                       formulation='small_strain')
+
+    actual_stress_field = np.zeros(discretization_fixture.gradient_size)
+    actual_stress_field[..., :] = homogenized_stress[(...,) + (np.newaxis,) * (actual_stress_field.ndim - 2)]
+
+    stress_diff = target_stress - homogenized_stress
+    # objective function without phase-field
+    f_sigma = np.sum(stress_diff ** 2)
+
+    # objective_function = topology_optimization.objective_function_small_strain(discretization_fixture,
+    #                                                                            actual_stress_field,
+    #                                                                            target_stress,
+    #                                                                            phase_field,
+    #                                                                            eta=1,
+    #                                                                            w=1)
+
+    d_of_d_u_analytical = topology_optimization.partial_der_of_objective_function_wrt_displacement_small_strain(
+        discretization_fixture,
+        material_data_field_i,
+        stress_diff,
+        eta=1,
+        w=1)
+
+    error_fd_vs_analytical = []
+    for epsilon in epsilons:
+        fd_norms = np.zeros(
+            [discretization_fixture.cell.unknown_shape[0], discretization_fixture.nb_unique_nodes_per_pixel])
+
+        # loop over every single element of displacement field
+        for f in np.arange(discretization_fixture.cell.unknown_shape[0]):
+            for n in np.arange(discretization_fixture.nb_unique_nodes_per_pixel):
+                # loop over every single element of phase field
+                for x in np.arange(discretization_fixture.nb_of_pixels[0]):
+                    for y in np.arange(discretization_fixture.nb_of_pixels[1]):
+                        # perturb f,n,x,y,z-component displacement field with epsilon
+                        displacement_field_fnxyz = np.copy(displacement_field)
+                        displacement_field_fnxyz[f, n, x, y] = displacement_field_fnxyz[f, n, x, y] + epsilon
+
+                        # homogenized stress
+                        homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_i,
+                                                                                           displacement_field=displacement_field_fnxyz,
+                                                                                           macro_gradient_field=macro_gradient_field,
+                                                                                           formulation='small_strain')
+
+                        stress_diff = target_stress - homogenized_stress
+                        # objective function withou phase-field
+                        f_sigma_perturbed = np.sum(stress_diff ** 2)
+
+                        # actual stress
+                        # actual_stress_field = discretization_fixture.get_stress_field(
+                        #     material_data_field=material_data_field_i,
+                        #     displacement_field=displacement_field_fnxyz,
+                        #     macro_gradient_field=macro_gradient_field,
+                        #     formulation='small_strain')
+                        #
+                        #
+                        #
+                        # objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                        #     discretization_fixture,
+                        #     actual_stress_field,
+                        #     target_stress,
+                        #     phase_field,
+                        #     eta=1,
+                        #     w=1)
+
+
+                        fd_derivative[f, n, x, y] = (f_sigma_perturbed - f_sigma) / epsilon
+
+                fd_norms[f, n] = np.sum(np.linalg.norm((fd_derivative[f, n] - d_of_d_u_analytical[f, n]), 'fro'))
+        # print('2')
+        # TODO Finish comments and the test. The function is working
+
+        print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
+        print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(d_of_d_u_analytical[f, n], 'fro')))
+        (d_of_d_u_analytical)
+
+        error_fd_vs_analytical.append(np.sum(fd_norms))
+
+    assert error_fd_vs_analytical[-1] < 1e-2, (
+        "Finite difference derivative  do not corresponds to the analytical expression "
+        "for partial derivative of adjoint potential  w.r.t. displacement ")
