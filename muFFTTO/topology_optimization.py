@@ -5,7 +5,7 @@ from muFFTTO import domain
 from muFFTTO import solvers
 
 
-def objective_function_small_strain(discretization, actual_stress_ij, target_stress_ij, phase_field_fnxyz, eta=1, w=1):
+def objective_function_small_strain(discretization, actual_stress_ij, target_stress_ij, phase_field_1nxyz, eta=1, w=1):
     # evaluate objective functions
     # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
     # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
@@ -16,10 +16,10 @@ def objective_function_small_strain(discretization, actual_stress_ij, target_str
     f_sigma = np.sum(stress_difference_ij ** 2)
 
     # double - well potential
-    integrant = (phase_field_fnxyz ** 2) * (1 - phase_field_fnxyz) ** 2
+    integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
 
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field_fnxyz)
+    phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
 
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
@@ -55,41 +55,41 @@ def compute_double_well_potential(discretization, phase_field, eta=1):
     # double - well potential
     integrant = (phase_field ** 2) * (1 - phase_field) ** 2
     integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
-    return eta * integral
+    return integral / eta
 
 
-def partial_der_of_double_well_potential_wrt_density(discretization, phase_field, eta=1):
+def partial_der_of_double_well_potential_wrt_density(discretization, phase_field_fnxyz, eta=1):
     # Derivative of the double-well potential with respect to phase-field
     # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
-    integrant = (2 * phase_field * (2 * phase_field * phase_field - 3 * phase_field + 1))
+    integrant_fnxyz = (2 * phase_field_fnxyz * (2 * phase_field_fnxyz * phase_field_fnxyz - 3 * phase_field_fnxyz + 1))
 
-    integral = (integrant / np.prod(integrant.shape)) * discretization.cell.domain_volume
-    # there is no sum here, as the
-    return eta * integral
+    integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
+    # there is no sum here
+    return integral_fnxyz / eta
 
 
-def compute_gradient_of_phase_field_potential(discretization, phase_field, eta=1):
+def compute_gradient_of_phase_field_potential(discretization, phase_field_1nxyz, eta=1):
     # Input: phase_field [1,n,x,y,z]
     # Output: potential [1]
     # phase field gradient potential = int (  (grad(rho))^2 )    dx
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field)
+    phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
-    return f_rho_grad / eta
+    return eta * f_rho_grad
 
 
-def partial_derivative_of_gradient_of_phase_field_potential(discretization, phase_field, eta=1):
+def partial_derivative_of_gradient_of_phase_field_potential(discretization, phase_field_1nxyz, eta=1):
     # Input: phase_field [1,n,x,y,z]
-    # Output: ∂ potential/ ∂ phase_field [1,n,x,y,z] # Note: one potential per phase field DOF
+    # Output: ∂ potential/ ∂ phadjoint_potentialase_field [1,n,x,y,z] # Note: one potential per phase field DOF
 
     # partial derivative of  phase field gradient potential = 2/eta int (  (grad(rho))^2 )    dx
     # Compute       grad (rho). grad I  without using I
     #
     #  (D rho, D I) ==  ( D I, D rho) and thus  == I D_t D rho
     # I try to implement it in the way = 2/eta (int I D_t D rho )
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field)
+    phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     phase_field_gradient = discretization.apply_quadrature_weights_on_gradient_field(phase_field_gradient)
     Dt_D_rho = discretization.apply_gradient_transposed_operator(phase_field_gradient)
 
@@ -163,7 +163,7 @@ def partial_derivative_of_objective_function_stress_equivalence(discretization,
     return partial_derivative_xyz
 
 
-def adjoint_potential(discretization, stress_field_ijqxyz, adjoint_field_inxyz):
+def adjoint_potential(discretization, stress_field_ijqxyz, adjoint_field_fnxyz):
     # g = (grad lambda, stress)
     # g = (grad lambda, C grad displacement)
     # g = (grad lambda, C grad displacement)  == lambda_transpose grad_transpose C grad u
@@ -176,7 +176,7 @@ def adjoint_potential(discretization, stress_field_ijqxyz, adjoint_field_inxyz):
     # apply quadrature weights
     stress_field_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz)
     force_field_inxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
-    adjoint_potential_field = np.einsum('i...,i...->...', adjoint_field_inxyz, force_field_inxyz)
+    adjoint_potential_field = np.einsum('i...,i...->...', adjoint_field_fnxyz, force_field_inxyz)
 
     return np.sum(adjoint_potential_field)
 

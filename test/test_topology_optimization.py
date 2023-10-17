@@ -103,8 +103,11 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
     actual_stress_field[..., :] = homogenized_stress[(...,) + (np.newaxis,) * (actual_stress_field.ndim - 2)]
 
     objective_function = topology_optimization.objective_function_small_strain(discretization_fixture,
-                                                                               actual_stress_field,
-                                                                               target_stress, phase_field, eta=1, w=1)
+                                                                               actual_stress_ij=homogenized_stress,
+                                                                               target_stress_ij=target_stress,
+                                                                               phase_field_1nxyz=phase_field,
+                                                                               eta=1,
+                                                                               w=1)
 
     # loop over every single element of phase field
     for x in np.arange(discretization_fixture.nb_of_pixels[0]):
@@ -132,14 +135,13 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                                                                                displacement_field=solution,
                                                                                macro_gradient_field=macro_gradient_field)
 
-            actual_stress_field = np.zeros(discretization_fixture.gradient_size)
-            actual_stress_field[..., :] = homogenized_stress[(...,) + (np.newaxis,) * (actual_stress_field.ndim - 2)]
-
             objective_function_perturbed = topology_optimization.objective_function_small_strain(discretization_fixture,
-                                                                                                 actual_stress_field,
-                                                                                                 target_stress,
-                                                                                                 phase_field, eta=1,
+                                                                                                 actual_stress_ij=homogenized_stress,
+                                                                                                 target_stress_ij=target_stress,
+                                                                                                 phase_field_1nxyz=phase_field,
+                                                                                                 eta=1,
                                                                                                  w=1)
+
             fd_sensitivity[0, 0, x, y] = (objective_function_perturbed - objective_function) / epsilon
 
     # TODO this just computes the sensitivity using finite difference --- will be used for FD check in the future
@@ -154,21 +156,22 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
     ([3, 4], 0, [6, 8]),
     ([3, 4], 1, [6, 8])])
 def test_finite_difference_check_of_double_well_potential(discretization_fixture):
-    # epsilons = [1e0,1e-1,1e-2,1e-3,1e-4,1e-5,1e-6,1e-7,1e-8,1e-9,1e-10]:
-    epsilons = [1e-4]
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
+    # epsilons = [1e-4]
     fd_derivative = discretization_fixture.get_scalar_sized_field()
 
     # compute double-well potential without perturbations
     phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
     phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
 
+    # double_well_potential for a phase field without perturbation
+    double_well_potential = topology_optimization.compute_double_well_potential(discretization_fixture,
+                                                                                phase_field, eta=1)
+
     # get analytical partial derivative of the double-well potential with respect to phase-field
     partial_der_of_double_well_potential = topology_optimization.partial_der_of_double_well_potential_wrt_density(
         discretization_fixture,
         phase_field)
-    # double_well_potential for a phase field without perturbation
-    double_well_potential = topology_optimization.compute_double_well_potential(discretization_fixture,
-                                                                                phase_field, eta=1)
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
@@ -184,14 +187,15 @@ def test_finite_difference_check_of_double_well_potential(discretization_fixture
                 double_well_potential_perturbed = topology_optimization.compute_double_well_potential(
                     discretization_fixture,
                     phase_field, eta=1)
+
                 fd_derivative[0, 0, x, y] = (double_well_potential_perturbed - double_well_potential) / epsilon
                 # print(fd_derivative[0, 0])
 
         error_fd_vs_analytical.append(
             np.linalg.norm((fd_derivative - partial_der_of_double_well_potential)[0, 0], 'fro'))
-    assert error_fd_vs_analytical[0] < 1e-3, (
-        "Finite difference derivative do not corresponds to the analytical expression "
-        "for partial derivative of double well potential ")
+        assert error_fd_vs_analytical[-1] < epsilon * 1e1, (
+            "Finite difference derivative do not corresponds to the analytical expression "
+            "for partial derivative of double well potential ")
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
@@ -200,28 +204,24 @@ def test_finite_difference_check_of_double_well_potential(discretization_fixture
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
 def test_finite_difference_check_of_gradient_of_phase_field_potential(discretization_fixture):
-    # epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
-    epsilons = [1e-5]
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
+    # epsilons = [1e-5]
     fd_derivative = discretization_fixture.get_scalar_sized_field()
-    nodal_coordinates = discretization_fixture.get_nodal_points_coordinates()
 
     # Compute phase field gradient potential without perturbations
     phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
     phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
 
-    # create a linear phase field
-    # u_fun_3 = lambda x,y: 0*x + 3 * y
-    # phase_field[0, 0, :, :] = u_fun_3(nodal_coordinates[0, 0, :, :],
-    #                                   nodal_coordinates[1, 0, :, :])
 
     # phase field gradient potential for a phase field without perturbation
     f_rho_grad_potential = topology_optimization.compute_gradient_of_phase_field_potential(discretization_fixture,
-                                                                                           phase_field, eta=1)
+                                                                                           phase_field_1nxyz=phase_field,
+                                                                                           eta=1)
 
     # get analytical partial derivative of phase field gradient potential for a phase field with respect to phase-field
     partial_der_of_f_rho_grad_potential = topology_optimization.partial_derivative_of_gradient_of_phase_field_potential(
         discretization_fixture,
-        phase_field)
+        phase_field_1nxyz=phase_field)
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
@@ -238,17 +238,17 @@ def test_finite_difference_check_of_gradient_of_phase_field_potential(discretiza
 
                 f_rho_grad_potential_perturbed = topology_optimization.compute_gradient_of_phase_field_potential(
                     discretization_fixture,
-                    phase_field, eta=1)
+                    phase_field_1nxyz=phase_field, eta=1)
                 fd_derivative[0, 0, x, y] = (f_rho_grad_potential_perturbed - f_rho_grad_potential) / epsilon
 
         error_fd_vs_analytical.append(
             np.linalg.norm((fd_derivative - partial_der_of_f_rho_grad_potential)[0, 0], 'fro'))
 
-    print(error_fd_vs_analytical)
+        #print(error_fd_vs_analytical)
 
-    assert error_fd_vs_analytical[0] < 1e-3, (
-        "Finite difference derivative do not corresponds to the analytical expression "
-        "for partial derivative of gradient of phase-field potential ")
+        assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
+            "Finite difference derivative do not corresponds to the analytical expression "
+            "for partial derivative of gradient of phase-field potential ")
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
@@ -344,18 +344,22 @@ def test_finite_difference_check_of_stress_equivalence_potential(discretization_
 
     displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
-    actual_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho, displacement_field,
-                                                                  macro_gradient_field, formulation='small_strain')
+    homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho, displacement_field,
+                                                                       macro_gradient_field, formulation='small_strain')
 
-    f_sigma_diff_potential = topology_optimization.objective_function_stress_equivalence(discretization_fixture,
-                                                                                         actual_stress,
-                                                                                         target_stress)
+    objective_function = topology_optimization.objective_function_small_strain(
+        discretization=discretization_fixture,
+        actual_stress_ij=homogenized_stress,
+        target_stress_ij=target_stress,
+        phase_field_1nxyz=phase_field,
+        eta=1,
+        w=1)
 
     # phase field gradient potential for a phase field without perturbation
     f_rho_grad_potential_analytical = topology_optimization.partial_derivative_of_objective_function_stress_equivalence(
         discretization_fixture,
         phase_field,
-        actual_stress,
+        homogenized_stress,
         target_stress,
         material_data_field_C_0,
         displacement_field,
@@ -370,13 +374,14 @@ def test_finite_difference_check_of_stress_equivalence_potential(discretization_
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
                 # phase_field_xy = phase_field.copy()  # Phase field has  one  value per pixel
-                phase_field_xy = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
+                phase_field_perturbed = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
                 # phase_field_xy[0, 0, 0, 0] = phase_field_xy[0, 0, 0, 0] / 2  # can be random in this case
-                phase_field_xy[0, 0, 2:5, 2:4] = phase_field_xy[0, 0, 2:5, 2:4] / 3  # can be random in this case
-                phase_field_xy[0, 0, x, y] = phase_field_xy[0, 0, x, y] - epsilon
+                phase_field_perturbed[0, 0, 2:5, 2:4] = phase_field_perturbed[0, 0, 2:5,
+                                                        2:4] / 3  # can be random in this case
+                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] - epsilon
 
                 # apply material distribution
-                material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * phase_field_xy[0, 0]
+                material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * phase_field_perturbed[0, 0]
 
                 rhs = discretization_fixture.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
@@ -386,17 +391,20 @@ def test_finite_difference_check_of_stress_equivalence_potential(discretization_
 
                 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
-                actual_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho,
-                                                                              displacement_field,
-                                                                              macro_gradient_field,
-                                                                              formulation='small_strain')
+                homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho,
+                                                                                   displacement_field,
+                                                                                   macro_gradient_field,
+                                                                                   formulation='small_strain')
 
-                f_sigma_diff_potential_perturbed = topology_optimization.objective_function_stress_equivalence(
-                    discretization_fixture,
-                    actual_stress,
-                    target_stress)
+                objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                    discretization=discretization_fixture,
+                    actual_stress_ij=homogenized_stress,
+                    target_stress_ij=target_stress,
+                    phase_field_1nxyz=phase_field_perturbed,
+                    eta=1,
+                    w=1)
 
-                fd_derivative[0, 0, x, y] = (f_sigma_diff_potential_perturbed - f_sigma_diff_potential) / epsilon
+                fd_derivative[0, 0, x, y] = (objective_function_perturbed - objective_function) / epsilon
 
         print(fd_derivative[0, 0, 0, 0])
         print(f_rho_grad_potential_analytical[0, 0])
@@ -606,7 +614,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
         discretization=discretization_fixture,
         actual_stress_ij=homogenized_stress,
         target_stress_ij=target_stress,
-        phase_field_fnxyz=phase_field,
+        phase_field_1nxyz=phase_field,
         eta=1,
         w=1)
 
@@ -646,7 +654,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
                             discretization=discretization_fixture,
                             actual_stress_ij=homogenized_stress,
                             target_stress_ij=target_stress,
-                            phase_field_fnxyz=phase_field,
+                            phase_field_1nxyz=phase_field,
                             eta=1,
                             w=1)
 
