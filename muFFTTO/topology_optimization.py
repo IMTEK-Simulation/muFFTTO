@@ -5,42 +5,44 @@ from muFFTTO import domain
 from muFFTTO import solvers
 
 
-def objective_function_small_strain(discretization, actual_stress, target_stress, phase_field, eta, w):
-    # TODO this is not correct
+def objective_function_small_strain(discretization, actual_stress_ij, target_stress_ij, phase_field_fnxyz, eta=1, w=1):
     # evaluate objective functions
     # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
     # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
 
-    # stress difference potential
-    stress_difference = (actual_stress - target_stress[
-        (...,) + (np.newaxis,) * (actual_stress.ndim - 2)])
+    # stress difference potential: actual_stress_ij is homogenized stress
+    stress_difference_ij = actual_stress_ij - target_stress_ij
 
-    f_sigma = np.sum(discretization.integrate_over_cell(stress_difference ** 2))
+    f_sigma = np.sum(stress_difference_ij ** 2)
 
     # double - well potential
-    integrant = (phase_field ** 2) * (1 - phase_field) ** 2
+    integrant = (phase_field_fnxyz ** 2) * (1 - phase_field_fnxyz) ** 2
     f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
 
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field)
+    phase_field_gradient = discretization.apply_gradient_operator(phase_field_fnxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
 
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
     f_rho = eta * f_rho_grad + f_dw / eta
 
-    return (f_sigma + w * f_rho) / discretization.cell.domain_volume
+    return (f_sigma + w * f_rho)  # / discretization.cell.domain_volume
 
 
-def solve_adjoint_problem(discretization, material_data_field, stress_difference):
+def solve_adjoint_problem(discretization, material_data_field, stress_difference,
+                          formulation='small_strain'):
     # Solve adjoint problem ∂f/∂u=-∂g/∂u
-    # Dt C D lambda = -Dt: C : sigma_diff
+    # Dt C D lambda = - 2/|omega| Dt: C : sigma_diff
 
     # stress difference potential
 
-    df_du_field = 2 * discretization.get_rhs(material_data_field, stress_difference)  # minus sign is already there
-
-    K_fun = lambda x: discretization.apply_system_matrix(material_data_field, displacement_field=x)
+    df_du_field = 2 * discretization.get_rhs(material_data_field,
+                                             stress_difference) / discretization.cell.domain_volume  # minus sign is already there
+    #
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field, displacement_field=x,
+                                                         formulation=formulation)
     M_fun = lambda x: 1 * x
+
     # solve the system
     adjoint_field, adjoint_norms = solvers.PCG(K_fun, df_du_field, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
@@ -197,20 +199,18 @@ def partial_derivative_of_adjoint_potential_wrt_displacement(discretization,
 
 def partial_der_of_objective_function_wrt_displacement_small_strain(discretization,
                                                                     material_data_field_ijklqxyz,
-                                                                    stress_diff_ij,
+                                                                    stress_difference_ij,
                                                                     eta=1,
                                                                     w=1):
     # Input: material_data_field [d,d,d,d,q,x,y,z] - elasticity
-    #        stress_diff_ij [d,d]
+    #        stress_diff_ij [d,d] # difference between homogenized stress and target stress
     #
     # Output: ∂ f_sigma/ ∂ u  = - (2 / |domain size|) int  grad_transpose : C: sigma_diff dx [f,n,x,y,z]
-    # TODO : finish commetnts
-    stress_difference_ij = stress_diff_ij[
-        (...,) + (np.newaxis,) * (stress_diff_ij.ndim - 2)]
 
     stress_field_ijqxyz = discretization.apply_material_data(material_data_field_ijklqxyz, stress_difference_ij)
+
     stress_field_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz)
 
-    force_field_fnxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
+    df_sigma_du_fnxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
 
-    return -2*force_field_fnxyz/discretization.cell.domain_volume
+    return -2 * df_sigma_du_fnxyz / discretization.cell.domain_volume

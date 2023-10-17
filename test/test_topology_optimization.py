@@ -256,7 +256,8 @@ def test_finite_difference_check_of_gradient_of_phase_field_potential(discretiza
     ([2, 5], 0, [12, 7]),
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
-def test_of_stress_equivalence_potential(discretization_fixture, plot=False):
+def test_of_stress_equivalence_potential_quadratic(discretization_fixture, plot=True):
+    # this test shows how the stress equivalence potential evolves with respect to perturbation of stress
     epsilons = np.arange(-6, 8.1, 0.5)
     # epsilons = [1e-4]
 
@@ -549,11 +550,13 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [6, 8]),
-    ([3, 4], 1, [6, 8])])
-def test_finite_difference_check_of_pd_whole_objective_function_wrt_displacement(discretization_fixture):
-    # TODO NOT FINISHED
-    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
-    #epsilons = [1e-2]
+    ([2, 5], 0, [12, 7]),
+    ([3, 4], 1, [6, 8]),
+    ([2, 5], 1, [12, 7])])
+def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small_strain(discretization_fixture):
+    # This test compares analytical expression for partial derivative  of objective function w.r.t. displacement
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
+    # epsilons = [1e-2]
     fd_derivative = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
 
     # set stress difference to zero
@@ -597,14 +600,15 @@ def test_finite_difference_check_of_pd_whole_objective_function_wrt_displacement
 
     stress_diff = target_stress - homogenized_stress
     # objective function without phase-field
-    f_sigma = np.sum(stress_diff ** 2)
-
-    # objective_function = topology_optimization.objective_function_small_strain(discretization_fixture,
-    #                                                                            actual_stress_field,
-    #                                                                            target_stress,
-    #                                                                            phase_field,
-    #                                                                            eta=1,
-    #                                                                            w=1)
+    f_sigma = np.sum(stress_diff ** 2)  # TODO: Replace it with implementation of whole objective functions
+    #
+    objective_function_perturbed = topology_optimization.objective_function_small_strain(
+        discretization=discretization_fixture,
+        actual_stress_ij=homogenized_stress,
+        target_stress_ij=target_stress,
+        phase_field_fnxyz=phase_field,
+        eta=1,
+        w=1)
 
     d_of_d_u_analytical = topology_optimization.partial_der_of_objective_function_wrt_displacement_small_strain(
         discretization_fixture,
@@ -635,39 +639,26 @@ def test_finite_difference_check_of_pd_whole_objective_function_wrt_displacement
                                                                                            formulation='small_strain')
 
                         stress_diff = target_stress - homogenized_stress
-                        # objective function withou phase-field
+                        # objective function without phase-field
                         f_sigma_perturbed = np.sum(stress_diff ** 2)
 
-                        # actual stress
-                        # actual_stress_field = discretization_fixture.get_stress_field(
-                        #     material_data_field=material_data_field_i,
-                        #     displacement_field=displacement_field_fnxyz,
-                        #     macro_gradient_field=macro_gradient_field,
-                        #     formulation='small_strain')
-                        #
-                        #
-                        #
-                        # objective_function_perturbed = topology_optimization.objective_function_small_strain(
-                        #     discretization_fixture,
-                        #     actual_stress_field,
-                        #     target_stress,
-                        #     phase_field,
-                        #     eta=1,
-                        #     w=1)
-
+                        objective_function_perturbed = objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                            discretization=discretization_fixture,
+                            actual_stress_ij=homogenized_stress,
+                            target_stress_ij=target_stress,
+                            phase_field_fnxyz=phase_field,
+                            eta=1,
+                            w=1)
 
                         fd_derivative[f, n, x, y] = (f_sigma_perturbed - f_sigma) / epsilon
 
                 fd_norms[f, n] = np.sum(np.linalg.norm((fd_derivative[f, n] - d_of_d_u_analytical[f, n]), 'fro'))
-        # print('2')
-        # TODO Finish comments and the test. The function is working
 
-        print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
-        print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(d_of_d_u_analytical[f, n], 'fro')))
-        (d_of_d_u_analytical)
+        # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
+        # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(d_of_d_u_analytical[f, n], 'fro')))
 
         error_fd_vs_analytical.append(np.sum(fd_norms))
 
-    assert error_fd_vs_analytical[-1] < 1e-2, (
-        "Finite difference derivative  do not corresponds to the analytical expression "
-        "for partial derivative of adjoint potential  w.r.t. displacement ")
+        assert error_fd_vs_analytical[-1] < epsilon * 10, (
+            "Finite difference derivative  do not corresponds to the analytical expression "
+            "for partial derivative of adjoint potential  w.r.t. displacement ")
