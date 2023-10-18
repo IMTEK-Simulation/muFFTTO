@@ -212,7 +212,6 @@ def test_finite_difference_check_of_gradient_of_phase_field_potential(discretiza
     phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
     phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
 
-
     # phase field gradient potential for a phase field without perturbation
     f_rho_grad_potential = topology_optimization.compute_gradient_of_phase_field_potential(discretization_fixture,
                                                                                            phase_field_1nxyz=phase_field,
@@ -238,13 +237,14 @@ def test_finite_difference_check_of_gradient_of_phase_field_potential(discretiza
 
                 f_rho_grad_potential_perturbed = topology_optimization.compute_gradient_of_phase_field_potential(
                     discretization_fixture,
-                    phase_field_1nxyz=phase_field, eta=1)
+                    phase_field_1nxyz=phase_field,
+                    eta=1)
                 fd_derivative[0, 0, x, y] = (f_rho_grad_potential_perturbed - f_rho_grad_potential) / epsilon
 
         error_fd_vs_analytical.append(
             np.linalg.norm((fd_derivative - partial_der_of_f_rho_grad_potential)[0, 0], 'fro'))
 
-        #print(error_fd_vs_analytical)
+        # print(error_fd_vs_analytical)
 
         assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
             "Finite difference derivative do not corresponds to the analytical expression "
@@ -293,77 +293,88 @@ def test_of_stress_equivalence_potential_quadratic(discretization_fixture, plot=
 ])
 def test_finite_difference_check_of_stress_equivalence_potential(discretization_fixture):
     # TODO finite_difference_check_of_stress_equivalence_potential DOES NOT  work!
-    epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+    epsilons = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-4]
     fd_derivative = discretization_fixture.get_scalar_sized_field()
+    fd_derivative_wo = discretization_fixture.get_scalar_sized_field()
 
     target_stress = np.array([[1, 0.3], [0.3, 2]])
-    macro_gradient = np.array([[0.01, 0], [0, 0.01]])
+    macro_gradient = np.array([[0.01, 0], [0, 0.02]])
 
-    # Compute phase field gradient potential without perturbations
-    phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
-    phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
-    # phase_field[0, 0, 0, 0] = phase_field[0, 0, 0, 0] / 2  # can be random in this case
-
-    # phase_field = np.random.rand(*phase_field.shape)  # set random distribution
-    # create a linear phase field
-    # identity tensor                                               [single tensor]
-    i = np.eye(discretization_fixture.domain_dimension)
-    # identity tensors                                            [grid of tensors]
-    I = np.einsum('ij,xy', i, np.ones(discretization_fixture.nb_of_pixels))
-    I4 = np.einsum('ijkl,qxy->ijklqxy', np.einsum('il,jk', i, i),
-                   np.ones(np.array(
-                       [discretization_fixture.nb_quad_points_per_pixel, *discretization_fixture.nb_of_pixels])))
-    I4rt = np.einsum('ijkl,qxy->ijklqxy', np.einsum('ik,jl', i, i),
-                     np.ones(np.array(
-                         [discretization_fixture.nb_quad_points_per_pixel, *discretization_fixture.nb_of_pixels])))
-    I4s = (I4 + I4rt) / 2.
     # create material data field
-    # K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
-    #
-    # material_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
-    #                                                   K=K_0,
-    #                                                   mu=G_0,
-    #                                                   kind='linear')
-    #
-    # material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', material_C_0,
-    #                                     np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
-    #                                                       *discretization_fixture.nb_of_pixels])))
+    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
 
-    material_data_field_C_0 = I4s
+    elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+                                                     K=K_0,
+                                                     mu=G_0,
+                                                     kind='linear')
+
+    K_2, G_2 = domain.get_bulk_and_shear_modulus(E=0.5, poison=0.2)
+    elastic_C_2 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+                                                     K=K_2,
+                                                     mu=G_2,
+                                                     kind='linear')
+
+    material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                                        np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
+                                                          *discretization_fixture.nb_of_pixels])))
+    material_data_field_C_2 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                                        np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
+                                                          *discretization_fixture.nb_of_pixels])))
+
+    phase_field = discretization_fixture.get_scalar_sized_field() + 1  #
+
+    for q in np.arange(discretization_fixture.nb_quad_points_per_pixel):
+        for x in np.arange(4):
+            for y in np.arange(3):
+                material_data_field_C_2[..., q, x, y] = elastic_C_2
+                phase_field[..., x, y] = 0.5  #
+    # phase_field = np.random.rand(*discretization_fixture.get_scalar_sized_field().shape)  # set random distribution
+    # Phase field has  one  value per pixel
+    # phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  #
+    #
     # apply material distribution
     material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * phase_field[0, 0]
 
+    # Set up the equilibrium system
     macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient)
-    #
     rhs = discretization_fixture.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
     K_fun = lambda x: discretization_fixture.apply_system_matrix(material_data_field_C_0_rho, x,
                                                                  formulation='small_strain')
     M_fun = lambda x: 1 * x
 
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
 
-    homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho, displacement_field,
-                                                                       macro_gradient_field, formulation='small_strain')
+    homogenized_stress = discretization_fixture.get_homogenized_stress(
+        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        displacement_field_fnxyz=displacement_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field,
+        formulation='small_strain')
 
-    objective_function = topology_optimization.objective_function_small_strain(
+    objective_function_stress_part = topology_optimization.objective_function_stress_equivalence(
         discretization=discretization_fixture,
         actual_stress_ij=homogenized_stress,
-        target_stress_ij=target_stress,
-        phase_field_1nxyz=phase_field,
-        eta=1,
-        w=1)
+        target_stress_ij=target_stress)
+
+    # objective_function = topology_optimization.objective_function_small_strain(
+    #     discretization=discretization_fixture,
+    #     actual_stress_ij=homogenized_stress,
+    #     target_stress_ij=target_stress,
+    #     phase_field_1nxyz=phase_field,
+    #     eta=1,
+    #     w=1)
 
     # phase field gradient potential for a phase field without perturbation
-    f_rho_grad_potential_analytical = topology_optimization.partial_derivative_of_objective_function_stress_equivalence(
-        discretization_fixture,
-        phase_field,
-        homogenized_stress,
-        target_stress,
-        material_data_field_C_0,
-        displacement_field,
-        macro_gradient_field)
+    df_drho_analytical = (
+        topology_optimization.partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field(
+            discretization_fixture,
+            phase_field_1nxyz=phase_field,
+            target_stress_ij=target_stress,
+            actual_stress_ij=homogenized_stress,
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            displacement_field_fnxyz=displacement_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field))
 
     # get analytical partial derivative of phase field gradient potential for a phase field with respect to phase-field
 
@@ -373,12 +384,11 @@ def test_finite_difference_check_of_stress_equivalence_potential(discretization_
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
-                # phase_field_xy = phase_field.copy()  # Phase field has  one  value per pixel
-                phase_field_perturbed = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
+                phase_field_perturbed = phase_field.copy()  # Phase field has  one  value per pixel
+                # phase_field_perturbed = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
                 # phase_field_xy[0, 0, 0, 0] = phase_field_xy[0, 0, 0, 0] / 2  # can be random in this case
-                phase_field_perturbed[0, 0, 2:5, 2:4] = phase_field_perturbed[0, 0, 2:5,
-                                                        2:4] / 3  # can be random in this case
-                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] - epsilon
+                # phase_field_perturbed[0, 0, 2:5, 2:4] = phase_field_perturbed[0, 0, 2:5,                                                        2:4] / 3  # can be random in this case
+                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] + epsilon
 
                 # apply material distribution
                 material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * phase_field_perturbed[0, 0]
@@ -389,27 +399,37 @@ def test_finite_difference_check_of_stress_equivalence_potential(discretization_
                                                                              formulation='small_strain')
                 M_fun = lambda x: 1 * x
 
-                displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+                displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
 
-                homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_C_0_rho,
-                                                                                   displacement_field,
-                                                                                   macro_gradient_field,
-                                                                                   formulation='small_strain')
+                homogenized_stress = discretization_fixture.get_homogenized_stress(
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                    displacement_field_fnxyz=displacement_field,
+                    macro_gradient_field_ijqxyz=macro_gradient_field,
+                    formulation='small_strain')
 
-                objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                objective_function_stress_part_perturbed = topology_optimization.objective_function_stress_equivalence(
                     discretization=discretization_fixture,
                     actual_stress_ij=homogenized_stress,
-                    target_stress_ij=target_stress,
-                    phase_field_1nxyz=phase_field_perturbed,
-                    eta=1,
-                    w=1)
+                    target_stress_ij=target_stress)
 
-                fd_derivative[0, 0, x, y] = (objective_function_perturbed - objective_function) / epsilon
+                # objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                #     discretization=discretization_fixture,
+                #     actual_stress_ij=homogenized_stress,
+                #     target_stress_ij=target_stress,
+                #     phase_field_1nxyz=phase_field_perturbed,
+                #     eta=1,
+                #     w=1)
 
+                fd_derivative[0, 0, x, y] = (
+                                                    objective_function_stress_part_perturbed - objective_function_stress_part) / epsilon
+                # fd_derivative_wo[0, 0, x, y] = (
+                #                                 objective_function_perturbed - objective_function) / epsilon
+
+        print(df_drho_analytical[0, 0])
+        error_fd_vs_analytical.append(
+            np.linalg.norm((fd_derivative[0, 0] - df_drho_analytical), 'fro'))
+        np.prod(discretization_fixture.pixel_size)
         print(fd_derivative[0, 0, 0, 0])
-        print(f_rho_grad_potential_analytical[0, 0])
-        error_fd_vs_analytical.append(np.linalg.norm((fd_derivative[0, 0] - f_rho_grad_potential_analytical), 'fro'))
-
     # print(f_rho_grad_potential_analytical)
 
     print(error_fd_vs_analytical)
@@ -566,7 +586,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-2]
     fd_derivative = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
-
+    fd_derivative_wo_phase = np.zeros([*discretization_fixture.get_displacement_sized_field().shape])
     # set stress difference to zero
     target_stress = np.array([[1, 0.5], [0.5, 2]])
     macro_gradient = np.array([[1, 0], [0, 1]])
@@ -598,19 +618,20 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
     # test homogenized stress
-    homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_i,
-                                                                       displacement_field=displacement_field,
-                                                                       macro_gradient_field=macro_gradient_field,
-                                                                       formulation='small_strain')
+    homogenized_stress = discretization_fixture.get_homogenized_stress(
+        material_data_field_ijklqxyz=material_data_field_i,
+        displacement_field_fnxyz=displacement_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field,
+        formulation='small_strain')
 
     actual_stress_field = np.zeros(discretization_fixture.gradient_size)
     actual_stress_field[..., :] = homogenized_stress[(...,) + (np.newaxis,) * (actual_stress_field.ndim - 2)]
 
     stress_diff = target_stress - homogenized_stress
-    # objective function without phase-field
-    f_sigma = np.sum(stress_diff ** 2)  # TODO: Replace it with implementation of whole objective functions
-    #
-    objective_function_perturbed = topology_optimization.objective_function_small_strain(
+    # objective function  without phase-field
+    f_sigma = np.sum(stress_diff ** 2)
+    # objective function
+    objective_function = topology_optimization.objective_function_small_strain(
         discretization=discretization_fixture,
         actual_stress_ij=homogenized_stress,
         target_stress_ij=target_stress,
@@ -629,6 +650,8 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     for epsilon in epsilons:
         fd_norms = np.zeros(
             [discretization_fixture.cell.unknown_shape[0], discretization_fixture.nb_unique_nodes_per_pixel])
+        fd_norms_wo_phase = np.zeros(
+            [discretization_fixture.cell.unknown_shape[0], discretization_fixture.nb_unique_nodes_per_pixel])
 
         # loop over every single element of displacement field
         for f in np.arange(discretization_fixture.cell.unknown_shape[0]):
@@ -641,16 +664,18 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
                         displacement_field_fnxyz[f, n, x, y] = displacement_field_fnxyz[f, n, x, y] + epsilon
 
                         # homogenized stress
-                        homogenized_stress = discretization_fixture.get_homogenized_stress(material_data_field_i,
-                                                                                           displacement_field=displacement_field_fnxyz,
-                                                                                           macro_gradient_field=macro_gradient_field,
-                                                                                           formulation='small_strain')
+                        homogenized_stress = discretization_fixture.get_homogenized_stress(
+                            material_data_field_ijklqxyz=material_data_field_i,
+                            displacement_field_fnxyz=displacement_field_fnxyz,
+                            macro_gradient_field_ijqxyz=macro_gradient_field,
+                            formulation='small_strain')
 
                         stress_diff = target_stress - homogenized_stress
                         # objective function without phase-field
                         f_sigma_perturbed = np.sum(stress_diff ** 2)
 
-                        objective_function_perturbed = objective_function_perturbed = topology_optimization.objective_function_small_strain(
+                        # objective function
+                        objective_function_perturbed = topology_optimization.objective_function_small_strain(
                             discretization=discretization_fixture,
                             actual_stress_ij=homogenized_stress,
                             target_stress_ij=target_stress,
@@ -658,15 +683,118 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
                             eta=1,
                             w=1)
 
-                        fd_derivative[f, n, x, y] = (f_sigma_perturbed - f_sigma) / epsilon
+                        fd_derivative_wo_phase[f, n, x, y] = (f_sigma_perturbed - f_sigma) / epsilon
+                        fd_derivative[f, n, x, y] = (objective_function_perturbed - objective_function) / epsilon
 
                 fd_norms[f, n] = np.sum(np.linalg.norm((fd_derivative[f, n] - d_of_d_u_analytical[f, n]), 'fro'))
-
+                fd_norms_wo_phase[f, n] = np.sum(
+                    np.linalg.norm((fd_derivative_wo_phase[f, n] - d_of_d_u_analytical[f, n]), 'fro'))
         # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
         # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(d_of_d_u_analytical[f, n], 'fro')))
+        # assert np.allclose(fd_norms, fd_norms_wo_phase), (
+        #     "Finite difference derivative with phase field do not corresponds to the one without phase field "
+        #     "for partial derivative of adjoint potential  w.r.t. displacement "
+        #     "epsilon = {}".format(epsilon))
 
         error_fd_vs_analytical.append(np.sum(fd_norms))
 
         assert error_fd_vs_analytical[-1] < epsilon * 10, (
             "Finite difference derivative  do not corresponds to the analytical expression "
             "for partial derivative of adjoint potential  w.r.t. displacement ")
+
+
+@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
+    ([3, 4], 0, [6, 8]),
+    ([2, 5], 0, [12, 7]),
+    ([3, 4], 1, [6, 8]),
+    ([2, 5], 1, [12, 7])])
+def test_finite_difference_check_of_adjoint_potential_wrt_phase_field(discretization_fixture, plot=False):
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, ]
+    # epsilons = [1e-4]
+    fd_derivative = discretization_fixture.get_scalar_sized_field()
+
+    macro_gradient = np.array([[0.01, 0], [0, 0.01]])
+
+    # create material data field
+    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+
+    material_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+                                                      K=K_0,
+                                                      mu=G_0,
+                                                      kind='linear')
+
+    material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', material_C_0,
+                                        np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
+                                                          *discretization_fixture.nb_of_pixels])))
+
+    phase_field = np.random.rand(*discretization_fixture.get_scalar_sized_field().shape)*0+1   # set random distribution
+    # apply material distribution
+    material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * phase_field[0, 0]
+
+    macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient)
+    # #
+    # rhs = discretization_fixture.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+    #
+    # K_fun = lambda x: discretization_fixture.apply_system_matrix(material_data_field_C_0_rho, x,
+    #                                                              formulation='small_strain')
+    # M_fun = lambda x: 1 * x
+    #
+    # displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
+
+    # create random displacement field
+    displacement_field = np.random.rand(*discretization_fixture.get_scalar_sized_field().shape)
+
+    # compute stress field corresponding to equilibrated displacement
+    stress_field = discretization_fixture.get_stress_field(material_data_field_C_0_rho, displacement_field,
+                                                           macro_gradient_field)
+
+    # create random adjoint field
+    adjoint_field = np.random.rand(
+        *discretization_fixture.get_displacement_sized_field().shape)  # set random adjoint field
+
+    # compute adjoint_potential
+    adjoint_potential = topology_optimization.adjoint_potential(discretization_fixture, stress_field, adjoint_field)
+
+    dg_drho_analytical = topology_optimization.partial_derivative_of_adjoint_potential_wrt_phase_field(
+        discretization=discretization_fixture,
+        material_data_field_ijklqxyz=material_data_field_C_0,
+        displacement_field_fnxyz=displacement_field,
+        phase_field_1nxyz=phase_field,
+        adjoint_field_fnxyz=adjoint_field)
+
+    error_fd_vs_analytical = []
+    for epsilon in epsilons:
+        # loop over every single element of displacement field
+        for x in np.arange(discretization_fixture.nb_of_pixels[0]):
+            for y in np.arange(discretization_fixture.nb_of_pixels[1]):
+                phase_field_perturbed = np.copy(phase_field)
+                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] + epsilon
+                # compute stress field corresponding to equilibrated displacement
+
+                # apply material distribution
+                material_data_field_C_0_per = material_data_field_C_0[..., :, :] * phase_field_perturbed[0, 0]
+                #
+
+                stress_field = discretization_fixture.get_stress_field(
+                    material_data_field_ijklqxyz=material_data_field_C_0_per,
+                    displacement_field_fnxyz=displacement_field,
+                    macro_gradient_field_ijqxyz=macro_gradient_field)
+
+                adjoint_potential_perturbed = topology_optimization.adjoint_potential(
+                    discretization=discretization_fixture,
+                    stress_field_ijqxyz=stress_field,
+                    adjoint_field_fnxyz=adjoint_field)
+
+                fd_derivative[0, 0, x, y] = (adjoint_potential_perturbed - adjoint_potential) / epsilon
+
+        fd_norm = np.sum(np.linalg.norm((fd_derivative[0, 0] - dg_drho_analytical ), 'fro'))
+
+            # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
+            # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(dg_du_analytical[f, n], 'fro')))
+        # (error_fd_vs_analytical)
+
+        error_fd_vs_analytical.append(fd_norm)
+
+    assert error_fd_vs_analytical[-1] < epsilon*1e1, (
+        "Finite difference derivative  do not corresponds to the analytical expression "
+        "for partial derivative of adjoint potential  w.r.t. displacement ")

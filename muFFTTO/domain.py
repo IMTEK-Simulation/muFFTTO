@@ -180,17 +180,17 @@ class Discretization:
     # for iteration in range(500):
     #     _ = np.einsum('ijk,ilm,njm,nlk,abc->',a,a,a,a,a, optimize=path)
     #
-    def get_rhs(self, material_data_field, macro_gradient_field):
+    def get_rhs(self, material_data_field_ijklqxyz, macro_gradient_field_ijqxyz):
         # macro_gradient_field    [f,d,q,x,y,z]
         # material_data_field [d,d,d,d,q,x,y,z] - elasticity
         # material_data_field     [d,d,q,x,y,z] - conductivity
         # rhs                       [f,n,x,y,z]
         #  rhs=-Dt*wA*E
-        material_data_field = self.apply_quadrature_weights(material_data_field)
-        stress = self.apply_material_data(material_data_field, macro_gradient_field)
-        rhs = self.apply_gradient_transposed_operator(stress)
+        material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)
+        stress = self.apply_material_data(material_data_field_ijklqxyz, macro_gradient_field_ijqxyz)
+        rhs_fnxyz = self.apply_gradient_transposed_operator(stress)
 
-        return -rhs
+        return -rhs_fnxyz
 
     def get_macro_gradient_field(self, macro_gradient):
         # return macro gradient field from single macro gradient vector ---
@@ -208,29 +208,30 @@ class Discretization:
 
         return weighted_material_data
 
-    def get_homogenized_stress(self, material_data_field, displacement_field, macro_gradient_field, formulation=None):
+    def get_homogenized_stress(self, material_data_field_ijklqxyz, displacement_field_fnxyz,
+                               macro_gradient_field_ijqxyz, formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         # A_h * macro_grad = int(A * (macro_grad + micro_grad))  dx / | domain |
         if formulation == 'small_strain':
-            strain = self.apply_gradient_operator_symmetrized(displacement_field)
+            strain = self.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
         else:
-            strain = self.apply_gradient_operator(displacement_field)
+            strain = self.apply_gradient_operator(displacement_field_fnxyz)
 
-        strain = strain + macro_gradient_field
-        material_data_field = self.apply_quadrature_weights(material_data_field)
-        stress = self.apply_material_data(material_data_field, strain)
+        strain = strain + macro_gradient_field_ijqxyz
+        material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)
+        stress = self.apply_material_data(material_data_field_ijklqxyz, strain)
         homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
         return homogenized_stress
 
-    def get_stress_field(self, material_data_field, displacement_field, macro_gradient_field, formulation=None):
+    def get_stress_field(self, material_data_field_ijklqxyz, displacement_field_fnxyz, macro_gradient_field_ijqxyz, formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         #  stress = A * (macro_grad + micro_grad)
         if formulation == 'small_strain':
-            strain = self.apply_gradient_operator_symmetrized(displacement_field)
+            strain = self.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
         else:
-            strain = self.apply_gradient_operator(displacement_field)
-        strain = strain + macro_gradient_field
-        stress = self.apply_material_data(material_data_field, strain)
+            strain = self.apply_gradient_operator(displacement_field_fnxyz)
+        strain = strain + macro_gradient_field_ijqxyz
+        stress = self.apply_material_data(material_data_field_ijklqxyz, strain)
         return stress
 
     def apply_quadrature_weights_conductivity(self, material_data):
