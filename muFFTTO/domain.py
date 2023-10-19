@@ -208,8 +208,10 @@ class Discretization:
 
         return weighted_material_data
 
-    def get_homogenized_stress(self, material_data_field_ijklqxyz, displacement_field_fnxyz,
-                               macro_gradient_field_ijqxyz, formulation=None):
+    def get_homogenized_stress(self, material_data_field_ijklqxyz,
+                               displacement_field_fnxyz,
+                               macro_gradient_field_ijqxyz,
+                               formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         # A_h * macro_grad = int(A * (macro_grad + micro_grad))  dx / | domain |
         if formulation == 'small_strain':
@@ -223,7 +225,11 @@ class Discretization:
         homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
         return homogenized_stress
 
-    def get_stress_field(self, material_data_field_ijklqxyz, displacement_field_fnxyz, macro_gradient_field_ijqxyz, formulation=None):
+    def get_stress_field(self,
+                         material_data_field_ijklqxyz,
+                         displacement_field_fnxyz,
+                         macro_gradient_field_ijqxyz,
+                         formulation=None):
         # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
         #  stress = A * (macro_grad + micro_grad)
         if formulation == 'small_strain':

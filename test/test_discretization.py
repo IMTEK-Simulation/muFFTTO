@@ -572,9 +572,9 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 solution, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test homogenized stress
-                homogenized_stress = discretization.get_homogenized_stress(material_data_field,
-                                                                           displacement_field=solution,
-                                                                           macro_gradient_field=macro_gradient_field)
+                homogenized_stress = discretization.get_homogenized_stress(material_data_field_ijklqxyz=material_data_field,
+                                                                           displacement_field_fnxyz=solution,
+                                                                           macro_gradient_field_ijqxyz=macro_gradient_field)
                 if problem_type == 'conductivity':
                     self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
                                     'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'
@@ -597,9 +597,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
                 solution_M, norms_M = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test homogenized stress
-                homogenized_stress_M = discretization.get_homogenized_stress(material_data_field,
-                                                                             displacement_field=solution_M,
-                                                                             macro_gradient_field=macro_gradient_field)
+                homogenized_stress_M = discretization.get_homogenized_stress(material_data_field_ijklqxyz=material_data_field,
+                                                                             displacement_field_fnxyz=solution_M,
+                                                                             macro_gradient_field_ijqxyz=macro_gradient_field)
                 self.assertTrue(np.allclose(solution, solution_M, rtol=1e-05, atol=1e-04),
                                 'Preconditioned solution is not equal to un preconditioned solution: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
