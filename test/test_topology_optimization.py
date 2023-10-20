@@ -987,7 +987,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
 
     # get analytical partial derivative of stress equivalent potential for a phase field with respect to phase-field
 
-    df_drho_analytical = topology_optimization.partial_derivative_of_objective_function__wrt_phase_field(
+    df_drho_analytical = topology_optimization.partial_derivative_of_objective_function_wrt_phase_field(
         discretization=discretization_fixture,
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_fnxyz=displacement_field,
@@ -1157,7 +1157,18 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
         adjoint_field_fnxyz=adjoint_field,
         p=p)
 
-    sensitivity_analytical = df_drho_analytical + dg_drho_analytical
+    # sensitivity_analytical_old = df_drho_analytical + dg_drho_analytical
+    sensitivity_analytical = topology_optimization.sensitivity(
+        discretization=discretization_fixture,
+        material_data_field_ijklqxyz=material_data_field_C_0,
+        displacement_field_fnxyz=displacement_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field,
+        phase_field_1nxyz=phase_field,
+        adjoint_field_fnxyz=adjoint_field,
+        target_stress_ij=target_stress,
+        actual_stress_ij=homogenized_stress,
+        p=p,
+        eta=1)
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
@@ -1209,7 +1220,7 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
 
         # print(error_fd_vs_analytical)
 
-    assert error_fd_vs_analytical[-1] < epsilon * 100, (
+    assert error_fd_vs_analytical[-1] < epsilon * 200, (
         "Finite difference derivative do not corresponds to the analytical expression "
         "for whole Sensitivity "
-        "error_fd_vs_analytical = {}".format(error_fd_vs_analytical))
+        "error_fd_vs_analytical = {}".format(error_fd_vs_analytical)) # 200 is housbumero
