@@ -294,7 +294,6 @@ def test_of_stress_equivalence_potential_quadratic(discretization_fixture, plot=
     # ([2, 5], 1, [12, 7])
 ])
 def test_finite_difference_check_of_stress_equivalence_potential(discretization_fixture):
-    # TODO finite_difference_check_of_stress_equivalence_potential DOES NOT  work!
     epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-4]
     p = 1
@@ -1131,7 +1130,7 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
     adjoint_field = topology_optimization.solve_adjoint_problem(
         discretization=discretization_fixture,
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        stress_difference_ijqxyz=stress_difference_ijqxyz,
+        stress_difference_ij=stress_difference_ij,
         formulation='small_strain')
 
     stress_field = discretization_fixture.get_stress_field(
@@ -1223,4 +1222,4 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
     assert error_fd_vs_analytical[-1] < epsilon * 200, (
         "Finite difference derivative do not corresponds to the analytical expression "
         "for whole Sensitivity "
-        "error_fd_vs_analytical = {}".format(error_fd_vs_analytical)) # 200 is housbumero
+        "error_fd_vs_analytical = {}".format(error_fd_vs_analytical))  # 200 is housbumero
