@@ -1057,11 +1057,11 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
     #
     epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-4]
-    p = 1
+    p = 4
     fd_derivative = discretization_fixture.get_scalar_sized_field()
 
     target_stress = np.array([[1, 0.3], [0.3, 2]])
-    macro_gradient = np.array([[0.01, 0], [0, 0.02]])
+    macro_gradient = np.array([[0.2, 0], [0, 0.2]])
 
     # create material data field
     K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -1095,7 +1095,7 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
     displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
 
     # ----------------------------------------------------------------------
-    # compute stress field corresponding to displacement
+    # compute homogenized stress field corresponding to displacement
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
         displacement_field_fnxyz=displacement_field,
@@ -1128,10 +1128,12 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
     stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
         (...,) + (np.newaxis,) * (stress_difference_ijqxyz.ndim - 2)]
 
-    adjoint_field = topology_optimization.solve_adjoint_problem(discretization=discretization_fixture,
-                                                                material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                                                                stress_difference_ijqxyz=stress_difference_ijqxyz,
-                                                                formulation='small_strain')
+    adjoint_field = topology_optimization.solve_adjoint_problem(
+        discretization=discretization_fixture,
+        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        stress_difference_ijqxyz=stress_difference_ijqxyz,
+        formulation='small_strain')
+
     stress_field = discretization_fixture.get_stress_field(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
         displacement_field_fnxyz=displacement_field,
@@ -1142,6 +1144,9 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
         discretization=discretization_fixture,
         stress_field_ijqxyz=stress_field,
         adjoint_field_fnxyz=adjoint_field)
+    assert np.abs(adjoint_potential) < 1e-12, (
+        "Adjoint potential si not zero for equilibrated stress field"
+        " adjoint_potential = {}".format(adjoint_potential))
 
     dg_drho_analytical = topology_optimization.partial_derivative_of_adjoint_potential_wrt_phase_field(
         discretization=discretization_fixture,
@@ -1150,9 +1155,9 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
         macro_gradient_field_ijqxyz=macro_gradient_field,
         phase_field_1nxyz=phase_field,
         adjoint_field_fnxyz=adjoint_field,
-        p=1)
+        p=p)
 
-    sensitivity_analytical=df_drho_analytical+dg_drho_analytical
+    sensitivity_analytical = df_drho_analytical + dg_drho_analytical
 
     error_fd_vs_analytical = []
     for epsilon in epsilons:
@@ -1192,7 +1197,7 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
                     stress_field_ijqxyz=stress_field_perturbed,
                     adjoint_field_fnxyz=adjoint_field)
 
-                fd_derivative[0, 0, x, y] = (objective_function_perturbed+adjoint_potential_perturbed
+                fd_derivative[0, 0, x, y] = (objective_function_perturbed + adjoint_potential_perturbed
                                              -
                                              objective_function) / epsilon
 
@@ -1206,5 +1211,5 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
 
     assert error_fd_vs_analytical[-1] < epsilon * 100, (
         "Finite difference derivative do not corresponds to the analytical expression "
-        "for partial derivative of gradient of phase-field potential "
+        "for whole Sensitivity "
         "error_fd_vs_analytical = {}".format(error_fd_vs_analytical))
