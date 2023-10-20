@@ -145,14 +145,14 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field(
     return 2 * partial_derivative_xyz
 
 
-def partial_derivative_of_objective_function__wrt_phase_field(discretization,
-                                                              material_data_field_ijklqxyz,
-                                                              displacement_field_fnxyz,
-                                                              macro_gradient_field_ijqxyz,
-                                                              phase_field_1nxyz,
-                                                              target_stress_ij,
-                                                              actual_stress_ij,
-                                                              p):
+def partial_derivative_of_objective_function_wrt_phase_field(discretization,
+                                                             material_data_field_ijklqxyz,
+                                                             displacement_field_fnxyz,
+                                                             macro_gradient_field_ijqxyz,
+                                                             phase_field_1nxyz,
+                                                             target_stress_ij,
+                                                             actual_stress_ij,
+                                                             p):
     df_drho = partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field(discretization,
                                                                                           material_data_field_ijklqxyz,
                                                                                           displacement_field_fnxyz,
@@ -192,17 +192,19 @@ def partial_der_of_objective_function_wrt_displacement_small_strain(discretizati
     return -2 * df_sigma_du_fnxyz / discretization.cell.domain_volume
 
 
-def solve_adjoint_problem(discretization, material_data_field, stress_difference,
+def solve_adjoint_problem(discretization, material_data_field_ijklqxyz,
+                          stress_difference_ijqxyz,
                           formulation='small_strain'):
     # Solve adjoint problem ∂f/∂u=-∂g/∂u
     # Dt C D lambda = - 2/|omega| Dt: C : sigma_diff
 
     # stress difference potential
     # rhs=-Dt*wA*E  -- we can use it to assemble df_du_field
-    df_du_field = 2 * discretization.get_rhs(material_data_field_ijklqxyz=material_data_field,
-                                             macro_gradient_field_ijqxyz=stress_difference) / discretization.cell.domain_volume  # minus sign is already there
+    df_du_field = 2 * discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+                                             macro_gradient_field_ijqxyz=stress_difference_ijqxyz) / discretization.cell.domain_volume  # minus sign is already there
     #
-    K_fun = lambda x: discretization.apply_system_matrix(material_data_field, displacement_field=x,
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_ijklqxyz,
+                                                         displacement_field=x,
                                                          formulation=formulation)
     M_fun = lambda x: 1 * x
 
