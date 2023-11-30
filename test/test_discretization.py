@@ -96,6 +96,67 @@ class DiscretizationTestCase(unittest.TestCase):
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
+    def test_3D_gradients_linear_conductivity(self):
+        domain_size = [3, 4, 5]
+        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        number_of_pixels = (4, 5, 6)
+
+        discretization_type = 'finite_element'
+        for element_type in ['trilinear_hexahedron']:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   number_of_pixels=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
+
+            nodal_coordinates = discretization.get_nodal_points_coordinates()
+            quad_coordinates = discretization.get_quad_points_coordinates()
+
+            u_fun_4x3y = lambda x, y, z: 4 * x + 3 * y + 0 * z  # np.sin(x)
+            du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
+            du_fun_3 = lambda y: 3 + 0 * y
+            du_fun_0 = lambda y: 0 + 0 * y
+            temperature = discretization.get_temperature_sized_field()
+            temperature_gradient = discretization.get_temperature_gradient_size_field()
+            temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
+
+            temperature[0, 0, :, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :, :],
+                                                    nodal_coordinates[1, 0, :, :, :],
+                                                    nodal_coordinates[2, 0, :, :, :])
+            temperature_gradient_anal[0, 0, :, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :, :])
+            temperature_gradient_anal[0, 1, :, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :, :])
+            temperature_gradient_anal[0, 2, :, :, :, :] = du_fun_0(quad_coordinates[2, :, :, :, :])
+
+            temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
+            temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
+                                                                                 temperature_gradient)
+              # TODO TEST FOR GRADEINT
+            # test 1
+            average = np.ndarray.sum(temperature_gradient)
+            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                     problem_type)
+            self.assertLessEqual(average, 1e-14, message)
+
+            # test 2
+            # compare values of gradient element wise --- without last-- periodic pixel that differs
+            value_1 = np.alltrue(
+                temperature_gradient[..., 0:-1, 0:-1] == temperature_gradient_anal[..., 0:-1, 0:-1])
+            diff = np.ndarray.sum(
+                temperature_gradient[..., 0:-1, 0:-1] - temperature_gradient_anal[..., 0:-1, 0:-1])
+            value = np.allclose(temperature_gradient[..., 0:-1, 0:-1], temperature_gradient_anal[..., 0:-1, 0:-1],
+                                rtol=1e-16, atol=1e-14)
+            self.assertTrue(value,
+                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                                element_type, problem_type, diff))
+
+            value_roll = np.alltrue(
+                temperature_gradient == temperature_gradient_rolled)
+            self.assertTrue(value_roll,
+                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                                element_type, problem_type, diff))
+
     def test_2D_gradients_bilinear_conductivity(self):
         domain_size = [4, 5]
         problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
@@ -572,9 +633,10 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 solution, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test homogenized stress
-                homogenized_stress = discretization.get_homogenized_stress(material_data_field_ijklqxyz=material_data_field,
-                                                                           displacement_field_fnxyz=solution,
-                                                                           macro_gradient_field_ijqxyz=macro_gradient_field)
+                homogenized_stress = discretization.get_homogenized_stress(
+                    material_data_field_ijklqxyz=material_data_field,
+                    displacement_field_fnxyz=solution,
+                    macro_gradient_field_ijqxyz=macro_gradient_field)
                 if problem_type == 'conductivity':
                     self.assertTrue(np.allclose(matlab_solution, solution, rtol=1e-05, atol=1e-04),
                                     'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'
@@ -597,9 +659,10 @@ class DiscretizationTestCase(unittest.TestCase):
                 M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
                 solution_M, norms_M = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test homogenized stress
-                homogenized_stress_M = discretization.get_homogenized_stress(material_data_field_ijklqxyz=material_data_field,
-                                                                             displacement_field_fnxyz=solution_M,
-                                                                             macro_gradient_field_ijqxyz=macro_gradient_field)
+                homogenized_stress_M = discretization.get_homogenized_stress(
+                    material_data_field_ijklqxyz=material_data_field,
+                    displacement_field_fnxyz=solution_M,
+                    macro_gradient_field_ijqxyz=macro_gradient_field)
                 self.assertTrue(np.allclose(solution, solution_M, rtol=1e-05, atol=1e-04),
                                 'Preconditioned solution is not equal to un preconditioned solution: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
@@ -609,7 +672,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
                         element_type, problem_type))
 
-    def unfinishedtest_2D_integral_linearity(self): #TODO
+    def unfinishedtest_2D_integral_linearity(self):  # TODO
         global material_data_field
         domain_size = [3, 4]
         for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
@@ -724,7 +787,6 @@ class DiscretizationTestCase(unittest.TestCase):
                       [4]])
         AB = np.matmul(mat_1, B)
         BtA = np.matmul(B.transpose(), mat_1)
-
 
     def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
 

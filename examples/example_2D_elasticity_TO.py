@@ -91,7 +91,8 @@ p = 2
 w = 1/10
 eta = 1
 
-
+#TODO eta = 0.025
+# TODO w = 0.1
 def my_objective_function(phase_field_1nxyz):
     # reshape the field
     phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *number_of_pixels])

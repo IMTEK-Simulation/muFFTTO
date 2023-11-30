@@ -1,5 +1,5 @@
 #
-# Copyright 2023 Martin Ladecky
+# Copyright 2021 Lars Pastewka
 #
 # MIT License
 #

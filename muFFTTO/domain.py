@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 
+from muFFTTO import discretization_library
 
 # import pyfftw  TODO ask about FFTW or numpy FFT
 
@@ -94,6 +95,7 @@ class Discretization:
         quad_points_coordinates = np.zeros([self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
 
         for q in range(0, self.nb_quad_points_per_pixel):
+
             quad_points_coordinates[:, q] = np.meshgrid(
                 *[np.arange(0 + self.quad_points_coord[d, q], self.domain_size[d], self.pixel_size[d]) for d in
                   range(0, self.domain_dimension)],
@@ -440,175 +442,9 @@ class Discretization:
         return np.zeros(self.material_data_size)
 
     def get_discretization_info(self, element_type):
+        discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
-        if not element_type in ['linear_triangles', 'bilinear_rectangle']:
-            raise ValueError('Unrecognised element_type {}'.format(element_type))
 
-        match element_type:
-            case 'linear_triangles':
-                if self.domain_dimension != 2:
-                    raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))
-                """ Geometry for 2 linear triangular elements in pixel
-                    x_3_______________x_4
-                      |  \            |
-                      |     \  q = 2  |
-                      |        \      |
-                      | q = 1    \    |
-                    x_1_______________x_2
-                """
-                self.nb_quad_points_per_pixel = 2
-                self.nb_nodes_per_pixel = 1  # left bottom corner belong to pixel.
-                self.nb_unique_nodes_per_pixel = 1
-
-                # nodal points offsets
-                self.offsets = np.array([[0, 0], [1, 0],
-                                         [0, 1], [1, 1]])
-                """  Structure of B matrix: 
-                     B(:,:,q,e) --> is B matrix evaluate gradient at point q in  element e
-                     B(:,:,q,e) has size [dim,nb_of_nodes/basis_functions] 
-                                           (usually 4 in 2D and 8 in 3D)
-                     B(:,:,q,e) = [ ∂φ_1/∂x_1  ∂φ_2/∂x_1  ∂φ_3/∂x_1 ∂φ_4/∂x_1 ;
-                                    ∂φ_1/∂x_2  ∂φ_2/∂x_2  ∂φ_3/∂x_2 ∂φ_4/∂x_2]   at (q)
-                """
-                self.B_gradient = np.zeros([self.domain_dimension, 4,
-                                            self.nb_quad_points_per_pixel])
-                h_x = self.pixel_size[0]
-                h_y = self.pixel_size[1]
-
-                self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_pixel])
-                self.quad_points_coord[:, 0] = [h_x / 3, h_y / 3]
-                self.quad_points_coord[:, 1] = [h_x * 2 / 3, h_y * 2 / 3]
-
-                # @formatter:off   B(dim,number of nodal values,quad point ,element)
-                self.B_gradient[:, :,  0] = [[-1 / h_x,   1 / h_x,    0,          0],
-                                               [-1 / h_y,         0,    1 / h_y,    0]]
-                self.B_gradient[:, :,  1] = [[0,         0, - 1 / h_x, 1 / h_x],
-                                               [0, - 1 / h_y,         0, 1 / h_y]]
-                # @formatter:on
-                self.quadrature_weights = np.zeros([self.nb_quad_points_per_pixel])
-                self.quadrature_weights[0] = h_x * h_y / 2
-                self.quadrature_weights[1] = h_x * h_y / 2
-
-                B_at_pixel_dnijkq = self.B_gradient.reshape(self.domain_dimension,
-                                                            self.nb_nodes_per_pixel,
-                                                            *self.domain_dimension * (2,),
-                                                            self.nb_quad_points_per_pixel)
-
-                if self.domain_dimension == 2:
-                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 3)
-                elif self.domain_dimension == 3:
-                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
-                    warnings.warn('Swapaxes for 3D is not tested.')
-
-                self.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
-
-                return
-            case 'bilinear_rectangle':
-                if self.domain_dimension != 2:
-                    raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))
-                """ 
-                    %   x_3____e=1__x_4
-                    %   |            |
-                    %   |  q=4   q=3 |
-                    %   |            |
-                    %   |  q=1   q=2 |
-                    %   x_1_________x_2 - --------x
-                    *(-1, 1) | (1, 1)
-                    *x       
-                    * | | |
-                    * | | |
-                    *-- | --------- | ----->  ξ
-                    * | | |
-                    * | | |
-                    *x - --------x
-                    *(-1, -1) | (1, -1)
-                    *
-                    *N₁ = (1 - ξ)(1 - η) / 4
-                    *N₂ = (1 + ξ)(1 - η) / 4
-                    *N₃ = (1 + ξ)(1 + η) / 4
-                    *N₄ = (1 - ξ)(1 + η) / 4
-                    * ∂N₁ / ∂ξ = - (1 - η) / 4, ∂N₁ / ∂η = - (1 - ξ) / 4
-                    * ∂N₂ / ∂ξ = + (1 - η) / 4, ∂N₂ / ∂η = - (1 + ξ) / 4
-                    * ∂N₃ / ∂ξ = + (1 + η) / 4, ∂N₃ / ∂η = + (1 + ξ) / 4
-                    * ∂N₄ / ∂ξ = - (1 + η) / 4, ∂N₄ / ∂η = + (1 - ξ) / 4
-                """
-                self.nb_quad_points_per_pixel = 4
-                # self.nb_elements_per_pixel = 1
-                self.nb_nodes_per_pixel = 1  # x1 is the only pixel assigned node, x2 belongs to pixel +1
-                self.nb_unique_nodes_per_pixel = 1
-
-                #  pixel sizes for better readability
-                h_x = self.pixel_size[0]
-                h_y = self.pixel_size[1]
-                # nodal points offsets
-                self.offsets = np.array([[0, 0], [1, 0],
-                                         [0, 1], [1, 1]])
-                coord_helper = np.zeros(2)
-                coord_helper[0] = -1. / (np.sqrt(3))
-                coord_helper[1] = +1. / (np.sqrt(3))
-
-                self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_pixel])
-
-                self.quad_points_coord[:, 0] = [coord_helper[0], coord_helper[0]]
-                self.quad_points_coord[:, 1] = [coord_helper[1], coord_helper[0]]
-                self.quad_points_coord[:, 2] = [coord_helper[0], coord_helper[1]]
-                self.quad_points_coord[:, 3] = [coord_helper[1], coord_helper[1]]
-
-                self.B_gradient = np.zeros([self.domain_dimension, 4,
-                                            self.nb_quad_points_per_pixel])
-                # Jacobian matrix of transformation from iso-element to current size
-
-                det_jacobian = h_x * h_y / 4
-
-                inv_jacobian = np.array([[h_y / 2, 0], [0, h_x / 2]]) / det_jacobian
-
-                # construction of B matrix
-                for qp in range(0, self.nb_quad_points_per_pixel):
-                    x_q = self.quad_points_coord[:, qp]
-                    xi = x_q[0]
-                    eta = x_q[1]
-                    # @formatter:off
-                    self.B_gradient[:,:, qp]=np.array( [[(eta - 1) / 4, (-eta + 1) / 4, (-eta - 1) / 4, (eta + 1) / 4],
-                                                           [(xi  - 1) / 4, (-xi  - 1) / 4, (-xi  + 1) / 4, (xi  + 1) / 4]])
-
-                    self.B_gradient[:,:, qp] = np.matmul(inv_jacobian,self.B_gradient[:,:, qp])
-                    # @formatter:on
-
-                self.quadrature_weights = np.zeros([self.nb_quad_points_per_pixel])
-                self.quadrature_weights[0] = h_x * h_y / 4
-                self.quadrature_weights[1] = h_x * h_y / 4
-                self.quadrature_weights[2] = h_x * h_y / 4
-                self.quadrature_weights[3] = h_x * h_y / 4
-                # we have to recompute positions base on the size of current pixel !!!
-                self.quad_points_coord = np.zeros(
-                    [self.domain_dimension, self.nb_quad_points_per_pixel])
-
-                self.quad_points_coord[:, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
-                                                h_y / 2 + h_y * coord_helper[0] / 2]
-                self.quad_points_coord[:, 1] = [h_x / 2 + h_x * coord_helper[1] / 2,
-                                                h_y / 2 + h_y * coord_helper[0] / 2]
-                self.quad_points_coord[:, 2] = [h_x / 2 + h_x * coord_helper[0] / 2,
-                                                h_y / 2 + h_y * coord_helper[1] / 2]
-                self.quad_points_coord[:, 3] = [h_x / 2 + h_x * coord_helper[1] / 2,
-                                                h_y / 2 + h_y * coord_helper[1] / 2]
-                # TODO find proper way of creating B matrices
-                B_at_pixel_dnijkq = self.B_gradient.reshape(self.domain_dimension,
-                                                            self.nb_nodes_per_pixel,
-                                                            *self.domain_dimension * (2,),
-                                                            self.nb_quad_points_per_pixel)
-
-                if self.domain_dimension == 2:
-                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 3)
-                elif self.domain_dimension == 3:
-                    B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
-                    warnings.warn('Swapaxes for 3D is not tested.')
-
-                self.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
-
-            case _:
-                raise ValueError('Element type {} is not implemented yet'.format(element_type))
 
 
 def compute_Vight_notation(C):
