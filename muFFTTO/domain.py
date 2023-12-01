@@ -447,7 +447,7 @@ class Discretization:
 
 
 
-def compute_Vight_notation(C):
+def compute_Voigt_notation_4order(C):# TODO add indicies
     # function return Voigt notation of elastic tensor in quad. point
     if len(C) == 2:
         C_voigt = np.zeros([3, 3])
@@ -466,6 +466,24 @@ def compute_Vight_notation(C):
                 C_voigt[i, j] = C[i_ind[i] + i_ind[j]]
                 # print()
     return C_voigt
+
+
+def compute_Voigt_notation_2order(sigma_ij):
+    # function return Voigt notation of second order tensor in quad. point
+    if len(sigma_ij) == 2:
+        sigma_voigt_k = np.zeros([3])
+        ij_ind = [(0, 0), (1, 1), (0, 1)]
+
+        for k in np.arange(len(sigma_voigt_k)):
+            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
+
+    elif len(sigma_ij) == 3:
+        sigma_voigt_k = np.zeros([6])
+        ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+        for k in np.arange(len(sigma_voigt_k)):
+            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
+                # print()
+    return sigma_voigt_k
 
 
 def get_bulk_and_shear_modulus(E, poison):
