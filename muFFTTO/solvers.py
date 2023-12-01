@@ -56,7 +56,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
         norms['residual_rr'].append(scalar_product(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
 
-        if (np.sqrt(r_1z_1)) < toler:
+        if (np.sqrt(r_1z_1)) < toler: # TODO[Solver] check out stopping criteria
             break
 
         beta = r_1z_1 / r_0z_0
