@@ -10,7 +10,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (12, 12, 12)
+number_of_pixels = (64, 64, 64)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -55,7 +55,7 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho
 
 preconditioner = discretization.get_preconditioner(reference_material_data_field=material_data_field_C_0)
 
-M_fun = lambda x: 1*x #discretization.apply_preconditioner(preconditioner, x)
+M_fun = lambda x: 1*x  #discretization.apply_preconditioner(preconditioner, x)
 
 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 

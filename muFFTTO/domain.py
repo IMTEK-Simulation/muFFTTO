@@ -4,6 +4,7 @@ import numpy as np
 
 from muFFTTO import discretization_library
 
+
 # import pyfftw  TODO ask about FFTW or numpy FFT
 
 class PeriodicUnitCell:
@@ -95,7 +96,6 @@ class Discretization:
         quad_points_coordinates = np.zeros([self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
 
         for q in range(0, self.nb_quad_points_per_pixel):
-
             quad_points_coordinates[:, q] = np.meshgrid(
                 *[np.arange(0 + self.quad_points_coord[d, q], self.domain_size[d], self.pixel_size[d]) for d in
                   range(0, self.domain_dimension)],
@@ -335,6 +335,7 @@ class Discretization:
         return M_system_matrix_diagonals  # return diagonals of preconditioner in Fourier space
 
     def apply_preconditioner(self, preconditioner_Fourier_space, force_field):
+        # TODO [Preconditioner] PRECONDITIONER DOES NOT WORK FOR ELASTICITY
         # apply preconditioner using FFT
         # force_field [f,n,x,y,z]
         # preconditioner_Fourier_space [f,n,f,n,x,y,z] # TODO find better indexing notation
@@ -445,27 +446,25 @@ class Discretization:
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
 
-
-
-def compute_Voigt_notation_4order(C):# TODO add indicies
+def compute_Voigt_notation_4order(C_ijkl):
     # function return Voigt notation of elastic tensor in quad. point
-    if len(C) == 2:
-        C_voigt = np.zeros([3, 3])
-        i_ind = [(0, 0), (1, 1), (0, 1)]
-        for i in np.arange(len(C_voigt[0])):
-            for j in np.arange(len(C_voigt[1])):
+    if len(C_ijkl) == 2:
+        C_voigt_kl = np.zeros([3, 3])
+        ij_ind = [(0, 0), (1, 1), (0, 1)]
+        for k in np.arange(len(C_voigt_kl[0])):
+            for l in np.arange(len(C_voigt_kl[1])):
                 # print()
                 # print([i_ind[i]+quad_point+i_ind[j]+quad_point])
-                C_voigt[i, j] = C[i_ind[i] + i_ind[j]]
+                C_voigt_kl[k, l] = C_ijkl[ij_ind[k] + ij_ind[l]]
 
-    elif len(C) == 3:
-        C_voigt = np.zeros([6, 6])
-        i_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
-        for i in np.arange(len(C_voigt[0])):
-            for j in np.arange(len(C_voigt[1])):
-                C_voigt[i, j] = C[i_ind[i] + i_ind[j]]
+    elif len(C_ijkl) == 3:
+        C_voigt_kl = np.zeros([6, 6])
+        ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+        for i in np.arange(len(C_voigt_kl[0])):
+            for j in np.arange(len(C_voigt_kl[1])):
+                C_voigt_kl[i, j] = C_ijkl[ij_ind[i] + ij_ind[j]]
                 # print()
-    return C_voigt
+    return C_voigt_kl
 
 
 def compute_Voigt_notation_2order(sigma_ij):
@@ -482,7 +481,7 @@ def compute_Voigt_notation_2order(sigma_ij):
         ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
         for k in np.arange(len(sigma_voigt_k)):
             sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
-                # print()
+
     return sigma_voigt_k
 
 

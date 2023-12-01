@@ -36,6 +36,8 @@ material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                       *discretization.nb_of_pixels])))
 
+print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+
 # material distribution
 
 phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
@@ -43,7 +45,6 @@ phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # 
 # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0],
                                                                             1)
-
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
@@ -68,8 +69,39 @@ homogenized_stress = discretization.get_homogenized_stress(
     macro_gradient_field_ijqxyz=macro_gradient_field,
     formulation='small_strain')
 
-print(homogenized_stress)
+print('homogenized stress = \n {}'.format(homogenized_stress))
+print('homogenized stress in Voigt notation = \n {}'.format(domain.compute_Voigt_notation_2order(homogenized_stress)))
 
+end_time = time.time()
+elapsed_time = end_time - start_time
+print("Elapsed time: ", elapsed_time)
+
+start_time = time.time()
+dim = discretization.domain_dimension
+homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
+# compute whole homogenized elastic tangent
+for i in range(dim):
+    for j in range(dim):
+        # set macroscopic gradient
+        macro_gradient = np.zeros([dim, dim])
+        macro_gradient[i, j] = 1
+        # Set up right hand side
+        macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+
+        # Solve mechanical equilibrium constrain
+        rhs_ij = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+
+        displacement_field_ij, norms = solvers.PCG(K_fun, rhs_ij, x0=None, P=M_fun, steps=int(500), toler=1e-12)
+
+        # ----------------------------------------------------------------------
+        # compute homogenized stress field corresponding
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho,
+            displacement_field_fnxyz=displacement_field_ij,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            formulation='small_strain')
+
+print('homogenized elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(homogenized_C_ijkl)))
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
