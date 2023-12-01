@@ -114,10 +114,10 @@ class DiscretizationTestCase(unittest.TestCase):
             nodal_coordinates = discretization.get_nodal_points_coordinates()
             quad_coordinates = discretization.get_quad_points_coordinates()
 
-            u_fun_4x3y = lambda x, y, z: 4 * x + 3 * y + 0 * z  # np.sin(x)
+            u_fun_4x3y = lambda x, y, z: 4 * x + 3 * y + 5 * z  # np.sin(x)
             du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
             du_fun_3 = lambda y: 3 + 0 * y
-            du_fun_0 = lambda y: 0 + 0 * y
+            du_fun_0 = lambda z: 5 + 0 * z
             temperature = discretization.get_temperature_sized_field()
             temperature_gradient = discretization.get_temperature_gradient_size_field()
             temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
@@ -131,24 +131,24 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
             temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
-                                                                                 temperature_gradient)
-              # TODO TEST FOR GRADEINT
+                                                                                  temperature_gradient)
+            # TODO TEST FOR GRADEINT
             # test 1
             average = np.ndarray.sum(temperature_gradient)
-            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+            message = "Gradient does not have zero mean !!!! for 3D element {} in {} problem".format(element_type,
                                                                                                      problem_type)
-            self.assertLessEqual(average, 1e-14, message)
+            self.assertLessEqual(average, 1e-12, message)
 
             # test 2
             # compare values of gradient element wise --- without last-- periodic pixel that differs
             value_1 = np.alltrue(
-                temperature_gradient[..., 0:-1, 0:-1] == temperature_gradient_anal[..., 0:-1, 0:-1])
+                temperature_gradient[..., 0:-1, 0:-1, 0:-1] == temperature_gradient_anal[..., 0:-1, 0:-1, 0:-1])
             diff = np.ndarray.sum(
-                temperature_gradient[..., 0:-1, 0:-1] - temperature_gradient_anal[..., 0:-1, 0:-1])
-            value = np.allclose(temperature_gradient[..., 0:-1, 0:-1], temperature_gradient_anal[..., 0:-1, 0:-1],
-                                rtol=1e-16, atol=1e-14)
+                temperature_gradient[..., 0:-1, 0:-1, 0:-1] - temperature_gradient_anal[..., 0:-1, 0:-1, 0:-1])
+            value = np.allclose(temperature_gradient[..., 0:-1, 0:-1, 0:-1], temperature_gradient_anal[..., 0:-1, 0:-1, 0:-1],
+                                rtol=1e-16, atol=1e-12)
             self.assertTrue(value,
-                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                            'Gradient is not equal to analytical expression for 3D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
             value_roll = np.alltrue(
@@ -554,6 +554,51 @@ class DiscretizationTestCase(unittest.TestCase):
                                         i,
                                         element_type, problem_type))
 
+    def test_3D_system_matrix_symmetricity(self):
+        domain_size = [3, 4, 5]
+        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
+            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                              problem_type=problem_type)
+            number_of_pixels = (4, 5,6)
+            discretization_type = 'finite_element'
+
+            for element_type in ['trilinear_hexahedron']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       number_of_pixels=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+
+                if problem_type == 'elasticity':
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                               K=K_1, mu=G_1,
+                                                               kind='linear')
+
+                    material_data_field = np.einsum('ijkl,qxyz->ijklqxyz', mat_1,
+                                                    np.ones(np.array(
+                                                        [discretization.nb_quad_points_per_pixel,
+                                                         *discretization.nb_of_pixels])))
+                elif problem_type == 'conductivity':
+                    mat_1 = np.array([[1, 0, 0],[0, 1, 0], [0,0, 1]])
+                    material_data_field = np.einsum('ij,qxyz->ijqxyz', mat_1,
+                                                    np.ones(np.array(
+                                                        [discretization.nb_quad_points_per_pixel,
+                                                         *discretization.nb_of_pixels])))
+
+                K = discretization.get_system_matrix(material_data_field)
+                # test symmetricity
+
+                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
+                                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
+                                    element_type, problem_type))
+                # test column sum to be 0
+                for i in np.arange(K.shape[0]):
+                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-14),
+                                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
+                                        i,
+                                        element_type, problem_type))
+
     def test_2D_homogenization_problem_solution(self):
         domain_size = [3, 4]
         for problem_type in ['elasticity', 'conductivity']:  # TODO add 'elasticity'
@@ -868,6 +913,8 @@ class DiscretizationTestCase(unittest.TestCase):
                                             element_type, problem_type))
 
     def test_plot_2D_mesh(self, plot=False):
+        # this is a visual test of nodal_coordinates and  quad_coordinates
+
         domain_size = [3, 4]
         problem_type = 'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -885,16 +932,53 @@ class DiscretizationTestCase(unittest.TestCase):
 
             nodal_coordinates = discretization.get_nodal_points_coordinates()
             quad_coordinates = discretization.get_quad_points_coordinates()
-            plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
-            segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
-            segs2 = segs1.transpose(1, 0, 2)
+
             if plot:
+                plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
+                segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
+                segs2 = segs1.transpose(1, 0, 2)
+
                 plt.gca().add_collection(LineCollection(segs1))
                 plt.gca().add_collection(LineCollection(segs2))
                 for q in range(0, discretization.nb_quad_points_per_pixel):
                     plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
 
                 plt.show()
+
+    def test_plot_3D_mesh(self, plot=False):
+        # this is a visual test of nodal_coordinates and  quad_coordinates
+        domain_size = [3, 4, 5]
+        problem_type = 'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        number_of_pixels = (4, 5, 6)
+
+        discretization_type = 'finite_element'
+        for element_type in ['trilinear_hexahedron']:
+
+            discretization = domain.Discretization(cell=my_cell,
+                                                   number_of_pixels=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
+
+            nodal_coordinates = discretization.get_nodal_points_coordinates()
+            quad_coordinates = discretization.get_quad_points_coordinates()
+
+            if plot:
+                # Create the figure
+                fig = plt.figure()
+                ax = fig.add_subplot(111,
+                                     projection='3d')  # ['3d', 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear']
+
+                ax.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0], nodal_coordinates[2, 0], c='b', marker='o')
+                ax.set_xlabel('X-axis')
+                ax.set_ylabel('Y-axis')
+                ax.set_zlabel('Z-axis')
+                for q in range(0, discretization.nb_quad_points_per_pixel):
+                    ax.scatter(quad_coordinates[0, q], quad_coordinates[1, q], quad_coordinates[2, q], marker='x')
+
+            plt.show()
 
 
 if __name__ == '__main__':

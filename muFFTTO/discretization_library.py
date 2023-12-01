@@ -277,7 +277,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             coord_helper[1] = +1. / (np.sqrt(3))
 
             # quadrature points    # TODO This hold for prototypical element      !!!
-
+            # TODO MAKE clear how to generate B matrices
             my_domain.quad_points_coord[:, 0] = [coord_helper[0], coord_helper[0], coord_helper[0]]
             my_domain.quad_points_coord[:, 1] = [coord_helper[1], coord_helper[0], coord_helper[0]]
             my_domain.quad_points_coord[:, 2] = [coord_helper[0], coord_helper[1], coord_helper[0]]
@@ -303,7 +303,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             # construction of B matrix
             dim = my_domain.domain_dimension
             B_dqnijk = np.zeros(
-                [dim, my_domain.nb_quad_points_per_pixel, my_domain.nb_unique_nodes_per_pixel, dim, dim, dim])
+                [dim, my_domain.nb_quad_points_per_pixel, my_domain.nb_unique_nodes_per_pixel, 2, 2, 2])
             for quad_point in range(0, my_domain.nb_quad_points_per_pixel):
                 x_q = my_domain.quad_points_coord[:, quad_point]
                 xi = x_q[0]
@@ -346,8 +346,8 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
 
 
                 # @formatter:on
-
-            B_dqnijk = np.einsum('di,iqnijk->dqnijk', inv_jacobian, B_dqnijk)
+            # multiplication with inverse of jacobian
+            B_dqnijk = np.einsum('dt,tqnijk->dqnijk', inv_jacobian, B_dqnijk)
 
             my_domain.B_grad_at_pixel_dqnijk = B_dqnijk
 
