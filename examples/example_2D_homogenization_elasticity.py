@@ -58,7 +58,8 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho
 preconditioner = discretization.get_preconditioner(
     reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
-M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
+M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
+                                                      nodal_field_fnxyz=x)
 
 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
 

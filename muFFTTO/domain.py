@@ -299,11 +299,11 @@ class Discretization:
                            formulation=None):
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
-        # for every type of degree of freedom, there is one diagonal of preconditioner matrix
-        # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # for convenience, we all type of DOFs in first pixel
+        # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
+        # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
 
         unit_impulse_fnxyz = self.get_unknown_size_field()
-        M_system_matrix_diagonals = np.zeros(unit_impulse_fnxyz.shape[:2] + unit_impulse_fnxyz.shape)
+        preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_fnxyz.shape[:2] + unit_impulse_fnxyz.shape)
 
         # construct unit impulses responses for all type of DOFs
         for impulse_position in np.ndindex(
@@ -311,20 +311,13 @@ class Discretization:
             unit_impulse_fnxyz.fill(0)  # empty the unit impulse vector
             unit_impulse_fnxyz[impulse_position + (0,) * (
                     unit_impulse_fnxyz.ndim - 2)] = 1  # set 1 --- the unit impulse --- to a proper positions
-            M_system_matrix_diagonals[impulse_position] = self.apply_system_matrix(
+            preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
                 material_data_field=reference_material_data_field_ijklqxyz,
                 displacement_field=unit_impulse_fnxyz,
                 formulation=formulation)
 
-        # for impulse_position_ab in np.ndindex(
-        #         unit_impulse_fnxyz.shape[0:2]):
-        #     for impulse_position_cd in np.ndindex(
-        #             unit_impulse_fnxyz.shape[0:2]):
-        #         M_system_matrix_diagonals_fourier[impulse_position_ab+impulse_position_cd]=fft(M_system_matrix_diagonals[impulse_position_ab+impulse_position_cd])
-        #     # M_system_matrix_diagonals[impulse_position] = np.fft.fftn(M_system_matrix_diagonals[impulse_position])
-
         # construct diagonals from unit impulses responses using FFT
-        M_system_matrix_diagonals = np.fft.fftn(M_system_matrix_diagonals, [*self.nb_of_pixels])
+        preconditioner_diagonals_fnfnxyz = np.fft.fftn(preconditioner_diagonals_fnfnxyz, [*self.nb_of_pixels])
 
         # compute inverse of diagonals
         for pixel_index in np.ndindex(unit_impulse_fnxyz.shape[2:]):  # TODO find the woy to avoid loops
@@ -332,31 +325,30 @@ class Discretization:
                     0,) * self.domain_dimension:  # avoid  inversion of zeros # TODO find better solution for setting this to 0
                 continue
             # pick local matrix with size [f*n,f*n]
-            local_matrix = np.reshape(M_system_matrix_diagonals[(..., *pixel_index)],
+            local_matrix = np.reshape(preconditioner_diagonals_fnfnxyz[(..., *pixel_index)],
                                       (np.prod(unit_impulse_fnxyz.shape[0:2]),
                                        np.prod(unit_impulse_fnxyz.shape[0:2])))
             # compute inversion
             local_matrix = np.linalg.inv(local_matrix)
             # rearrange local inverse matrix into global field
-            M_system_matrix_diagonals[(..., *pixel_index)] = np.reshape(local_matrix, (
+            preconditioner_diagonals_fnfnxyz[(..., *pixel_index)] = np.reshape(local_matrix, (
                     unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
 
-        return M_system_matrix_diagonals  # return diagonals of preconditioner in Fourier space
+        return preconditioner_diagonals_fnfnxyz  # return diagonals of preconditioner in Fourier space
 
-    def apply_preconditioner(self, preconditioner_Fourier_space, force_field):
-        # TODO [Preconditioner] PRECONDITIONER DOES NOT WORK FOR ELASTICITY
+    def apply_preconditioner(self, preconditioner_Fourier_fnfnxyz, nodal_field_fnxyz):
         # apply preconditioner using FFT
-        # force_field_fnxyz [f,n,x,y,z]
-        # preconditioner_Fourier_space [f,n,f,n,x,y,z] # TODO find better indexing notation
+        # nodal_field_fnxyz [f,n,x,y,z]
+        # preconditioner_Fourier_fnfnxyz [f,n,f,n,x,y,z] # TODO find better indexing notation
 
-        force_field = np.fft.fftn(force_field, [*self.nb_of_pixels])  # FFT of the input field
-        force_field = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_space, force_field)
-        # TODO what if force_field = np.einsum('abfn...,fn...->...', preconditioner_Fourier_space, force_field)
-        # np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
-        # force_field_full=np.fft.ifftn(force_field, [*self.nb_of_pixels])
-        force_field = np.real(np.fft.ifftn(force_field, [*self.nb_of_pixels]))
+        # FFTn of the input field
+        nodal_field_fnxyz = np.fft.fftn(nodal_field_fnxyz, [*self.nb_of_pixels])
+        # multiplication with a diagonals of preconditioner
+        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnxyz, nodal_field_fnxyz)
+        # iFFTn
+        nodal_field_fnxyz = np.real(np.fft.ifftn(nodal_field_fnxyz, [*self.nb_of_pixels]))
 
-        return force_field
+        return nodal_field_fnxyz
 
     def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):
 

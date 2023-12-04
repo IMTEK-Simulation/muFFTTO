@@ -700,7 +700,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 K = discretization.get_system_matrix(material_data_field)
 
                 preconditioner = discretization.get_preconditioner(
-                    reference_material_data_field=ref_material_data_field)
+                    reference_material_data_field_ijklqxyz=ref_material_data_field)
 
                 M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
                 solution_M, norms_M = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
