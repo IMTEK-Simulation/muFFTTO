@@ -837,11 +837,13 @@ class DiscretizationTestCase(unittest.TestCase):
     def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
 
         global material_data_field
-        domain_size = [3, 4]
-        for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
+        domain_size = [2, 3]
+        for problem_type in [
+            'elasticity',
+            'conductivity']:  # 'conductivity','elasticity' 'elasticity', 'conductivity' # TODO add 'elasticity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
-            number_of_pixels = (4, 5)
+            number_of_pixels = (3, 4)
             discretization_type = 'finite_element'
 
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
@@ -856,6 +858,19 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
+                    # mat_1=np.zeros([2,2,2,2])
+                    # mat_1[0,0,0,0]=1
+                    # mat_1[0, 1, 0, 1] = 1
+                    # mat_1[1, 0, 1, 0] = 1
+                    # mat_1[1, 1, 1, 1] = 1
+                    # # identity tensor (single tensor)
+                    # i = np.eye(2)
+                    # # identity tensors (grid)
+                    # I = np.einsum('ij,xy', i, np.ones(number_of_pixels))
+                    # I4 = np.einsum('ijkl,xy->ijklxy', np.einsum('il,jk', i, i), np.ones(number_of_pixels))
+                    # I4rt = np.einsum('ijkl,xy->ijklxy', np.einsum('ik,jl', i, i), np.ones(number_of_pixels))
+                    # I4s = (I4 + I4rt) / 2.
+                    # I4s[..., 0, 0]
                     material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
@@ -890,23 +905,26 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 ref_material_data_field = np.copy(material_data_field)
 
-                x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
-                x_0 -= x_0.mean()
-
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
                 preconditioner_Fourier = discretization.get_preconditioner(
-                    reference_material_data_field=ref_material_data_field)
+                    reference_material_data_field_ijklqxyz=ref_material_data_field)
 
                 M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier, x)
 
+                # set up random field
+                x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
+                for f in range(discretization.cell.unknown_shape[0]):
+                    x_0[f] -= x_0[f].mean()
+                # apply system matrix
                 f_0 = K_fun(x_0)
+                # apply preconditioner --- inverse of system matrix for homo-data
                 x_1 = M_fun(f_0)
 
                 diff = x_0 - x_1
-                print(np.sum(diff))
+                # print(np.sum(diff))
                 assert_condition = np.allclose(x_0, x_1, rtol=1e-14, atol=1e-14)
-                print(assert_condition)
+                # print(assert_condition)
                 self.assertTrue(assert_condition,
                                 'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem. \n '
                                 'Discrepancy = {}'.format(element_type, problem_type, np.sum(diff)))
@@ -940,21 +958,21 @@ class DiscretizationTestCase(unittest.TestCase):
 
 
                 elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0 ,0 ], [0, 1 ,0 ], [0, 0, 1]])
+                    mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
                     material_data_field = np.einsum('ij,qxyz->ijqxyz', mat_1,
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
 
-
                 ref_material_data_field = np.copy(material_data_field)
 
                 x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
-                x_0 -= x_0.mean()
+                for f in range(discretization.cell.unknown_shape[0]):
+                    x_0[f] -= x_0[f].mean()
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
                 preconditioner = discretization.get_preconditioner(
-                    reference_material_data_field=ref_material_data_field)
+                    reference_material_data_field_ijklqxyz=ref_material_data_field)
 
                 M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
 
