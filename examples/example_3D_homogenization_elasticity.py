@@ -3,6 +3,7 @@ import time
 
 from muFFTTO import domain
 from muFFTTO import solvers
+from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -10,7 +11,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (62, 62, 62)
+number_of_pixels = (6, 6, 6)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -37,8 +38,9 @@ material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
                                                       *discretization.nb_of_pixels])))
 
 # material distribution
+phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels
+                                                  , microstructure_name='random_distribution')
 
-phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
 
 # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field[0, 0], 1)

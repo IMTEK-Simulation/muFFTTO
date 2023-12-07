@@ -13,7 +13,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [4, 4]
-number_of_pixels = (48, 48)
+number_of_pixels = (31, 31)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -67,9 +67,18 @@ start_time = time.time()
 
 macro_gradient = np.array([[0.0, 0.1],
                            [0, 0.0]])
+print('macro_gradient = \n {}'.format(macro_gradient))
+# create material data field
+K_targer, G_target = domain.get_bulk_and_shear_modulus(E=1, poison=0.3)
 
-target_stress = np.array([[0.0, 0.05],
-                          [0.05, 0.0]])
+elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                      K=K_targer,
+                                                      mu=G_target,
+                                                      kind='linear')
+# target_stress = np.array([[0.0, 0.05],
+#                           [0.05, 0.0]])
+target_stress = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradient)
+print('target_stress = \n {}'.format(target_stress))
 
 # create material data field
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -87,11 +96,12 @@ material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
 stress = np.einsum('ijkl,lk->ij', elastic_C_1, macro_gradient)
-p = 2
-w = 1/10
-eta = 1
+p = 1
+w = 1 / 10
+eta = 0.0025
 
-#TODO eta = 0.025
+
+# TODO eta = 0.025
 # TODO w = 0.1
 def my_objective_function(phase_field_1nxyz):
     # reshape the field
@@ -165,6 +175,7 @@ def my_sensitivity(phase_field_1nxyz):
 
 
 if __name__ == '__main__':
+
     # material distribution
     phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)
     phase_field_0 = phase_field_0.reshape(-1)  # b
@@ -205,7 +216,9 @@ if __name__ == '__main__':
         target_stress_ij=target_stress,
         phase_field_1nxyz=phase_field_sol,
         eta=eta, w=w)
+
     print(of)
+
     # def my_sensitivity(phase_field_1nxyz,
     #                           material_data_field_C_0_ijklqxyz):
     #

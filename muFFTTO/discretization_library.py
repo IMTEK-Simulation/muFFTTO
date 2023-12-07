@@ -45,9 +45,9 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
 
             # @formatter:off   B(dim,number of nodal values,quad point ,element)
             my_domain.B_gradient[:, :,  0] = [[-1 / h_x,   1 / h_x,    0,          0],
-                                         [-1 / h_y,         0,    1 / h_y,    0]]
+                                              [-1 / h_y,         0,    1 / h_y,    0]]
             my_domain.B_gradient[:, :,  1] = [[0,         0, - 1 / h_x, 1 / h_x],
-                                         [0, - 1 / h_y,         0, 1 / h_y]]
+                                              [0, - 1 / h_y,         0, 1 / h_y]]
             # @formatter:on
             my_domain.quadrature_weights = np.zeros([my_domain.nb_quad_points_per_pixel])
             my_domain.quadrature_weights[0] = h_x * h_y / 2

@@ -205,11 +205,11 @@ if __name__ == "__main__":
 
         # get homogenized flux
         homogenized_flux = discretization.get_homogenized_stress(material_data_field_i,
-                                                                 displacement_field=solution_i,
-                                                                 macro_gradient_field=macro_gradient_field)
+                                                                 displacement_field_fnxyz=solution_i,
+                                                                 macro_gradient_field_ijqxyz=macro_gradient_field)
         actual_flux = discretization.get_stress_field(material_data_field_i,
-                                                      displacement_field=solution_i,
-                                                      macro_gradient_field=macro_gradient_field)
+                                                      displacement_field_fnxyz=solution_i,
+                                                      macro_gradient_field_ijqxyz=macro_gradient_field)
 
         ############################ evaluate objective functions
         # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
