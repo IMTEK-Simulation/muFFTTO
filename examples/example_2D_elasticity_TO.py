@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import matplotlib.pyplot as plt
 
 import time
 
@@ -12,7 +13,7 @@ discretization_type = 'finite_element'
 element_type = 'linear_triangles'
 formulation = 'small_strain'
 
-domain_size = [4, 4]
+domain_size = [1, 1]
 number_of_pixels = (31, 31)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -66,10 +67,34 @@ start_time = time.time()
 
 
 macro_gradient = np.array([[0.0, 0.1],
-                           [0, 0.0]])
+                           [0.1, 0.0]])
 print('macro_gradient = \n {}'.format(macro_gradient))
-# create material data field
-K_targer, G_target = domain.get_bulk_and_shear_modulus(E=1, poison=0.3)
+
+# Set up the equilibrium system
+macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+
+# create material data of solid phase rho=1
+E_0 = 1
+poison_0 = 0.1
+
+K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+
+elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                 K=K_0,
+                                                 mu=G_0,
+                                                 kind='linear')
+
+material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
+                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                      *discretization.nb_of_pixels])))
+
+stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradient)
+
+# create target material data
+
+
+K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+G_target = (7 / 20) * E_0
 
 elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                       K=K_targer,
@@ -80,30 +105,15 @@ elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_
 target_stress = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradient)
 print('target_stress = \n {}'.format(target_stress))
 
-# create material data field
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
-
-elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
-
-material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
-
-# Set up the equilibrium system
-macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-
-stress = np.einsum('ijkl,lk->ij', elastic_C_1, macro_gradient)
-p = 1
-w = 1 / 10
+p = 2
+w = 1 / 10  # 1e-4 Young modulus of solid
 eta = 0.0025
 
 
 # TODO eta = 0.025
 # TODO w = 0.1
 def my_objective_function(phase_field_1nxyz):
+    print('OF')
     # reshape the field
     phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *number_of_pixels])
 
@@ -113,7 +123,8 @@ def my_objective_function(phase_field_1nxyz):
     # Solve mechanical equilibrium constrain
     rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
-    K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho,
+                                                         x,
                                                          formulation='small_strain')
     M_fun = lambda x: 1 * x
 
@@ -175,19 +186,31 @@ def my_sensitivity(phase_field_1nxyz):
 
 
 if __name__ == '__main__':
-
     # material distribution
     phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)
     phase_field_0 = phase_field_0.reshape(-1)  # b
 
     bounds = sp.optimize.Bounds(lb=0, ub=1, keep_feasible=True)
 
-    xopt = sp.optimize.minimize(my_objective_function, phase_field_0, method='bfgs', jac=my_sensitivity)
+    xopt = sp.optimize.minimize(my_objective_function,
+                                phase_field_0,
+                                method='bfgs',
+                                jac=my_sensitivity,
+                                options={'gtol': 1e-6,
+                                         'disp': True})
+    print('I finished optimization')
+    ###  post process
 
-    # post process
     # phase_field_1nxyz =phase_field_1nxyz.reshape([1,1,*number_of_pixels])
     phase_field_sol = xopt.x.reshape([1, 1, *number_of_pixels])
     of = my_objective_function(phase_field_sol)
+    # plotting the solution
+    nodal_coordinates = discretization.get_nodal_points_coordinates()
+
+    plt.figure()
+    plt.contourf(nodal_coordinates[0, 0], nodal_coordinates[1, 0], phase_field_sol[0, 0])
+    plt.colorbar()
+    plt.show()
 
     material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_sol,
                                                                                 p)

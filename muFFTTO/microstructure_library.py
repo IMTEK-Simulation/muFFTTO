@@ -13,7 +13,7 @@ def get_geometry(nb_voxels,
 
             phase_field = np.random.rand(*nb_voxels)
 
-        case 'geometry_1_3D':  # TODO : this is an template for Bharat
+        case 'geometry_1_3D':  # TODO[Bharat] : this is an template for you
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code

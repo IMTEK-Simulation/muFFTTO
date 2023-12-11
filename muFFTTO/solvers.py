@@ -2,6 +2,7 @@ import numpy as np
 
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
+    print('I am in PCG')
     """
     Conjugate gradients solver.
 

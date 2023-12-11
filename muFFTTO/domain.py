@@ -44,7 +44,9 @@ class Discretization:
     # such as physical dimension, number of pixels/voxels, FE type, number of quadrature points,
     # number of nodal points, etc....
     #
-    def __init__(self, cell, number_of_pixels=None, discretization_type='finite_element',
+    def __init__(self, cell,
+                 number_of_pixels=None,
+                 discretization_type='finite_element',
                  element_type='linear_triangles'):
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
