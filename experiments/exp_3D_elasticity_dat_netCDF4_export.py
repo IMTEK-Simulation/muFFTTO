@@ -44,20 +44,22 @@ material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
                                                       *discretization.nb_of_pixels])))
 
 # material distribution
-phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels
-                                                  , microstructure_name=geometry_ID)
+phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                  microstructure_name=geometry_ID)
 
 # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field[0, 0], 1)
 
 # Set up right hand side
-macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient=macro_gradient)
 
 # Solve mechanical equilibrium constrain
-rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                             macro_gradient_field_ijqxyz=macro_gradient_field)
 
 # linear system
-K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
+K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
+                                                     displacement_field=x,
                                                      formulation='small_strain')
 preconditioner = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
@@ -76,6 +78,7 @@ nc = Dataset(filename='exp_data/'+dataset_name,
              mode='w',
              format='NETCDF3_64BIT_OFFSET')
 
+# create dimensions -- nicknames with sizes
 nc.createDimension(dimname='displacent_shape', size=discretization.domain_dimension)  # for temperature this is 1!!!
 nc.createDimension(dimname='dimension', size=discretization.domain_dimension)
 
@@ -85,8 +88,6 @@ nc.createDimension(dimname='nb_quad_per_pixel', size=discretization.nb_quad_poin
 nc.createDimension(dimname='nb_voxels_x', size=number_of_pixels[0])
 nc.createDimension(dimname='nb_voxels_y', size=number_of_pixels[1])
 nc.createDimension(dimname='nb_voxels_z', size=number_of_pixels[2])
-
-nc.createDimension('time', None)  # 'unlimited' dimension
 
 # crate a variable
 displacement_var = nc.createVariable(varname='displacement_field', datatype='f8',
@@ -103,6 +104,7 @@ material_data_var = nc.createVariable(varname='material_data_field', datatype='f
                                                   'nb_voxels_x', 'nb_voxels_y', 'nb_voxels_z'))
 phase_field_var = nc.createVariable(varname='phase_field', datatype='f8',
                                     dimensions=('nb_voxels_x', 'nb_voxels_y', 'nb_voxels_z'))
+
 # fill the variable with data
 displacement_var[...] = displacement_field
 gradient_var[...] = discretization.apply_gradient_operator(displacement_field)
