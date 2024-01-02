@@ -12,8 +12,8 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (6, 6, 6)
-geometry_ID = 'geometry_1_3D'
+number_of_pixels = (20, 20, 20)
+geometry_ID = 'geometry_II_3_3D'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -47,8 +47,10 @@ material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
 phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                   microstructure_name=geometry_ID)
 
+microstructure_library.visualize_voxels(phase_field_xyz=phase_field)
+
 # apply material distribution
-material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field[0, 0], 1)
+material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field, 1)
 
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient=macro_gradient)
@@ -63,9 +65,11 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field=materia
                                                      formulation='small_strain')
 preconditioner = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
-# preconditioner
+#preconditioner
 M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
                                                       nodal_field_fnxyz=x)
+
+
 # solver
 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
@@ -74,7 +78,7 @@ displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(
 dataset_name = f'muFFTTO_{problem_type}_{formulation}_{geometry_ID}_N{discretization.nb_of_pixels[0]}_all.nc'
 
 # create dataset
-nc = Dataset(filename='exp_data/'+dataset_name,
+nc = Dataset(filename='exp_data/' + dataset_name,
              mode='w',
              format='NETCDF3_64BIT_OFFSET')
 

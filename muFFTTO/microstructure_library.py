@@ -1,12 +1,19 @@
 import warnings
 import numpy as np
+import matplotlib.pyplot as plt
+
+# This import registers the 3D projection, but is otherwise unused.
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 
 
 def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  parameter=None):
-    if not microstructure_name in ['random_distribution', 'geometry_1_3D', 'geometry_2_3D', 'geometry_3_3D',
-                                   'geometry_4_3D', 'geometry_5_3D', 'geometry_6_3D', 'geometry_7_3D', 'geometry_8_3D']:
+    if not microstructure_name in ['random_distribution',
+                                   'geometry_I_1_3D', 'geometry_I_2_3D','geometry_I_3_3D', 'geometry_I_4_3D', 'geometry_I_5_3D',
+                                   'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
+                                   'geometry_III_1_3D', 'geometry_III_2_3D'
+                                   ]:
         raise ValueError('Unrecognised microstructure_name {}'.format(microstructure_name))
     # if not nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19 and nb_voxels[0]//5!=0 and nb_voxels[1]//5!=0 and nb_voxels[2]//5!=0:
     #     raise ValueError('Microstructure_name {} is implemented only when Size of any dimension is more than 10 and it is multiple of 5'.format(microstructure_name))
@@ -20,29 +27,26 @@ def get_geometry(nb_voxels,
         case 'random_distribution':
 
             phase_field = np.random.rand(*nb_voxels)
-
-        case 'geometry_1_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with the Circle removed from each face
+    # --- Category I : Material in faces
+        case 'geometry_I_1_3D':
+            #  Cube Frame
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
             if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
                 raise ValueError(
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
-            phase_field = Circle_Frame(*nb_voxels)
-
-        case 'geometry_2_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with the Body Diagonals
+            phase_field = HSCC(*nb_voxels)
+        case 'geometry_I_2_3D':
+            #  Cube Frame with one diagonal in each face
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
             if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
                 raise ValueError(
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
-            phase_field = HBCC(*nb_voxels)
+            phase_field = HFDC(*nb_voxels)
 
-        case 'geometry_3_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with the Face Diagonals
+        case 'geometry_I_3_3D':
+            # Cube Frame with two diagonals in each face
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
@@ -51,32 +55,46 @@ def get_geometry(nb_voxels,
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
             phase_field = HFCC(*nb_voxels)
 
-        case 'geometry_4_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with the Single Diagonal on Faces
+        case 'geometry_I_4_3D':
+            # Just two diagonals in each face
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
             if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
                 raise ValueError(
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
-            phase_field = HSCC(*nb_voxels)
+            phase_field = HFCC_no_frame(*nb_voxels)
 
-        case 'geometry_4_3D':  # TODO[Bharat] : this is an template for you
-            # I will just create a Completely filled Cube
+        case 'geometry_I_5_3D':
+            #  Hollow Cube  with the Circle removed from each face
+            if nb_voxels.size != 3:
+                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
+            # here should come your code
+            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
+                raise ValueError(
+                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            phase_field = Circle_Frame(*nb_voxels)
+
+    # --- Category II : in body geometries
+        case 'geometry_II_0_3D':
+            # Filled Cube
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
             phase_field = Normalcube(*nb_voxels)
 
-        case 'geometry_5_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with a Sphere removed from it
+        case 'geometry_II_1_3D':
+            # Cube with the Body Diagonals
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
-            phase_field = SphereinCube(*nb_voxels)
+            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
+                raise ValueError(
+                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            phase_field = HBCC(*nb_voxels)
 
-        case 'geometry_6_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a Cube with a another isocentric connected with the diagonals of Both Cubes Subtracted
+        case 'geometry_II_3_3D':  # TODO[Bharat] : this is an template for you
+            # Cube with a another isocentric connected with the diagonals of Both Cubes Subtracted
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
@@ -85,18 +103,16 @@ def get_geometry(nb_voxels,
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
             phase_field = Metamaterial_1(*nb_voxels)
 
-        case 'geometry_7_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a ligtweight strong metamaterial
+        case 'geometry_II_4_3D':
+            #  Filled Cube with a Sphere removed from it
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
-            phase_field = Metamaterial_2(*nb_voxels)
+            phase_field = SphereinCube(*nb_voxels)
 
-        case 'geometry_8_3D':  # TODO[Bharat] : this is an template for you
-            # I will create a ligtweight strong metamaterial
+        # --- Category III : Metamaterials
+        case 'geometry_III_1_3D':
+            #  lightweight strong metamaterial
             if nb_voxels.size != 3:
                 raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
             # here should come your code
@@ -104,6 +120,16 @@ def get_geometry(nb_voxels,
                 raise ValueError(
                     'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
             phase_field = Metamaterial_3(*nb_voxels)
+
+        case 'geometry_III_2_3D':
+            #  ligtweight strong metamaterial
+            if nb_voxels.size != 3:
+                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
+            # here should come your code
+            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
+                raise ValueError(
+                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            phase_field = Metamaterial_2(*nb_voxels)
 
     return phase_field  # size is
 
@@ -247,6 +273,31 @@ def HFCC(*nb_voxels):
     D = D[0:Nx, 0:Ny, 0:Nz]
     return D
 
+def HFCC_no_frame(*nb_voxels):
+    (Nx, Ny, Nz) = nb_voxels
+    # Create cube
+    Cube = np.zeros((Nx, Ny, Nz))
+    k = int(0.05 * Nx)
+
+    # Create meshgrid
+    I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Ny + 1), np.arange(1, Nz + 1))
+
+    # Get Diagonal2D_FACE matrix
+    Face = Diagonal2D_FACE(Nx, k)
+    Overall = np.logical_or(Face,Face)
+    # Assign values to D
+    D = np.zeros_like(Cube)
+    for i in range(k):
+        D[i, :, :] = Overall
+        D[-i - 1, :, :] = Overall
+        D[:, i, :] = Overall
+        D[:, -i - 1, :] = Overall
+        D[:, :, i] = Overall
+        D[:, :, -i - 1] = Overall
+
+    # Restrict D to Nx x Nx x Nx
+    D = D[0:Nx, 0:Ny, 0:Nz]
+    return D
 
 def HSCC(*nb_voxels):
     (Nx, Ny, Nz) = nb_voxels
@@ -266,6 +317,34 @@ def HSCC(*nb_voxels):
     # Restrict D to Nx x Nx x Nx
     E = E[0:Nx, 0:Ny, 0:Nz]
     return E
+
+
+def HFDC(*nb_voxels):
+    (Nx, Ny, Nz) = nb_voxels
+    # Create cube
+    Cube = np.zeros((Nx, Ny, Nz))
+    k = int(0.05 * Nx)
+
+    # Create meshgrid
+    I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Ny + 1), np.arange(1, Nz + 1))
+
+    # Get Diagonal2D_FACE matrix
+    Face = Diagonal2D_A(Nx, k)
+    Frame = square_frame2D(Nx, k)
+    Overall = np.logical_or(Face, Frame)
+    # Assign values to D
+    D = np.zeros_like(Cube)
+    for i in range(k):
+        D[i, :, :] = Overall
+        D[-i - 1, :, :] = Overall
+        D[:, i, :] = Overall
+        D[:, -i - 1, :] = Overall
+        D[:, :, i] = Overall
+        D[:, :, -i - 1] = Overall
+
+    # Restrict D to Nx x Nx x Nx
+    D = D[0:Nx, 0:Ny, 0:Nz]
+    return D
 
 
 def Kite(Nx, k):
@@ -552,3 +631,28 @@ def Metamaterial_3(*nb_voxels):
     # Restrict D to Nx x Nx x Nx
     D = D[0:Nx, 0:Nx, 0:Nx]
     return D
+
+
+def visualize_voxels(phase_field_xyz,
+                     alphas_xyz=None):
+    # -----
+    # phase_field_xyz  - indicator field - 0 or 1 in every voxel
+    # alphas_xyz  - opacity field - [0-1] in every voxel
+    # plot voxelized geometry of the phase_field
+    # works properly with 0,1 field. Intermediate values must be added
+    # TODO[martin] add alpha based on phase_field
+    # -----
+    phase_field_bool = phase_field_xyz.round(decimals=0).astype(int).astype(bool)
+    # set the colors of each object
+    face_colors = np.empty(list(phase_field_xyz.shape) + [4], dtype=np.float32)
+    alpha = 0.1
+    face_colors[phase_field_bool] = [0, 1, 0, alpha]
+    if alphas_xyz is not None:
+        # face_colors[..., -1] = alphas_xyz
+        face_colors[..., -1] = phase_field_xyz
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    ax.voxels(phase_field_bool, facecolors=face_colors, edgecolor='k', linewidth=0.1)
+
+    plt.show()

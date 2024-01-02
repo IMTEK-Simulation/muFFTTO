@@ -11,7 +11,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (6, 6, 6)
+number_of_pixels = (20, 20, 20)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -43,7 +43,7 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
 
 
 # apply material distribution
-material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field[0, 0], 1)
+material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field, 1)
 
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
