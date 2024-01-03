@@ -11,9 +11,9 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
-domain_size = [4, 3, 5]
-number_of_pixels = (20, 20, 20)
-geometry_ID = 'geometry_II_3_3D'
+domain_size = [1, 1, 1]
+number_of_pixels = 3*(30,)
+geometry_ID = 'geometry_II_1_3D'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,

@@ -10,125 +10,106 @@ def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  parameter=None):
     if not microstructure_name in ['random_distribution',
-                                   'geometry_I_1_3D', 'geometry_I_2_3D','geometry_I_3_3D', 'geometry_I_4_3D', 'geometry_I_5_3D',
+                                   'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
+                                   'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
                                    'geometry_III_1_3D', 'geometry_III_2_3D'
                                    ]:
         raise ValueError('Unrecognised microstructure_name {}'.format(microstructure_name))
     # if not nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19 and nb_voxels[0]//5!=0 and nb_voxels[1]//5!=0 and nb_voxels[2]//5!=0:
     #     raise ValueError('Microstructure_name {} is implemented only when Size of any dimension is more than 10 and it is multiple of 5'.format(microstructure_name))
-    if not (nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19):
-        # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
-        raise ValueError('Microstructure_name {} is implemented only when Size '
-                         'of any dimension is more than 19 and it is a multiple of 5'.format(
-            microstructure_name))
+
+    # TODO [Bharat] put this condition into proper positions!
+    # if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
+    #     raise ValueError(
+    #         'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+    # if not (nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19):
+    #     # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
+    #     raise ValueError('Microstructure_name {} is implemented only when Size '
+    #                      'of any dimension is more than 19 and it is a multiple of 5'.format(
+    #         microstructure_name))
 
     match microstructure_name:
         case 'random_distribution':
 
             phase_field = np.random.rand(*nb_voxels)
-    # --- Category I : Material in faces
+        # --- Category I : Material in faces
         case 'geometry_I_1_3D':
+            check_dimension(nb_voxels=nb_voxels,microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels,microstructure_name=microstructure_name)
+            check_number_of_voxels(nb_voxels=nb_voxels,microstructure_name=microstructure_name, min_nb_voxels=19)
             #  Cube Frame
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
             phase_field = HSCC(*nb_voxels)
+
         case 'geometry_I_2_3D':
             #  Cube Frame with one diagonal in each face
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=19)
+
             phase_field = HFDC(*nb_voxels)
 
         case 'geometry_I_3_3D':
             # Cube Frame with two diagonals in each face
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = HFCC(*nb_voxels)
 
         case 'geometry_I_4_3D':
             # Just two diagonals in each face
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = HFCC_no_frame(*nb_voxels)
 
         case 'geometry_I_5_3D':
             #  Hollow Cube  with the Circle removed from each face
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = Circle_Frame(*nb_voxels)
 
-    # --- Category II : in body geometries
+        # --- Category II : in body geometries
         case 'geometry_II_0_3D':
             # Filled Cube
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             # here should come your code
             phase_field = Normalcube(*nb_voxels)
 
         case 'geometry_II_1_3D':
             # Cube with the Body Diagonals
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = HBCC(*nb_voxels)
 
-        case 'geometry_II_3_3D':  # TODO[Bharat] : this is an template for you
+        case 'geometry_II_3_3D':
             # Cube with a another isocentric connected with the diagonals of Both Cubes Subtracted
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = Metamaterial_1(*nb_voxels)
 
         case 'geometry_II_4_3D':
             #  Filled Cube with a Sphere removed from it
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             # here should come your code
             phase_field = SphereinCube(*nb_voxels)
 
         # --- Category III : Metamaterials
         case 'geometry_III_1_3D':
             #  lightweight strong metamaterial
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = Metamaterial_3(*nb_voxels)
 
         case 'geometry_III_2_3D':
             #  ligtweight strong metamaterial
-            if nb_voxels.size != 3:
-                raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
-            # here should come your code
-            if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-                raise ValueError(
-                    'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+
             phase_field = Metamaterial_2(*nb_voxels)
 
     return phase_field  # size is
@@ -273,6 +254,7 @@ def HFCC(*nb_voxels):
     D = D[0:Nx, 0:Ny, 0:Nz]
     return D
 
+
 def HFCC_no_frame(*nb_voxels):
     (Nx, Ny, Nz) = nb_voxels
     # Create cube
@@ -284,7 +266,7 @@ def HFCC_no_frame(*nb_voxels):
 
     # Get Diagonal2D_FACE matrix
     Face = Diagonal2D_FACE(Nx, k)
-    Overall = np.logical_or(Face,Face)
+    Overall = np.logical_or(Face, Face)
     # Assign values to D
     D = np.zeros_like(Cube)
     for i in range(k):
@@ -298,6 +280,7 @@ def HFCC_no_frame(*nb_voxels):
     # Restrict D to Nx x Nx x Nx
     D = D[0:Nx, 0:Ny, 0:Nz]
     return D
+
 
 def HSCC(*nb_voxels):
     (Nx, Ny, Nz) = nb_voxels
@@ -656,3 +639,21 @@ def visualize_voxels(phase_field_xyz,
     ax.voxels(phase_field_bool, facecolors=face_colors, edgecolor='k', linewidth=0.1)
 
     plt.show()
+
+
+def check_equal_number_of_voxels(nb_voxels, microstructure_name):
+    if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
+        raise ValueError(
+            'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
+
+
+def check_number_of_voxels(nb_voxels, microstructure_name, min_nb_voxels):
+    if not (nb_voxels[0] > min_nb_voxels and nb_voxels[1] > min_nb_voxels and nb_voxels[2] > min_nb_voxels):
+        # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
+        raise ValueError('Microstructure_name {} is implemented only when Size '
+                         'of any dimension is more than 19 and it is a multiple of 5'.format(
+            microstructure_name))
+
+def check_dimension(nb_voxels, microstructure_name):
+    if nb_voxels.size != 3:
+        raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))

@@ -2,8 +2,6 @@ import numpy as np
 import time
 from netCDF4 import Dataset
 
-
-
 from muFFTTO import domain
 from muFFTTO import solvers
 
@@ -28,7 +26,7 @@ start_time = time.time()
 macro_gradient = np.array([0.2, 0])
 
 # create material data field
-conductivity_C_1=100*np.array([[1.2, 0], [0, 1.0]])
+conductivity_C_1 = 100 * np.array([[1.2, 0], [0, 1.0]])
 
 material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
@@ -38,7 +36,7 @@ material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
 phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
 
 # apply material distribution
-material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0],
+material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field,
                                                                             1)
 
 # Set up the equilibrium system
@@ -63,9 +61,6 @@ homogenized_flux = discretization.get_homogenized_stress(
     displacement_field_fnxyz=tempetarute_field,
     macro_gradient_field_ijqxyz=macro_gradient_field)
 
-
-
-
 print(homogenized_flux)
 
 end_time = time.time()
@@ -77,14 +72,11 @@ nc.createDimension('coords', 1)
 nc.createDimension('number_of_dofs_x', number_of_pixels[0])
 nc.createDimension('number_of_dofs_y', number_of_pixels[1])
 nc.createDimension('number_of_dofs_per_pixel', 1)
-nc.createDimension('time', None) # 'unlimited' dimension
-var = nc.createVariable('temperatures', 'f8', ('time', 'coords','number_of_dofs_per_pixel','number_of_dofs_x', 'number_of_dofs_y'))
-var[0, ...] = tempetarute_field[0,...]
-
+nc.createDimension('time', None)  # 'unlimited' dimension
+var = nc.createVariable('temperatures', 'f8',
+                        ('time', 'coords', 'number_of_dofs_per_pixel', 'number_of_dofs_x', 'number_of_dofs_y'))
+var[0, ...] = tempetarute_field[0, ...]
 
 print(homogenized_flux)
-#var[0, ..., 0] = x
-#var[0, ..., 1] = y
-
-
-
+# var[0, ..., 0] = x
+# var[0, ..., 1] = y
