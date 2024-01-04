@@ -35,9 +35,9 @@ def get_geometry(nb_voxels,
             phase_field = np.random.rand(*nb_voxels)
         # --- Category I : Material in faces
         case 'geometry_I_1_3D':
-            check_dimension(nb_voxels=nb_voxels,microstructure_name=microstructure_name)
-            check_equal_number_of_voxels(nb_voxels=nb_voxels,microstructure_name=microstructure_name)
-            check_number_of_voxels(nb_voxels=nb_voxels,microstructure_name=microstructure_name, min_nb_voxels=19)
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=19)
             #  Cube Frame
             phase_field = HSCC(*nb_voxels)
 
@@ -616,18 +616,21 @@ def Metamaterial_3(*nb_voxels):
     return D
 
 
-def visualize_voxels(phase_field_xyz,
-                     alphas_xyz=None):
+def visualize_voxels(phase_field_xyz):
     # -----
-    # phase_field_xyz  - indicator field - 0 or 1 in every voxel
-    # alphas_xyz  - opacity field - [0-1] in every voxel
+    # phase_field_xyz  - indicator field in every voxel
     # plot voxelized geometry of the phase_field
-    # works properly with 0,1 field. Intermediate values must be added
-    # TODO[martin] add alpha based on phase_field
+    #
     # -----
-    phase_field_bool = phase_field_xyz.round(decimals=0).astype(int).astype(bool)
-    negative_values =  phase_field_xyz < 0
-    positive_values =  phase_field_xyz > 0
+    # phase_field_bool = phase_field_xyz.round(decimals=0).astype(int).astype(bool)
+    phase_field_bool = np.empty(phase_field_xyz.shape, dtype=bool)
+    phase_field_bool[np.abs(phase_field_xyz) < 0.01] = False
+    phase_field_bool[np.abs(phase_field_xyz) >= 0.01] = True
+    # test_bool = test.astype(int).astype(bool)
+
+    # te=phase_field_xyz[abs(phase_field_xyz) >= 0.1] = 1
+    negative_values = phase_field_xyz < 0
+    positive_values = phase_field_xyz > 0
 
     # set the colors of each object
     face_colors = np.zeros(list(phase_field_xyz.shape) + [4], dtype=np.float32)
@@ -635,17 +638,17 @@ def visualize_voxels(phase_field_xyz,
     # set possitive to blues
     face_colors[positive_values] = [0, 0, 1, alpha]
     face_colors[negative_values] = [1, 0, 0, alpha]
-    #edge_colors = face_colors
+    # edge_colors = face_colors
 
-        #if alphas_xyz is not None:
-         # face_colors[..., -1] = alphas_xyz
     # set transparency --- opacity --- alpha     scale 0-1
-    face_colors[..., -1] = abs(phase_field_xyz)/abs(phase_field_xyz).max()
+    face_colors[..., -1] = abs(phase_field_xyz) / abs(phase_field_xyz).max()
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
-    ax.voxels(np.full(phase_field_bool.shape, True), facecolors=face_colors, edgecolor='k', linewidth=0.1 )
-
-    plt.show()
+    ax.voxels(phase_field_bool, facecolors=face_colors, edgecolor='k', linewidth=0.01)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    # ax.voxels(np.full(phase_field_bool.shape, True), facecolors=face_colors, edgecolor='k', linewidth=0.01)
 
 
 def check_equal_number_of_voxels(nb_voxels, microstructure_name):
@@ -660,6 +663,7 @@ def check_number_of_voxels(nb_voxels, microstructure_name, min_nb_voxels):
         raise ValueError('Microstructure_name {} is implemented only when Size '
                          'of any dimension is more than 19 and it is a multiple of 5'.format(
             microstructure_name))
+
 
 def check_dimension(nb_voxels, microstructure_name):
     if nb_voxels.size != 3:
