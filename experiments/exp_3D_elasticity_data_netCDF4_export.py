@@ -12,8 +12,8 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3*(30,)
-geometry_ID = 'geometry_II_1_3D'
+number_of_pixels = 3*(80,)
+geometry_ID = 'geometry_I_2_3D'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -83,7 +83,7 @@ nc = Dataset(filename='exp_data/' + dataset_name,
              format='NETCDF3_64BIT_OFFSET')
 
 # create dimensions -- nicknames with sizes
-nc.createDimension(dimname='displacent_shape', size=discretization.domain_dimension)  # for temperature this is 1!!!
+nc.createDimension(dimname='displacement_shape', size=discretization.domain_dimension)  # for temperature this is 1!!!
 nc.createDimension(dimname='dimension', size=discretization.domain_dimension)
 
 nc.createDimension(dimname='nb_nodes_per_pixel', size=discretization.nb_nodes_per_pixel)
@@ -99,9 +99,10 @@ displacement_var = nc.createVariable(varname='displacement_field', datatype='f8'
                                                  'nb_nodes_per_pixel',
                                                  'nb_voxels_x', 'nb_voxels_y', 'nb_voxels_z'))
 gradient_var = nc.createVariable(varname='gradient_field', datatype='f8',
-                                 dimensions=('displacent_shape', 'dimension',
+                                 dimensions=('displacement_shape', 'dimension',
                                              'nb_quad_per_pixel',
                                              'nb_voxels_x', 'nb_voxels_y', 'nb_voxels_z'))
+
 material_data_var = nc.createVariable(varname='material_data_field', datatype='f8',
                                       dimensions=('dimension', 'dimension', 'dimension', 'dimension',
                                                   'nb_quad_per_pixel',
