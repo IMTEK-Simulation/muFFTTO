@@ -626,17 +626,24 @@ def visualize_voxels(phase_field_xyz,
     # TODO[martin] add alpha based on phase_field
     # -----
     phase_field_bool = phase_field_xyz.round(decimals=0).astype(int).astype(bool)
-    # set the colors of each object
-    face_colors = np.empty(list(phase_field_xyz.shape) + [4], dtype=np.float32)
-    alpha = 0.1
-    face_colors[phase_field_bool] = [0, 1, 0, alpha]
-    if alphas_xyz is not None:
-        # face_colors[..., -1] = alphas_xyz
-        face_colors[..., -1] = phase_field_xyz
+    negative_values =  phase_field_xyz < 0
+    positive_values =  phase_field_xyz > 0
 
+    # set the colors of each object
+    face_colors = np.zeros(list(phase_field_xyz.shape) + [4], dtype=np.float32)
+    alpha = 0.0
+    # set possitive to blues
+    face_colors[positive_values] = [0, 0, 1, alpha]
+    face_colors[negative_values] = [1, 0, 0, alpha]
+    #edge_colors = face_colors
+
+        #if alphas_xyz is not None:
+         # face_colors[..., -1] = alphas_xyz
+    # set transparency --- opacity --- alpha     scale 0-1
+    face_colors[..., -1] = abs(phase_field_xyz)/abs(phase_field_xyz).max()
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
-    ax.voxels(phase_field_bool, facecolors=face_colors, edgecolor='k', linewidth=0.1)
+    ax.voxels(np.full(phase_field_bool.shape, True), facecolors=face_colors, edgecolor='k', linewidth=0.1 )
 
     plt.show()
 
