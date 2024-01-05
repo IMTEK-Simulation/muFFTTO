@@ -624,8 +624,8 @@ def visualize_voxels(phase_field_xyz):
     # -----
     # phase_field_bool = phase_field_xyz.round(decimals=0).astype(int).astype(bool)
     phase_field_bool = np.empty(phase_field_xyz.shape, dtype=bool)
-    phase_field_bool[np.abs(phase_field_xyz) < 0.01] = False
-    phase_field_bool[np.abs(phase_field_xyz) >= 0.01] = True
+    phase_field_bool[np.abs(phase_field_xyz) / abs(phase_field_xyz).max() < 0.1] = False
+    phase_field_bool[np.abs(phase_field_xyz) / abs(phase_field_xyz).max() >= 0.1] = True
     # test_bool = test.astype(int).astype(bool)
 
     # te=phase_field_xyz[abs(phase_field_xyz) >= 0.1] = 1
@@ -649,6 +649,7 @@ def visualize_voxels(phase_field_xyz):
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     # ax.voxels(np.full(phase_field_bool.shape, True), facecolors=face_colors, edgecolor='k', linewidth=0.01)
+    return fig, ax
 
 
 def check_equal_number_of_voxels(nb_voxels, microstructure_name):
@@ -668,3 +669,15 @@ def check_number_of_voxels(nb_voxels, microstructure_name, min_nb_voxels):
 def check_dimension(nb_voxels, microstructure_name):
     if nb_voxels.size != 3:
         raise ValueError('Microstructure_name {} is implemented only in 3D'.format(microstructure_name))
+
+
+if __name__ == '__main__':
+    # plot  geometry
+    geometry_ID = 'geometry_III_1_3D'
+    N = 40
+    nb_of_pixels = np.asarray(3 * (N,), dtype=int)
+    phase_field = get_geometry(nb_voxels=nb_of_pixels,
+                               microstructure_name=geometry_ID)
+    fig, ax = visualize_voxels(phase_field_xyz=phase_field)
+    ax.set_title('geometry_III_2_3D')
+    plt.show()
