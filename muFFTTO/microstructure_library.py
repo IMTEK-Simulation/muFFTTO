@@ -102,6 +102,8 @@ def get_geometry(nb_voxels,
             #  lightweight strong metamaterial
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_unequal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name,
+                                           ratios=[1.8, 1.8, 1])
 
             phase_field = Metamaterial_3(*nb_voxels)
 
@@ -582,21 +584,40 @@ def specialface1(Nx):
     geom = geom[0:Nx, 0:Nx]
     return geom
 
-def height(Nx,h,k):
-    t=Nx//2
+
+def height(Nx, h, k):
+    t = Nx // 2
     geom = np.zeros((Nx, h))
-    geom[t-k:t+k,:]=1
+    geom[t - k:t + k, :] = 1
     geom = geom[0:Nx, 0:h]
     return geom
+
+
+def height1(Nx, h, k):
+    geom = np.zeros((Nx, h))
+    geom[0:2 * k, :] = 1
+    geom[Nx - 2 * k:Nx, :] = 1
+    geom = geom[0:Nx, 0:h]
+    return geom
+
+
+def height2(Nx, h, k):
+    t = Nx // 2
+    geom = np.zeros((Nx, h))
+    geom[t - k:t + k, :] = 1
+    geom = geom[0:Nx, 0:h]
+    return geom
+
 
 def Metamaterial_3(*nb_voxels):
     (Nx, Ny, Nz) = nb_voxels
     # Create cube
     Cube = np.zeros((Nx, Nx, Nx))
-    Nz = int(Nx+0.40*Nx)
+    Nz = int(Nx + 0.80 * Nx)
     k = int(0.05 * Nx)
     t = Nx // 2
-    h = Nz - Nx
+    h = (Nz - Nx) // 2
+    h1 = h // 2
     # Create mesh grid
     I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Nx + 1), np.arange(1, Nz + 1))
 
@@ -604,6 +625,8 @@ def Metamaterial_3(*nb_voxels):
     Face = specialface(Nx)
     Lonee = specialface1(Nx)
     Height = height(Nx, h, k)
+    Height1 = height1(Nx, h1, k)
+    Height2 = height2(Nx, h1, k)
 
     D = np.zeros_like(Cube)
     # Assign values to D
@@ -629,16 +652,35 @@ def Metamaterial_3(*nb_voxels):
 
     Cuboid = np.zeros((Nx, Nx, Nz))
     E = np.zeros_like(Cuboid)
-    E[:, :, 0:t] = D[:, :, 0:t]
-    E[:, :, -t - 1:-1] = D[:, :, -t - 1:-1]
+    E[:, :, h1:t + h1] = D[:, :, 0:t]
+    E[:, :, -t - 1 - h1:-1 - h1] = D[:, :, -t - 1:-1]
 
     for i in range(2 * k):
-        E[i, :, t:t + h] = Height
-        E[-i - 1, :, t:t + h] = Height
-        E[:, i, t:t + h] = Height
-        E[:, -i - 1, t:t + h] = Height
+        E[i, :, h1 + t:h1 + t + h] = Height
+        E[-i - 1, :, h1 + t:h1 + t + h] = Height
+        E[:, i, h1 + t:h1 + t + h] = Height
+        E[:, -i - 1, h1 + t:h1 + t + h] = Height
+        E[i, :, 0:h1] = Height1
+        E[-i - 1, :, 0:h1] = Height1
+        E[:, i, 0:h1] = Height1
+        E[:, -i - 1, 0:h1] = Height1
+        E[i, :, -h1 - 1:-1] = Height1
+        E[-i - 1, :, -h1 - 1:-1] = Height1
+        E[:, i, -h1 - 1:-1] = Height1
+        E[:, -i - 1, -h1 - 1:-1] = Height1
+
+    for i in range(k):
+        E[t - i, :, 0:h1] = Height2
+        E[t + i, :, 0:h1] = Height2
+        E[:, t - i, 0:h1] = Height2
+        E[:, t + i, 0:h1] = Height2
+        E[:, t - i, -(h1 + 1):-1] = Height2
+        E[:, t + i, -(h1 + 1):-1] = Height2
+        E[t - i, :, -(h1 + 1):-1] = Height2
+        E[t + i, :, -(h1 + 1):-1] = Height2
 
     E = E[0:Nx, 0:Nx, 0:Nz]
+
     return E
 
 
@@ -684,12 +726,21 @@ def check_equal_number_of_voxels(nb_voxels, microstructure_name):
             'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
 
 
+def check_unequal_number_of_voxels(nb_voxels, microstructure_name, ratios):
+    if (np.allclose(nb_voxels[0] * ratios[0], nb_voxels[1] * ratios[1])) and not (
+    np.allclose(nb_voxels[0] * ratios[0], nb_voxels[2] * ratios[2])):
+        raise ValueError(
+            'Microstructure_name {} is implemented only in {} Nx = {} Ny = {} Nz grids'.format(microstructure_name,
+                                                                                               ratios[0],
+                                                                                               ratios[1], ratios[2]))
+
+
 def check_number_of_voxels(nb_voxels, microstructure_name, min_nb_voxels):
     if not (nb_voxels[0] > min_nb_voxels and nb_voxels[1] > min_nb_voxels and nb_voxels[2] > min_nb_voxels):
         # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
         raise ValueError('Microstructure_name {} is implemented only when Size '
                          'of any dimension is more than {} and it is a multiple of 5'.format(
-            microstructure_name,min_nb_voxels))
+            microstructure_name, min_nb_voxels))
 
 
 def check_dimension(nb_voxels, microstructure_name):
@@ -699,9 +750,10 @@ def check_dimension(nb_voxels, microstructure_name):
 
 if __name__ == '__main__':
     # plot  geometry
-    geometry_ID = 'geometry_III_2_3D'
+    geometry_ID = 'geometry_III_1_3D'
     N = 20
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
+    # nb_of_pixels = np.asarray( (20,20,1.8*20), dtype=int)
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
