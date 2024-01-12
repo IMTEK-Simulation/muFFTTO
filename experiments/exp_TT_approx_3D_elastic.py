@@ -17,9 +17,9 @@ from muFFTTO import TT_tools
 discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
-N = 40
+N = 20
 number_of_pixels = 3 * (N,)
-geometry_ID = 'geometry_III_1_3D'
+geometry_ID = 'geometry_I_2_3D'
 
 #problem_type = 'elasticity'
 #dataset_name = 'exp_data/' + f'muFFTTO_{problem_type}_{formulation}_{geometry_ID}_N{number_of_pixels[0]}_all.nc'
@@ -40,11 +40,11 @@ loaded_dataset = Dataset(dataset_name)
 # field_name = 'phase_field' #
 # field = np.asarray(loaded_dataset.variables[field_name])  #
 
-# field_name = 'temperature_field'
-# field = np.asarray(loaded_dataset.variables[field_name][0, 0])  #
+field_name = 'temperature_field'
+field = np.asarray(loaded_dataset.variables[field_name][0, 0])  #
 
-field_name ='gradient_field'
-field=np.asarray(loaded_dataset.variables[field_name]).mean(axis=2)[0,0]
+# field_name ='gradient_field'
+# field=np.asarray(loaded_dataset.variables[field_name]).mean(axis=2)[0,2]
 
 
 field_norm = np.linalg.norm(field)

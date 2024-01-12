@@ -109,6 +109,7 @@ def get_geometry(nb_voxels,
             #  ligtweight strong metamaterial
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=39)
 
             phase_field = Metamaterial_2(*nb_voxels)
 
@@ -520,6 +521,8 @@ def Metamaterial_2(*nb_voxels):
         D[h - i, :, :] = kite
         D[:, h + i, :] = kite
         D[:, h - i, :] = kite
+        D[:, :, h + i] = kite
+        D[:, :, h - i] = kite
 
     # Restrict D to Nx x Nx x Nx
     D = D[0:Nx, 0:Nx, 0:Nx]
@@ -579,22 +582,40 @@ def specialface1(Nx):
     geom = geom[0:Nx, 0:Nx]
     return geom
 
+def height(Nx,h,k):
+    t=Nx//2
+    geom = np.zeros((Nx, h))
+    geom[t-k:t+k,:]=1
+    geom = geom[0:Nx, 0:h]
+    return geom
 
 def Metamaterial_3(*nb_voxels):
     (Nx, Ny, Nz) = nb_voxels
     # Create cube
     Cube = np.zeros((Nx, Nx, Nx))
+    Nz = int(Nx+0.40*Nx)
     k = int(0.05 * Nx)
     t = Nx // 2
-    # Create meshgrid
-    I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Nx + 1), np.arange(1, Nx + 1))
+    h = Nz - Nx
+    # Create mesh grid
+    I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Nx + 1), np.arange(1, Nz + 1))
 
     # Get Diagonal2D_FACE matrix
     Face = specialface(Nx)
     Lonee = specialface1(Nx)
+    Height = height(Nx, h, k)
 
-    # Assign values to D
     D = np.zeros_like(Cube)
+    # Assign values to D
+    D[t, :, :] = Lonee
+    D[:, t, :] = Lonee
+
+    for i in range(k):
+        D[t - i, :, :] = Lonee
+        D[t + i, :, :] = Lonee
+        D[:, t - i, :] = Lonee
+        D[:, t + i, :] = Lonee
+
     for i in range(2 * k):
         D[i, :, :] = Face
         D[-i - 1, :, :] = Face
@@ -602,18 +623,23 @@ def Metamaterial_3(*nb_voxels):
         D[:, -i - 1, :] = Face
         # D[:, :, i] = Face
         # D[:, :, -i-1] = Face
-    D[t, :, :] = Lonee
-    D[:, t, :] = Lonee
-
-    for i in range(k):
-        D[t - k, :, :] = Lonee
-        D[t + k, :, :] = Lonee
-        D[:, t - k, :] = Lonee
-        D[:, t + k, :] = Lonee
 
     # Restrict D to Nx x Nx x Nx
     D = D[0:Nx, 0:Nx, 0:Nx]
-    return D
+
+    Cuboid = np.zeros((Nx, Nx, Nz))
+    E = np.zeros_like(Cuboid)
+    E[:, :, 0:t] = D[:, :, 0:t]
+    E[:, :, -t - 1:-1] = D[:, :, -t - 1:-1]
+
+    for i in range(2 * k):
+        E[i, :, t:t + h] = Height
+        E[-i - 1, :, t:t + h] = Height
+        E[:, i, t:t + h] = Height
+        E[:, -i - 1, t:t + h] = Height
+
+    E = E[0:Nx, 0:Nx, 0:Nz]
+    return E
 
 
 def visualize_voxels(phase_field_xyz):
@@ -662,8 +688,8 @@ def check_number_of_voxels(nb_voxels, microstructure_name, min_nb_voxels):
     if not (nb_voxels[0] > min_nb_voxels and nb_voxels[1] > min_nb_voxels and nb_voxels[2] > min_nb_voxels):
         # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
         raise ValueError('Microstructure_name {} is implemented only when Size '
-                         'of any dimension is more than 19 and it is a multiple of 5'.format(
-            microstructure_name))
+                         'of any dimension is more than {} and it is a multiple of 5'.format(
+            microstructure_name,min_nb_voxels))
 
 
 def check_dimension(nb_voxels, microstructure_name):
@@ -673,11 +699,11 @@ def check_dimension(nb_voxels, microstructure_name):
 
 if __name__ == '__main__':
     # plot  geometry
-    geometry_ID = 'geometry_III_1_3D'
-    N = 40
+    geometry_ID = 'geometry_III_2_3D'
+    N = 20
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
-    ax.set_title('geometry_III_2_3D')
+    ax.set_title(geometry_ID)
     plt.show()

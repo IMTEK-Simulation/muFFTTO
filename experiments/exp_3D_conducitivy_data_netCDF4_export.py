@@ -13,7 +13,7 @@ element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
 number_of_pixels = 3 * (40,)
-geometry_ID = 'geometry_III_1_3D'
+geometry_ID = 'geometry_III_2_3D'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -26,7 +26,7 @@ discretization = domain.Discretization(cell=my_cell,
 start_time = time.time()
 
 # set macroscopic gradient
-macro_gradient = np.array([[1.0, 0, 0]])
+macro_gradient = np.array([[.0, 0, 1]])
 
 # create material data field
 conductivity_C_1 = 100 * np.array([[1, 0, 0],

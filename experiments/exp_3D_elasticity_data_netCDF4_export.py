@@ -12,7 +12,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3*(80,)
+number_of_pixels = 3*(40,)
 geometry_ID = 'geometry_I_2_3D'
 
 # set up the system

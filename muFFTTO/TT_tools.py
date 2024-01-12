@@ -92,3 +92,5 @@ def tt_to_full_format(tt_cores):
         full_format = np.tensordot(full_format, tt_cores[d], axes=1)
 
     return np.squeeze(full_format, axis=0)
+
+
