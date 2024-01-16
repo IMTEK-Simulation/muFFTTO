@@ -90,4 +90,4 @@ def test_tt_summation():
 
     error = np.allclose(tensor, tt_reconstructed_tensor)
     assert error, (
-        "TT summation does not work {}".format(error))
+        "TT summation does not work {}".format(error)   )

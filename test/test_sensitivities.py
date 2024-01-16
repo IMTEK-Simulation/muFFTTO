@@ -1,9 +1,6 @@
 import unittest
 
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -52,7 +49,7 @@ class SensitivityTestCase(unittest.TestCase):
                                    'Objective_stress is not equal to analytical expression for 2D element {} in {} problem '.format(
                                        element_type, problem_type))
 
-    def NOtest_objective_function_double_well_potential_part(self, plot=True):
+    def NOtest_objective_function_double_well_potential_part(self, plot=False):
         # test double well potential. for constant phase field
         # shape of double well potential
         # number of pixel independence
@@ -119,10 +116,10 @@ class SensitivityTestCase(unittest.TestCase):
                                        element_type, problem_type, domain_size))
             phase_field = 1 + discretization.get_scalar_sized_field()
             of_phase_1 = topology_optimization.objective_function_small_strain(discretization,
-                                                                                            actual_stress_ij=actual_stress_field,
-                                                                                            target_stress_ij=target_stress,
-                                                                                            phase_field_1nxyz=phase_field,
-                                                                                            eta=1, w=1)
+                                                                               actual_stress_ij=actual_stress_field,
+                                                                               target_stress_ij=target_stress,
+                                                                               phase_field_1nxyz=phase_field,
+                                                                               eta=1, w=1)
 
             self.assertAlmostEqual(of_phase_1, 0, 16,
                                    'Objective function: double well is not equal to 0 at 1'
@@ -130,10 +127,11 @@ class SensitivityTestCase(unittest.TestCase):
                                        element_type, problem_type, domain_size))
 
         if plot:
+            import matplotlib.pyplot as plt
             plt.plot(rhos, of_phase)
             plt.show()
 
-    def nottest_objective_function_phase_field_gradient_part(self, plot=True):
+    def nottest_objective_function_phase_field_gradient_part(self):
         # test hase_field_gradient potential
         # shape of double well potential
         # number of pixel independence

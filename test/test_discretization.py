@@ -1,9 +1,6 @@
 import unittest
 
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -982,7 +979,8 @@ class DiscretizationTestCase(unittest.TestCase):
                 diff = x_0 - x_1
                 print(np.sum(diff))
                 self.assertTrue(np.allclose(x_0, x_1, rtol=1e-15, atol=1e-15),
-                                'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem.'.format(
+                                'Preconditioner is not the inverse of the system matrix with homogeneous'
+                                ' data: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
 
     def test_plot_2D_mesh(self, plot=False):
@@ -1007,6 +1005,8 @@ class DiscretizationTestCase(unittest.TestCase):
             quad_coordinates = discretization.get_quad_points_coordinates()
 
             if plot:
+                import matplotlib.pyplot as plt
+                from matplotlib.collections import LineCollection
                 plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
                 segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
                 segs2 = segs1.transpose(1, 0, 2)
@@ -1040,9 +1040,12 @@ class DiscretizationTestCase(unittest.TestCase):
 
             if plot:
                 # Create the figure
+                import matplotlib.pyplot as plt
+                from matplotlib.collections import LineCollection
                 fig = plt.figure()
                 ax = fig.add_subplot(111,
-                                     projection='3d')  # ['3d', 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear']
+                                     projection='3d')
+                # ['3d', 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear']
 
                 ax.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0], nodal_coordinates[2, 0], c='b', marker='o')
                 ax.set_xlabel('X-axis')

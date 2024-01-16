@@ -1,9 +1,6 @@
 import pytest
 
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -277,6 +274,7 @@ def test_of_stress_equivalence_potential_quadratic(discretization_fixture, plot=
 
     # error_fd_vs_analytical.append(np.linalg.norm((fd_derivative[0, 0] - f_rho_grad_potential), 'fro'))
     if plot:
+        import matplotlib.pyplot as plt
         plt.figure()
         plt.scatter(epsilons, stress_diffrence_potential)
         plt.show()
@@ -698,7 +696,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     ([2, 5], 0, [12, 7]),
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
-def test_finite_difference_check_of_adjoint_potential_wrt_phase_field(discretization_fixture, plot=False):
+def test_finite_difference_check_of_adjoint_potential_wrt_phase_field(discretization_fixture):
     epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, ]
     # epsilons = [1e-4]
     p = 4
