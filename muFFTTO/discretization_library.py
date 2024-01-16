@@ -3,10 +3,34 @@ import warnings
 import numpy as np
 
 
+
+
 def get_shape_function_gradient_matrix(my_domain, element_type):
+    """Example function with types documented in the docstring.
+
+    `PEP 484`_ type annotations are supported. If attribute, parameter, and
+    return types are annotated according to `PEP 484`_, they do not need to be
+    included in the docstring:
+
+    Parameters
+    ----------
+    param1 : int
+        The first parameter.
+    param2 : str
+        The second parameter.
+
+    Returns
+    -------
+    bool
+        True if successful, False otherwise.
+
+    .. _PEP 484:
+        https://www.python.org/dev/peps/pep-0484/
+
+    """
     if not element_type in ['linear_triangles', 'bilinear_rectangle', 'trilinear_hexahedron']:
         raise ValueError('Unrecognised element_type {}'.format(element_type))
-
+    # TODO [martin] get rid of match, use IF
     match element_type:
         case 'linear_triangles':
             if my_domain.domain_dimension != 2:
@@ -27,11 +51,11 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             my_domain.offsets = np.array([[0, 0], [1, 0],
                                           [0, 1], [1, 1]])
             """  Structure of B matrix: 
-                 B(:,:,q,e) --> is B matrix evaluate gradient at point q in  element e
-                 B(:,:,q,e) has size [dim,nb_of_nodes/basis_functions] 
-                                       (usually 4 in 2D and 8 in 3D)
-                 B(:,:,q,e) = [ ∂φ_1/∂x_1  ∂φ_2/∂x_1  ∂φ_3/∂x_1 ∂φ_4/∂x_1 ;
-                                ∂φ_1/∂x_2  ∂φ_2/∂x_2  ∂φ_3/∂x_2 ∂φ_4/∂x_2]   at (q)
+            #     B(:,:,q,e) --> is B matrix evaluate gradient at point q in  element e
+            #     B(:,:,q,e) has size [dim,nb_of_nodes/basis_functions] 
+            #                           (usually 4 in 2D and 8 in 3D)
+            #     B(:,:,q,e) = [ ∂φ_1/∂x_1  ∂φ_2/∂x_1  ∂φ_3/∂x_1 ∂φ_4/∂x_1 ;
+            #                    ∂φ_1/∂x_2  ∂φ_2/∂x_2  ∂φ_3/∂x_2 ∂φ_4/∂x_2]   at (q)
             """
             my_domain.B_gradient = np.zeros([my_domain.domain_dimension, 4,
                                              my_domain.nb_quad_points_per_pixel])
