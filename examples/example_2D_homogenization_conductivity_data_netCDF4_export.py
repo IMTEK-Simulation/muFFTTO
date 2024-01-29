@@ -52,13 +52,13 @@ preconditioner = discretization.get_preconditioner(reference_material_data_field
 
 M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
 
-tempetarute_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
+temperatute_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
 
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=tempetarute_field,
+    displacement_field_fnxyz=temperatute_field,
     macro_gradient_field_ijqxyz=macro_gradient_field)
 
 print(homogenized_flux)
@@ -75,7 +75,7 @@ nc.createDimension('number_of_dofs_per_pixel', 1)
 nc.createDimension('time', None)  # 'unlimited' dimension
 var = nc.createVariable('temperatures', 'f8',
                         ('time', 'coords', 'number_of_dofs_per_pixel', 'number_of_dofs_x', 'number_of_dofs_y'))
-var[0, ...] = tempetarute_field[0, ...]
+var[0, ...] = temperatute_field[0, ...]
 
 print(homogenized_flux)
 # var[0, ..., 0] = x

@@ -41,7 +41,6 @@ material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
 phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels
                                                   , microstructure_name='random_distribution')
 
-
 # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field, 1)
 

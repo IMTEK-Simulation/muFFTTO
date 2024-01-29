@@ -12,8 +12,10 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3*(40,)
-geometry_ID = 'geometry_I_2_3D'
+#number_of_pixels = 3*(40,)
+number_of_pixels = np.asarray( (30,30,1.8*30), dtype=int)
+
+geometry_ID = 'geometry_III_1_3D'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -26,9 +28,9 @@ discretization = domain.Discretization(cell=my_cell,
 start_time = time.time()
 
 # set macroscopic gradient
-macro_gradient = np.array([[1.0, 0, 0],
-                           [0., .0, 0],
-                           [0, 0, .0]])
+macro_gradient = np.array([[0.1, .2, 0],
+                           [2., .1, 0],
+                           [0, 0, .3]])
 
 # create material data field
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1,
@@ -95,7 +97,7 @@ nc.createDimension(dimname='nb_voxels_z', size=number_of_pixels[2])
 
 # crate a variable
 displacement_var = nc.createVariable(varname='displacement_field', datatype='f8',
-                                     dimensions=('displacent_shape',
+                                     dimensions=('displacement_shape',
                                                  'nb_nodes_per_pixel',
                                                  'nb_voxels_x', 'nb_voxels_y', 'nb_voxels_z'))
 gradient_var = nc.createVariable(varname='gradient_field', datatype='f8',

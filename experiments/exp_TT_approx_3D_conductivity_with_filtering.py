@@ -12,13 +12,15 @@ mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'sans-serif'
 
 from muFFTTO import microstructure_library
-from muFFTTO import TT_tools
+from muFFTTO import tensor_train_tools
 
 discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
-N = 20
+N = 90
 number_of_pixels = 3 * (N,)
+#number_of_pixels = np.asarray( (30,30,1.8*30), dtype=int)
+
 geometry_ID = 'geometry_I_2_3D'
 
 #problem_type = 'elasticity'
@@ -31,17 +33,22 @@ dataset_name = 'exp_data/' + f'muFFTTO_{problem_type}_{geometry_ID}_N{number_of_
 # read dataset
 loaded_dataset = Dataset(dataset_name)
 #
-# displacemet = loaded_dataset.variables['displacement_field']# displacement_field
+field_name = 'gradient_field'
 
-# phase_field = loaded_dataset.variables['phase_field']
+#displacemet = loaded_dataset.variables['displacement_field']# displacement_field
+
+#phase_field = loaded_dataset.variables['phase_field']
+#field=np.asarray(loaded_dataset.variables[field_name]).mean(axis=2)[2,2]
+
+
 
 # microstructure_library.visualize_voxels(phase_field_xyz=geometry)
 # routine
-# field_name = 'phase_field' #
-# field = np.asarray(loaded_dataset.variables[field_name])  #
+field_name = 'phase_field' #
+field = np.asarray(loaded_dataset.variables[field_name])  #
 
-field_name = 'temperature_field'
-field = np.asarray(loaded_dataset.variables[field_name][0, 0])  #
+#field_name = 'temperature_field'
+#field = np.asarray(loaded_dataset.variables[field_name][0, 0])  #
 
 # field_name ='gradient_field'
 # field=np.asarray(loaded_dataset.variables[field_name]).mean(axis=2)[0,2]
@@ -73,10 +80,10 @@ for filter_par in [0, 0.5, 1, 2]:  # 0.1, 0.5, 1, 2, 4, 8
         # for rank_j in np.arange(0, number_of_pixels[0]):
 
         ranks = np.asarray([1, rank_i + 1, rank_j + 1, 1])
-        tt_field = TT_tools.tt_decompose_rank(tensor_xyz=field_filtered,
+        tt_field = tensor_train_tools.tt_decompose_rank(tensor_xyz=field_filtered,
                                               ranks=ranks)
 
-        tt_reconstructed_field = TT_tools.tt_to_full_format(tt_cores=tt_field)
+        tt_reconstructed_field = tensor_train_tools.tt_to_full_format(tt_cores=tt_field)
 
         abs_error_norms[rank_i, rank_j] = (np.linalg.norm(field_filtered - tt_reconstructed_field))
         rel_error_norms[rank_i, rank_j] = (abs_error_norms[rank_i, rank_j] / field_filtered_norm)
