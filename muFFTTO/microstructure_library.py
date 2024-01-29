@@ -684,7 +684,7 @@ def Metamaterial_3(*nb_voxels):
     return E
 
 
-def visualize_voxels(phase_field_xyz):
+def visualize_voxels(phase_field_xyz, figure=None, ax=None):
     # -----
     # phase_field_xyz  - indicator field in every voxel
     # plot voxelized geometry of the phase_field
@@ -710,8 +710,10 @@ def visualize_voxels(phase_field_xyz):
 
     # set transparency --- opacity --- alpha     scale 0-1
     face_colors[..., -1] = abs(phase_field_xyz) / abs(phase_field_xyz).max()
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
+    if figure is None:
+        fig = plt.figure()
+    if ax is None:
+        ax = fig.add_subplot(projection='3d')
     ax.voxels(phase_field_bool, facecolors=face_colors, edgecolor='k', linewidth=0.01)
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
@@ -728,7 +730,7 @@ def check_equal_number_of_voxels(nb_voxels, microstructure_name):
 
 def check_unequal_number_of_voxels(nb_voxels, microstructure_name, ratios):
     if (np.allclose(nb_voxels[0] * ratios[0], nb_voxels[1] * ratios[1])) and not (
-    np.allclose(nb_voxels[0] * ratios[0], nb_voxels[2] * ratios[2])):
+            np.allclose(nb_voxels[0] * ratios[0], nb_voxels[2] * ratios[2])):
         raise ValueError(
             'Microstructure_name {} is implemented only in {} Nx = {} Ny = {} Nz grids'.format(microstructure_name,
                                                                                                ratios[0],
@@ -750,7 +752,7 @@ def check_dimension(nb_voxels, microstructure_name):
 
 if __name__ == '__main__':
     # plot  geometry
-    geometry_ID = 'geometry_III_1_3D'
+    geometry_ID = 'geometry_II_4_3D'
     N = 20
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
     # nb_of_pixels = np.asarray( (20,20,1.8*20), dtype=int)
