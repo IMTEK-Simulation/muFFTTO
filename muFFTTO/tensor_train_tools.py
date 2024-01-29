@@ -32,6 +32,8 @@ def tt_decompose_rank(tensor_xyz, ranks):
         temp = np.matmul(np.diag(S[0:ranks[d + 1]]), Vh[0:ranks[d + 1], :])
 
     tt_cores.append(temp)
+    # formally add new dimension at the end of the last core
+    tt_cores[-1] = np.expand_dims(tt_cores[-1], axis=-1)
     return tt_cores
 
 
@@ -77,6 +79,8 @@ def tt_decompose_error(tensor_xyz, rel_error_norm):
         temp = np.matmul(np.diag(S[0:ranks[d + 1]]), Vh[0:ranks[d + 1], :])
 
     tt_cores.append(temp)
+    # formally add new dimension at the end of the last core
+    tt_cores[-1] = np.expand_dims(tt_cores[-1], axis=-1)
     return tt_cores, ranks
 
 
@@ -91,6 +95,63 @@ def tt_to_full_format(tt_cores):
     for d in np.arange(2, len(tt_cores)):
         full_format = np.tensordot(full_format, tt_cores[d], axes=1)
 
-    return np.squeeze(full_format, axis=0)
+    return np.squeeze(full_format, axis=(0, -1))
 
 
+def get_gradient_finite_difference(tt_cores, voxel_sizes):
+    dim = len(tt_cores)
+    dtt_cores = []
+
+    for d in np.arange(dim):
+        dtt_cores.append(tt_cores.copy())
+        dtt_cores[d][d] = (np.roll(tt_cores[d], -1, axis=1) - tt_cores[d]) / voxel_sizes[d]
+
+    return dtt_cores
+
+
+def tt_addition(tt_cores_1, tt_cores_2):
+    if len(tt_cores_1) != len(tt_cores_2):
+        raise ValueError('Number of dimensions of TT cores 1 = {} is not equal to '
+                         ' Number of dimensions of TT cores 2 = {}'.format(len(tt_cores_1), len(tt_cores_2)))
+    #
+    dim = len(tt_cores_1)
+    # check if spatial dimension are correct for both tt_tensors
+    for d in np.arange(0, dim):
+        if tt_cores_1[d].shape[1] != tt_cores_2[d].shape[1]:
+            raise ValueError('Spatial dimension of TT cores {} = {} is not equal to '
+                             'Spatial dimension of TT cores {} = {}'.format(len(tt_cores_1),
+                                                                            tt_cores_1[d].shape[1],
+                                                                            len(tt_cores_2),
+                                                                            tt_cores_2[d].shape[1]))
+    # first core
+    sum_tt_cores = []
+    sum_tt_cores.append(np.concatenate((tt_cores_1[0], tt_cores_2[0]), axis=2))
+
+    for d in np.arange(1, dim - 1):
+        print(dim)
+        # dtt_cores[d][d] = (np.roll(tt_cores[d], -1, axis=1) - tt_cores[d]) / voxel_sizes[d]
+        # aaa=np.concatenate((tt_cores_1[1], tt_cores_2[1]), axis=1,2)
+        r1_left = tt_cores_1[d].shape[0]
+        r2_left = tt_cores_2[d].shape[0]
+
+        r1_right = tt_cores_1[d].shape[2]
+        r2_right = tt_cores_2[d].shape[2]
+        Nd = tt_cores_1[d].shape[1]
+        temp = np.zeros([r1_left + r2_left, Nd, r1_right + r2_right])
+
+        temp[:r1_left, :, :r1_right] = tt_cores_1[d]
+        temp[r1_left:r1_left + r2_left, :, r1_right:r1_right + r2_right] = tt_cores_2[d]
+
+        sum_tt_cores.append(temp.copy())
+
+    # last core
+    sum_tt_cores.append(np.concatenate((tt_cores_1[-1], tt_cores_2[-1]), axis=0))
+
+    return sum_tt_cores
+
+
+def tt_subtraction(tt_cores_1, tt_cores_2):
+    dim = len(tt_cores_2)
+    for d in np.arange(0, dim):
+        tt_cores_2[d]=-1*tt_cores_2[d]
+    return tt_addition(tt_cores_1, tt_cores_2)
