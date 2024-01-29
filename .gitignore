@@ -10,3 +10,5 @@ dist
 
 
 *.nc
+
+experiments/figures/
