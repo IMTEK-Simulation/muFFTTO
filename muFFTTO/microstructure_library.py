@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+from muFFTTO import geometries_indre_joedicke
 
 
 def get_geometry(nb_voxels,
@@ -13,7 +14,8 @@ def get_geometry(nb_voxels,
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
-                                   'geometry_III_1_3D', 'geometry_III_2_3D'
+                                   'geometry_III_1_3D', 'geometry_III_2_3D', 'geometry_III_3_3D', 'geometry_III_4_3D',
+                                   'geometry_III_5_3D'
                                    ]:
         raise ValueError('Unrecognised microstructure_name {}'.format(microstructure_name))
     # if not nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19 and nb_voxels[0]//5!=0 and nb_voxels[1]//5!=0 and nb_voxels[2]//5!=0:
@@ -114,6 +116,71 @@ def get_geometry(nb_voxels,
             check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=39)
 
             phase_field = Metamaterial_2(*nb_voxels)
+
+        case 'geometry_III_3_3D':
+            #  ligtweight strong metamaterial
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=20)
+
+            phase_field = Metamaterial_4(*nb_voxels)
+
+
+        case 'geometry_III_4_3D':
+            # Define a  chiral metamaterial.
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=20)
+            if parameter is None:
+                parameter = {'lengths': [1., 1., 1],
+                             'radius': 0.4,
+                             'thickness': 0.1,
+                             'alpha': 0.2}
+            elif "lengths" not in parameter:
+                parameter['lengths'] = [1., 1., 1]
+            elif "radius" not in parameter:
+                parameter['radius'] = 0.4
+            elif "thickness" not in parameter:
+                parameter['thickness'] = 0.1
+            elif "alpha" not in parameter:
+                parameter['alpha'] = 0.2
+
+            phase_field = geometries_indre_joedicke.chiral_metamaterial(nb_grid_pts=nb_voxels,
+                                                                        lengths=parameter['lengths'],
+                                                                        radius=parameter['radius'],
+                                                                        thickness=parameter['thickness'],
+                                                                        alpha=parameter['alpha'])
+
+        case 'geometry_III_5_3D':
+            # Define a (more complex) chiral metamaterial.
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            # check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=20)
+            if parameter is None:
+                parameter = {
+                    'lengths': [1.1, 1.1, 1],
+                    'radius_out': 0.3,
+                    'radius_inn': 0.2,
+                    'thickness': 0.1,
+                    'alpha': 0.25}
+
+            elif "lengths" not in parameter:
+                parameter['lengths'] = [1.1, 1.1, 1]
+            elif "radius_out" not in parameter:
+                parameter['radius_out'] = 0.3
+            elif "radius_inn" not in parameter:
+                parameter['radius_inn'] = 0.2
+            elif "thickness" not in parameter:
+                parameter['thickness'] = 0.1
+            elif "alpha" not in parameter:
+                parameter['alpha'] = 0.25
+
+            phase_field = geometries_indre_joedicke.chiral_metamaterial_2(nb_grid_pts=nb_voxels,
+                                                                          lengths=parameter['lengths'],
+                                                                          radius_out=parameter['radius_out'],
+                                                                          radius_inn=parameter['radius_inn'],
+                                                                          thickness=parameter['thickness'],
+                                                                          alpha=parameter['alpha'])
 
     return phase_field  # size is
 
@@ -684,6 +751,63 @@ def Metamaterial_3(*nb_voxels):
     return E
 
 
+def Structure2D(Nx, k):
+    geom = np.zeros((Nx, Nx))
+    N = int(0.6 * Nx)
+    geom1 = Diagonal2D_FACE(N, k)
+    geom[int(0.1 * Nx):int(0.4 * Nx), int(0.2 * Nx):int(0.8 * Nx)] = geom1[0:int(N / 2), 0:N]
+    geom[int(0.6 * Nx):int(0.9 * Nx), int(0.2 * Nx):int(0.8 * Nx)] = geom1[int(N / 2):N, 0:N]
+    for i in range(k):
+        geom[int(0.1 * Nx):int(0.9 * Nx), int(0.2 * Nx) + i] = 1
+        geom[int(0.1 * Nx):int(0.9 * Nx), int(0.8 * Nx) - i] = 1
+        geom[int(0.1 * Nx):int(0.9 * Nx), int(0.2 * Nx) - i] = 1
+        geom[int(0.1 * Nx):int(0.9 * Nx), int(0.8 * Nx) + i] = 1
+        geom[0:int(0.4 * Nx), int(0.5 * Nx) + i] = 1
+        geom[0:int(0.4 * Nx), int(0.5 * Nx) - i] = 1
+        geom[int(0.6 * Nx):Nx, int(0.5 * Nx) + i] = 1
+        geom[int(0.6 * Nx):Nx, int(0.5 * Nx) - i] = 1
+
+    geom = geom[0:Nx, 0:Nx]
+    return geom
+
+
+def Structure2D_FACE(NX, k):
+    Nx = int(3 * NX / 2)
+
+    geom = np.zeros((Nx, Nx))
+    unit = np.transpose(Structure2D(int(Nx / 3), k))
+    unit = unit[k + 1:-k, :]
+    geom[0 + 1:int(Nx / 3) - 2 * k, 0:int(Nx / 3)] = unit
+    geom[int((Nx / 3) - 2 * k - 2 * k) + 1:int((2 * Nx / 3) - 4 * k - 2 * k), 0:int(Nx / 3)] = unit
+    geom[int(2 * (Nx / 3 - 2 * k) - 4 * k) + 1:int(3 * (Nx / 3 - 2 * k) - 4 * k), 0:int(Nx / 3)] = unit
+    geom[0 + 1:int(Nx / 3) - 2 * k, int(Nx / 3):int(2 * Nx / 3)] = unit
+    geom[int((Nx / 3) - 2 * k - 2 * k) + 1:int((2 * Nx / 3) - 4 * k - 2 * k), int(Nx / 3):int(2 * Nx / 3)] = unit
+    geom[int(2 * (Nx / 3 - 2 * k) - 4 * k) + 1:int(3 * (Nx / 3 - 2 * k) - 4 * k), int(Nx / 3):int(2 * Nx / 3)] = unit
+
+    geom = geom[0:NX, 0:NX]
+    return geom
+
+
+def Metamaterial_4(*nb_voxels):
+    (Nx, Ny, Nz) = nb_voxels
+    # Create cube
+    Cube = np.zeros((Nx, Ny, Nx))
+    k = int(Nx / 20)
+    # Create meshgrid
+    I, J, K = np.meshgrid(np.arange(1, Nx + 1), np.arange(1, Nx + 1), np.arange(1, Nx + 1))
+
+    # Get Diagonal2D_FACE matrix
+    Face = Structure2D_FACE(Nx, k)
+    # Assign values to D
+    D = np.zeros_like(Cube)
+    for i in range(Ny):
+        D[:, i, :] = Face
+    # Restrict D to Nx x Nx x Nx
+    D = D[0:Nx, 0:Ny, 0:Nx]
+
+    return D
+
+
 def visualize_voxels(phase_field_xyz, figure=None, ax=None):
     # -----
     # phase_field_xyz  - indicator field in every voxel
@@ -752,12 +876,14 @@ def check_dimension(nb_voxels, microstructure_name):
 
 if __name__ == '__main__':
     # plot  geometry
-    geometry_ID = 'geometry_II_4_3D'
-    N = 20
+    geometry_ID = 'geometry_III_5_3D'
+    N = 50
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
     # nb_of_pixels = np.asarray( (20,20,1.8*20), dtype=int)
+
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
+
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
     ax.set_title(geometry_ID)
     plt.show()

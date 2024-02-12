@@ -11,16 +11,17 @@ problem_type = 'conductivity'
 discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 # formulation = 'small_strain'
-N=150
+N=140
 domain_size = [1, 1, 1]
 number_of_pixels = 3 * (N,)
 #number_of_pixels = np.asarray( (20,20,1.8*20), dtype=int)
 #number_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
 #
-for geometry_ID in  [ 'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
-    'geometry_I_5_3D', 'geometry_II_1_3D', 'geometry_II_4_3D',
-     'geometry_III_2_3D'
-    ]:
+for geometry_ID in ['geometry_III_5_3D']:
+    # [ 'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
+    # 'geometry_I_5_3D', 'geometry_II_1_3D', 'geometry_II_4_3D',
+    #  'geometry_III_2_3D','geometry_III_3_3D'
+    # ]:
     #'geometry_III_1_3D', , 'geometry_II_3_3D'
     print(geometry_ID)
     # set up the system
@@ -34,7 +35,7 @@ for geometry_ID in  [ 'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', '
     start_time = time.time()
 
     # set macroscopic gradient
-    macro_gradient = np.array([[1., 0, 0]])
+    macro_gradient = np.array([[0., 0, 1.0]])
 
     # create material data field
     conductivity_C_1 = 100 * np.array([[1, 0, 0],

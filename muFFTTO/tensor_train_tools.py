@@ -1,5 +1,5 @@
 import numpy as np
-
+import scipy as sc
 
 def tt_decompose_rank(tensor_xyz, ranks):
     # function computes TT decomposition of the tensor_xyz with specified ranks
@@ -136,8 +136,8 @@ def tt_addition(tt_cores_1, tt_cores_2):
 
         r1_right = tt_cores_1[d].shape[2]
         r2_right = tt_cores_2[d].shape[2]
-        Nd = tt_cores_1[d].shape[1]
-        temp = np.zeros([r1_left + r2_left, Nd, r1_right + r2_right])
+        nd = tt_cores_1[d].shape[1]
+        temp = np.zeros([r1_left + r2_left, nd, r1_right + r2_right])
 
         temp[:r1_left, :, :r1_right] = tt_cores_1[d]
         temp[r1_left:r1_left + r2_left, :, r1_right:r1_right + r2_right] = tt_cores_2[d]
@@ -151,7 +151,54 @@ def tt_addition(tt_cores_1, tt_cores_2):
 
 
 def tt_subtraction(tt_cores_1, tt_cores_2):
-    dim = len(tt_cores_2)
-    for d in np.arange(0, dim):
-        tt_cores_2[d]=-1*tt_cores_2[d]
+    # dim = len(tt_cores_2)
+    tt_cores_2[0] = np.copy(-1.0 * (tt_cores_2[0]))
+    # for d in np.arange(0, dim):
+    #     tt_cores_2[d] =np.copy( -1.0 * (tt_cores_2[d]))
+
     return tt_addition(tt_cores_1, tt_cores_2)
+
+
+
+def tt_rounding_Bharat(cores, epsilon):
+    d = len(cores)
+    norm_A = [np.linalg.norm(c) for c in cores]
+    delta = np.sqrt(epsilon / (d - 1)) * norm_A
+
+    # Right-to-left orthogonalization
+    for k in range(d - 1, 0, -1):
+        C = cores[k].reshape(-1, cores[k].shape[-1])
+        Q, R = np.linalg.qr(C)
+        cores[k] = Q.reshape(cores[k].shape[0], cores[k].shape[1], -1)
+        cores[k - 1] = np.tensordot(cores[k - 1], R, axes=([2], [1]))
+
+    # Compression
+    for k in range(d - 1):
+        C = cores[k].reshape(-1, cores[k].shape[-1])
+        U, S, Vh = np.linalg.svd(C, full_matrices=False)
+        rk = np.sum(S > delta)
+        cores[k] = U[:, :rk].reshape(cores[k].shape[0], cores[k].shape[1], rk)
+        cores[k + 1] = np.tensordot(np.dot(np.diag(S[:rk]), Vh[:rk, :]), cores[k + 1], axes=([1], [0]))
+
+    return cores
+
+
+def tt_rounding_Martin(cores, epsilon):
+    d = len(cores)
+    norm_A=np.linalg.norm(tt_to_full_format(tt_cores=cores))
+    #norm_A = np.sum[np.linalg.norm(c) for c in cores]
+    delta = np.sqrt(epsilon / (d - 1)) * norm_A
+    # Right-to-left orthogonalization
+    for k in range(d - 1, 0, -1):
+        C_unfolded = cores[k].reshape(cores[k].shape[0], np.prod(cores[k].shape[1:]))
+        R, Q = sc.linalg.rq(C_unfolded, mode='economic')
+
+        #G_k_new=Q.reshape(cores[k].shape)
+        #cores[k - 1].reshape(np.prod(cores[k - 1].shape[:2]), cores[k - 1].shape[-1])
+        aaa=np.dot(cores[k - 1].reshape(np.prod(cores[k - 1].shape[:2]), cores[k - 1].shape[-1]),R)
+        cores[k-1]=aaa
+        #reshape(cr[i - 1], (r[i - 1] * n[i - 1], r[i])
+        #G_kminus=np.tensordot(G_k_new, R, axes=2)
+        cores[k] = Q.reshape(cores[k].shape)
+
+    return cores

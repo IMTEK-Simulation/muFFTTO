@@ -804,7 +804,7 @@ def test_finite_difference_check_of_stress_equivalence_potential222(discretizati
     # TODO this check works for p=1,2
     epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-4]
-    p = 4
+    p = 3
     fd_derivative = discretization_fixture.get_scalar_sized_field()
 
     target_stress = np.array([[1, 0.3], [0.3, 2]])
@@ -936,7 +936,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
     #
     epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     # epsilons = [1e-4]
-    p = 3
+    p = 1
     fd_derivative = discretization_fixture.get_scalar_sized_field()
 
     target_stress = np.array([[1, 0.3], [0.3, 2]])

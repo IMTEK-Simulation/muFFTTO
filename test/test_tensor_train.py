@@ -245,11 +245,11 @@ def test_tt_partial_derivative_3D():
 @pytest.mark.parametrize('domain_size , element_type, number_of_pixels', [
     ([2, 3], 'linear_triangles', [2, 2]),
     ([3, 2], 'linear_triangles', [4, 3]),
-    ([2, 3], 'linear_triangles', [6, 4]),
-    ([3, 2], 'linear_triangles', [3, 5]),
+    ([1, 3], 'linear_triangles', [6, 4]),
+    ([3, 4], 'linear_triangles', [3, 5]),
     ([2, 3], 'bilinear_rectangle', [2, 2]),
     ([3, 2], 'bilinear_rectangle', [4, 3]),
-    ([2, 3], 'bilinear_rectangle', [6, 4]),
+    ([1, 3], 'bilinear_rectangle', [6, 4]),
     ([3, 2], 'bilinear_rectangle', [3, 5]),
     ([2, 2, 3], 'trilinear_hexahedron', [2, 2, 2]),
     ([3, 4, 2], 'trilinear_hexahedron', [3, 4, 3]),
@@ -279,8 +279,8 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
     test_field_2 = discretization.get_temperature_sized_field()
 
     if number_of_pixels.__len__() == 2:
-        u_fun_4x = lambda x, y: (4 * x + 0 * y) * np.sin(x)
-        u_fun_3y = lambda x, y: (0 * x + 3 * y) * np.sin(x)
+        u_fun_4x = lambda x, y: (4 * x + 1 * y) * np.sin(x)
+        u_fun_3y = lambda x, y: (2 * x + 3 * y) * np.sin(x)
         test_field_1[0, 0, :, :] = u_fun_4x(nodal_coordinates[0, 0, :, :],
                                             nodal_coordinates[1, 0, :, :]
                                             )
@@ -289,8 +289,8 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
                                             )
 
     if number_of_pixels.__len__() == 3:
-        u_fun_4x = lambda x, y, z: (4 * x + 0 * y + 5 * z) * np.sin(x)
-        u_fun_3y = lambda x, y, z: (0 * x + 3 * y + 0 * z) * np.sin(x)
+        u_fun_4x = lambda x, y, z: (4 * x + 2 * y + 5 * z) * np.sin(x)
+        u_fun_3y = lambda x, y, z: (1 * x + 3 * y + 7 * z) * np.sin(x)
         test_field_1[0, 0, :, :] = u_fun_4x(nodal_coordinates[0, 0, :, :],
                                             nodal_coordinates[1, 0, :, :],
                                             nodal_coordinates[2, 0, :, :]
@@ -313,6 +313,7 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
 
     tt_plus = tensor_train_tools.tt_addition(tt_cores_1=tt_cores_1,
                                              tt_cores_2=tt_cores_2)
+
     tt_minus = tensor_train_tools.tt_subtraction(tt_cores_1=tt_cores_1,
                                                  tt_cores_2=tt_cores_2)
 
@@ -320,6 +321,7 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
     tt_minus_reconstructed = tensor_train_tools.tt_to_full_format(tt_cores=tt_minus)
 
     error_plus = np.allclose(tt_plus_reconstructed, test_field_1 + test_field_2)
+
     error_minus = np.allclose(tt_minus_reconstructed, test_field_1 - test_field_2)
 
     assert error_plus, (
@@ -327,4 +329,86 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
             np.linalg.norm(tt_plus_reconstructed - (test_field_1 + test_field_2))))
     assert error_minus, (
         "TT-subtraction does not return correct numbers {}".format(
+            np.linalg.norm(tt_minus_reconstructed - (test_field_1 - test_field_2))))
+
+
+@pytest.mark.parametrize('domain_size , element_type, number_of_pixels', [
+    ([2, 3,4], 'trilinear_hexahedron', [2, 3,4]),
+    ([3, 2,5], 'trilinear_hexahedron', [4, 3,5]),])
+def test_tt_rounding(domain_size, element_type, number_of_pixels):
+    # test TT FD compared to finite element gradient
+    # compare  fem gradient with low rank gradient for linear elements
+    # number_of_pixels = [5, 6, 7]
+    # domain_size = [3, 4, 5]  #
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    discretization_type = 'finite_element'
+    # element_type = 'trilinear_hexahedron'  # #linear_triangles
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           number_of_pixels=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    nodal_coordinates = discretization.get_nodal_points_coordinates()
+    quad_coordinates = discretization.get_quad_points_coordinates()
+
+    test_field_1 = discretization.get_temperature_sized_field()
+    test_field_2 = discretization.get_temperature_sized_field()
+
+    if number_of_pixels.__len__() == 2:
+        u_fun_4x = lambda x, y: (4 * x + 1 * y) * np.sin(x)
+        u_fun_3y = lambda x, y: (2 * x + 3 * y) * np.sin(x)
+        test_field_1[0, 0, :, :] = u_fun_4x(nodal_coordinates[0, 0, :, :],
+                                            nodal_coordinates[1, 0, :, :]
+                                            )
+        test_field_2[0, 0, :, :] = u_fun_3y(nodal_coordinates[0, 0, :, :],
+                                            nodal_coordinates[1, 0, :, :]
+                                            )
+
+    if number_of_pixels.__len__() == 3:
+        u_fun_4x = lambda x, y, z: (4 * x + 2 * y + 5 * z) * np.sin(x)
+        u_fun_3y = lambda x, y, z: (1 * x + 3 * y + 7 * z) * np.sin(x)
+        test_field_1[0, 0, :, :] = u_fun_4x(nodal_coordinates[0, 0, :, :],
+                                            nodal_coordinates[1, 0, :, :],
+                                            nodal_coordinates[2, 0, :, :]
+                                            )
+        test_field_2[0, 0, :, :] = u_fun_3y(nodal_coordinates[0, 0, :, :],
+                                            nodal_coordinates[1, 0, :, :],
+                                            nodal_coordinates[2, 0, :, :]
+                                            )
+
+    #            u_fun_4x3y = lambda x, y: np.random.rand() * x + np.random.rand() * y  # np.sin(x)
+
+    test_field_1 = test_field_1[0, 0, :, :]
+    test_field_2 = test_field_2[0, 0, :, :]
+
+    tt_cores_1, ranks_1 = tensor_train_tools.tt_decompose_error(tensor_xyz=test_field_1,
+                                                                rel_error_norm=0.)
+
+    tt_cores_2, ranks_2 = tensor_train_tools.tt_decompose_error(tensor_xyz=test_field_2,
+                                                                rel_error_norm=0.)
+
+    tt_plus = tensor_train_tools.tt_addition(tt_cores_1=tt_cores_1,
+                                             tt_cores_2=tt_cores_2)
+
+    tt_minus = tensor_train_tools.tt_subtraction(tt_cores_1=tt_cores_1,
+                                                 tt_cores_2=tt_cores_2)
+
+    tt_plus_reconstructed = tensor_train_tools.tt_to_full_format(tt_cores=tt_plus)
+    tt_minus_reconstructed = tensor_train_tools.tt_to_full_format(tt_cores=tt_minus)
+
+    rounded = tensor_train_tools.tt_rounding_Martin(cores=tt_plus, epsilon=1.)
+
+    error_plus = np.allclose(tt_plus_reconstructed, test_field_1 + test_field_2)
+
+    error_minus = np.allclose(tt_minus_reconstructed, test_field_1 - test_field_2)
+
+    assert error_plus, (
+        "TT-rounding does not return correct numbers {}".format(
+            np.linalg.norm(tt_plus_reconstructed - (test_field_1 + test_field_2))))
+    assert error_minus, (
+        "TT-rounding does not return correct numbers {}".format(
             np.linalg.norm(tt_minus_reconstructed - (test_field_1 - test_field_2))))
