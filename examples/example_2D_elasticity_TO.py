@@ -131,7 +131,7 @@ def my_objective_function(phase_field_1nxyz):
         reference_material_data_field_ijklqxyz=material_data_field_C_0)
     M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
                                                           nodal_field_fnxyz=x)
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-8)
 
     # compute homogenized stress field corresponding t
     homogenized_stress = discretization.get_homogenized_stress(
@@ -164,7 +164,7 @@ def my_sensitivity(phase_field_1nxyz):
                                                          formulation='small_strain')
     M_fun = lambda x: 1 * x
 
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-8)
 
     # compute homogenized stress field corresponding t
     homogenized_stress = discretization.get_homogenized_stress(

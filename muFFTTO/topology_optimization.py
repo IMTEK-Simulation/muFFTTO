@@ -16,13 +16,17 @@ def objective_function_small_strain(discretization,
     # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
 
     # stress difference potential: actual_stress_ij is homogenized stress
-    stress_difference_ij = actual_stress_ij - target_stress_ij
+    # stress_difference_ij = actual_stress_ij - target_stress_ij
+    stress_difference_ij = (actual_stress_ij - target_stress_ij)
 
     f_sigma = np.sum(stress_difference_ij ** 2)
 
     # double - well potential
-    integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
-    f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
+    # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    f_dw = compute_double_well_potential(discretization=discretization,
+                                         phase_field_1nxyz=phase_field_1nxyz,
+                                         eta=1)
 
     phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
@@ -30,20 +34,51 @@ def objective_function_small_strain(discretization,
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
     f_rho = eta * f_rho_grad + f_dw / eta
-    print('f_rho_grad =  {} '.format((f_rho_grad)))
 
-    print('f_dw =  {} '.format((f_dw)))
-    print('f_sigma =  {} '.format((f_sigma)))
-    print('objective_function = {} '.format((f_sigma + w * f_rho)))
+    print('f_sigma =  {} '.format(f_sigma))
+    print('f_rho_grad =  {} '.format(f_rho_grad))
+    print('f_dw =  {} '.format(f_dw))
+    print('objective_function = {} '.format(f_sigma + w * f_rho))
 
-    return (f_sigma + w * f_rho)  # / discretization.cell.domain_volume
+    return f_sigma + w * f_rho  # / discretization.cell.domain_volume
 
 
-def compute_double_well_potential(discretization, phase_field, eta=1):
+def compute_double_well_potential(discretization, phase_field_1nxyz, eta=1):
     # The double-well potential
     # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
     # double - well potential
-    integrant = (phase_field ** 2) * (1 - phase_field) ** 2
+    # with interpolation for more precise integration
+    # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
+    # integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+
+    # TODO make this dimension-less
+    x_coords = np.linspace(0, discretization.domain_size[0], discretization.nb_of_pixels[0], endpoint=False)
+    y_coords = np.linspace(0, discretization.domain_size[1], discretization.nb_of_pixels[1], endpoint=False)
+    phase_field_interpolator = sc.interpolate.interp2d(x_coords,
+                                                       y_coords,
+                                                       phase_field_1nxyz[0, 0].transpose(),
+                                                       kind='linear')
+    x_coords_interpolated = np.linspace(0, discretization.domain_size[0], 4 * discretization.nb_of_pixels[0],
+                                        endpoint=False)
+    y_coords_interpolated = np.linspace(0, discretization.domain_size[1], 4 * discretization.nb_of_pixels[1],
+                                        endpoint=False)
+
+    phase_field_interpolated_xyz = np.zeros([1, discretization.nb_nodes_per_pixel, *4 * discretization.nb_of_pixels])
+    phase_field_interpolated_xyz[0, 0] = phase_field_interpolator(x_coords_interpolated,
+                                                                  y_coords_interpolated).transpose()
+
+    integrant_precise = (phase_field_interpolated_xyz ** 2) * (1 - phase_field_interpolated_xyz) ** 2
+    integral_precise = (np.sum(integrant_precise) / np.prod(
+        integrant_precise.shape)) * discretization.cell.domain_volume
+
+    return integral_precise / eta
+
+
+def compute_double_well_potential_old(discretization, phase_field_1nxyz, eta=1):
+    # The double-well potential
+    # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
+    # double - well potential
+    integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
     return integral / eta
 
@@ -53,7 +88,7 @@ def partial_der_of_double_well_potential_wrt_density(discretization, phase_field
     # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
-
+    # TODO[Martin]: do this part first ' integration of double well potential
     integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
 
     integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
@@ -61,12 +96,26 @@ def partial_der_of_double_well_potential_wrt_density(discretization, phase_field
     return integral_fnxyz / eta
 
 
+def compute_gradient_of_phase_field_potential_NEW_WIP(discretization, phase_field_1nxyz, eta=1):
+    # Input: phase_field [1,n,x,y,z]
+    # Output: potential [1]
+    # phase field gradient potential = int (  (grad(rho))^2 )    dx
+    phase_field_gradient_ijqxyz = discretization.apply_gradient_operator(phase_field_1nxyz)
+
+    phase_field_gradient_squared_qxyz = np.einsum('ij...,ij...->...',
+                                                  phase_field_gradient_ijqxyz,
+                                                  phase_field_gradient_ijqxyz)
+
+    f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient_squared_qxyz))
+    return eta * f_rho_grad
+
+
 def compute_gradient_of_phase_field_potential(discretization, phase_field_1nxyz, eta=1):
     # Input: phase_field [1,n,x,y,z]
     # Output: potential [1]
     # phase field gradient potential = int (  (grad(rho))^2 )    dx
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
-    f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
+    phase_field_gradient_ijqxyz = discretization.apply_gradient_operator(phase_field_1nxyz)
+    f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient_ijqxyz ** 2))
     return eta * f_rho_grad
 
 
@@ -134,8 +183,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field(
     stress_field_ijqxyz = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz, strain_ijqxyz)
 
     # apply quadrature weights
-    stress_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(
-        stress_field_ijqxyz)
+    stress_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz)
 
     # stress difference
     stress_difference_ij = actual_stress_ij - target_stress_ij
@@ -605,10 +653,14 @@ def sensitivity_with_adjoint_problem(discretization,
     K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
                                                          displacement_field=x,
                                                          formulation=formulation)
-    M_fun = lambda x: 1 * x
+    # M_fun = lambda x: 1 * x
+    preconditioner = discretization.get_preconditioner(
+        reference_material_data_field_ijklqxyz=material_data_field_ijklqxyz)
+    M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
+                                                          nodal_field_fnxyz=x)
 
     # solve the system
-    adjoint_field_fnxyz, adjoint_norms = solvers.PCG(K_fun, df_du_field, x0=None, P=M_fun, steps=int(500), toler=1e-6)
+    adjoint_field_fnxyz, adjoint_norms = solvers.PCG(K_fun, df_du_field, x0=None, P=M_fun, steps=int(500), toler=1e-8)
 
     # gradient of adjoint_field
     adjoint_field_gradient_ijqxyz = discretization.apply_gradient_operator_symmetrized(adjoint_field_fnxyz)

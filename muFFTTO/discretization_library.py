@@ -46,6 +46,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             my_domain.nb_quad_points_per_pixel = 2
             my_domain.nb_nodes_per_pixel = 1  # left bottom corner belong to pixel.
             my_domain.nb_unique_nodes_per_pixel = 1
+            #
 
             # nodal points offsets
             my_domain.offsets = np.array([[0, 0], [1, 0],

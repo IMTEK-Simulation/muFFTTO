@@ -10,11 +10,11 @@ from muFFTTO import topology_optimization
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
+element_type = 'trilinear_hexahedron'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
-domain_size = [1, 1]
-number_of_pixels = (30, 30)
+domain_size = [1, 1, 1]
+number_of_pixels = (31, 31, 31)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -68,8 +68,9 @@ start_time = time.time()
 
 # macro_gradient = np.array([[0.0, 0.01],
 #                            [0.01, 0.0]])
-macro_gradient = np.array([[0.01, 0.0],
-                           [0.0, 0.0]])
+macro_gradient = np.array([[0.01, 0.0, 0.0],
+                           [0.0, 0.0, 0.0],
+                           [0.0, 0.0, 0.0]])
 print('macro_gradient = \n {}'.format(macro_gradient))
 
 # Set up the equilibrium system
@@ -86,7 +87,7 @@ elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  mu=G_0,
                                                  kind='linear')
 
-material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
+material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_0,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                       *discretization.nb_of_pixels])))
 
@@ -94,21 +95,13 @@ stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradient)
 
 # create target material data
 print('init_stress = \n {}'.format(stress))
-# validation metamaterials
+poison_target = 1 / 3
+G_target_auxet = (1 / 4) * E_0
+E_target_auxet = 2 * G_target_auxet * (1 + poison_target)
+K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target_auxet, poison=poison_target)
 
-poison_target = 0.2
-#G_target_auxet = (3 / 10) * E_0  # (7 / 20) * E_0
-G_target_auxet = (7 / 20) * E_0
-E_target = 2 * G_target_auxet * (1 + poison_target)
-# Auxetic metamaterials
-# poison_target= 1/3  # lambda = -10
-# G_target_auxet = (1 / 4) * E_0  #23   25
-# E_target=2*G_target_auxet*(1+poison_target)
-# test materials
-poison_target = 0.2
-#E_target =0.9
+# G_target = (7 / 20) * E_0
 
-K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
 elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                       K=K_targer,
@@ -118,18 +111,13 @@ elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_
 #                           [0.05, 0.0]])
 target_stress = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradient)
 print('target_stress = \n {}'.format(target_stress))
-# circle
-# p = 1
-# w = 1e-5*E_0# 1 / 10  # 1e-4 Young modulus of solid
-# #eta = 0.00915#1430#145#357#3#33#5#25#4#7#250
-# eta = 0.0555 #0.02125#08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
-# Auxetic metamaterials
+
 p = 1
-w = 1e-1* E_0  # 1 / 10  # 1e-4 Young modulus of solid
-eta = 0.015 #
-
-
+w = 3e-5 * E_0  # 1 / 10  # 1e-4 Young modulus of solid
 # eta = 0.00915#1430#145#357#3#33#5#25#4#7#250
+eta = 0.02125  # 08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
+
+
 # TODO eta = 0.025
 # TODO w = 0.1
 def my_objective_function(phase_field_1nxyz):
@@ -186,7 +174,7 @@ def my_sensitivity(phase_field_1nxyz):
 
     K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
                                                          formulation='small_strain')
-    # M_fun = lambda x: 1 * x
+
     preconditioner = discretization.get_preconditioner(
         reference_material_data_field_ijklqxyz=material_data_field_C_0)
     M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
@@ -220,14 +208,10 @@ def my_sensitivity(phase_field_1nxyz):
 
 if __name__ == '__main__':
     # material distribution
-    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)**0
-    #phase_field_0[0, 0,:phase_field_0.shape[2] // 2,  :phase_field_0.shape[2] // 2] = 0.1
-    #phase_field_0[0, 0,:,  phase_field_0.shape[2] // 2:] = 1
-    phase_field_0[0, 0,
-    phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4,
-    phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4] = 0
+    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)
+    # phase_field_0[0, 0,:,  :phase_field_0.shape[2] // 2] = 0.1
+    # phase_field_0[0, 0,:,  phase_field_0.shape[2] // 2:] = 1
     phase_field_00 = np.copy(phase_field_0)
-
 
     phase_field_0 = phase_field_0.reshape(-1)  # b
 
