@@ -44,14 +44,14 @@ from muFFTTO import tensor_train_tools
 discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
-N = 60
+N = 90
 number_of_pixels = 3 * (N,)
 # number_of_pixels = np.asarray( (30,30,1.8*30), dtype=int)
 
 domain_size = [1, 1, 1]
 pixel_size = domain_size / np.asarray(number_of_pixels)
 
-geometry_ID = 'geometry_III_1_3D'
+geometry_ID = 'geometry_I_2_3D'
 
 # problem_type = 'elasticity'
 # dataset_name = 'exp_data/' + f'muFFTTO_{problem_type}_{formulation}_{geometry_ID}_N{number_of_pixels[0]}_all.nc'
@@ -79,9 +79,13 @@ field_geometry = np.asarray(loaded_dataset.variables['phase_field'])  #
 
 field_temperature = np.asarray(loaded_dataset.variables['temperature_field'][0, 0])  #
 
-field_gradient_x = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 0]
-field_gradient_y = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 1]
-field_gradient_z = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 2]
+#field_gradient_x = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 0]
+#field_gradient_y = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 1]
+#field_gradient_z = np.asarray(loaded_dataset.variables['gradient_field']).mean(axis=2)[0, 2]
+
+field_gradient_x = (np.roll(field_temperature, -1, axis=0) - field_temperature) / pixel_size[0]
+field_gradient_y = (np.roll(field_temperature, -1, axis=1) - field_temperature) / pixel_size[1]
+field_gradient_z = (np.roll(field_temperature, -1, axis=2) - field_temperature) / pixel_size[2]
 
 fields = {'geometry': field_geometry,
           'temperature': field_temperature,
@@ -156,6 +160,10 @@ for field_name in ['temperature']:
             field_gradient_y)
         rel_error_norms_Dz[rank_i] = np.linalg.norm(field_gradient_z - tt_dNz_field_FD) / np.linalg.norm(
             field_gradient_z)
+
+
+    fig_dz, ax = microstructure_library.visualize_voxels(phase_field_xyz=field_gradient_z)
+    fig_TTdz, axTT = microstructure_library.visualize_voxels(phase_field_xyz=tt_dNz_field_FD)
 
 
     axes.semilogy(np.arange(0, N), rel_error_norms, label='{}'.format(field_name))
