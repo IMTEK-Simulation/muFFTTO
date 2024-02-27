@@ -69,6 +69,7 @@ class Discretization:
 
         if discretization_type == 'finite_element':
             # finite element properties
+            self.element_type = element_type
             self.nb_quad_points_per_pixel = None
             self.quadrature_weights = None
             self.quad_points_coord = None
@@ -449,6 +450,31 @@ class Discretization:
     def get_discretization_info(self, element_type):
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
+    def evaluate_at_quad_points(self, field_fnxyz):
+        # scalar filed only - evaluate in quadrature points
+        if field_fnxyz.shape[0] != 1:
+            raise ValueError(
+                'evaluation at quad points is implemented only for scalar field {}'.format(field_fnxyz.shape[0]))
+
+        # Assembly nonlinear term
+        quad_points_coords = np.array([[1 / 6, 1 / 6],
+                                       [2 / 3, 1 / 6],
+                                       [1 / 6, 2 / 3]])
+        quad_points_weights = np.array([[1 / 6],
+                                        [1 / 6],
+                                        [1 / 6]])
+        nb_quad_points_per_pixel = 6
+        N_at_pixel_fqnijk = np.zeros(
+            [1, nb_quad_points_per_pixel, 1, *self.domain_dimension * (self.domain_dimension,)])
+        if self.element_type != 'linear_triangles':
+            raise ValueError(
+                'evaluation at quad points is implemented only for linear triangles {} '.format(self.element_type))
+
+        if self.element_type == 'linear_triangles':
+            print(5)
+    # gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+    #                          np.roll(u, -1 * pixel_node, axis=(2, 3)))
+
 
 def compute_Voigt_notation_4order(C_ijkl):
     # function return Voigt notation of elastic tensor in quad. point
@@ -519,7 +545,7 @@ def compute_stress_difference(actual_stress, target_stress):
 def integrate_field(stress_field, quadrature_weights):
     stress_field = np.einsum('ijq...,q->ijq...', stress_field, quadrature_weights)
 
-    integral = np.einsum('fdqxy...->fd', stress_field)
+    integral = np.einsum('fdqxy...->fd...', stress_field)
 
     return integral
 

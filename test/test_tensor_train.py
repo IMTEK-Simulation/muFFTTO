@@ -187,6 +187,7 @@ def test_tt_partial_derivative_3D():
     quad_coordinates = discretization.get_quad_points_coordinates()
 
     u_fun_4x3y = lambda x, y, z: (4 * x + 3 * y + 5 * z)  # * np.sin(x)
+    u_fun_4x3y = lambda x, y, z: (4 * x ** x * y + 3 * y * y + 5 * z)
     #            u_fun_4x3y = lambda x, y: np.random.rand() * x + np.random.rand() * y  # np.sin(x)
 
     temperature = discretization.get_temperature_sized_field()
@@ -203,8 +204,14 @@ def test_tt_partial_derivative_3D():
     tensor_dy = discretization.apply_gradient_operator(temperature, temperature_gradient).mean(axis=2)[0, 1]
     tensor_dz = discretization.apply_gradient_operator(temperature, temperature_gradient).mean(axis=2)[0, 2]
 
+    tensor_dx_FD = (np.roll(temperature[0, 0], -1, axis=0) - temperature[0, 0]) / discretization.pixel_size[0]
+    tensor_dy_FD = (np.roll(temperature[0, 0], -1, axis=1) - temperature[0, 0]) / discretization.pixel_size[1]
+    tensor_dz_FD = (np.roll(temperature[0, 0], -1, axis=2) - temperature[0, 0]) / discretization.pixel_size[2]
+
+    # dtt_cores[d][d] = (np.roll(tt_cores[d], -1, axis=1) - tt_cores[d]) / voxel_sizes[d]
+
     for rank_i in reversed(np.arange(2, max(number_of_pixels) + 1)):
-        # print(rank_i)
+        print(rank_i)
 
         tensor = np.copy(temperature[0, 0, :, :])
 
@@ -226,20 +233,25 @@ def test_tt_partial_derivative_3D():
         # print(abs_error_norms)
         # print(rel_error_norms)
         #
-        # print(np.linalg.norm(tt_dNx_field_FD - tensor_dx) / np.linalg.norm(tensor_dx))
-        # print(np.linalg.norm(tt_dNy_field_FD - tensor_dy) / np.linalg.norm(tensor_dy))
-        # print(np.linalg.norm(tt_dNz_field_FD - tensor_dz) / np.linalg.norm(tensor_dz))
+        #  print(np.linalg.norm(tt_dNx_field_FD - tensor_dx) / np.linalg.norm(tensor_dx))
+        #  print(np.linalg.norm(tt_dNy_field_FD - tensor_dy) / np.linalg.norm(tensor_dy))
+        #  print(np.linalg.norm(tt_dNz_field_FD - tensor_dz) / np.linalg.norm(tensor_dz))
+
+        #  print(np.linalg.norm(tt_dNx_field_FD - tensor_dx_FD) / np.linalg.norm(tensor_dx_FD))
+        # print(np.linalg.norm(tt_dNy_field_FD - tensor_dy_FD) / np.linalg.norm(tensor_dy_FD))
+        #  print(np.linalg.norm(tt_dNz_field_FD - tensor_dz_FD) / np.linalg.norm(tensor_dz_FD))
+        #
 
         error_dx = np.allclose(tt_dNx_field_FD, tensor_dx)
         error_dy = np.allclose(tt_dNy_field_FD, tensor_dy)
         error_dz = np.allclose(tt_dNz_field_FD, tensor_dz)
 
         assert error_dx, (
-            "TT-full rank gradient dx is not equal to full format gradient  {}".format(error_dx))
+            "TT-full rank {} gradient dx is not equal to full format gradient  {}".format(rank_i, error_dx))
         assert error_dy, (
-            "TT-full rank gradient dy is not equal to full format gradient  {}".format(error_dy))
+            "TT-full rank {} gradient dy is not equal to full format gradient  {}".format(rank_i, error_dx))
         assert error_dz, (
-            "TT-full rank gradient dy is not equal to full format gradient  {}".format(error_dz))
+            "TT-full rank {} gradient dy is not equal to full format gradient  {}".format(rank_i, error_dx))
 
 
 @pytest.mark.parametrize('domain_size , element_type, number_of_pixels', [
@@ -333,8 +345,8 @@ def test_tt_addition(domain_size, element_type, number_of_pixels):
 
 
 @pytest.mark.parametrize('domain_size , element_type, number_of_pixels', [
-    ([2, 3,4], 'trilinear_hexahedron', [2, 3,4]),
-    ([3, 2,5], 'trilinear_hexahedron', [4, 3,5]),])
+    ([2, 3, 4], 'trilinear_hexahedron', [2, 3, 4]),
+    ([3, 2, 5], 'trilinear_hexahedron', [4, 3, 5]), ])
 def test_tt_rounding(domain_size, element_type, number_of_pixels):
     # test TT FD compared to finite element gradient
     # compare  fem gradient with low rank gradient for linear elements
@@ -412,3 +424,94 @@ def test_tt_rounding(domain_size, element_type, number_of_pixels):
     assert error_minus, (
         "TT-rounding does not return correct numbers {}".format(
             np.linalg.norm(tt_minus_reconstructed - (test_field_1 - test_field_2))))
+
+
+
+
+def test_diagonal_partial_derivative_3D():
+    # test TT FD compared to finite element gradient
+    # compare  fem gradient with low rank gradient for linear elements
+    number_of_pixels = [13, 13, 13]
+    domain_size = [3, 4, 5]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    discretization_type = 'finite_element'
+    element_type = 'trilinear_hexahedron'
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           number_of_pixels=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    nodal_coordinates = discretization.get_nodal_points_coordinates()
+    quad_coordinates = discretization.get_quad_points_coordinates()
+
+    u_fun_4x3y = lambda x, y, z: (4 * x + 3 * y + 5 * z)  # * np.sin(x)
+    u_fun_4x3y = lambda x, y, z: (4 * x ** x * y + 3 * y * y + 5 * z)
+    #            u_fun_4x3y = lambda x, y: np.random.rand() * x + np.random.rand() * y  # np.sin(x)
+
+    temperature = discretization.get_temperature_sized_field()
+    temperature_gradient = discretization.get_temperature_gradient_size_field()
+
+    temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
+                                         nodal_coordinates[1, 0, :, :],
+                                         nodal_coordinates[2, 0, :, :]
+                                         )
+
+    # temperature[0, 0, :, :] = np.random.rand(*number_of_pixels)
+
+    tensor_dx = discretization.apply_gradient_operator(temperature, temperature_gradient).mean(axis=2)[0, 0]
+    tensor_dy = discretization.apply_gradient_operator(temperature, temperature_gradient).mean(axis=2)[0, 1]
+    tensor_dz = discretization.apply_gradient_operator(temperature, temperature_gradient).mean(axis=2)[0, 2]
+
+    tensor_dx_FD = (np.roll(temperature[0, 0], -1, axis=0) - temperature[0, 0]) / discretization.pixel_size[0]
+    tensor_dy_FD = (np.roll(temperature[0, 0], -1, axis=1) - temperature[0, 0]) / discretization.pixel_size[1]
+    tensor_dz_FD = (np.roll(temperature[0, 0], -1, axis=2) - temperature[0, 0]) / discretization.pixel_size[2]
+
+    # dtt_cores[d][d] = (np.roll(tt_cores[d], -1, axis=1) - tt_cores[d]) / voxel_sizes[d]
+
+    for rank_i in reversed(np.arange(2, max(number_of_pixels) + 1)):
+        print(rank_i)
+
+        tensor = np.copy(temperature[0, 0, :, :])
+
+        tt_cores = tensor_train_tools.tt_decompose_rank(tensor_xyz=tensor,
+                                                        ranks=[1, rank_i, rank_i, 1])
+        tt_reconstructed_field = tensor_train_tools.tt_to_full_format(tt_cores=tt_cores)
+
+        # #
+        tt_cores_grad = tensor_train_tools.get_gradient_finite_difference(tt_cores=tt_cores,
+                                                                          voxel_sizes=discretization.pixel_size)
+        tt_dNx_field_FD = tensor_train_tools.tt_to_full_format(tt_cores=tt_cores_grad[0])
+        tt_dNy_field_FD = tensor_train_tools.tt_to_full_format(tt_cores=tt_cores_grad[1])
+        tt_dNz_field_FD = tensor_train_tools.tt_to_full_format(tt_cores=tt_cores_grad[2])
+
+        field_norm = np.linalg.norm(tensor)
+        abs_error_norms = (np.linalg.norm(tensor - tt_reconstructed_field))
+        rel_error_norms = (abs_error_norms / field_norm)
+
+        # print(abs_error_norms)
+        # print(rel_error_norms)
+        #
+        #  print(np.linalg.norm(tt_dNx_field_FD - tensor_dx) / np.linalg.norm(tensor_dx))
+        #  print(np.linalg.norm(tt_dNy_field_FD - tensor_dy) / np.linalg.norm(tensor_dy))
+        #  print(np.linalg.norm(tt_dNz_field_FD - tensor_dz) / np.linalg.norm(tensor_dz))
+
+        #  print(np.linalg.norm(tt_dNx_field_FD - tensor_dx_FD) / np.linalg.norm(tensor_dx_FD))
+        # print(np.linalg.norm(tt_dNy_field_FD - tensor_dy_FD) / np.linalg.norm(tensor_dy_FD))
+        #  print(np.linalg.norm(tt_dNz_field_FD - tensor_dz_FD) / np.linalg.norm(tensor_dz_FD))
+        #
+
+        error_dx = np.allclose(tt_dNx_field_FD, tensor_dx)
+        error_dy = np.allclose(tt_dNy_field_FD, tensor_dy)
+        error_dz = np.allclose(tt_dNz_field_FD, tensor_dz)
+
+        assert error_dx, (
+            "TT-full rank {} gradient dx is not equal to full format gradient  {}".format(rank_i, error_dx))
+        assert error_dy, (
+            "TT-full rank {} gradient dy is not equal to full format gradient  {}".format(rank_i, error_dx))
+        assert error_dz, (
+            "TT-full rank {} gradient dy is not equal to full format gradient  {}".format(rank_i, error_dx))
+

@@ -281,7 +281,7 @@ def chiral_metamaterial(nb_grid_pts, lengths, radius, thickness, alpha=0):
         print(message)
     if (radius < thickness + hx) or (radius < thickness + hy):
         message = 'Error: The radius is too small.'
-        assert radius < thicknss + hx, message
+        assert radius < thickness + hx, message
         assert radius < thickness + hy, message
     if (hx > thickness) or (hy > thickness) or (hy > thickness):
         message = 'Error: The pixels are larger than the thickness.'

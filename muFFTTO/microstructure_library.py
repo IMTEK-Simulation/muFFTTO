@@ -877,13 +877,25 @@ def check_dimension(nb_voxels, microstructure_name):
 if __name__ == '__main__':
     # plot  geometry
     geometry_ID = 'geometry_III_5_3D'
-    N = 50
+    N = 60
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
-    # nb_of_pixels = np.asarray( (20,20,1.8*20), dtype=int)
+    #nb_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
 
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
 
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
     ax.set_title(geometry_ID)
+    save_plot=True
+    if save_plot:
+        src = '/home/martin/Programming/muFFTTO/experiments/figures/'  # source folder\
+        fig_data_name = f'muFFTTO_{geometry_ID}_N{N}'
+
+        fname = src + fig_data_name + '_geometry{}'.format('.pdf')
+        print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+        plt.savefig(fname, dpi=1000, pad_inches= 0.02, bbox_inches='tight',
+                    facecolor='auto', edgecolor='auto')
+        print('END plot ')
+
     plt.show()
+

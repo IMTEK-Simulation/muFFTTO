@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sc
-
+import ttpy as tt
 def tt_decompose_rank(tensor_xyz, ranks):
     # function computes TT decomposition of the tensor_xyz with specified ranks
     #
