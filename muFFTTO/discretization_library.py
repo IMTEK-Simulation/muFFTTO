@@ -3,8 +3,6 @@ import warnings
 import numpy as np
 
 
-
-
 def get_shape_function_gradient_matrix(my_domain, element_type):
     """Example function with types documented in the docstring.
 
@@ -42,7 +40,9 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                   |        \      |
                   | q = 1    \    |
                 x_1_______________x_2
+      
             """
+
             my_domain.nb_quad_points_per_pixel = 2
             my_domain.nb_nodes_per_pixel = 1  # left bottom corner belong to pixel.
             my_domain.nb_unique_nodes_per_pixel = 1
@@ -51,6 +51,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             # nodal points offsets
             my_domain.offsets = np.array([[0, 0], [1, 0],
                                           [0, 1], [1, 1]])
+
             """  Structure of B matrix: 
             #     B(:,:,q,e) --> is B matrix evaluate gradient at point q in  element e
             #     B(:,:,q,e) has size [dim,nb_of_nodes/basis_functions] 
@@ -63,6 +64,27 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             h_x = my_domain.pixel_size[0]
             h_y = my_domain.pixel_size[1]
 
+            # @formatter:off
+            def basis_interpolator(xi, eta):
+                N_at_xi_eta=np.zeros([2, 2])
+
+                N_at_xi_eta[0,0]=   1 - xi  - eta  if eta < 1 - xi else 0 * xi
+                N_at_xi_eta[0,1]= xi               if eta < 1 - xi else 1 - eta
+                N_at_xi_eta[1,0]=             eta  if eta < 1 - xi else 1 - xi
+                N_at_xi_eta[1,1]= 0 * xi           if eta < 1 - xi else xi +eta -1
+                return N_at_xi_eta
+
+            my_domain.N_basis_interpolator_array = np.array([
+                [lambda xi, eta: 1 - xi  - eta  if eta < 1 - xi else 0 * xi,
+                 lambda xi, eta:     xi             if eta < 1 - xi else 1 - eta ],[
+                 lambda xi, eta:                eta  if eta < 1 - xi else 1 - xi  ,
+                 lambda xi, eta:                   0 * xi if eta < 1 - xi else     xi +eta-1]
+                  ])
+            #[f(0.2,0.3) for f in basis_interpolator]
+            #test = basis_interpolator(xi=0.0, eta=0.3)
+            # @formatter:on
+            # quad_points_coord stores spatial coordinates of quad points [dim,q]
+            # my_domain.quad_points_coord[:,q] = [x_q,y_q,x_q]
             my_domain.quad_points_coord = np.zeros(
                 [my_domain.domain_dimension, my_domain.nb_quad_points_per_pixel])
             my_domain.quad_points_coord[:, 0] = [h_x / 3, h_y / 3]
@@ -175,7 +197,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                 [my_domain.domain_dimension, my_domain.nb_quad_points_per_pixel])
 
             my_domain.quad_points_coord[:, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
-                                                 h_y / 2 + h_y * coord_helper[0] / 2]
+                                 h_y / 2 + h_y * coord_helper[0] / 2]
             my_domain.quad_points_coord[:, 1] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                  h_y / 2 + h_y * coord_helper[0] / 2]
             my_domain.quad_points_coord[:, 2] = [h_x / 2 + h_x * coord_helper[0] / 2,

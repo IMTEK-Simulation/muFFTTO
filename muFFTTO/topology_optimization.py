@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import scipy as sc
 
@@ -24,9 +26,9 @@ def objective_function_small_strain(discretization,
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
-    f_dw = compute_double_well_potential(discretization=discretization,
-                                         phase_field_1nxyz=phase_field_1nxyz,
-                                         eta=1)
+    f_dw = compute_double_well_potential_Gauss_quad(discretization=discretization,
+                                             phase_field_1nxyz=phase_field_1nxyz,
+                                             eta=1)
 
     phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
@@ -38,43 +40,91 @@ def objective_function_small_strain(discretization,
     print('f_sigma =  {} '.format(f_sigma))
     print('f_rho_grad =  {} '.format(f_rho_grad))
     print('f_dw =  {} '.format(f_dw))
+
+    print('f_rho =  {} '.format(f_rho))
+    print('w * f_rho =  {} '.format(w * f_rho))
     print('objective_function = {} '.format(f_sigma + w * f_rho))
 
     return f_sigma + w * f_rho  # / discretization.cell.domain_volume
 
 
-def compute_double_well_potential(discretization, phase_field_1nxyz, eta=1):
+def compute_double_well_potential_NEW(discretization, phase_field_1nxyz, eta=1):
     # The double-well potential
     # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
     # double - well potential
     # with interpolation for more precise integration
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
+    # TODO[Martin]: do this part first ' integration of double well potential
+    if discretization.element_type != 'linear_triangles':
+        raise ValueError(
+            'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
 
     # TODO make this dimension-less
-    x_coords = np.linspace(0, discretization.domain_size[0], discretization.nb_of_pixels[0], endpoint=False)
-    y_coords = np.linspace(0, discretization.domain_size[1], discretization.nb_of_pixels[1], endpoint=False)
+    x_coords = np.linspace(0, discretization.domain_size[0], discretization.nb_of_pixels[0] + 1, endpoint=True)
+    y_coords = np.linspace(0, discretization.domain_size[1], discretization.nb_of_pixels[1] + 1, endpoint=True)
+    #  add periodic images
+    phase_field_1nxyz_periodic = np.c_[phase_field_1nxyz[0, 0], phase_field_1nxyz[0, 0, :, 0]]  # add a column
+    phase_field_1nxyz_periodic = np.r_[phase_field_1nxyz_periodic, [phase_field_1nxyz_periodic[0, :]]]  # add a column
+
     phase_field_interpolator = sc.interpolate.interp2d(x_coords,
                                                        y_coords,
-                                                       phase_field_1nxyz[0, 0].transpose(),
+                                                       phase_field_1nxyz_periodic,
                                                        kind='linear')
-    x_coords_interpolated = np.linspace(0, discretization.domain_size[0], 4 * discretization.nb_of_pixels[0],
-                                        endpoint=False)
-    y_coords_interpolated = np.linspace(0, discretization.domain_size[1], 4 * discretization.nb_of_pixels[1],
-                                        endpoint=False)
+    k = 3
+    x_coords_interpolated = np.linspace(0, discretization.domain_size[0], k * discretization.nb_of_pixels[0] + 1,
+                                        endpoint=True)
+    y_coords_interpolated = np.linspace(0, discretization.domain_size[1], k * discretization.nb_of_pixels[1] + 1,
+                                        endpoint=True)
 
-    phase_field_interpolated_xyz = np.zeros([1, discretization.nb_nodes_per_pixel, *4 * discretization.nb_of_pixels])
+    phase_field_interpolated_xyz = np.zeros(
+        [1, discretization.nb_nodes_per_pixel, *k * discretization.nb_of_pixels + 1])
     phase_field_interpolated_xyz[0, 0] = phase_field_interpolator(x_coords_interpolated,
                                                                   y_coords_interpolated).transpose()
 
     integrant_precise = (phase_field_interpolated_xyz ** 2) * (1 - phase_field_interpolated_xyz) ** 2
-    integral_precise = (np.sum(integrant_precise) / np.prod(
-        integrant_precise.shape)) * discretization.cell.domain_volume
+    integral_precise = (np.sum(integrant_precise[0, 0, :-1, :-1]) / np.prod(
+        integrant_precise[0, 0, :-1, :-1].shape)) * discretization.cell.domain_volume
 
     return integral_precise / eta
 
 
-def compute_double_well_potential_old(discretization, phase_field_1nxyz, eta=1):
+def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz, eta=1):
+    # The double-well potential
+    # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
+    # double - well potential
+    # with interpolation for more precise integration
+    # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
+    # integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
+    if discretization.element_type != 'linear_triangles':
+        raise ValueError(
+            'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
+
+    nb_quad_points_per_pixel = 8
+    quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
+        element_type=discretization.element_type,
+        nb_quad_points_per_pixel=nb_quad_points_per_pixel)
+
+    Jacobian_matrix = np.diag(discretization.pixel_size)
+    Jacobian_det = np.linalg.det(
+        Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    quad_points_weights = quad_points_weights * Jacobian_det
+    # Evaluate field on the quadrature points
+    quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=quad_points_coord)
+
+    quad_field_fqnxyz = (quad_field_fqnxyz ** 2) * (1 - quad_field_fqnxyz) ** 2
+    # Multiply with quadrature weights
+    quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+
+    return np.sum(quad_field_fqnxyz) / eta
+
+
+def compute_double_well_potential(discretization, phase_field_1nxyz, eta=1):
     # The double-well potential
     # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
     # double - well potential
@@ -83,12 +133,85 @@ def compute_double_well_potential_old(discretization, phase_field_1nxyz, eta=1):
     return integral / eta
 
 
+def partial_der_of_double_well_potential_wrt_density_NEW(discretization, phase_field_1nxyz, eta=1):
+    # Derivative of the double-well potential with respect to phase-field
+    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
+    # gradient phase field potential = int ((2 * phase_field - 6 * phase_field^2  +  4 * phase_field^3 )) )/eta   dx
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2ρ -6ρ^2 + 4ρ^3
+    # TODO[Martin]: do this part first ' integration of double well potential
+    if discretization.element_type != 'linear_triangles':
+        raise ValueError(
+            'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
+    nb_quad_points_per_pixel =8
+    quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
+        element_type=discretization.element_type,
+        nb_quad_points_per_pixel=nb_quad_points_per_pixel)
+
+    Jacobian_matrix = np.diag(discretization.pixel_size)
+    Jacobian_det = np.linalg.det(
+        Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    quad_points_weights = quad_points_weights * Jacobian_det
+    # Evaluate field on the quadrature points
+    quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=quad_points_coord)
+    # quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+
+    quad_field_fqnxyz = (2 * (quad_field_fqnxyz ** 1)
+                         - 6 * (quad_field_fqnxyz ** 2)
+                         + 4 * (quad_field_fqnxyz ** 3))
+    #quad_field_fqnxyz = quad_field_fqnxyz ** 3
+    quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+    #np.sum(quad_field_fqnxyz[0, :nb_quad_points_per_pixel//2, 0, 0, 0])
+    # test_phase_field_1nxyz=phase_field_1nxyz*0
+    # test_phase_field_1nxyz[0,0,1,1]=1
+    # test_quad_field_fqnxyz, N_at_quad_points_qnijk  = discretization.evaluate_field_at_quad_points(
+    #     nodal_field_fnxyz=test_phase_field_1nxyz,
+    #     quad_field_fqnxyz=None,
+    #     quad_points_coords_dq=quad_points_coord)
+    nodal_field_u_fnxyz = np.zeros(phase_field_1nxyz.shape)
+    for pixel_node in np.ndindex(
+            *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+        pixel_node = np.asarray(pixel_node)
+        if discretization.domain_dimension == 2:
+            # N_at_quad_points_qnijk
+            div_fnxyz_pixel_node = np.einsum('qn,fqnxy->fnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
+                                             quad_field_fqnxyz)
+
+            nodal_field_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
+
+        elif discretization.domain_dimension == 3:
+
+            div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
+                                             N_at_quad_points_qnijk[(..., *pixel_node)],
+                                             quad_field_fqnxyz)
+
+            nodal_field_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
+            warnings.warn('Gradient transposed is not tested for 3D.')
+
+
+    # test_quad_field_fqn=test_quad_field_fqnxyz[0,:,0,0,0]
+    # el_volume = np.prod(discretization.pixel_size) / 2
+    #
+    # integrant_fnxyz = 6 * (2 * (phase_field_1nxyz ** 1) * el_volume / 3
+    #                        - 6 * (phase_field_1nxyz ** 2) * el_volume / 6
+    #                        + 4 * (phase_field_1nxyz ** 3) * el_volume / 10)
+    # integrant_fnxyz =
+    # integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
+
+    # integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
+    # there is no sum here
+    # inter = np.sum(quad_field_fqnxyz)
+    return nodal_field_u_fnxyz / eta
+
+
 def partial_der_of_double_well_potential_wrt_density(discretization, phase_field_1nxyz, eta=1):
     # Derivative of the double-well potential with respect to phase-field
     # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
-    # TODO[Martin]: do this part first ' integration of double well potential
+
     integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
 
     integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
@@ -294,11 +417,15 @@ def partial_derivative_of_objective_function_wrt_phase_field(discretization,
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
-    integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
-
-    integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
+    #integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
+    #integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
     # there is no sum here
-    ddouble_well_drho_drho = integral_fnxyz
+    #ddouble_well_drho_drho = integral_fnxyz
+
+    ddouble_well_drho_drho=partial_der_of_double_well_potential_wrt_density_NEW(discretization=discretization,
+                                                         phase_field_1nxyz=phase_field_1nxyz,
+                                                         eta=1)
+
 
     return dfstress_drho + dgradrho_drho * eta + ddouble_well_drho_drho / eta
 
@@ -490,7 +617,7 @@ def sensitivity(discretization,
 
     # -----    stress difference potential ----- #
     # Gradient of material data with respect to phase field
-    material_data_field_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
+    dmaterial_data_field_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
             p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
 
     # compute strain field from to displacement and macro gradient
@@ -498,7 +625,7 @@ def sensitivity(discretization,
     strain_ijqxyz = macro_gradient_field_ijqxyz + strain_ijqxyz
 
     # compute stress field
-    stress_field_ijqxyz = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz, strain_ijqxyz)
+    stress_field_ijqxyz = np.einsum('ijkl...,lk...->ij...', dmaterial_data_field_ijklqxyz, strain_ijqxyz)
 
     # apply quadrature weights
     stress_field_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz)
@@ -532,11 +659,15 @@ def sensitivity(discretization,
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
-    integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
+    #integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
 
-    integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
+    #integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
     # there is no sum here
-    ddouble_well_drho_drho = integral_fnxyz
+    #ddouble_well_drho_drho = integral_fnxyz
+    ddouble_well_drho_drho = partial_der_of_double_well_potential_wrt_density_NEW(discretization=discretization,
+                                                                                  phase_field_1nxyz=phase_field_1nxyz,
+                                                                                  eta=1)
+
 
     # sum of all parts of df_drho
     df_drho = dfstress_drho + dgradrho_drho * eta + ddouble_well_drho_drho / eta
@@ -565,8 +696,8 @@ def sensitivity_with_adjoint_problem(discretization,
                                      actual_stress_ij,
                                      formulation,
                                      p,
-                                     eta=1,
-                                     weight=1):
+                                     eta,
+                                     weight):
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -626,12 +757,14 @@ def sensitivity_with_adjoint_problem(discretization,
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
-    integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
+    #integrant_fnxyz = (2 * phase_field_1nxyz * (2 * phase_field_1nxyz * phase_field_1nxyz - 3 * phase_field_1nxyz + 1))
 
-    integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
+    #integral_fnxyz = (integrant_fnxyz / np.prod(integrant_fnxyz.shape)) * discretization.cell.domain_volume
     # there is no sum here
-    ddouble_well_drho_drho = integral_fnxyz
-
+    #ddouble_well_drho_drho = integral_fnxyz
+    ddouble_well_drho_drho = partial_der_of_double_well_potential_wrt_density_NEW(discretization=discretization,
+                                                                                  phase_field_1nxyz=phase_field_1nxyz,
+                                                                                  eta=1)
     # sum of all parts of df_drho
     df_drho = dfstress_drho + weight * (dgradrho_drho * eta + ddouble_well_drho_drho / eta)
 

@@ -994,7 +994,7 @@ class DiscretizationTestCase(unittest.TestCase):
         number_of_pixels = (4, 5)
 
         discretization_type = 'finite_element'
-        for element_type in ['bilinear_rectangle', 'linear_triangles']:
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
 
             discretization = domain.Discretization(cell=my_cell,
                                                    number_of_pixels=number_of_pixels,
@@ -1055,6 +1055,53 @@ class DiscretizationTestCase(unittest.TestCase):
                     ax.scatter(quad_coordinates[0, q], quad_coordinates[1, q], quad_coordinates[2, q], marker='x')
 
             plt.show()
+
+    def test_elavuate_at_quad_points_2D_mesh(self, plot=False):
+        # this  test interpolates field based on basis functions
+
+        domain_size = [4, 4]
+        problem_type = 'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        number_of_pixels = (2, 2)
+
+        discretization_type = 'finite_element'
+        for element_type in ['linear_triangles']:
+
+            discretization = domain.Discretization(cell=my_cell,
+                                                   number_of_pixels=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
+
+            nodal_coordinates = discretization.get_nodal_points_coordinates()
+            quad_coordinates = discretization.get_quad_points_coordinates()
+            phase_field_0 = np.random.rand(
+                *discretization.get_scalar_sized_field().shape) ** 0  # set random distribution
+            phase_field_0 = phase_field_0 * 0
+            phase_field_0[0, 0, 0, 1] = 1
+            # linfunc = lambda x: 1 * x
+            # phase_field_0[0, 0] = linfunc(nodal_coordinates[0, 0])
+
+            interpolated_field = discretization.evaluate_field_at_quad_points(
+                nodal_field_fnxyz=phase_field_0,
+                quad_field_fqnxyz=None,
+                quad_points_coords_dq=None)
+
+            itegral = discretization.integrate_field(field_fnxyz=phase_field_0)
+            if plot:
+                import matplotlib.pyplot as plt
+                from matplotlib.collections import LineCollection
+                plt.scatter(nodal_coordinates[0, 0], nodal_coordinates[1, 0])
+                segs1 = np.stack((nodal_coordinates[0, 0], nodal_coordinates[1, 0]), axis=2)
+                segs2 = segs1.transpose(1, 0, 2)
+
+                plt.gca().add_collection(LineCollection(segs1))
+                plt.gca().add_collection(LineCollection(segs2))
+                for q in range(0, discretization.nb_quad_points_per_pixel):
+                    plt.scatter(quad_coordinates[0, q], quad_coordinates[1, q])
+
+                plt.show()
 
 
 if __name__ == '__main__':

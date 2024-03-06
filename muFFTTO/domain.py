@@ -106,7 +106,7 @@ class Discretization:
 
         return quad_points_coordinates
 
-    def apply_gradient_operator(self, u, gradient_of_u=None):  ## TODO symmetric gradient operator """"""""""""""""""""
+    def apply_gradient_operator(self, u, gradient_of_u=None):
         if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
             #   u_field size :      [f,n,x,y,z]
             #   u_gradient_field    [f,d,q,x,y,z]
@@ -185,6 +185,53 @@ class Discretization:
     # for iteration in range(500):
     #     _ = np.einsum('ijk,ilm,njm,nlk,abc->',a,a,a,a,a, optimize=path)
     #
+
+    def evaluate_field_at_quad_points(self,
+                                      nodal_field_fnxyz,
+                                      quad_field_fqnxyz=None,
+                                      quad_points_coords_dq=None):
+        # TODO: Implement evaluation of at quad points
+        if quad_points_coords_dq is None:  # if quad_points_coords are not specified, use basic ones from B matrix
+            nb_quad_points_per_pixel = self.nb_quad_points_per_pixel
+            quad_points_coords_dq = self.quad_points_coord  # quad_points_coord[:,q]=[x_q,y_q,z_q]
+
+        nb_quad_points_per_pixel = quad_points_coords_dq.shape[-1]
+        if quad_field_fqnxyz is None:  # if quad_field_fqxyz is not specified, determine the size
+            #   nodal_field_fnxyz : [f,n,x,y,z]
+            #   quad_field_fqxyz : [f,q,x,y,z]
+
+            quad_field_shape = list(nodal_field_fnxyz.shape)  # [f,n,x,y,z]
+            quad_field_shape = np.insert(quad_field_shape, 1, nb_quad_points_per_pixel)
+            quad_field_fqnxyz = np.zeros(quad_field_shape)  # create quad_field field
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Interpolator operator does not work for multiple nodal points per pixel.')
+
+        quad_field_fqnxyz.fill(0)
+        f_size = nodal_field_fnxyz.shape[0]
+        n_size = nodal_field_fnxyz.shape[1]  # To ensure that gradient field is empty/zero
+        N_at_quad_points_qnijk = np.zeros(
+            [nb_quad_points_per_pixel, n_size, *self.domain_dimension * (self.domain_dimension,)])
+        for quad_point_idx in range(nb_quad_points_per_pixel):
+            quad_point_coords = quad_points_coords_dq[:, quad_point_idx]
+            # iteration over all voxel corners
+            for pixel_node in np.ndindex(*np.ones([self.domain_dimension], dtype=int) * 2):
+                N_at_quad_points_qnijk[(quad_point_idx, 0, *pixel_node)] = self.N_basis_interpolator_array[pixel_node](
+                    *quad_point_coords)
+
+        for pixel_node in np.ndindex(
+                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+            pixel_node = np.asarray(pixel_node)
+            if self.domain_dimension == 2:
+                quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
+                                               np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3)))
+
+            elif self.domain_dimension == 3:  # TODO 3D interpolation is not tested
+                quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
+                                               np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
+
+        return quad_field_fqnxyz, N_at_quad_points_qnijk
+
     def get_rhs(self, material_data_field_ijklqxyz, macro_gradient_field_ijqxyz):
         # macro_gradient_field    [f,d,q,x,y,z]
         # material_data_field [d,d,d,d,q,x,y,z] - elasticity
@@ -450,30 +497,29 @@ class Discretization:
     def get_discretization_info(self, element_type):
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
-    def evaluate_at_quad_points(self, field_fnxyz):
-        # scalar filed only - evaluate in quadrature points
+    def integrate_field(self, field_fnxyz,
+                        nb_quad_points_per_pixel=None):
+        # for scalar field only - evaluate in quadrature points
         if field_fnxyz.shape[0] != 1:
             raise ValueError(
-                'evaluation at quad points is implemented only for scalar field {}'.format(field_fnxyz.shape[0]))
+                'integrate_field is implemented only for scalar field {}'.format(field_fnxyz.shape[0]))
+        if nb_quad_points_per_pixel is None:
+            nb_quad_points_per_pixel = self.nb_quad_points_per_pixel
 
-        # Assembly nonlinear term
-        quad_points_coords = np.array([[1 / 6, 1 / 6],
-                                       [2 / 3, 1 / 6],
-                                       [1 / 6, 2 / 3]])
-        quad_points_weights = np.array([[1 / 6],
-                                        [1 / 6],
-                                        [1 / 6]])
-        nb_quad_points_per_pixel = 6
-        N_at_pixel_fqnijk = np.zeros(
-            [1, nb_quad_points_per_pixel, 1, *self.domain_dimension * (self.domain_dimension,)])
-        if self.element_type != 'linear_triangles':
-            raise ValueError(
-                'evaluation at quad points is implemented only for linear triangles {} '.format(self.element_type))
-
-        if self.element_type == 'linear_triangles':
-            print(5)
-    # gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-    #                          np.roll(u, -1 * pixel_node, axis=(2, 3)))
+        quad_points_coord, quad_points_weights = get_gauss_points_and_weights(element_type=self.element_type,
+                                                                              nb_quad_points_per_pixel=nb_quad_points_per_pixel)
+        Jacobian_matrix = np.diag(self.pixel_size)
+        Jacobian_det = np.linalg.det(
+            Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+        quad_points_weights = quad_points_weights * Jacobian_det
+        # Evaluate field on the quadrature points
+        quad_field_fqnxyz = self.evaluate_field_at_quad_points(
+            nodal_field_fnxyz=field_fnxyz,
+            quad_field_fqnxyz=None,
+            quad_points_coords_dq=quad_points_coord)
+        # Multiply with quadrature weights
+        quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+        return np.sum(quad_field_fqnxyz)
 
 
 def compute_Voigt_notation_4order(C_ijkl):
@@ -556,3 +602,92 @@ def integrate_flux_field(flux_field, quadrature_weights):
     integral = np.einsum('fdqxy...->fd', stress_field)
 
     return integral
+
+
+def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
+    if element_type != 'linear_triangles':
+        raise ValueError('Quadrature weights for Element_type {} is not implemented'.format(element_type))
+
+    if element_type == 'linear_triangles':
+        if nb_quad_points_per_pixel == 6:
+            quad_points_coord = np.zeros(
+                [2, nb_quad_points_per_pixel])
+            quad_points_coord[:, 0] = [1 / 6, 1 / 6]
+            quad_points_coord[:, 1] = [2 / 3, 1 / 6]
+            quad_points_coord[:, 2] = [1 / 6, 2 / 3]
+            quad_points_coord[:, 3] = [1 - 1 / 6, 1 - 1 / 6]
+            quad_points_coord[:, 4] = [1 - 2 / 3, 1 - 1 / 6]
+            quad_points_coord[:, 5] = [1 - 1 / 6, 1 - 2 / 3]
+            quad_points_weights = np.zeros(
+                [nb_quad_points_per_pixel])
+            quad_points_weights[0:6] = 1 / 6
+
+        elif nb_quad_points_per_pixel == 8:
+            # 8 nodes
+            quad_points_coord = np.zeros(
+                [2, nb_quad_points_per_pixel])
+            quad_points_coord[:, 0] = [0.280019915499074, 0.644948974278318]
+            quad_points_coord[:, 1] = [0.666390246014701, 0.155051025721682]
+            quad_points_coord[:, 2] = [0.075031110222608, 0.644948974278318]
+            quad_points_coord[:, 3] = [0.178558728263616, 0.155051025721682]
+            quad_points_coord[:, 4] = [0.355051025721682, 0.924968889777392]
+            quad_points_coord[:, 5] = [0.844948974278318, 0.821441271736384]
+            quad_points_coord[:, 6] = [0.355051025721682, 0.719980084500926]
+            quad_points_coord[:, 7] = [0.844948974278318, 0.333609753985299]
+
+            quad_points_weights = np.zeros(
+                [nb_quad_points_per_pixel])
+            quad_points_weights[0] = 0.090979309128011
+            quad_points_weights[1] = 0.159020690871989
+            quad_points_weights[2] = 0.090979309128011
+            quad_points_weights[3] = 0.159020690871989
+            quad_points_weights[4] = 0.090979309128011
+            quad_points_weights[5] = 0.159020690871989
+            quad_points_weights[6] = 0.090979309128011
+            quad_points_weights[7] = 0.159020690871989
+
+        elif nb_quad_points_per_pixel == 18:
+            # 18 nodes
+            quad_points_coord = np.zeros(
+                [2, nb_quad_points_per_pixel])
+            quad_points_coord[:, 0] = [0.188409405952072, 0.787659461760847]
+            quad_points_coord[:, 1] = [0.523979067720101, 0.409466864440735]
+            quad_points_coord[:, 2] = [0.808694385677670, 0.0885879595127039]
+            quad_points_coord[:, 3] = [0.106170269119576, 0.787659461760847]
+            quad_points_coord[:, 4] = [0.295266567779633, 0.409466864440735]
+            quad_points_coord[:, 5] = [0.455706020243648, 0.0885879595127039]
+            quad_points_coord[:, 6] = [0.0239311322870805,0.787659461760847]
+            quad_points_coord[:, 7] = [0.0665540678391645,0.409466864440735]
+            quad_points_coord[:, 8] = [0.102717654809626, 0.0885879595127039]
+
+            quad_points_coord[:, 9] =  [0.212340538239153, 0.976068867712919]
+            quad_points_coord[:, 10] = [0.590533135559265, 0.933445932160836]
+            quad_points_coord[:, 11] = [0.911412040487296, 0.897282345190374]
+            quad_points_coord[:, 12] = [0.212340538239153, 0.893829730880424]
+            quad_points_coord[:, 13] = [0.590533135559265, 0.704733432220367]
+            quad_points_coord[:, 14] = [0.911412040487296, 0.544293979756352]
+            quad_points_coord[:, 15] = [0.212340538239153, 0.811590594047928]
+            quad_points_coord[:, 16] = [0.590533135559265, 0.476020932279899]
+            quad_points_coord[:, 17] = [0.911412040487296, 0.191305614322330]
+
+            quad_points_weights = np.zeros([nb_quad_points_per_pixel])
+            quad_points_weights[0] = 0.0193963833059595
+            quad_points_weights[1] = 0.0636780850998851
+            quad_points_weights[2] = 0.0558144204830443
+            quad_points_weights[3] = 0.0310342132895352
+            quad_points_weights[4] = 0.101884936159816
+            quad_points_weights[5] = 0.0893030727728709
+            quad_points_weights[6] = 0.0193963833059595
+            quad_points_weights[7] = 0.0636780850998851
+            quad_points_weights[8] = 0.0558144204830443
+            quad_points_weights[9] =  0.0193963833059595
+            quad_points_weights[10] = 0.0636780850998851
+            quad_points_weights[11] = 0.0558144204830443
+            quad_points_weights[12] = 0.0310342132895352
+            quad_points_weights[13] = 0.101884936159816
+            quad_points_weights[14] = 0.0893030727728709
+            quad_points_weights[15] = 0.0193963833059595
+            quad_points_weights[16] = 0.0636780850998851
+            quad_points_weights[17] = 0.0558144204830443
+
+        return quad_points_coord, quad_points_weights
