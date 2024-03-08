@@ -37,13 +37,13 @@ def objective_function_small_strain(discretization,
 
     f_rho = eta * f_rho_grad + f_dw / eta
 
-    print('f_sigma =  {} '.format(f_sigma))
-    print('f_rho_grad =  {} '.format(f_rho_grad))
-    print('f_dw =  {} '.format(f_dw))
-
-    print('f_rho =  {} '.format(f_rho))
-    print('w * f_rho =  {} '.format(w * f_rho))
-    print('objective_function = {} '.format(f_sigma + w * f_rho))
+    # print('f_sigma =  {} '.format(f_sigma))
+    # print('f_rho_grad =  {} '.format(f_rho_grad))
+    # print('f_dw =  {} '.format(f_dw))
+    #
+    # print('f_rho =  {} '.format(f_rho))
+    # print('w * f_rho =  {} '.format(w * f_rho))
+    # print('objective_function = {} '.format(f_sigma + w * f_rho))
 
     return f_sigma + w * f_rho  # / discretization.cell.domain_volume
 
@@ -102,7 +102,7 @@ def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz, 
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
 
-    nb_quad_points_per_pixel = 8
+    nb_quad_points_per_pixel = 2
     quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
         element_type=discretization.element_type,
         nb_quad_points_per_pixel=nb_quad_points_per_pixel)
@@ -142,7 +142,7 @@ def partial_der_of_double_well_potential_wrt_density_NEW(discretization, phase_f
     if discretization.element_type != 'linear_triangles':
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
-    nb_quad_points_per_pixel =8
+    nb_quad_points_per_pixel =2
     quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
         element_type=discretization.element_type,
         nb_quad_points_per_pixel=nb_quad_points_per_pixel)

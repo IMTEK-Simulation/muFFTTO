@@ -1408,7 +1408,7 @@ def test_finite_difference_check_of_objective_function_with_adjoin_potential_wrt
 def test_phase_field_size_independance(plot=True):
     domain_size = [1, 1]
     eta = 1
-    nb_pixels = (20, 20)
+    nb_pixels = (10, 10)
     problem_type = 'elasticity'
     element_types = ['linear_triangles']
     element_type = 0
@@ -1502,9 +1502,10 @@ def test_phase_field_size_independance(plot=True):
 
         plt.plot(nodal_coordinates[0, 0, :, 0], phase_field_0[0, 0, :, 0], label='phase_field_0')
         plt.figure()
+        plt.plot(nodal_coordinates[0, 0, :, 0], phase_field_0[0, 0, :, 0], label='phase_field_0')
         # plt.show()
 
-    for nb_pixel_x in [20, 40, 100, 500]:  # ,160,320
+    for nb_pixel_x in [10, 20, 40]:  # ,160,320
         nb_pixels = (nb_pixel_x, nb_pixel_x)
 
         discretization_k = domain.Discretization(cell=my_cell,
@@ -1528,7 +1529,7 @@ def test_phase_field_size_independance(plot=True):
             from matplotlib.collections import LineCollection
             # plt.contourf(nodal_coordinates_k[0, 0], nodal_coordinates_k[1, 0],integrant)
 
-            plt.plot(nodal_coordinates_k[0, 0, :, 0], integrant[:, 0], label='f_rho ')
+            plt.plot(nodal_coordinates_k[0, 0, :, 0], integrant[:, 0], label=r' $16 * (\rho^2)(1-\rho)^2, grid$ = {}'.format(nb_pixel_x))
             # plt.plot(nodal_coordinates_k[0, 0, :, 0], grad_integrant_fnxyz[0, :], label='df_rho/drho')
             # plt.plot(nodal_coordinates_k[0, 0, :, 0], phase_field_k[0, 0, :, 0], label='phase_field_k')
 

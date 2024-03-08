@@ -609,6 +609,15 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
         raise ValueError('Quadrature weights for Element_type {} is not implemented'.format(element_type))
 
     if element_type == 'linear_triangles':
+        if nb_quad_points_per_pixel == 2:
+            quad_points_coord = np.zeros(
+                [2, nb_quad_points_per_pixel])
+            quad_points_coord[:, 0] = [1 / 3, 1 / 3]
+            quad_points_coord[:, 1] = [2 / 3, 2 / 3]
+            quad_points_weights = np.zeros(
+                [nb_quad_points_per_pixel])
+            quad_points_weights[0:2] = 1 / 2
+
         if nb_quad_points_per_pixel == 6:
             quad_points_coord = np.zeros(
                 [2, nb_quad_points_per_pixel])

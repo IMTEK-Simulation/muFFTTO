@@ -14,7 +14,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (60,60)
+number_of_pixels = (90,90)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -105,8 +105,8 @@ print('init_stress = \n {}'.format(stress))
 #G_target_auxet = (1 / 4) * E_0  #23   25
 #E_target=2*G_target_auxet*(1+poison_target)
 # test materials
-poison_target = -0.3
-E_target =E_0*0.7
+poison_target = 0.2
+E_target =E_0*0.2
 
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
@@ -126,7 +126,7 @@ print('target_stress = \n {}'.format(target_stress))
 # Auxetic metamaterials
 p = 1
 w = 1e0#* E_0  # 1 / 10  # 1e-4 Young modulus of solid
-eta = 0.01
+eta = 0.02
 print('p =   {}'.format(p))
 print('w  =  {}'.format(w ))
 print('eta =  {}'.format(eta))
@@ -224,10 +224,10 @@ def my_sensitivity(phase_field_1nxyz):
 if __name__ == '__main__':
     # material distribution
     #phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)**1
-    phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape)
+    phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape)**1
 
     # phase_field_0[0, 0,
-    # phase_field_0.shape[2] * 0 // 4:phase_field_0.shape[2] * 1 // 4,
+    # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4,
     # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4] = 0
     phase_field_00 = np.copy(phase_field_0)
 
@@ -243,7 +243,8 @@ if __name__ == '__main__':
                                 jac=my_sensitivity,
                                 bounds=bounds,
                                 options={'gtol': 1e-6,
-                                         'disp': True})
+                                         'disp': True,
+                                         'maxiter': 500})
 
     # xopt = sp.optimize.minimize(fun=my_objective_function,
     #                             x0=phase_field_0,
@@ -305,8 +306,10 @@ if __name__ == '__main__':
         displacement_field_fnxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
-    print('Optimized stress = \n {}'.format(homogenized_stress))
+    print('init_stress = \n {}'.format(stress))
     print('Target_stress = \n {}'.format(target_stress))
+    print('Optimized stress = \n {}'.format(homogenized_stress))
+
     print('Stress diff = \n {}'.format(target_stress-homogenized_stress))
     objective_function = topology_optimization.objective_function_small_strain(
         discretization=discretization,
