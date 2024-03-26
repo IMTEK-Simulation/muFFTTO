@@ -2,6 +2,8 @@ import pytest
 
 import numpy as np
 import scipy as sc
+import time
+
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -9,6 +11,7 @@ from muFFTTO import topology_optimization
 from muFFTTO import microstructure_library
 
 
+# TODO implement test for bilinear elements and 3D
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
     problem_type = 'elasticity'
@@ -237,25 +240,30 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
             np.linalg.norm((fd_sensitivity - analitical_sensitivity)[0, 0], 'fro'))
 
     print(error_fd_vs_analytical)
+
+
 # @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
 #     ([3, 4], 0, [5, 8]),
 #     ([4, 5], 1, [7, 6])])
 # def test_adjoint_sensitivity_(discretization_fixture):
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
+    ([3, 3], 0, [3, 3]),
     ([2, 2], 0, [10, 10]),
-    ([2, 2], 0, [2, 2])])
-def test_finite_difference_check_of_double_well_potential(discretization_fixture):
+    ([2, 3], 0, [22, 22])])
+def test_finite_difference_check_of_double_well_potential(discretization_fixture, plot=True):
     epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
     # epsilons = [1e-4]
     fd_derivative = discretization_fixture.get_scalar_sized_field()
-    fd_derivative_NEW = discretization_fixture.get_scalar_sized_field()
+    fd_derivative_interpolated = discretization_fixture.get_scalar_sized_field()
     fd_derivative_Gauss_quad = discretization_fixture.get_scalar_sized_field()
+    fd_derivative_anal = discretization_fixture.get_scalar_sized_field()
+
     # compute double-well potential without perturbations
     phase_field = discretization_fixture.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
     phase_field = np.random.rand(*discretization_fixture.get_scalar_sized_field().shape) ** 0
 
-    linfunc = lambda x: 1 * x
+    linfunc = lambda x: 1 * x ** 2 + 0
     phase_field[0, 0] = linfunc(discretization_fixture.get_nodal_points_coordinates()[0, 0])
     phase_field_0 = np.copy(phase_field)
     # phase_field[0, 0, 2:5, 2:4] = phase_field[0, 0, 2:5, 2:4] / 3  # can be random in this case
@@ -270,12 +278,31 @@ def test_finite_difference_check_of_double_well_potential(discretization_fixture
             discretization_fixture,
             phase_field))
 
+    partial_der_of_double_well_potential_analytical = (
+        topology_optimization.partial_der_of_double_well_potential_wrt_density_analytical(
+            discretization=discretization_fixture,
+            phase_field_1nxyz=phase_field))
+
+    double_well_potential_plus_eps_Gauss_quad = topology_optimization.compute_double_well_potential_Gauss_quad(
+        discretization_fixture,
+        phase_field, eta=1)
+
+    double_well_potential_plus_eps_anal = topology_optimization.compute_double_well_potential_analytical(
+        discretization=discretization_fixture,
+        phase_field_1nxyz=phase_field,
+        eta=1)
+    print(double_well_potential_plus_eps_Gauss_quad)
+    print(double_well_potential_plus_eps_anal)
+
     error_fd_vs_analytical = []
     error_fd_vs_analytical_NEW = []
     error_fd_NEW_vs_analytical_NEW = []
 
     error_fd_NEW_vs_analytical_NEW = []
     error_fd_Gaus_vs_analytical_Gaus = []
+    error_fd_anal_vs_analytical_NEW = []
+    error_fd_anal_vs_analytical_Gaus = []
+
     for epsilon in epsilons:
         # shifted: compute gradient in the middle point between phase_field and phase_field+epsilon
         # phase_field_shift = np.copy(phase_field_0) + epsilon
@@ -301,52 +328,240 @@ def test_finite_difference_check_of_double_well_potential(discretization_fixture
                 double_well_potential_plus_eps = topology_optimization.compute_double_well_potential(
                     discretization_fixture,
                     phase_field, eta=1)
-                double_well_potential_plus_eps_NEW = topology_optimization.compute_double_well_potential_NEW(
-                    discretization_fixture,
-                    phase_field, eta=1)
+                double_well_potential_plus_eps_interpolated = topology_optimization.compute_double_well_potential_interpolated(
+                    discretization_fixture, phase_field, eta=1)
 
                 double_well_potential_plus_eps_Gauss_quad = topology_optimization.compute_double_well_potential_Gauss_quad(
                     discretization_fixture,
                     phase_field, eta=1)
+
+                double_well_potential_plus_eps_anal = topology_optimization.compute_double_well_potential_analytical(
+                    discretization=discretization_fixture,
+                    phase_field_1nxyz=phase_field,
+                    eta=1)
 
                 phase_field[0, 0, x, y] = phase_field[0, 0, x, y] - epsilon
                 # assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
                 double_well_potential_minus_eps = topology_optimization.compute_double_well_potential(
                     discretization_fixture,
                     phase_field, eta=1)
-                double_well_potential_minus_eps_NEW = topology_optimization.compute_double_well_potential_NEW(
-                    discretization_fixture,
-                    phase_field, eta=1)
+                double_well_potential_minus_eps_interpolated = topology_optimization.compute_double_well_potential_interpolated(
+                    discretization_fixture, phase_field, eta=1)
 
                 double_well_potential_minus_eps_Gauss_quad = topology_optimization.compute_double_well_potential_Gauss_quad(
                     discretization_fixture,
                     phase_field, eta=1)
 
+                double_well_potential_minus_eps_anal = topology_optimization.compute_double_well_potential_analytical(
+                    discretization=discretization_fixture,
+                    phase_field_1nxyz=phase_field,
+                    eta=1)
+
                 fd_derivative[0, 0, x, y] = (double_well_potential_plus_eps - double_well_potential_minus_eps) / epsilon
 
                 # print(fd_derivative[0, 0])
-                fd_derivative_NEW[0, 0, x, y] = (double_well_potential_plus_eps_NEW -
-                                                 double_well_potential_minus_eps_NEW) / epsilon
+                fd_derivative_interpolated[0, 0, x, y] = (double_well_potential_plus_eps_interpolated -
+                                                          double_well_potential_minus_eps_interpolated) / epsilon
                 fd_derivative_Gauss_quad[0, 0, x, y] = (double_well_potential_plus_eps_Gauss_quad -
                                                         double_well_potential_minus_eps_Gauss_quad) / epsilon
-
+                fd_derivative_anal[0, 0, x, y] = (double_well_potential_plus_eps_anal -
+                                                  double_well_potential_minus_eps_anal) / epsilon
         # print('error_fd_NEW_vs_analytical_NEW: {}'.format(fd_derivative_NEW))
         error_fd_vs_analytical.append(
             np.linalg.norm((fd_derivative - partial_der_of_double_well_potential)[0, 0], 'fro'))
         error_fd_vs_analytical_NEW.append(
             np.linalg.norm((fd_derivative - partial_der_of_double_well_potential_NEW)[0, 0], 'fro'))
         error_fd_NEW_vs_analytical_NEW.append(
-            np.linalg.norm((fd_derivative_NEW - partial_der_of_double_well_potential_NEW)[0, 0], 'fro'))
+            np.linalg.norm((fd_derivative_interpolated - partial_der_of_double_well_potential_NEW)[0, 0], 'fro'))
         error_fd_Gaus_vs_analytical_Gaus.append(
             np.linalg.norm((fd_derivative_Gauss_quad - partial_der_of_double_well_potential_NEW)[0, 0], 'fro'))
-    print('error_fd_vs_analytical: {}'.format(error_fd_vs_analytical))
-    print('error_fd_vs_analytical_NEW: {}'.format(error_fd_vs_analytical_NEW))
-    print('error_fd_NEW_vs_analytical_NEW: {}'.format(error_fd_NEW_vs_analytical_NEW))
-    print('error_fd_Gaus_vs_analytical_Gaus: {}'.format(error_fd_Gaus_vs_analytical_Gaus))
+        error_fd_anal_vs_analytical_NEW.append(
+            np.linalg.norm((fd_derivative_anal - partial_der_of_double_well_potential_analytical)[0, 0], 'fro'))
 
-    # assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
-    #   "Finite difference derivative do not corresponds to the analytical expression "
-    #   "for partial derivative of double well potential ")
+    print('error_fd_vs_analytical: {}\n'.format(error_fd_vs_analytical))
+    print('error_fd_vs_analytical_NEW: {}\n'.format(error_fd_vs_analytical_NEW))
+    print('error_fd_NEW_vs_analytical_NEW: {}\n'.format(error_fd_NEW_vs_analytical_NEW))
+    print('error_fd_Gaus_vs_analytical_Gaus: {}\n'.format(error_fd_Gaus_vs_analytical_Gaus))
+    print('error_fd_anal_vs_analytical_Gaus: {}\n'.format(error_fd_anal_vs_analytical_NEW))
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.loglog(epsilons, error_fd_vs_analytical,
+                   label=r' error_fd_vs_analytical'.format())
+        plt.loglog(epsilons, error_fd_Gaus_vs_analytical_Gaus,
+                   label=r' error_fd_Gaus_vs_analytical_Gaus'.format())
+        plt.loglog(epsilons, error_fd_anal_vs_analytical_NEW,
+                   label=r' error_fd_anal_vs_analytical_NEW'.format())
+
+        plt.legend(loc='best')
+
+        #   ax.legend()
+        # assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
+        #   "Finite difference derivative do not corresponds to the analytical expression "
+        #   "for partial derivative of double well potential ")
+        plt.show()
+
+
+def test_integration_of_double_well_potential(plot=True):
+    problem_type = 'elasticity'
+    element_types = ['linear_triangles', 'bilinear_rectangle']
+    discretization_type = 'finite_element'
+    domain_size = [2, 3]
+    double_well_potential_nodal_res = []
+    double_well_potential_interpolated_res = []
+    double_well_potential_plus_eps_Gauss_quad_res = []
+    double_well_potential_plus_eps_anal_res = []
+    double_well_potential_plus_eps_anal_fast_res= []
+
+    error_nodal_vs_analytical = []
+    error_gauss_vs_analytical = []
+    error_nodal_vs_gauss = []
+
+    norm_nodal = []
+    norm_gauss = []
+    norm_analytical = []
+
+    Ns = [10, 100, 200, 300, 400, 500, 600 ,1024]
+    for N in Ns:
+        print()
+
+        nb_pixels = 2 * (N,)
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               number_of_pixels=nb_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='linear_triangles')
+
+        # compute double-well potential without perturbations
+        phase_field = discretization.get_scalar_sized_field() + 1  # Phase field has  one  value per pixel
+        phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 0
+
+        linfunc = lambda x: 1 * (x / 3) ** 2 + 0
+        sinfunc = lambda x, y: np.sin(x * np.pi / 3) * np.sin(y * np.pi / 3) * (x / 3) ** 2
+
+        # phase_field[0, 0] = linfunc(discretization.get_nodal_points_coordinates()[0, 0])
+        phase_field[0, 0] = sinfunc(discretization.get_nodal_points_coordinates()[0, 0],
+                                    discretization.get_nodal_points_coordinates()[1, 0])
+
+        phase_field_0 = np.copy(phase_field)
+
+        double_well_potential_nodal = topology_optimization.compute_double_well_potential(
+            discretization,
+            phase_field, eta=1)
+
+        double_well_potential_interpolated = topology_optimization.compute_double_well_potential_interpolated(
+            discretization, phase_field, eta=1)
+
+        start_time = time.time()
+        double_well_potential_plus_eps_Gauss_quad = topology_optimization.compute_double_well_potential_Gauss_quad(
+            discretization,
+            phase_field, eta=1)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("double_well_potential_plus_eps_Gauss_quad time: ", elapsed_time)
+
+        start_time = time.time()
+        double_well_potential_plus_eps_anal = topology_optimization.compute_double_well_potential_analytical(
+            discretization=discretization,
+            phase_field_1nxyz=phase_field,
+            eta=1)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("double_well_potential_plus_eps_anal time: ", elapsed_time)
+
+        start_time = time.time()
+        double_well_potential_plus_eps_anal_fast = topology_optimization.compute_double_well_potential_analytical_fast(
+            discretization=discretization,
+            phase_field_1nxyz=phase_field,
+            eta=1)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("double_well_potential_plus_eps_anal_fast time: ", elapsed_time)
+
+        print()
+        double_well_potential_nodal_res.append(double_well_potential_nodal)
+        double_well_potential_interpolated_res.append(double_well_potential_interpolated)
+        double_well_potential_plus_eps_Gauss_quad_res.append(double_well_potential_plus_eps_Gauss_quad)
+        double_well_potential_plus_eps_anal_res.append(double_well_potential_plus_eps_anal)
+        double_well_potential_plus_eps_anal_fast_res.append(double_well_potential_plus_eps_anal_fast)
+
+        #print(double_well_potential_nodal)
+        #print(double_well_potential_interpolated)
+        #print(double_well_potential_plus_eps_Gauss_quad)
+        #print(double_well_potential_plus_eps_anal)
+        # get analytical partial derivative of the double-well potential with respect to phase-field
+        partial_der_of_double_well_potential = topology_optimization.partial_der_of_double_well_potential_wrt_density(
+            discretization,
+            phase_field)
+
+        partial_der_of_double_well_potential_gauss = (
+            topology_optimization.partial_der_of_double_well_potential_wrt_density_NEW(
+                discretization,
+                phase_field))
+
+        partial_der_of_double_well_potential_analytical = (
+            topology_optimization.partial_der_of_double_well_potential_wrt_density_analytical(
+                discretization=discretization,
+                phase_field_1nxyz=phase_field))
+
+        error_nodal_vs_analytical.append(
+            np.linalg.norm(
+                (partial_der_of_double_well_potential - partial_der_of_double_well_potential_analytical)[0, 0], 'fro'))
+        error_gauss_vs_analytical.append(
+            np.linalg.norm(
+                (partial_der_of_double_well_potential_gauss - partial_der_of_double_well_potential_analytical)[0, 0],
+                'fro'))
+        error_nodal_vs_gauss.append(
+            np.linalg.norm(
+                (partial_der_of_double_well_potential - partial_der_of_double_well_potential_gauss)[0, 0], 'fro'))
+
+        norm_nodal.append(np.linalg.norm(partial_der_of_double_well_potential[0, 0], 'fro'))
+        norm_gauss.append(np.linalg.norm(partial_der_of_double_well_potential_gauss[0, 0], 'fro'))
+        norm_analytical.append(np.linalg.norm(partial_der_of_double_well_potential_analytical, 'fro'))
+        print()
+
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(Ns, double_well_potential_nodal_res,
+                 label=r' double_well_potential_nodal_res'.format())
+        plt.plot(Ns, double_well_potential_interpolated_res,
+                 label=r' double_well_potential_interpolated_res'.format())
+        plt.plot(Ns, double_well_potential_plus_eps_Gauss_quad_res, marker='x',
+                 label=r' double_well_potential_plus_eps_Gauss_quad_res'.format())
+        plt.plot(Ns, double_well_potential_plus_eps_anal_res,
+                 label=r' double_well_potential_plus_eps_anal_res'.format())
+        plt.plot(Ns, double_well_potential_plus_eps_anal_fast_res,
+                 label=r' double_well_potential_plus_eps_anal_fast_res'.format())
+        plt.legend(loc='best')
+
+
+
+        plt.figure()
+        plt.loglog(Ns, error_nodal_vs_analytical, marker='>',
+                   label=r' error_nodal_vs_analytical'.format())
+        plt.loglog(Ns, error_nodal_vs_gauss, marker='x',
+                   label=r' error_nodal_vs_gauss'.format())
+        plt.loglog(Ns, error_gauss_vs_analytical, marker='|',
+                   label=r' error_gauss_vs_analytical'.format())
+        plt.legend(loc='best')
+
+        plt.figure()
+        plt.loglog(Ns, norm_nodal, marker='>',
+                   label=r' norm_nodal'.format())
+        plt.loglog(Ns, norm_gauss, marker='x',
+                   label=r' norm_gauss'.format())
+        plt.loglog(Ns, norm_analytical, marker='|',
+                   label=r' norm_analytical'.format())
+        plt.legend(loc='best')
+
+        #   ax.legend()
+        # assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
+        #   "Finite difference derivative do not corresponds to the analytical expression "
+        #   "for partial derivative of double well potential ")
+        plt.show()
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
@@ -738,8 +953,8 @@ def test_finite_difference_check_of_adjoint_potential_wrt_displacement(discretiz
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [6, 8]),
     ([2, 5], 0, [12, 7]),
-    ([3, 4], 1, [6, 8]),
-    ([2, 5], 1, [12, 7])])
+    ([3, 4], 0, [6, 8]),
+    ([2, 5], 0, [12, 7])])
 def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small_strain(discretization_fixture):
     # This test compares analytical expression for partial derivative  of objective function w.r.t. displacement
     epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
@@ -1455,9 +1670,8 @@ def test_phase_field_size_independance(plot=True):
     f_dw_0_old = topology_optimization.compute_double_well_potential(discretization=discretization,
                                                                      phase_field_1nxyz=phase_field_0,
                                                                      eta=eta)
-    f_dw_0 = topology_optimization.compute_double_well_potential_NEW(discretization=discretization,
-                                                                     phase_field_1nxyz=phase_field_0,
-                                                                     eta=eta)
+    f_dw_0 = topology_optimization.compute_double_well_potential_interpolated(discretization=discretization,
+                                                                              phase_field_1nxyz=phase_field_0, eta=eta)
     f_dw_quad = topology_optimization.compute_double_well_potential_Gauss_quad(discretization=discretization,
                                                                                phase_field_1nxyz=phase_field_0,
                                                                                eta=eta)
@@ -1505,7 +1719,7 @@ def test_phase_field_size_independance(plot=True):
         plt.plot(nodal_coordinates[0, 0, :, 0], phase_field_0[0, 0, :, 0], label='phase_field_0')
         # plt.show()
 
-    for nb_pixel_x in [10, 20, 40]:  # ,160,320
+    for nb_pixel_x in [10, 20, 150]:  # ,160,320
         nb_pixels = (nb_pixel_x, nb_pixel_x)
 
         discretization_k = domain.Discretization(cell=my_cell,
@@ -1529,7 +1743,8 @@ def test_phase_field_size_independance(plot=True):
             from matplotlib.collections import LineCollection
             # plt.contourf(nodal_coordinates_k[0, 0], nodal_coordinates_k[1, 0],integrant)
 
-            plt.plot(nodal_coordinates_k[0, 0, :, 0], integrant[:, 0], label=r' $16 * (\rho^2)(1-\rho)^2, grid$ = {}'.format(nb_pixel_x))
+            plt.plot(nodal_coordinates_k[0, 0, :, 0], integrant[:, 0],
+                     label=r' $16 * (\rho^2)(1-\rho)^2, grid$ = {}'.format(nb_pixel_x))
             # plt.plot(nodal_coordinates_k[0, 0, :, 0], grad_integrant_fnxyz[0, :], label='df_rho/drho')
             # plt.plot(nodal_coordinates_k[0, 0, :, 0], phase_field_k[0, 0, :, 0], label='phase_field_k')
 
@@ -1540,9 +1755,9 @@ def test_phase_field_size_independance(plot=True):
                                                                        phase_field_1nxyz=phase_field_k,
                                                                        eta=eta)
 
-        f_dw = topology_optimization.compute_double_well_potential_NEW(discretization=discretization_k,
-                                                                       phase_field_1nxyz=phase_field_k,
-                                                                       eta=eta)
+        f_dw = topology_optimization.compute_double_well_potential_interpolated(discretization=discretization_k,
+                                                                                phase_field_1nxyz=phase_field_k,
+                                                                                eta=eta)
         f_dw_Gauss_quad = topology_optimization.compute_double_well_potential_Gauss_quad(
             discretization=discretization_k,
             phase_field_1nxyz=phase_field_k,

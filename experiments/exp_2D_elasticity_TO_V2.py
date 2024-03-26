@@ -1,5 +1,7 @@
 import numpy as np
 import scipy as sp
+import matplotlib as mpl
+
 import matplotlib.pyplot as plt
 
 import time
@@ -14,7 +16,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (90,90)
+number_of_pixels = (10, 10)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -68,8 +70,8 @@ start_time = time.time()
 
 # macro_gradient = np.array([[0.0, 0.01],
 #                            [0.01, 0.0]])
-macro_gradient = np.array([[0.1, 0.0],
-                           [0.0, 0.0]])
+macro_gradient = np.array([[ .05,  .0],
+                           [ .0,  .0]])
 print('macro_gradient = \n {}'.format(macro_gradient))
 
 # Set up the equilibrium system
@@ -96,17 +98,17 @@ stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradient)
 print('init_stress = \n {}'.format(stress))
 # validation metamaterials
 
-#poison_target = 0.2
-#G_target_auxet = (3 / 10) * E_0  # (7 / 20) * E_0
-#G_target_auxet = (7 / 20) * E_0
-#E_target = 2 * G_target_auxet * (1 + poison_target)
+# poison_target = 0.2
+# G_target_auxet = (3 / 10) * E_0  # (7 / 20) * E_0
+# G_target_auxet = (7 / 20) * E_0
+# E_target = 2 * G_target_auxet * (1 + poison_target)
 # Auxetic metamaterials
-#poison_target= 1/3  # lambda = -10
-#G_target_auxet = (1 / 4) * E_0  #23   25
-#E_target=2*G_target_auxet*(1+poison_target)
+# poison_target= 1/3  # lambda = -10
+# G_target_auxet = (1 / 4) * E_0  #23   25
+# E_target=2*G_target_auxet*(1+poison_target)
 # test materials
-poison_target = 0.2
-E_target =E_0*0.2
+poison_target = -0.0
+E_target = E_0 * 0.2
 
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
@@ -124,11 +126,11 @@ print('target_stress = \n {}'.format(target_stress))
 # #eta = 0.00915#1430#145#357#3#33#5#25#4#7#250
 # eta = 0.0555 #0.02125#08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
 # Auxetic metamaterials
-p = 1
-w = 1e0#* E_0  # 1 / 10  # 1e-4 Young modulus of solid
+p = 2
+w = 1e1  # +* E_0  # 1 / 10  # 1e-4 Young modulus of solid
 eta = 0.02
 print('p =   {}'.format(p))
-print('w  =  {}'.format(w ))
+print('w  =  {}'.format(w))
 print('eta =  {}'.format(eta))
 
 
@@ -140,25 +142,35 @@ def my_objective_function(phase_field_1nxyz):
     # reshape the field
     phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *number_of_pixels])
 
-    material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz,
-                                                                                p)
+    # material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz,                                                                                         p)
+    phase_field_at_quad_poits_1qnxyz = discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
+                                                                                 quad_field_fqnxyz=None,
+                                                                                 quad_points_coords_dq=None)[0]
 
+    # material_data_field_C_0_rho_ijklqxyz_test = material_data_field_C_0[..., :, :] * np.power(
+    #     phase_field_at_quad_poits_1qnxyz,
+    #     p)
+
+    material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
+        phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+    # TODO [Lars] is this proper formulation ? I wabt to multipluy phase field [0,q,0,xyz] * material_data_field_C_0[ijkl,q,xyz]
     # Solve mechanical equilibrium constrain
-    rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+    rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+                                 macro_gradient_field_ijqxyz=macro_gradient_field)
 
-    K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho,
-                                                         x,
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                         displacement_field=x,
                                                          formulation='small_strain')
     # M_fun = lambda x: 1 * x
     preconditioner = discretization.get_preconditioner(
         reference_material_data_field_ijklqxyz=material_data_field_C_0)
     M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
                                                           nodal_field_fnxyz=x)
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-8)
+    displacement_field, norms = solvers.PCG(Afun=K_fun, B=rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
     # compute homogenized stress field corresponding t
     homogenized_stress = discretization.get_homogenized_stress(
-        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
         displacement_field_fnxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
@@ -182,12 +194,21 @@ def my_sensitivity(phase_field_1nxyz):
     phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *number_of_pixels])
 
     # Compute homogenized stress field for current phase field
-    material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz,
-                                                                                p)
-    # Solve mechanical equilibrium constrain for hom
-    rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+    # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz, p)
 
-    K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
+    phase_field_at_quad_poits_1qnxyz = discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
+                                                                                 quad_field_fqnxyz=None,
+                                                                                 quad_points_coords_dq=None)[0]
+
+    material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
+        phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+
+    # Solve mechanical equilibrium constrain for hom
+    rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+                                 macro_gradient_field_ijqxyz=macro_gradient_field)
+
+    K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                         displacement_field=x,
                                                          formulation='small_strain')
     # M_fun = lambda x: 1 * x
     preconditioner = discretization.get_preconditioner(
@@ -195,11 +216,11 @@ def my_sensitivity(phase_field_1nxyz):
     M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
                                                           nodal_field_fnxyz=x)
 
-    displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-8)
+    displacement_field, norms = solvers.PCG(Afun=K_fun, B=rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
     # compute homogenized stress field corresponding t
     homogenized_stress = discretization.get_homogenized_stress(
-        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
         displacement_field_fnxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
@@ -223,18 +244,18 @@ def my_sensitivity(phase_field_1nxyz):
 
 if __name__ == '__main__':
     # material distribution
-    #phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)**1
-    phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape)**1
+    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)**1
+    #phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
 
     # phase_field_0[0, 0,
     # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4,
     # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4] = 0
     phase_field_00 = np.copy(phase_field_0)
 
-
     phase_field_0 = phase_field_0.reshape(-1)  # b
 
     print('Init objective function = {}'.format(my_objective_function(phase_field_00)))
+    start_time = time.time()
 
     bounds = sp.optimize.Bounds(lb=0, ub=1, keep_feasible=True)
     xopt = sp.optimize.minimize(fun=my_objective_function,
@@ -244,8 +265,10 @@ if __name__ == '__main__':
                                 bounds=bounds,
                                 options={'gtol': 1e-6,
                                          'disp': True,
-                                         'maxiter': 500})
-
+                                         'maxiter': 2000})
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print("Optimization time: ", elapsed_time)
     # xopt = sp.optimize.minimize(fun=my_objective_function,
     #                             x0=phase_field_0,
     #                             method='bfgs',
@@ -268,7 +291,7 @@ if __name__ == '__main__':
 
     plt.figure()
     plt.contourf(nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-                 phase_field_sol[0, 0])
+                 phase_field_sol[0, 0], cmap=mpl.cm.Greys)
     # plt.colorbar()
 
     # plt.figure()
@@ -310,7 +333,7 @@ if __name__ == '__main__':
     print('Target_stress = \n {}'.format(target_stress))
     print('Optimized stress = \n {}'.format(homogenized_stress))
 
-    print('Stress diff = \n {}'.format(target_stress-homogenized_stress))
+    print('Stress diff = \n {}'.format(target_stress - homogenized_stress))
     objective_function = topology_optimization.objective_function_small_strain(
         discretization=discretization,
         actual_stress_ij=homogenized_stress,
