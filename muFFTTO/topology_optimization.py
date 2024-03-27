@@ -27,9 +27,9 @@ def objective_function_small_strain(discretization,
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
-    f_dw = compute_double_well_potential_analytical(discretization=discretization,
-                                                    phase_field_1nxyz=phase_field_1nxyz,
-                                                    eta=1)
+    f_dw = compute_double_well_potential_analytical_fast(discretization=discretization,
+                                                         phase_field_1nxyz=phase_field_1nxyz,
+                                                         eta=1)
 
     phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
@@ -427,6 +427,175 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization, 
                     ) * Jacobian_det
 
     return drho_squared - 2 * drho_cubed + drho_quartic / eta
+
+
+def partial_der_of_double_well_potential_wrt_density_analytical_fast(discretization, phase_field_1nxyz, eta=1):
+    # Derivative of the double-well potential with respect to phase-field
+    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
+    # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2ρ -6ρ^2 + 4ρ^3
+    if discretization.element_type != 'linear_triangles':
+        raise ValueError(
+            'Analytical  evaluation works only for linear triangles. You provided {} '.format(
+                discretization.element_type))
+    Jacobian_matrix = np.diag(discretization.pixel_size)
+    Jacobian_det = np.linalg.det(
+        Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    # allocate empty field for partial derivative
+    ddouble_well_drho_1nxyz = np.zeros(phase_field_1nxyz.shape)
+    # integral_fnxyz =  (2 * phase_field_1nxyz[0, 0] \
+    #                 - 6 * phase_field_1nxyz[0, 0] ** 2 * 6 / 12 \
+    #                 + 4 * phase_field_1nxyz[0, 0] ** 3 * 6 / 20) *Jacobian_det
+    # NODAL VALUES OF CONNECTED POINTS
+    rho0 = phase_field_1nxyz[0, 0]
+    rho1 = np.roll(phase_field_1nxyz[0, 0], -1, axis=(0))
+    rho2 = np.roll(phase_field_1nxyz[0, 0], -1, axis=(1))
+    rho3 = np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]), axis=(0, 1))
+
+    # partial derivative of a quadratic term
+    # d/dρ(ρ^2) =
+    ddouble_well_drho_1nxyz[0, 0] += (1 / 6) * (rho0) + (1 / 12) * (rho1 + rho2)
+    ddouble_well_drho_1nxyz[0, 0] += np.roll((1 / 3) * (rho1) + (1 / 12) * (rho0 + 2 * rho2 + rho3), 1, axis=(0))
+    ddouble_well_drho_1nxyz[0, 0] += np.roll((1 / 3) * (rho2) + (1 / 12) * (rho0 + 2 * rho1 + rho3), 1, axis=(1))
+    ddouble_well_drho_1nxyz[0, 0] += np.roll((1 / 6) * (rho3) + (1 / 12) * (rho1 + rho2), np.array([1, 1]), axis=(0, 1))
+
+    # partial derivative of a cibic term
+    # d/dρ(ρ^3) =
+    ddouble_well_drho_1nxyz[0, 0] += - 2 * ((1 / 20) * (3 * rho0 ** 2 + rho1 ** 2 + rho2 ** 2)
+                                            + (1 / 10) * rho0 * (rho1 + rho2)
+                                            + (1 / 20) * rho1 * rho2)
+
+    ddouble_well_drho_1nxyz[0, 0] += - 2 * np.roll(
+        ((1 / 20) * (rho0 ** 2 + 6 * rho1 ** 2 + 2 * rho2 ** 2 + rho3 ** 2)
+         + (1 / 10) * rho1 * (rho0 + 2 * rho2 + rho3)
+         + (1 / 20) * rho2 * (rho0 + rho3)), 1, axis=(0))
+
+    ddouble_well_drho_1nxyz[0, 0] += - 2 * np.roll(
+        ((1 / 20) * (rho0 ** 2 + 2 * rho1 ** 2 + 6 * rho2 ** 2 + rho3 ** 2)
+         + (1 / 10) * rho2 * (rho0 + 2 * rho1 + rho3)
+         + (1 / 20) * rho1 * (rho0 + rho3)), 1, axis=(1))
+
+    ddouble_well_drho_1nxyz[0, 0] += - 2 * np.roll((
+            (1 / 20) * (3 * rho3 ** 2 + rho1 ** 2 + rho2 ** 2)
+            + (1 / 10) * rho3 * (rho1 + rho2)
+            + (1 / 20) * rho1 * rho2), np.array([1, 1]), axis=(0, 1))
+
+    # partial derivative of a cibic term
+    # d/dρ(ρ^4) =
+
+    ddouble_well_drho_1nxyz[0, 0] += ((1 / 30) * (4 * rho0 ** 3 + rho1 ** 3 + rho2 ** 3)
+                                      + (1 / 10) * rho0 ** 2 * (rho1 + rho2)
+                                      + (1 / 30) * rho1 ** 2 * (2 * rho0 + rho2)
+                                      + (1 / 30) * rho2 ** 2 * (2 * rho0 + rho1)
+                                      + (2 / 30) * rho0 * rho1 * rho2)
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        ((1 / 30) * (rho0 ** 3 + 8 * rho1 ** 3 + 2 * rho2 ** 3 + rho3 ** 3)
+         + (1 / 30) * rho0 ** 2 * (2 * rho1 + rho2)
+         + (1 / 30) * rho3 ** 2 * (2 * rho1 + rho2)
+         + (1 / 10) * rho1 ** 2 * (rho0 + 2 * rho2 + rho3)
+         + (1 / 30) * rho2 ** 2 * (rho0 + 4 * rho1 + rho3)
+         + (2 / 30) * rho1 * rho2 * (rho0 + rho3)
+         ), 1, axis=(0))
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        ((1 / 30) * (rho0 ** 3 + 2 * rho1 ** 3 + 8 * rho2 ** 3 + rho3 ** 3)
+         + (1 / 30) * rho0 ** 2 * (2 * rho2 + rho1)
+         + (1 / 30) * rho3 ** 2 * (2 * rho2 + rho1)
+         + (1 / 10) * rho2 ** 2 * (rho0 + 2 * rho1 + rho3)
+         + (1 / 30) * rho1 ** 2 * (rho0 + 4 * rho2 + rho3)
+         + (2 / 30) * rho2 * rho1 * (rho0 + rho3)
+         ), 1, axis=(1))
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        ((1 / 30) * (4 * rho3 ** 3 + rho1 ** 3 + rho2 ** 3)
+         + (1 / 10) * rho3 ** 2 * (rho1 + rho2)
+         + (1 / 30) * rho1 ** 2 * (2 * rho3 + rho2)
+         + (1 / 30) * rho2 ** 2 * (2 * rho3 + rho1)
+         + (2 / 30) * rho3 * rho1 * rho2), np.array([1, 1]), axis=(0, 1))
+
+    return ddouble_well_drho_1nxyz * Jacobian_det / eta
+
+
+def partial_der_of_double_well_potential_wrt_density_analytical_fast2(discretization, phase_field_1nxyz, eta=1):
+    # Derivative of the double-well potential with respect to phase-field
+    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
+    # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2ρ -6ρ^2 + 4ρ^3
+    if discretization.element_type != 'linear_triangles':
+        raise ValueError(
+            'Analytical  evaluation works only for linear triangles. You provided {} '.format(
+                discretization.element_type))
+    Jacobian_matrix = np.diag(discretization.pixel_size)
+    Jacobian_det = np.linalg.det(
+        Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    # allocate empty field for partial derivative
+    ddouble_well_drho_1nxyz = np.zeros(phase_field_1nxyz.shape)
+    # integral_fnxyz =  (2 * phase_field_1nxyz[0, 0] \
+    #                 - 6 * phase_field_1nxyz[0, 0] ** 2 * 6 / 12 \
+    #                 + 4 * phase_field_1nxyz[0, 0] ** 3 * 6 / 20) *Jacobian_det
+    # NODAL VALUES OF CONNECTED POINTS
+    rho0 = phase_field_1nxyz[0, 0]
+    rho1 = np.roll(phase_field_1nxyz[0, 0], -1, axis=(0))
+    rho2 = np.roll(phase_field_1nxyz[0, 0], -1, axis=(1))
+    rho3 = np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]), axis=(0, 1))
+
+    # partial derivative of a quadratic term
+    # d/dρ(ρ^2) =
+    ddouble_well_drho_1nxyz[0, 0] += ((1 / 6) * (rho0) + (1 / 12) * (rho1 + rho2)
+                                      - 2 * ((1 / 20) * (3 * rho0 ** 2 + rho1 ** 2 + rho2 ** 2)
+                                             + (1 / 10) * rho0 * (rho1 + rho2)
+                                             + (1 / 20) * rho1 * rho2)
+                                      + ((1 / 30) * (4 * rho0 ** 3 + rho1 ** 3 + rho2 ** 3)
+                                         + (1 / 10) * rho0 ** 2 * (rho1 + rho2)
+                                         + (1 / 30) * rho1 ** 2 * (2 * rho0 + rho2)
+                                         + (1 / 30) * rho2 ** 2 * (2 * rho0 + rho1)
+                                         + (2 / 30) * rho0 * rho1 * rho2))
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        ((1 / 3) * (rho1) + (1 / 12) * (rho0 + 2 * rho2 + rho3)
+         - 2 * ((1 / 20) * (rho0 ** 2 + 6 * rho1 ** 2 + 2 * rho2 ** 2 + rho3 ** 2)
+                + (1 / 10) * rho1 * (rho0 + 2 * rho2 + rho3)
+                + (1 / 20) * rho2 * (rho0 + rho3))
+         + ((1 / 30) * (rho0 ** 3 + 8 * rho1 ** 3 + 2 * rho2 ** 3 + rho3 ** 3)
+            + (1 / 30) * rho0 ** 2 * (2 * rho1 + rho2)
+            + (1 / 30) * rho3 ** 2 * (2 * rho1 + rho2)
+            + (1 / 10) * rho1 ** 2 * (rho0 + 2 * rho2 + rho3)
+            + (1 / 30) * rho2 ** 2 * (rho0 + 4 * rho1 + rho3)
+            + (2 / 30) * rho1 * rho2 * (rho0 + rho3))
+         ), 1, axis=(0))
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        ((1 / 3) * (rho2) + (1 / 12) * (rho0 + 2 * rho1 + rho3)
+         - 2 * ((1 / 20) * (rho0 ** 2 + 2 * rho1 ** 2 + 6 * rho2 ** 2 + rho3 ** 2)
+                + (1 / 10) * rho2 * (rho0 + 2 * rho1 + rho3)
+                + (1 / 20) * rho1 * (rho0 + rho3))
+         + ((1 / 30) * (rho0 ** 3 + 2 * rho1 ** 3 + 8 * rho2 ** 3 + rho3 ** 3)
+            + (1 / 30) * rho0 ** 2 * (2 * rho2 + rho1)
+            + (1 / 30) * rho3 ** 2 * (2 * rho2 + rho1)
+            + (1 / 10) * rho2 ** 2 * (rho0 + 2 * rho1 + rho3)
+            + (1 / 30) * rho1 ** 2 * (rho0 + 4 * rho2 + rho3)
+            + (2 / 30) * rho2 * rho1 * (rho0 + rho3)
+            )
+         ), 1, axis=(1))
+
+    ddouble_well_drho_1nxyz[0, 0] += np.roll(
+        (1 / 6) * (rho3) + (1 / 12) * (rho1 + rho2)
+        - 2 * ((1 / 20) * (3 * rho3 ** 2 + rho1 ** 2 + rho2 ** 2)
+               + (1 / 10) * rho3 * (rho1 + rho2)
+               + (1 / 20) * rho1 * rho2)
+        + ((1 / 30) * (4 * rho3 ** 3 + rho1 ** 3 + rho2 ** 3)
+           + (1 / 10) * rho3 ** 2 * (rho1 + rho2)
+           + (1 / 30) * rho1 ** 2 * (2 * rho3 + rho2)
+           + (1 / 30) * rho2 ** 2 * (2 * rho3 + rho1)
+           + (2 / 30) * rho3 * rho1 * rho2)
+        , np.array([1, 1]), axis=(0, 1))
+
+
+
+    return ddouble_well_drho_1nxyz * Jacobian_det / eta
 
 
 def compute_gradient_of_phase_field_potential_NEW_WIP(discretization, phase_field_1nxyz, eta=1):

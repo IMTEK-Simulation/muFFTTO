@@ -4,7 +4,6 @@ import numpy as np
 import scipy as sc
 import time
 
-
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
@@ -411,17 +410,19 @@ def test_integration_of_double_well_potential(plot=True):
     double_well_potential_interpolated_res = []
     double_well_potential_plus_eps_Gauss_quad_res = []
     double_well_potential_plus_eps_anal_res = []
-    double_well_potential_plus_eps_anal_fast_res= []
+    double_well_potential_plus_eps_anal_fast_res = []
 
     error_nodal_vs_analytical = []
     error_gauss_vs_analytical = []
     error_nodal_vs_gauss = []
+    error_fast_vs_analytical = []
+    error_fast_vs_fast2 = []
 
     norm_nodal = []
     norm_gauss = []
     norm_analytical = []
 
-    Ns = [10, 100, 200, 300, 400, 500, 600 ,1024]
+    Ns = [3, 10, 100, 200, 300, 400, 500, 600, 1024]
     for N in Ns:
         print()
 
@@ -487,24 +488,58 @@ def test_integration_of_double_well_potential(plot=True):
         double_well_potential_plus_eps_anal_res.append(double_well_potential_plus_eps_anal)
         double_well_potential_plus_eps_anal_fast_res.append(double_well_potential_plus_eps_anal_fast)
 
-        #print(double_well_potential_nodal)
-        #print(double_well_potential_interpolated)
-        #print(double_well_potential_plus_eps_Gauss_quad)
-        #print(double_well_potential_plus_eps_anal)
+        # print(double_well_potential_nodal)
+        # print(double_well_potential_interpolated)
+        # print(double_well_potential_plus_eps_Gauss_quad)
+        # print(double_well_potential_plus_eps_anal)
         # get analytical partial derivative of the double-well potential with respect to phase-field
+        start_time = time.time()
         partial_der_of_double_well_potential = topology_optimization.partial_der_of_double_well_potential_wrt_density(
             discretization,
             phase_field)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("partial_der_of_double_well_potential time: ", elapsed_time)
+
+        start_time = time.time()
 
         partial_der_of_double_well_potential_gauss = (
             topology_optimization.partial_der_of_double_well_potential_wrt_density_NEW(
                 discretization,
                 phase_field))
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("partial_der_of_double_well_potential_gauss time: ", elapsed_time)
+
+        start_time = time.time()
 
         partial_der_of_double_well_potential_analytical = (
             topology_optimization.partial_der_of_double_well_potential_wrt_density_analytical(
                 discretization=discretization,
                 phase_field_1nxyz=phase_field))
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("partial_der_of_double_well_potential_analytical time: ", elapsed_time)
+
+        start_time = time.time()
+
+        partial_der_of_double_well_potential_analytical_fast = (
+            topology_optimization.partial_der_of_double_well_potential_wrt_density_analytical_fast(
+                discretization=discretization,
+                phase_field_1nxyz=phase_field))
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("partial_der_of_double_well_potential_analytical_fast time: ", elapsed_time)
+
+        start_time = time.time()
+
+        partial_der_of_double_well_potential_analytical_fast2 = (
+            topology_optimization.partial_der_of_double_well_potential_wrt_density_analytical_fast2(
+                discretization=discretization,
+                phase_field_1nxyz=phase_field))
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("partial_der_of_double_well_potential_wrt_density_analytical_fast2 time: ", elapsed_time)
 
         error_nodal_vs_analytical.append(
             np.linalg.norm(
@@ -516,6 +551,19 @@ def test_integration_of_double_well_potential(plot=True):
         error_nodal_vs_gauss.append(
             np.linalg.norm(
                 (partial_der_of_double_well_potential - partial_der_of_double_well_potential_gauss)[0, 0], 'fro'))
+        error_fast_vs_analytical.append(
+            np.linalg.norm(
+                (
+                        partial_der_of_double_well_potential_analytical_fast - partial_der_of_double_well_potential_analytical)[
+                    0, 0],
+                'fro'))
+
+        error_fast_vs_fast2.append(
+            np.linalg.norm(
+                (
+                        partial_der_of_double_well_potential_analytical_fast - partial_der_of_double_well_potential_analytical_fast2)[
+                    0, 0],
+                'fro'))
 
         norm_nodal.append(np.linalg.norm(partial_der_of_double_well_potential[0, 0], 'fro'))
         norm_gauss.append(np.linalg.norm(partial_der_of_double_well_potential_gauss[0, 0], 'fro'))
@@ -535,9 +583,10 @@ def test_integration_of_double_well_potential(plot=True):
                  label=r' double_well_potential_plus_eps_anal_res'.format())
         plt.plot(Ns, double_well_potential_plus_eps_anal_fast_res,
                  label=r' double_well_potential_plus_eps_anal_fast_res'.format())
+
+
+
         plt.legend(loc='best')
-
-
 
         plt.figure()
         plt.loglog(Ns, error_nodal_vs_analytical, marker='>',
@@ -546,6 +595,10 @@ def test_integration_of_double_well_potential(plot=True):
                    label=r' error_nodal_vs_gauss'.format())
         plt.loglog(Ns, error_gauss_vs_analytical, marker='|',
                    label=r' error_gauss_vs_analytical'.format())
+        plt.loglog(Ns, error_fast_vs_analytical, marker='|',
+                   label=r' error_fast_vs_analytical'.format())
+        plt.loglog(Ns, error_fast_vs_fast2, marker='x',
+                   label=r' error_fast_vs_fast2'.format())
         plt.legend(loc='best')
 
         plt.figure()
