@@ -4,6 +4,8 @@ import matplotlib as mpl
 
 import matplotlib.pyplot as plt
 
+plt.rcParams['text.usetex'] = True
+
 import time
 
 from muFFTTO import domain
@@ -16,7 +18,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (20, 20)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -70,8 +72,8 @@ start_time = time.time()
 
 # macro_gradient = np.array([[0.0, 0.01],
 #                            [0.01, 0.0]])
-macro_gradient = np.array([[ .05,  .0],
-                           [ .0,  .0]])
+macro_gradient = np.array([[1.0, -1.0],
+                           [-1.0, 0.0]])
 print('macro_gradient = \n {}'.format(macro_gradient))
 
 # Set up the equilibrium system
@@ -79,7 +81,7 @@ macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
 # create material data of solid phase rho=1
 E_0 = 100
-poison_0 = 0.0
+poison_0 = 0.
 
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
 
@@ -97,18 +99,19 @@ stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradient)
 # create target material data
 print('init_stress = \n {}'.format(stress))
 # validation metamaterials
+poison_target = -0.5
+#E_target = E_0 * 0.2
 
 # poison_target = 0.2
 # G_target_auxet = (3 / 10) * E_0  # (7 / 20) * E_0
-# G_target_auxet = (7 / 20) * E_0
-# E_target = 2 * G_target_auxet * (1 + poison_target)
+G_target_auxet = (0.2) * E_0
+E_target = 2 * G_target_auxet * (1 + poison_target)
 # Auxetic metamaterials
 # poison_target= 1/3  # lambda = -10
 # G_target_auxet = (1 / 4) * E_0  #23   25
 # E_target=2*G_target_auxet*(1+poison_target)
 # test materials
-poison_target = -0.0
-E_target = E_0 * 0.2
+
 
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
@@ -127,8 +130,8 @@ print('target_stress = \n {}'.format(target_stress))
 # eta = 0.0555 #0.02125#08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
 # Auxetic metamaterials
 p = 2
-w = 1e1  # +* E_0  # 1 / 10  # 1e-4 Young modulus of solid
-eta = 0.02
+w = 1e2# +* E_0  # 1 / 10  # 1e-4 Young modulus of solid
+eta = 0.03
 print('p =   {}'.format(p))
 print('w  =  {}'.format(w))
 print('eta =  {}'.format(eta))
@@ -144,8 +147,8 @@ def my_objective_function(phase_field_1nxyz):
 
     # material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz,                                                                                         p)
     phase_field_at_quad_poits_1qnxyz = discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
-                                                                                 quad_field_fqnxyz=None,
-                                                                                 quad_points_coords_dq=None)[0]
+                                                                                    quad_field_fqnxyz=None,
+                                                                                    quad_points_coords_dq=None)[0]
 
     # material_data_field_C_0_rho_ijklqxyz_test = material_data_field_C_0[..., :, :] * np.power(
     #     phase_field_at_quad_poits_1qnxyz,
@@ -197,8 +200,8 @@ def my_sensitivity(phase_field_1nxyz):
     # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz, p)
 
     phase_field_at_quad_poits_1qnxyz = discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
-                                                                                 quad_field_fqnxyz=None,
-                                                                                 quad_points_coords_dq=None)[0]
+                                                                                    quad_field_fqnxyz=None,
+                                                                                    quad_points_coords_dq=None)[0]
 
     material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
         phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -244,8 +247,8 @@ def my_sensitivity(phase_field_1nxyz):
 
 if __name__ == '__main__':
     # material distribution
-    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape)**1
-    #phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
+    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 1
+    # phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
 
     # phase_field_0[0, 0,
     # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4,
@@ -256,16 +259,26 @@ if __name__ == '__main__':
 
     print('Init objective function = {}'.format(my_objective_function(phase_field_00)))
     start_time = time.time()
+    bounds = True
+    if bounds:
+        phase_bounds = sp.optimize.Bounds(lb=0, ub=1, keep_feasible=True)
+        xopt = sp.optimize.minimize(fun=my_objective_function,
+                                    x0=phase_field_0,
+                                    method='l-bfgs-b',
+                                    jac=my_sensitivity,
+                                    bounds=phase_bounds,
+                                    options={'gtol': 1e-6,
+                                             'disp': True,
+                                             'maxiter': 3000})
+    else:
+        xopt = sp.optimize.minimize(fun=my_objective_function,
+                                    x0=phase_field_0,
+                                    method='l-bfgs-b',
+                                    jac=my_sensitivity,
+                                    options={'gtol': 1e-6,
+                                             'disp': True,
+                                             'maxiter': 3000})
 
-    bounds = sp.optimize.Bounds(lb=0, ub=1, keep_feasible=True)
-    xopt = sp.optimize.minimize(fun=my_objective_function,
-                                x0=phase_field_0,
-                                method='l-bfgs-b',
-                                jac=my_sensitivity,
-                                bounds=bounds,
-                                options={'gtol': 1e-6,
-                                         'disp': True,
-                                         'maxiter': 2000})
     end_time = time.time()
     elapsed_time = end_time - start_time
     print("Optimization time: ", elapsed_time)
@@ -288,17 +301,6 @@ if __name__ == '__main__':
     of = my_objective_function(phase_field_sol)
     # plotting the solution
     nodal_coordinates = discretization.get_nodal_points_coordinates()
-
-    plt.figure()
-    plt.contourf(nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-                 phase_field_sol[0, 0], cmap=mpl.cm.Greys)
-    # plt.colorbar()
-
-    # plt.figure()
-    # plt.contourf(nodal_coordinates[0, 0], nodal_coordinates[1, 0], phase_field_00[0, 0])
-
-    plt.clim(0, 1)
-    plt.colorbar()
 
     plt.figure()
     plt.contourf(nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
@@ -372,6 +374,26 @@ if __name__ == '__main__':
     end_time = time.time()
     elapsed_time = end_time - start_time
     print("Elapsed time: ", elapsed_time)
+
+    plt.figure()
+    plt.contourf(nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+                 phase_field_sol[0, 0], cmap=mpl.cm.Greys)
+
+    plt.clim(0, 1)
+    plt.colorbar()
+    src = './figures/'  # source folder\
+    fig_data_name = f'muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_w{w}_eta{eta}_p{p}_bounds={bounds}'
+    plt.title(r" Target stress $[{} , {}],[ {}, {}] $" "\n"
+              r" Stress  $[{} ,{},][ {}, {} ]$" "\n"
+              r" nb_iter={}".format(target_stress[0, 0], target_stress[0, 1],
+                                    target_stress[1, 0], target_stress[1, 1],
+                                    homogenized_stress[0, 0], homogenized_stress[0, 1],
+                                    homogenized_stress[1, 0], homogenized_stress[1, 1],
+                                    xopt.nit), wrap=True)
+    fname = src + fig_data_name + '{}'.format('.png')
+    print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+    plt.savefig(fname, bbox_inches='tight')
+    print('END plot ')
 
     print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_target)))
 
