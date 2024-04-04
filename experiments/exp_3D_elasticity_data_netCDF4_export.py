@@ -36,6 +36,9 @@ macro_gradient = np.array([[0.1, .2, 0],
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1,
                                              poison=0.2)
 
+
+
+
 elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,

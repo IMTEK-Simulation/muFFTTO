@@ -1134,13 +1134,13 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     ([2, 5], 0, [12, 7]),
     ([3, 4], 1, [6, 8]),
     ([2, 5], 1, [12, 7])])
-def test_finite_difference_check_of_adjoint_potential_wrt_phase_field(discretization_fixture):
-    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, ]
+def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_pixel(discretization_fixture):
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6 ]
     # epsilons = [1e-4]
-    p = 4
+    p = 1
     fd_derivative = discretization_fixture.get_scalar_sized_field()
 
-    macro_gradient = np.array([[0.01, 0], [0, 0.01]])
+    macro_gradient = np.array([[0.1, 0], [0, 0.1]])
 
     # create material data field
     K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -1225,8 +1225,156 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field(discretiza
         # (error_fd_vs_analytical)
 
         error_fd_vs_analytical.append(fd_norm)
+        print('error_fd_vs_analytical: {}'.format(error_fd_vs_analytical))
+        assert error_fd_vs_analytical[-1] < epsilon * 1e0, (
+            "Finite difference derivative  do not corresponds to the analytical expression "
+            "for partial derivative of adjoint potential  w.r.t. displacement "
+            "for epsilon = {} and p = {}".format(epsilon, p))
 
-        assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
+@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
+    ([3, 4], 0, [6, 8]),
+    ([2, 5], 0, [12, 7])])
+def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture):
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, ]
+    # epsilonminuss = [1e-4]
+    p = 3
+    fd_derivative = discretization_fixture.get_scalar_sized_field()
+
+    macro_gradient = np.array([[0.01, 0], [0, 0.01]])
+
+    # create material data field
+    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+
+    material_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+                                                      K=K_0,
+                                                      mu=G_0,
+                                                      kind='linear')
+
+    material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', material_C_0,
+                                        np.ones(np.array([discretization_fixture.nb_quad_points_per_pixel,
+                                                          *discretization_fixture.nb_of_pixels])))
+
+    phase_field = np.random.rand(
+        *discretization_fixture.get_scalar_sized_field().shape)  # * 0 + 1  # set random distribution
+    # apply material distribution
+    phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=None)[0]
+
+    material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * (
+        np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
+
+    # Set up the equilibrium system
+    macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient)
+
+    # create random displacement field
+    displacement_field = np.random.rand(*discretization_fixture.get_scalar_sized_field().shape)
+
+    # ----------------------------------------------------------------------
+    # compute stress field corresponding to displacement
+    stress_field = discretization_fixture.get_stress_field(material_data_field_C_0_rho,
+                                                           displacement_field,
+                                                           macro_gradient_field)
+
+    # create random adjoint field
+    adjoint_field = np.random.rand(
+        *discretization_fixture.get_displacement_sized_field().shape)  # set random adjoint field
+
+    # compute adjoint_potential
+    adjoint_potential = topology_optimization.adjoint_potential(discretization_fixture,
+                                                                stress_field,
+                                                                adjoint_field)
+
+    dg_drho_analytical = topology_optimization.partial_derivative_of_adjoint_potential_wrt_phase_field(
+        discretization=discretization_fixture,
+        material_data_field_ijklqxyz=material_data_field_C_0,
+        displacement_field_fnxyz=displacement_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field,
+        phase_field_1nxyz=phase_field,
+        adjoint_field_fnxyz=adjoint_field,
+        p=p)
+    dg_drho_analytical_FE = topology_optimization.partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
+        discretization=discretization_fixture,
+        material_data_field_ijklqxyz=material_data_field_C_0,
+        displacement_field_fnxyz=displacement_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field,
+        phase_field_1nxyz=phase_field,
+        adjoint_field_fnxyz=adjoint_field,
+        p=p)
+
+    error_fd_vs_analytical = []
+    error_fd_vs_analytical_FE =[]
+    for epsilon in epsilons:
+        # loop over every single element of displacement field
+        for x in np.arange(discretization_fixture.nb_of_pixels[0]):
+            for y in np.arange(discretization_fixture.nb_of_pixels[1]):
+                phase_field_perturbed = np.copy(phase_field)
+                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] + epsilon / 2
+
+                # compute stress field corresponding to equilibrated displacement
+
+                # apply material distribution
+                phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
+                    nodal_field_fnxyz=phase_field_perturbed,
+                    quad_field_fqnxyz=None,
+                    quad_points_coords_dq=None)[0]
+
+                material_data_field_C_0_per = material_data_field_C_0[..., :, :, :] * (
+                    np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
+
+                #
+                stress_field = discretization_fixture.get_stress_field(
+                    material_data_field_ijklqxyz=material_data_field_C_0_per,
+                    displacement_field_fnxyz=displacement_field,
+                    macro_gradient_field_ijqxyz=macro_gradient_field,
+                    formulation='small_strain')
+
+                adjoint_potential_perturbed_plus = topology_optimization.adjoint_potential(
+                    discretization=discretization_fixture,
+                    stress_field_ijqxyz=stress_field,
+                    adjoint_field_fnxyz=adjoint_field)
+
+                # - epsilon 2
+                phase_field_perturbed[0, 0, x, y] = phase_field_perturbed[0, 0, x, y] - epsilon
+
+                # apply material distribution
+                phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
+                    nodal_field_fnxyz=phase_field_perturbed,
+                    quad_field_fqnxyz=None,
+                    quad_points_coords_dq=None)[0]
+
+                material_data_field_C_0_per = material_data_field_C_0[..., :, :, :] * (
+                    np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
+
+                stress_field = discretization_fixture.get_stress_field(
+                    material_data_field_ijklqxyz=material_data_field_C_0_per,
+                    displacement_field_fnxyz=displacement_field,
+                    macro_gradient_field_ijqxyz=macro_gradient_field,
+                    formulation='small_strain')
+
+                adjoint_potential_perturbed_minus = topology_optimization.adjoint_potential(
+                    discretization=discretization_fixture,
+                    stress_field_ijqxyz=stress_field,
+                    adjoint_field_fnxyz=adjoint_field)
+
+                fd_derivative[0, 0, x, y] = (adjoint_potential_perturbed_plus
+                                             -
+                                             adjoint_potential_perturbed_minus) / epsilon
+
+        fd_norm = np.sum(np.linalg.norm((fd_derivative[0, 0] - dg_drho_analytical), 'fro'))
+        fd_norm_FE = np.sum(np.linalg.norm((fd_derivative[0, 0] - dg_drho_analytical_FE[0, 0]), 'fro'))
+
+        # print('finite difference norm {0}{1} = {2}'.format(f, n, np.linalg.norm(fd_derivative[f, n], 'fro')))
+        # print('analytical derivative {0}{1} = {2}'.format(f, n, np.linalg.norm(dg_du_analytical[f, n], 'fro')))
+        # (error_fd_vs_analytical)
+
+        error_fd_vs_analytical.append(fd_norm)
+        error_fd_vs_analytical_FE.append(fd_norm_FE)
+        print('fd_norm: ', fd_norm)
+        print('error_fd_vs_analytical_FE: ', error_fd_vs_analytical_FE)
+
+        assert error_fd_vs_analytical_FE[-1] < epsilon * 1e2, (
             "Finite difference derivative  do not corresponds to the analytical expression "
             "for partial derivative of adjoint potential  w.r.t. displacement "
             "for epsilon = {} and p = {}".format(epsilon, p))
