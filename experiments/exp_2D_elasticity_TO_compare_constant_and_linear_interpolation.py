@@ -142,7 +142,7 @@ print('target_stress = \n {}'.format(target_stress))
 # #eta = 0.00915#1430#145#357#3#33#5#25#4#7#250
 # eta = 0.0555 #0.02125#08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
 # Auxetic metamaterials
-p = 10
+p = 1.1
 w = 1  # e0# +* E_0  # 1 / 10  # 1e-4 Young modulus of solid
 eta = 1
 
@@ -319,6 +319,8 @@ def my_sensitivity_FE(phase_field_1nxyz):
 
     displacement_field, norms = solvers.PCG(Afun=K_fun, B=rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
+    # apply rho distribution to displacement
+    displacement_field_rho = displacement_field * phase_field_1nxyz
     # compute homogenized stress field corresponding t
     homogenized_stress = discretization.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,

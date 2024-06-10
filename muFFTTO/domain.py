@@ -458,7 +458,7 @@ class Discretization:
         if not self.cell.problem_type == 'conductivity':
             warnings.warn(
                 'Cell problem type is {}. But temperature material data  sized field  is returned !!!'.format(
-                    self.cell.problem_type))
+                self.cell.problem_type))
 
         return np.zeros(
             [self.domain_dimension, self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])

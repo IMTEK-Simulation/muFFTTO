@@ -1,8 +1,10 @@
 import numpy as np
 import time
+import muFFT
 
 from muFFTTO import domain
 from muFFTTO import solvers
+from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -31,18 +33,21 @@ elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
+eigs = np.linalg.eig(domain.compute_Voigt_notation_4order(elastic_C_1))
 
 material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                       *discretization.nb_of_pixels])))
 
 print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
-
+contrast=1e2
 # material distribution
 
-phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
+phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)**0  # set random distribution
 
-# apply material distribution
+phase_field[0, 0,phase_field.shape[2] * 1 // 4:phase_field.shape[2] * 3 // 4,
+phase_field.shape[2] * 1 // 4:phase_field.shape[2] * 3 // 4] = contrast
+ # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0],
                                                                             1)
 # Set up right hand side
@@ -56,12 +61,16 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho
 # M_fun = lambda x: 1 * x
 
 preconditioner = discretization.get_preconditioner(
-    reference_material_data_field_ijklqxyz=material_data_field_C_0)
+    reference_material_data_field_ijklqxyz=material_data_field_C_0*contrast)
 
 M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
                                                       nodal_field_fnxyz=x)
 
 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
+print(norms['residual_rr'].__len__())
+print(norms['residual_rz'].__len__())
+print('contrast {} = '.format(contrast))
+
 
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement

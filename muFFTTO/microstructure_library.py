@@ -35,6 +35,12 @@ def get_geometry(nb_voxels,
         case 'random_distribution':
 
             phase_field = np.random.rand(*nb_voxels)
+        case 'geometry_I_1_3D':
+            check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
+            check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=19)
+            #  Cube Frame
+            phase_field = HSCC(*nb_voxels)
         # --- Category I : Material in faces
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
