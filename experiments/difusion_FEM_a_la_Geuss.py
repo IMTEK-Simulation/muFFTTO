@@ -1,10 +1,10 @@
 import numpy as np
 import scipy.sparse.linalg as sp
-import itertools
 
 
 def solve_sparse(A, b, M=None):
     num_iters = 0
+
     def callback(xk):
         nonlocal num_iters
         num_iters += 1
@@ -18,7 +18,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 128  # number of voxels (assumed equal for all directions)
+N_x = N_y = 32  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1, 1  # pixel size / grid spacing
@@ -129,7 +129,6 @@ M_diag_fij = get_gradient_transposed(dot21_fem(A=ref_mat_data_ij, v=get_gradient
 M_diag_fourier_fij = fft_fem(x=M_diag_fij)
 M_diag_fourier_fij[M_diag_fourier_fij != 0] = 1 / M_diag_fourier_fij[M_diag_fourier_fij != 0]
 M_fun_fem = lambda x: ifft_fem(M_diag_fourier_fij * fft_fem(x=x.reshape(temp_shape))).reshape(-1)
-
 
 # Solver
 u_sol_fem, status, num_iters = solve_sparse(
