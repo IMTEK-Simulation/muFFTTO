@@ -9,8 +9,8 @@ discretization_type = 'finite_element'
 element_type = 'linear_triangles'
 formulation = 'small_strain'
 
-domain_size = [4, 3]
-number_of_pixels = (24, 24)
+domain_size = [1, 1]
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -25,7 +25,7 @@ start_time = time.time()
 macro_gradient = np.array([[1.0, 0], [0, 0.0]])
 
 # create material data field
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+K_0, G_0 = 1, 0.5 #domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
 
 elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
@@ -42,9 +42,21 @@ print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elas
 
 phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
 
+phase = 1 * np.ones(number_of_pixels)
+inc_contrast = 0.
+# phase[10:30, 10:30] = phase[10:30, 10:30] * inc_contrast
+# Square inclusion with: Obsonov solution
+phase[phase.shape[0] * 1 // 4:phase.shape[0] * 3 // 4,
+phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
+
+phase_fem = np.zeros([2, *number_of_pixels])
+phase_fem[:] = phase
+
 # apply material distribution
-material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0],
-                                                                            1)
+#material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
+material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
+material_data_field_C_0_rho +=10*material_data_field_C_0[..., :, :] * (1-phase_fem)
+
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
