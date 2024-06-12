@@ -22,6 +22,7 @@ N_x = N_y = 32  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1, 1  # pixel size / grid spacing
+pixel_size = (delta_x, delta_y)
 domain_vol = (delta_x * N_x) * (delta_y * N_y)  # domain volume
 
 # auxiliary values
@@ -33,6 +34,13 @@ vec_shape = (ndim,) + N  # shape of the vector for storing DOFs
 
 temp_shape = (1,) + N  # shape of the vector for storing DOFs, (number of degrees-of-freedom)
 grad_shape = (1, ndim, nb_quad_points_per_pixel) + N  # shape of the gradient vector, DOFs
+
+# OPERATORS #
+dot21 = lambda A, v: np.einsum('ij...,fj...  ->fi...', A, v)  # dot product between data and gradient
+
+# (inverse) Fourier transform (for each tensor component in each direction)
+fft = lambda x: np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(x), [*N]))
+ifft = lambda x: np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(x), [*N]))
 
 ##############################################################
 # Shape function gradients
@@ -86,46 +94,40 @@ def get_gradient_transposed(flux_ijqxyz, div_flux_ixy=None):
 
 
 # PROBLEM DEFINITION ######################################################
+# Material distribution: Square inclusion with: Obnosov solution
+phase = np.ones([nb_quad_points_per_pixel, N_x, N_y])
+phase[:, phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4,
+phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= 0
+
+# material data --- thermal_conductivity
 mat_contrast = 1.
-phase = mat_contrast * np.ones(N)
 inc_contrast = 10.
-# phase[10:30, 10:30] = phase[10:30, 10:30] * inc_contrast
-# Square inclusion with: Obsonov solution
-phase[phase.shape[0] * 1 // 4:phase.shape[0] * 3 // 4,
-phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
 
-phase_fem = np.zeros([nb_quad_points_per_pixel, N_x, N_y])
-phase_fem[:] = phase
+A2_0 = mat_contrast * np.eye(ndim)
+A2_1 = inc_contrast * np.eye(ndim)
 
-J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
-print('Analytical effective properties A11 = {}'.format(J_eff))
+# Material data matrix --- conductivity matrix A_ij per quad point           [grid of tensors]
+mat_data_ijqxy = np.einsum('ij,qxy', A2_0, phase)
+mat_data_ijqxy += np.einsum('ij,qxy', A2_1, 1 - phase)
 
-# Material data matrix --- conductivity matrix A_ij per quad point
-mat_data_ijqxy = np.einsum('ij,qxy', np.eye(ndim), phase_fem)
+# apply quadrature weights
 mat_data_weighted_ijqxy = np.einsum('ijq...,q->ijq...', mat_data_ijqxy, quadrature_weights)
 
+# Macroscopic gradient ---  loading
 macro_grad = np.array([1, 0])
-E_fem_dqxy = np.einsum('j,qxy', macro_grad,
-                       np.ones([nb_quad_points_per_pixel, N_x, N_y]))  # set macroscopic gradient loading
-E_fem_fdqxy = E_fem_dqxy[np.newaxis, ...]  # f for elasticity
-
-# OPERATORS #
-dot21 = lambda A, v: np.einsum('ij...,fj...  ->fi...', A, v)  # dot product between data and gradient
-ref_mat_data_ij = np.array([[1, 0], [0, 1]])
-
-# (inverse) Fourier transform (for each tensor component in each direction)
-fft_fem = lambda x: np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(x), [N_x, N_y]))
-ifft_fem = lambda x: np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(x), [N_x, N_y]))
+E_jqxy = np.einsum('j,qxy', macro_grad,
+                   np.ones([nb_quad_points_per_pixel, N_x, N_y]))  # set macroscopic gradient loading
+E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
 
 # System matrix function
-K_fun = lambda x: get_gradient_transposed(
+K_fun_I = lambda x: get_gradient_transposed(
     dot21(mat_data_weighted_ijqxy,
-              get_gradient(u_ixy=x.reshape(temp_shape)))).reshape(-1)
+          get_gradient(u_ixy=x.reshape(temp_shape)))).reshape(-1)
 # right hand side vector
-b_fem = -get_gradient_transposed(dot21(mat_data_weighted_ijqxy, E_fem_fdqxy)).reshape(-1)  # right-hand side
+b_I = -get_gradient_transposed(dot21(mat_data_weighted_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
 
 # Preconditioner IN FOURIER SPACE #############################################
-
+ref_mat_data_ij = np.array([[1, 0], [0, 1]])
 M_diag_ixy = np.zeros([n_u_dofs, n_u_dofs, N_x, N_y])
 for d in range(n_u_dofs):
     unit_impuls_ixy = np.zeros(temp_shape)
@@ -134,36 +136,39 @@ for d in range(n_u_dofs):
     M_diag_ixy[:, d, ...] = get_gradient_transposed(dot21(A=ref_mat_data_ij, v=get_gradient(u_ixy=unit_impuls_ixy)))
 
 # Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
-M_diag_ixy = np.real(fft_fem(x=M_diag_ixy))  # imaginary part is zero
+M_diag_ixy = np.real(fft(x=M_diag_ixy))  # imaginary part is zero
 # Compute the inverse of preconditioner
 M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
+# Preconditioner function
+M_fun_I = lambda x: ifft(M_diag_ixy * fft(x=x.reshape(temp_shape))).reshape(-1)
 
-M_fun = lambda x: ifft_fem(M_diag_ixy * fft_fem(x=x.reshape(temp_shape))).reshape(-1)
-
-# Solver
-u_sol_fem, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun, dtype='float'),
-    b=b_fem,
-    M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun, dtype='float'))
+###### Solver ######
+u_sol_vec, status, num_iters = solve_sparse(
+    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+    b=b_I,
+    M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
 
 print('Number of steps = {}'.format(num_iters))
 
-du_sol_fem = get_gradient(u_ixy=u_sol_fem.reshape(temp_shape))
-
-aux_fem = du_sol_fem + E_fem_fdqxy
+du_sol_ijqxy = get_gradient(u_ixy=u_sol_vec.reshape(temp_shape))
+aux_ijqxy = du_sol_ijqxy + E_ijqxy
 print('homogenised properties preconditioned A11 = {}'.format(
-    np.inner(dot21(mat_data_weighted_ijqxy, aux_fem).reshape(-1), aux_fem.reshape(-1)) / (domain_vol)))
-print('END')
+    np.inner(dot21(mat_data_weighted_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
+print('END PCG')
 
 # Reference solution without preconditioner
-u_sol_fem_plain, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun, dtype='float'),
-    b=b_fem, M=None)
+u_sol_plain_I, status, num_iters = solve_sparse(
+    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+    b=b_I,
+    M=None)
 print('Number of steps = {}'.format(num_iters))
 
-du_sol_fem_plain = get_gradient(u_ixy=u_sol_fem_plain.reshape(temp_shape))
+du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(temp_shape))
 
-aux_fem_plain = du_sol_fem_plain + E_fem_fdqxy
+aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
 print('homogenised properties plain A11 = {}'.format(
-    np.inner(dot21(mat_data_weighted_ijqxy, aux_fem_plain).reshape(-1), aux_fem_plain.reshape(-1)) / (domain_vol)))
-print('END')
+    np.inner(dot21(mat_data_weighted_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END CG')
+
+J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
+print('Analytical effective properties A11 = {}'.format(J_eff))
