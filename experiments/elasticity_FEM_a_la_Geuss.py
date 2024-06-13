@@ -35,8 +35,8 @@ grad_shape = (ndim, ndim, nb_quad_points_per_pixel) + N  # shape of the gradient
 dot21 = lambda A, v: np.einsum('ij...,j...  ->i...', A, v)
 ddot42 = lambda A, B: np.einsum('ijkl...,lk... ->ij...  ', A, B)  # dot product between data and gradient
 # (inverse) Fourier transform (for each tensor component in each direction)
-fft = lambda x: np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(x), [*N]))
-ifft = lambda x: np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(x), [*N]))
+fft = lambda x: np.fft.fftn(x, [*N])
+ifft = lambda x: np.fft.ifftn(x, [*N])
 
 ##############################################################
 # Shape function gradients
@@ -114,7 +114,7 @@ mat_data_ijklqxy = np.einsum('ijkl,qxy', K4_0, phase)
 mat_data_ijklqxy += np.einsum('ijkl,qxy', K4_1, 1 - phase)
 
 # apply quadrature weights
-mat_data_weighted_ijklqxy = np.einsum('ijklq...,q->ijklq...', mat_data_ijklqxy, quadrature_weights)
+mat_data_ijklqxy = np.einsum('ijklq...,q->ijklq...', mat_data_ijklqxy, quadrature_weights)
 
 # Macroscopic gradient ---  loading
 macro_grad_ij = np.array([[1, 0], [0, 0]])  # set macroscopic gradient loading
@@ -123,10 +123,10 @@ E_ijqxy = np.einsum('ij,qxy', macro_grad_ij,
 
 # System matrix function
 K_fun_I = lambda x: get_gradient_transposed(
-    ddot42(mat_data_weighted_ijklqxy,
+    ddot42(mat_data_ijklqxy,
            get_gradient(u_ixy=x.reshape(displacement_shape)))).reshape(-1)
 # right hand side vector
-b_I = -get_gradient_transposed(ddot42(A=mat_data_weighted_ijklqxy, B=E_ijqxy)).reshape(-1)  # right-hand side
+b_I = -get_gradient_transposed(ddot42(A=mat_data_ijklqxy, B=E_ijqxy)).reshape(-1)  # right-hand side
 
 # Preconditioner IN FOURIER SPACE #############################################
 ref_mat_data_ijkl = I4s
@@ -162,7 +162,7 @@ print('Number of steps = {}'.format(num_iters))
 du_sol_ijqxy = get_gradient(u_ixy=u_sol_I.reshape(displacement_shape))
 aux_ijqxy = du_sol_ijqxy + macro_grad_ij[:, :, np.newaxis, np.newaxis, np.newaxis]
 print('Homogenised properties PCG C_11 = {}'.format(
-    np.inner(ddot42(mat_data_weighted_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
+    np.inner(ddot42(mat_data_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
 print('END PCG')
 
 # Reference solution without preconditioner
@@ -176,5 +176,5 @@ du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(displacement_shape
 
 aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
 print('Homogenised properties CG C_11 = {}'.format(
-    np.inner(ddot42(mat_data_weighted_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+    np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
 print('END CG')
