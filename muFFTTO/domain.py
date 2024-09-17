@@ -513,10 +513,10 @@ class Discretization:
             Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
         quad_points_weights = quad_points_weights * Jacobian_det
         # Evaluate field on the quadrature points
-        quad_field_fqnxyz = self.evaluate_field_at_quad_points(
+        quad_field_fqnxyz  = self.evaluate_field_at_quad_points(
             nodal_field_fnxyz=field_fnxyz,
             quad_field_fqnxyz=None,
-            quad_points_coords_dq=quad_points_coord)
+            quad_points_coords_dq=quad_points_coord)[0]
         # Multiply with quadrature weights
         quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
         return np.sum(quad_field_fqnxyz)

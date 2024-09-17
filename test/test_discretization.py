@@ -983,7 +983,7 @@ class DiscretizationTestCase(unittest.TestCase):
                                 ' data: 2D element {} in {} problem.'.format(
                                     element_type, problem_type))
 
-    def test_plot_2D_mesh(self, plot=False):
+    def test_plot_2D_mesh(self, plot=True):
         # this is a visual test of nodal_coordinates and  quad_coordinates
 
         domain_size = [3, 4]
@@ -1054,7 +1054,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 for q in range(0, discretization.nb_quad_points_per_pixel):
                     ax.scatter(quad_coordinates[0, q], quad_coordinates[1, q], quad_coordinates[2, q], marker='x')
 
-            plt.show()
+                plt.show()
 
     def test_elavuate_at_quad_points_2D_mesh(self, plot=False):
         # this  test interpolates field based on basis functions
