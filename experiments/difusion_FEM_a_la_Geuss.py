@@ -18,7 +18,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 128  # number of voxels (assumed equal for all directions)
+N_x = N_y = 2048  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1, 1  # pixel size / grid spacing
@@ -100,7 +100,7 @@ phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= 0
 
 # material data --- thermal_conductivity
 mat_contrast = 1.
-inc_contrast = 2.
+inc_contrast =10
 
 A2_0 = mat_contrast * np.eye(ndim)
 A2_1 = inc_contrast * np.eye(ndim)
@@ -148,7 +148,6 @@ M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
 dot11 = lambda A, v: np.einsum('i...,i...  ->i...', A, v)  # dot product between precon and
 M_fun_I = lambda x: (ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape)))).reshape(-1))
 
-
 ###### Solver ######
 u_sol_vec, status, num_iters = solve_sparse(
     A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
@@ -159,8 +158,8 @@ print('Number of steps = {}'.format(num_iters))
 
 du_sol_ijqxy = get_gradient(u_ixy=u_sol_vec.reshape(temp_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
-print('homogenised properties preconditioned A11 = {}'.format(
-    np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
+A_eff = np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol
+print('homogenised properties preconditioned A11 = {}'.format(A_eff))
 print('END PCG')
 
 # Reference solution without preconditioner
@@ -179,3 +178,4 @@ print('END PCG')
 
 J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
 print('Analytical effective properties A11 = {}'.format(J_eff))
+print('Error A11 = {}, contrast = {}, N = {}'.format(A_eff - J_eff , inc_contrast/mat_contrast, N_x))

@@ -183,10 +183,12 @@ II = np.einsum('ij,kl ', i, i)
 
 #                                                                       [local tensors]
 K_0, K_1 = 1., 100.  # bulk  modulus
-mu_0, mu_1 = 0.5, 5.  # shear modulus
+mu_0, mu_1 = 55.5, 0.1  # shear modulus
+
 # stiffness tensor
 K4_0 = K_0 * II + 2. * mu_0 * (I4s - 1. / 3. * II)
 K4_1 = K_1 * II + 2. * mu_1 * (I4s - 1. / 3. * II)
+
 
 # Material data matrix --- stiffness tensor K_ij per quad point q          [grid of tensors]
 mat_data_ijklqxy = np.einsum('ijkl,qxy...->ijklqxy...', K4_0, phase)
@@ -246,15 +248,15 @@ print('Homogenised properties PCG C_11 = {}'.format(
 print('END PCG')
 
 # Reference solution without preconditioner
-u_sol_plain_I, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
-    b=b_I,
-    M=None)
-print('Number of steps = {}'.format(num_iters))
-
-du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(displacement_shape))
-
-aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
-print('Homogenised properties CG C_11 = {}'.format(
-    np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
-print('END CG')
+# u_sol_plain_I, status, num_iters = solve_sparse(
+#     A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+#     b=b_I,
+#     M=None)
+# print('Number of steps = {}'.format(num_iters))
+#
+# du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(displacement_shape))
+#
+# aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
+# print('Homogenised properties CG C_11 = {}'.format(
+#     np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+# print('END CG')
