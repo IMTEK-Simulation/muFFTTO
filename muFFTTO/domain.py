@@ -52,8 +52,9 @@ class Discretization:
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size
         # number of pixels/voxels, without periodic nodes
-        self.nb_of_pixels = np.asarray(number_of_pixels, dtype=np.intp)
 
+        #todo self.fft= FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
+        self.nb_of_pixels = np.asarray(number_of_pixels, dtype=np.intp) # self.fft.nb_subdomain_grid_pts  #todo
         if not discretization_type in ['finite_element']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
