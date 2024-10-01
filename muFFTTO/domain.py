@@ -4,6 +4,11 @@ import numpy as np
 
 from muFFTTO import discretization_library
 
+from mpi4py import MPI
+from muGrid import Communicator
+from muGrid import FileIONetCDF, OpenMode
+from muFFT import FFT
+
 
 # import pyfftw  TODO ask about FFTW or numpy FFT
 
@@ -45,7 +50,7 @@ class Discretization:
     # number of nodal points, etc....
     #
     def __init__(self, cell,
-                 number_of_pixels=None,
+                 nb_of_pixels_global=None,
                  discretization_type='finite_element',
                  element_type='linear_triangles'):
         self.cell = cell
@@ -53,8 +58,11 @@ class Discretization:
         self.domain_size = cell.domain_size
         # number of pixels/voxels, without periodic nodes
 
-        #todo self.fft= FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
-        self.nb_of_pixels = np.asarray(number_of_pixels, dtype=np.intp) # self.fft.nb_subdomain_grid_pts  #todo
+        ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
+        self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=MPI.COMM_WORLD)
+
+        self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
+                                       dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         if not discretization_type in ['finite_element']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
@@ -368,26 +376,67 @@ class Discretization:
                 formulation=formulation)
 
         # construct diagonals from unit impulses responses using FFT
-        preconditioner_diagonals_fnfnxyz = np.fft.fftn(preconditioner_diagonals_fnfnxyz, [*self.nb_of_pixels])
-
+        preconditioner_diagonals_fnfnqks = np.fft.fftn(preconditioner_diagonals_fnfnxyz, [*self.nb_of_pixels])
         # compute inverse of diagonals
         for pixel_index in np.ndindex(unit_impulse_fnxyz.shape[2:]):  # TODO find the woy to avoid loops
             if pixel_index == (
                     0,) * self.domain_dimension:  # avoid  inversion of zeros # TODO find better solution for setting this to 0
                 continue
             # pick local matrix with size [f*n,f*n]
-            local_matrix = np.reshape(preconditioner_diagonals_fnfnxyz[(..., *pixel_index)],
+            local_matrix = np.reshape(preconditioner_diagonals_fnfnqks[(..., *pixel_index)],
                                       (np.prod(unit_impulse_fnxyz.shape[0:2]),
                                        np.prod(unit_impulse_fnxyz.shape[0:2])))
             # compute inversion
             local_matrix = np.linalg.inv(local_matrix)
             # rearrange local inverse matrix into global field
-            preconditioner_diagonals_fnfnxyz[(..., *pixel_index)] = np.reshape(local_matrix, (
+            preconditioner_diagonals_fnfnqks[(..., *pixel_index)] = np.reshape(local_matrix, (
                     unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
 
-        return preconditioner_diagonals_fnfnxyz  # return diagonals of preconditioner in Fourier space
+        return preconditioner_diagonals_fnfnqks  # return diagonals of preconditioner in Fourier space
 
-    def apply_preconditioner(self, preconditioner_Fourier_fnfnxyz, nodal_field_fnxyz):
+    def get_preconditioner_NEW(self, reference_material_data_field_ijklqxyz,
+                               formulation=None):
+        # return diagonals of preconditioned matrix in Fourier space
+        # unit_impulse [f,n,x,y,z]
+        # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
+        # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
+
+        unit_impulse_fnxyz = self.get_unknown_size_field()
+        preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_fnxyz.shape[:2] + unit_impulse_fnxyz.shape)
+
+        # construct unit impulses responses for all type of DOFs
+        for impulse_position in np.ndindex(
+                unit_impulse_fnxyz.shape[0:2]):  # loop over all types of degree of freedom [f,n]
+            unit_impulse_fnxyz.fill(0)  # empty the unit impulse vector
+            unit_impulse_fnxyz[impulse_position + (0,) * (
+                    unit_impulse_fnxyz.ndim - 2)] = 1  # set 1 --- the unit impulse --- to a proper positions
+            preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
+                material_data_field=reference_material_data_field_ijklqxyz,
+                displacement_field=unit_impulse_fnxyz,
+                formulation=formulation)
+
+        # construct diagonals from unit impulses responses using FFT
+        preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+        # THE SIZE OF   DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
+        # compute inverse of diagonals
+        for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
+            if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
+                    0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
+                continue
+            # pick local matrix with size [f*n,f*n]
+
+            local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)],
+                                               (np.prod(unit_impulse_fnxyz.shape[0:2]),
+                                                np.prod(unit_impulse_fnxyz.shape[0:2])))
+            # compute inversion
+            local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
+            # rearrange local inverse matrix into global field
+            preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
+                    unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
+
+        return preconditioner_diagonals_fnfnqks_NEW
+
+    def apply_preconditioner(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
         # apply preconditioner using FFT
         # nodal_field_fnxyz [f,n,x,y,z]
         # preconditioner_Fourier_fnfnxyz [f,n,f,n,x,y,z] # TODO find better indexing notation
@@ -395,9 +444,33 @@ class Discretization:
         # FFTn of the input field
         nodal_field_fnxyz = np.fft.fftn(nodal_field_fnxyz, [*self.nb_of_pixels])
         # multiplication with a diagonals of preconditioner
-        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnxyz, nodal_field_fnxyz)
+        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, nodal_field_fnxyz)
         # iFFTn
         nodal_field_fnxyz = np.real(np.fft.ifftn(nodal_field_fnxyz, [*self.nb_of_pixels]))
+
+        return nodal_field_fnxyz
+
+    def apply_preconditioner_NEW(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
+        # apply preconditioner using FFT
+        # nodal_field_fnxyz [f,n,x,y,z]
+        # preconditioner_Fourier_fnfnxyz [f,n,f,n,x,y,z] # TODO find better indexing notation
+
+        # FFTn of the input field
+        # nodal_field_fnxyz_frq = self.fft.fft(nodal_field_fnxyz)
+        # Compute Fourier transform
+        # ffield_fnqks = self.fft.fourier_space_field('force_field',
+        #                                     self.unknown_size[:-4])  # TODO [this is fixed for one node per pixel !!]
+        # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
+        # FFTn of input array
+        ffield_fnqks = self.fft.fft(nodal_field_fnxyz)
+
+        # multiplication with a diagonals of preconditioner
+        ffield_fnqks = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, ffield_fnqks)
+
+        # normalization
+        ffield_fnqks *= self.fft.normalisation
+        # iFFTn
+        self.fft.ifft(ffield_fnqks, nodal_field_fnxyz)
 
         return nodal_field_fnxyz
 
@@ -459,7 +532,7 @@ class Discretization:
         if not self.cell.problem_type == 'conductivity':
             warnings.warn(
                 'Cell problem type is {}. But temperature material data  sized field  is returned !!!'.format(
-                self.cell.problem_type))
+                    self.cell.problem_type))
 
         return np.zeros(
             [self.domain_dimension, self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
@@ -514,7 +587,7 @@ class Discretization:
             Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
         quad_points_weights = quad_points_weights * Jacobian_det
         # Evaluate field on the quadrature points
-        quad_field_fqnxyz  = self.evaluate_field_at_quad_points(
+        quad_field_fqnxyz = self.evaluate_field_at_quad_points(
             nodal_field_fnxyz=field_fnxyz,
             quad_field_fqnxyz=None,
             quad_points_coords_dq=quad_points_coord)[0]
@@ -666,11 +739,11 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
             quad_points_coord[:, 3] = [0.106170269119576, 0.787659461760847]
             quad_points_coord[:, 4] = [0.295266567779633, 0.409466864440735]
             quad_points_coord[:, 5] = [0.455706020243648, 0.0885879595127039]
-            quad_points_coord[:, 6] = [0.0239311322870805,0.787659461760847]
-            quad_points_coord[:, 7] = [0.0665540678391645,0.409466864440735]
+            quad_points_coord[:, 6] = [0.0239311322870805, 0.787659461760847]
+            quad_points_coord[:, 7] = [0.0665540678391645, 0.409466864440735]
             quad_points_coord[:, 8] = [0.102717654809626, 0.0885879595127039]
 
-            quad_points_coord[:, 9] =  [0.212340538239153, 0.976068867712919]
+            quad_points_coord[:, 9] = [0.212340538239153, 0.976068867712919]
             quad_points_coord[:, 10] = [0.590533135559265, 0.933445932160836]
             quad_points_coord[:, 11] = [0.911412040487296, 0.897282345190374]
             quad_points_coord[:, 12] = [0.212340538239153, 0.893829730880424]
@@ -690,7 +763,7 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
             quad_points_weights[6] = 0.0193963833059595
             quad_points_weights[7] = 0.0636780850998851
             quad_points_weights[8] = 0.0558144204830443
-            quad_points_weights[9] =  0.0193963833059595
+            quad_points_weights[9] = 0.0193963833059595
             quad_points_weights[10] = 0.0636780850998851
             quad_points_weights[11] = 0.0558144204830443
             quad_points_weights[12] = 0.0310342132895352
