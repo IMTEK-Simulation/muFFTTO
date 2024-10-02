@@ -40,3 +40,35 @@ plt.xlabel(r'phase contrast $\rho$')
 plt.ylabel(r'Total error in  homogenized data $A_{11}^{FEM}-A_{11}^{Analytical}$')
 plt.legend(loc='best')
 plt.show()
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# N=512
+rho = np.array([0.00001, 0.0001, 0.001, 0.01, 0.1, 2, 10, 100, 1000, 10000, 100000])
+# x =
+
+
+error_32 = np.array(
+    [0.003366687704723814, 0.0033648041231111314, 0.0033460407590564234, 0.0031654214234443367,
+     0.0018836197000315913, .0003426444017404773, 0.004491708515460546, 0.009250406295694402,
+     0.010011434015880338, 0.010091721333346015, 0.010099793787232914])
+
+
+error_512 = np.array([8.38180125228849e-05, 8.374106730946185e-05, 8.297626632713939e-05, 7.577188452034811e-05,
+                      3.3079980324535185e-05, 2.8367217486113816e-06, 7.888303000469499e-05, 0.0002511562291653835,
+                      0.0002482669743246735, 0.0002214304586469762, 0.00025144733232673744])
+
+
+plt.loglog(rho, error_32, ':', label='N=32 top',marker='|',markersize=15)
+plt.loglog(rho, error_32, ':', label='N=32 bottom',marker='o', markerfacecolor='none')
+plt.loglog(rho, error_512, '--', label='N=512 top',marker='|',markersize=15)
+plt.loglog(rho, error_512, '--', label='N=512 bottom',marker='o', markerfacecolor='none')
+
+plt.xlabel(r'phase contrast $\rho$')
+plt.ylabel(r'Total error in  homogenized data $A_{11}^{FEM}-A_{11}^{Analytical}$')
+plt.legend(loc='best')
+plt.show()

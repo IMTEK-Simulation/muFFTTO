@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from NuMPI import Optimization
+from mpi4py import MPI
 
 
 plt.rcParams['text.usetex'] = True
@@ -21,15 +22,29 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (256,256)
+number_of_pixels = (32,32)
+
+
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 
+if MPI.COMM_WORLD.rank == 0:
+    print('  Rank   Size          Domain       Subdomain        Location')
+    print('  ----   ----          ------       ---------        --------')
+MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+
+
+
 discretization = domain.Discretization(cell=my_cell,
-                                       number_of_pixels=number_of_pixels,
+                                       nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
+print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
+      f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
+
+
+
 
 start_time = time.time()
 

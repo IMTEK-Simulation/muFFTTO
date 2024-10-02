@@ -79,8 +79,7 @@ macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 # Solve mechanical equilibrium constrain
 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
-K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
-                                                     displacement_field=x,
+K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
                                                      formulation='small_strain')
 # M_fun = lambda x: 1 * x
 print('rank' f'{MPI.COMM_WORLD.rank:6}')
@@ -89,35 +88,27 @@ K_old = discretization.get_system_matrix(material_data_field=material_data_field
 #print('rank' f'{MPI.COMM_WORLD.rank:6} K_old=' f'{K_old}')
 print('rank' f'{MPI.COMM_WORLD.rank:6} K_old shape=' f'{K_old.shape}')
 
-preconditioner_NEW = discretization.get_preconditioner_NEW(
-    reference_material_data_field_ijklqxyz=material_data_field_C_0)
+preconditioner = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+
 
 # np.sum(preconditioner[...,0:int(number_of_pixels[0]/2+1),:,:]-preconditioner_NEW)
 
+M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                      nodal_field_fnxyz=x)
 
-M_fun_NEW = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner_NEW,
-                                                              nodal_field_fnxyz=x)
 
-M_fun_NONE = lambda x: 1 * x
-# x_0=np.random.rand(*discretization.get_unknown_size_field().shape)
-# x_00=np.copy(x_0)
-# x_1=M_fun_NEW(np.copy(x_0))
-# x_12=M_fun_NEW(np.copy(x_1))
-#
-# x_2=M_fun_NEW(x_0)
-# x_22=M_fun_NEW(x_2)
+displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 
-displacement_field_NEW, norms_NEW = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_NEW, steps=int(500), toler=1e-6)
-
+# ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=displacement_field_NEW,
+    displacement_field_fnxyz=displacement_field,
     macro_gradient_field_ijqxyz=macro_gradient_field,
     formulation='small_strain')
 
-print("homogenized_stress NEW: ", homogenized_stress)
-print("homogenized_stress NEW: ", domain.compute_Voigt_notation_2order(homogenized_stress))
+print("homogenized_stress old: ", homogenized_stress)
+print("homogenized_stress old: ", domain.compute_Voigt_notation_2order(homogenized_stress))
 
 end_time = time.time()
 elapsed_time = end_time - start_time
