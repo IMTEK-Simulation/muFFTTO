@@ -414,11 +414,13 @@ class Discretization:
                 material_data_field=reference_material_data_field_ijklqxyz,
                 displacement_field=unit_impulse_fnxyz,
                 formulation=formulation)
+        print(preconditioner_diagonals_fnfnxyz)
 
         # construct diagonals from unit impulses responses using FFT
         preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
         # THE SIZE OF   DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
         # compute inverse of diagonals
+        print(pixel_index, local_matrix_ijkl_NEW)
         for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
             if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
                     0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
@@ -428,8 +430,10 @@ class Discretization:
             local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)],
                                                (np.prod(unit_impulse_fnxyz.shape[0:2]),
                                                 np.prod(unit_impulse_fnxyz.shape[0:2])))
+            print(pixel_index, local_matrix_ijkl_NEW)
             # compute inversion
             local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
+
             # rearrange local inverse matrix into global field
             preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
                     unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
@@ -470,7 +474,8 @@ class Discretization:
         # normalization
         ffield_fnqks *= self.fft.normalisation
         # iFFTn
-        self.fft.ifft(ffield_fnqks, nodal_field_fnxyz)
+        nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
+        #self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
 
         return nodal_field_fnxyz
 
