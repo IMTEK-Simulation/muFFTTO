@@ -17,15 +17,15 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
-discretization_type = 'finite_element'
-element_type = 'linear_triangles'
+discretization_type = 'finite_element' # bilinear_rectangle
+element_type = 'bilinear_rectangle' #'linear_triangles'
 
 # element_type = 'trilinear_hexahedron'
 #
 formulation = 'small_strain'
 
-domain_size = [1, 1]  # 4, 5
-number_of_pixels = 2 * (4,)
+domain_size = [1, 2]  # 4, 5
+number_of_pixels = [2,4 ]#2 * (2,)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -43,11 +43,11 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
 discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
-                                       element_type=element_type)
+                                       element_type=element_type,
+                                       communicator=MPI.COMM_WORLD)
 
 print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
       f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
-
 start_time = time.time()
 
 ## set macroscopic gradient
@@ -70,6 +70,8 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
                                                   , microstructure_name='random_distribution')
 phase_field[:, :phase_field.shape[1] // 2] = 1
 phase_field[:, phase_field.shape[1] // 2:] = 2.5
+
+
 # apply material distribution
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field, 1)
 
@@ -78,16 +80,21 @@ macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
 # Solve mechanical equilibrium constrain
 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+print(' Before apply K 'f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
 
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
                                                      displacement_field=x,
                                                      formulation='small_strain')
 # M_fun = lambda x: 1 * x
 print('rank' f'{MPI.COMM_WORLD.rank:6}')
+print(' Before getting K 'f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
 
 K_old = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 #print('rank' f'{MPI.COMM_WORLD.rank:6} K_old=' f'{K_old}')
 print('rank' f'{MPI.COMM_WORLD.rank:6} K_old shape=' f'{K_old.shape}')
+
+
+print(' Before Getting M 'f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
 
 preconditioner_NEW = discretization.get_preconditioner_NEW(
     reference_material_data_field_ijklqxyz=material_data_field_C_0)
@@ -106,8 +113,12 @@ M_fun_NONE = lambda x: 1 * x
 #
 # x_2=M_fun_NEW(x_0)
 # x_22=M_fun_NEW(x_2)
+print(' Before solving problem 'f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
 
 displacement_field_NEW, norms_NEW = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_NEW, steps=int(500), toler=1e-6)
+
+
+print(' After solving problem 'f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
 
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(

@@ -33,15 +33,16 @@ class PeriodicUnitCell:
             self.gradient_shape = np.array([1, self.domain_dimension],
                                            dtype=int)  # temp. gradient is a vector of d components
             self.material_data_shape = np.array([self.domain_dimension, self.domain_dimension],
-                                                dtype=int)  # mat. data matrix a vector of d components
+                                                dtype=int)  # mat. data matrix a  of dxd components
 
         elif problem_type == 'elasticity':
             self.unknown_shape = np.array([self.domain_dimension], dtype=int)
+            # displacement. gradient is a vector of d components
             self.gradient_shape = np.array([self.domain_dimension, self.domain_dimension],
-                                           dtype=int)  # mat. data matrix a vector of d components
+                                           dtype=int)  # gradient  matrix of d x d components
             self.material_data_shape = np.array(
                 [self.domain_dimension, self.domain_dimension, self.domain_dimension, self.domain_dimension],
-                dtype=int)  # mat. data matrix a vector of d components
+                dtype=int)  # mat. data tensor  of dxdxdxd components
 
 
 class Discretization:
@@ -52,11 +53,13 @@ class Discretization:
     def __init__(self, cell,
                  nb_of_pixels_global=None,
                  discretization_type='finite_element',
-                 element_type='linear_triangles'):
+                 element_type='linear_triangles',
+                 communicator=MPI.COMM_WORLD):
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size
         # number of pixels/voxels, without periodic nodes
+        self.nb_of_pixels_global = nb_of_pixels_global
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=MPI.COMM_WORLD)
@@ -68,12 +71,19 @@ class Discretization:
                 'Unrecognised discretization type {}. Choose from ' \
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
         self.discretization_type = discretization_type  # only finite elements for now
+        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        # print('rank' f'{MPI.COMM_WORLD.rank:6}')
+        # print('nb sub points ' f'{self.fft.nb_subdomain_grid_pts}')
 
         # pixel properties
-        self.pixel_size = self.domain_size / self.nb_of_pixels
+        self.pixel_size = self.domain_size / self.nb_of_pixels_global
         # self.nb_elements_per_pixel = None
         self.nb_nodes_per_pixel = None
         self.nodal_points_coordinates = None
+        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        # print('rank' f'{MPI.COMM_WORLD.rank:6}')
+        # print('coords ' f'{self.nodal_points_coordinates}')
+
         self.nb_vertices_per_pixel = 2 ** self.domain_dimension
 
         if discretization_type == 'finite_element':
@@ -83,6 +93,9 @@ class Discretization:
             self.quadrature_weights = None
             self.quad_points_coord = None
             self.get_discretization_info(element_type)
+            # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+            # print('rank' f'{MPI.COMM_WORLD.rank:6}')
+            # print('B matrix ' f'{self.B_grad_at_pixel_dqnijk}')
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
@@ -96,10 +109,8 @@ class Discretization:
 
     def get_nodal_points_coordinates(self):
         # TODO[more then one nodal point] add coords for more than one nodal point
-        nodal_points_coordinates = np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
-        nodal_points_coordinates[:, 0] = np.meshgrid(
-            *[np.arange(0, self.domain_size[d], self.pixel_size[d]) for d in range(0, self.domain_dimension)],
-            indexing='ij')
+        nodal_points_coordinates = self.domain_size[:, np.newaxis, np.newaxis] * self.fft.coords
+        #
         return nodal_points_coordinates
 
     # @property
@@ -115,6 +126,10 @@ class Discretization:
 
         return quad_points_coordinates
 
+    def roll(self,fft, u, shift, axis):
+        phase = -2 * np.pi * sum(s * fft.fftfreq[a] for s, a in zip(shift, axis))
+        return fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation
+
     def apply_gradient_operator(self, u, gradient_of_u=None):
         if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
             #   u_field size :      [f,n,x,y,z]
@@ -124,21 +139,34 @@ class Discretization:
             gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
             gradient_of_u = np.zeros(gradient_of_u_shape)  # create gradient field
 
+        #  MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        #  print('rank' f'{MPI.COMM_WORLD.rank:6}')
+        # print('gradient_of_u_shape ' f'{gradient_of_u_shape}')
+
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
+        gradient_of_u_selfroll = np.copy(gradient_of_u)
+
+        # !/usr/bin/env python3
 
         for pixel_node in np.ndindex(
                 *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
             pixel_node = np.asarray(pixel_node)
             if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless .. working for 3 as well
+                # gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                #                             np.roll(u, -1 * pixel_node, axis=(2, 3)))
+
                 gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                           np.roll(u, -1 * pixel_node, axis=(2, 3)))
+                                           self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1)))
 
             elif self.domain_dimension == 3:
+                # gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                #                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
+
                 gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                           np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
+                                           self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1, 2)))
         # TODO roll[u]= ifft (e^iq dx fft (u))
         return gradient_of_u
 
@@ -174,7 +202,8 @@ class Discretization:
                 div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqxyz)
 
-                div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
+                #div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
+                div_u_fnxyz += self.roll(self.fft,div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1))
 
             elif self.domain_dimension == 3:
 
@@ -182,7 +211,9 @@ class Discretization:
                                                  self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                  gradient_of_u_fdqxyz)
 
-                div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
+                #div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
+                div_u_fnxyz += self.roll(self.fft,div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
+
                 warnings.warn('Gradient transposed is not tested for 3D.')
 
         return div_u_fnxyz

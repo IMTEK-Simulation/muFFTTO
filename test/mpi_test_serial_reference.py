@@ -24,7 +24,7 @@ element_type = 'linear_triangles'
 #
 formulation = 'small_strain'
 
-domain_size = [1, 1]  # 4, 5
+domain_size = [1, 2]  # 4, 5
 number_of_pixels = 2 * (4,)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
