@@ -25,7 +25,7 @@ element_type = 'bilinear_rectangle'  # 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]  # 4, 5
-number_of_pixels = [1024,1024]  # 2 * (2,)
+number_of_pixels = [128,128]  # 2 * (2,)
 start_time =  MPI.Wtime()
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,

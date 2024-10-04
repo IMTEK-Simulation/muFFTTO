@@ -130,7 +130,9 @@ class Discretization:
 
     def roll(self, fft, u, shift, axis):
         phase = -2 * np.pi * sum(s * fft.fftfreq[a] for s, a in zip(shift, axis))
-        return fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation
+        # a= fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation
+        # a=a.reshape(u.shape)
+        return (fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation).reshape(u.shape)
 
     def apply_gradient_operator(self, u, gradient_of_u=None):
         if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
@@ -141,7 +143,7 @@ class Discretization:
             gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
             gradient_of_u = np.zeros(gradient_of_u_shape)  # create gradient field
 
-        MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:gradient_of_u_shape ' f'{gradient_of_u_shape}')
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:displacement_field_shape=' f'{u.shape}')
 
@@ -328,7 +330,7 @@ class Discretization:
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
         # TODO change this to muGRID
         homogenized_stress = Reductor_numpi.sum(stress, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-        print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
         return homogenized_stress / self.cell.domain_volume
 
     def get_stress_field(self,
@@ -447,42 +449,46 @@ class Discretization:
         # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
 
         unit_impulse_fnxyz = self.get_unknown_size_field()
-        #print()
+        # print()
 
-        #print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
+        # print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
 
         preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_fnxyz.shape[:2] + unit_impulse_fnxyz.shape)
-        #print('preconditioner_diagonals_fnfnxyz.shape = {}'.format(preconditioner_diagonals_fnfnxyz.shape))
+        # print('preconditioner_diagonals_fnfnxyz.shape = {}'.format(preconditioner_diagonals_fnfnxyz.shape))
         # construct unit impulses responses for all type of DOFs
         # print('rank' f'{MPI.COMM_WORLD.rank:6} self.fft.ifftfreq[0]=' f'{self.fft.icoords[0]}')
         # print('rank' f'{MPI.COMM_WORLD.rank:6}  self.fft.ifftfreq[1]=' f'{self.fft.icoords[1]}')
 
-       # print(            'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node=' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
+        # print(            'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node=' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
         # check if I have zero frequency on the core
 
         # TODO self.fft.icoords == 0, axis = 0
         # loop over all types of degree of freedom [f,n]
         for impulse_position in np.ndindex(unit_impulse_fnxyz.shape[0:2]):
-            #print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
 
             unit_impulse_fnxyz.fill(0)  # empty the unit impulse vector
             if np.any(np.all(self.fft.icoords == 0, axis=0)):
-                #print(                   'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node =' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
+                # print(                   'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node =' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
                 # set 1 --- the unit impulse --- to a proper positions
                 unit_impulse_fnxyz[impulse_position + (0,) * (unit_impulse_fnxyz.ndim - 2)] = 1
-            #print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW unit_impulse_fnxyz=' f'{unit_impulse_fnxyz}')
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW unit_impulse_fnxyz=' f'{unit_impulse_fnxyz}')
 
             preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
                 material_data_field=reference_material_data_field_ijklqxyz,
                 displacement_field=unit_impulse_fnxyz,
                 formulation=formulation)
 
-        MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
         # print(preconditioner_diagonals_fnfnxyz.reshape([2, 2, *preconditioner_diagonals_fnfnxyz.shape[-2:]]))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
         # construct diagonals from unit impulses responses using FFT
         preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+            preconditioner_diagonals_fnfnqks_NEW = np.expand_dims(preconditioner_diagonals_fnfnqks_NEW,
+                                                                  axis=(0, 1, 2, 3))
+
         # THE SIZE OF   DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
         # compute inverse of diagonals
         # zero_indices = np.all(array == 0, axis=0)
@@ -546,7 +552,9 @@ class Discretization:
         # iFFTn
         nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
         # self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
-
+        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+            nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
+                                                                  axis=(0, 1))
         return nodal_field_fnxyz
 
     def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):

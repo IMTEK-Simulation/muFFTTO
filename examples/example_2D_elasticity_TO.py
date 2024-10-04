@@ -20,7 +20,7 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 
 discretization = domain.Discretization(cell=my_cell,
-                                       number_of_pixels=number_of_pixels,
+                                       nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
 
@@ -129,7 +129,7 @@ def my_objective_function(phase_field_1nxyz):
     #M_fun = lambda x: 1 * x
     preconditioner = discretization.get_preconditioner(
         reference_material_data_field_ijklqxyz=material_data_field_C_0)
-    M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
+    M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnqks=preconditioner,
                                                           nodal_field_fnxyz=x)
     displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-8)
 

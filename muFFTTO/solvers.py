@@ -34,11 +34,11 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
     r_0 = B - Ax
     z_0 = P(r_0)
 
-    scalar_product = lambda a, b: np.sum(a * b)
+    #scalar_product = lambda a, b: np.sum(a * b)
 
     r_0z_0 = scalar_product_mpi(r_0, z_0)
 
-    norms['residual_rr'].append(scalar_product(r_0, r_0))
+    norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
     norms['residual_rz'].append(r_0z_0)
     p_0 = np.copy(z_0)
 
@@ -60,7 +60,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
 
-        if (np.sqrt(r_1z_1)) < toler:  # TODO[Solver] check out stopping criteria
+        if r_1z_1 < toler:  # TODO[Solver] check out stopping criteria
             break
 
         beta = r_1z_1 / r_0z_0

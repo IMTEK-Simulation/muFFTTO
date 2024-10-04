@@ -45,7 +45,14 @@ def get_geometry(nb_voxels,
             phase_field[np.logical_and(coordinates[0] < 0.5, coordinates[1] < 0.5)] = 1
         case 'circle_inclusion':
             phase_field = np.zeros(nb_voxels)
-            phase_field[np.power(coordinates[0], 2)+np.power(coordinates[1], 2) < 0.3] = 1
+            if nb_voxels.size != 2:
+                phase_field[np.power(coordinates[0], 2) + np.power(coordinates[1], 2) < 0.3] = 1
+            elif nb_voxels.size != 3:
+                phase_field[
+                    np.power(coordinates[0], 2) +
+                    np.power(coordinates[1], 2) +
+                    np.power(coordinates[2], 2) < 0.3] = 1
+
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
