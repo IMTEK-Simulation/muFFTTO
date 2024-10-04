@@ -13,7 +13,7 @@ def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  coordinates=None,
                  parameter=None):
-    if not microstructure_name in ['random_distribution', 'square_inclusion',
+    if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -43,6 +43,9 @@ def get_geometry(nb_voxels,
 
             phase_field = np.zeros(nb_voxels)
             phase_field[np.logical_and(coordinates[0] < 0.5, coordinates[1] < 0.5)] = 1
+        case 'circle_inclusion':
+            phase_field = np.zeros(nb_voxels)
+            phase_field[np.power(coordinates[0], 2)+np.power(coordinates[1], 2) < 0.3] = 1
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)

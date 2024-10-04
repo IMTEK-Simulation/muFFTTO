@@ -1,8 +1,11 @@
 import numpy as np
 
+from NuMPI.Tools import Reduction
+from mpi4py import MPI
+
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
-    #print('I am in PCG')
+    # print('I am in PCG')
     """
     Conjugate gradients solver.
 
@@ -33,7 +36,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
 
     scalar_product = lambda a, b: np.sum(a * b)
 
-    r_0z_0 = scalar_product(r_0, z_0)
+    r_0z_0 = scalar_product_mpi(r_0, z_0)
 
     norms['residual_rr'].append(scalar_product(r_0, r_0))
     norms['residual_rz'].append(r_0z_0)
@@ -42,7 +45,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
     for k in np.arange(1, steps):
         Ap_0 = Afun(p_0)
 
-        alpha = float(r_0z_0 / scalar_product(p_0, Ap_0))
+        alpha = float(r_0z_0 / scalar_product_mpi(p_0, Ap_0))
         x_k = x_k + alpha * p_0
 
         # if xCG.val.mean() > 1e-10:
@@ -52,12 +55,12 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
 
         z_0 = P(r_0)
 
-        r_1z_1 = scalar_product(r_0, z_0)
+        r_1z_1 = scalar_product_mpi(r_0, z_0)
 
-        norms['residual_rr'].append(scalar_product(r_0, r_0))
+        norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
 
-        if (np.sqrt(r_1z_1)) < toler: # TODO[Solver] check out stopping criteria
+        if (np.sqrt(r_1z_1)) < toler:  # TODO[Solver] check out stopping criteria
             break
 
         beta = r_1z_1 / r_0z_0
@@ -66,3 +69,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
         r_0z_0 = r_1z_1
 
     return x_k, norms
+
+
+def scalar_product_mpi(a, b):
+    return Reduction(MPI.COMM_WORLD).sum(a * b)
