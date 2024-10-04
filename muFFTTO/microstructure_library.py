@@ -4,13 +4,16 @@ import matplotlib.pyplot as plt
 
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+from ruamel.yaml.compat import Nprint
+
 from muFFTTO import geometries_indre_joedicke
 
 
 def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
+                 coordinates=None,
                  parameter=None):
-    if not microstructure_name in ['random_distribution',
+    if not microstructure_name in ['random_distribution', 'square_inclusion',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -35,6 +38,11 @@ def get_geometry(nb_voxels,
         case 'random_distribution':
 
             phase_field = np.random.rand(*nb_voxels)
+
+        case 'square_inclusion':
+
+            phase_field = np.zeros(nb_voxels)
+            phase_field[np.logical_and(coordinates[0] < 0.5, coordinates[1] < 0.5)] = 1
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
@@ -130,7 +138,6 @@ def get_geometry(nb_voxels,
             # check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=20)
 
             phase_field = Metamaterial_4(*nb_voxels)
-
 
         case 'geometry_III_4_3D':
             # Define a  chiral metamaterial.
@@ -885,23 +892,22 @@ if __name__ == '__main__':
     geometry_ID = 'geometry_III_5_3D'
     N = 60
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
-    #nb_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
+    # nb_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
 
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
 
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
     ax.set_title(geometry_ID)
-    save_plot=True
+    save_plot = True
     if save_plot:
         src = '/home/martin/Programming/muFFTTO/experiments/figures/'  # source folder\
         fig_data_name = f'muFFTTO_{geometry_ID}_N{N}'
 
         fname = src + fig_data_name + '_geometry{}'.format('.pdf')
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
-        plt.savefig(fname, dpi=1000, pad_inches= 0.02, bbox_inches='tight',
+        plt.savefig(fname, dpi=1000, pad_inches=0.02, bbox_inches='tight',
                     facecolor='auto', edgecolor='auto')
         print('END plot ')
 
     plt.show()
-
