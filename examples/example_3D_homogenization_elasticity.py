@@ -56,9 +56,9 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho
                                                      formulation='small_strain')
 M_fun = lambda x: 1 * x
 
-# preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
-# M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,                                                      nodal_field_fnxyz=x)
+M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,                                                      nodal_field_fnxyz=x)
 
 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
 print('Number of CG steps = {}'.format(np.size(norms['residual_rz'])))

@@ -65,7 +65,7 @@ class Discretization:
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=communicator)
-
+        self.mpi_reduction = Reduction(MPI.COMM_WORLD)
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         if not discretization_type in ['finite_element']:
@@ -523,16 +523,16 @@ class Discretization:
 
         # FFTn of the input field
         nodal_field_fnxyz = np.fft.fftn(nodal_field_fnxyz, [*self.nb_of_pixels])
-        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
 
         # multiplication with a diagonals of preconditioner
         nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, nodal_field_fnxyz)
-       # print('rank' f'{MPI.COMM_WORLD.rank:6} einsum:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} einsum:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
 
         # iFFTn
         nodal_field_fnxyz = np.real(np.fft.ifftn(nodal_field_fnxyz, [*self.nb_of_pixels]))
 
-        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
         return nodal_field_fnxyz
 
     def apply_preconditioner_NEW(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
@@ -552,11 +552,11 @@ class Discretization:
             ffield_fnqks = np.expand_dims(ffield_fnqks,
                                           axis=(0, 1))
 
-        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
 
         # multiplication with a diagonals of preconditioner
         ffield_fnqks = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, ffield_fnqks)
-        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:einsum=' f'{ffield_fnqks}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:einsum=' f'{ffield_fnqks}')
 
         # normalization
         ffield_fnqks *= self.fft.normalisation
@@ -566,7 +566,7 @@ class Discretization:
         if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
             nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
                                                axis=(0, 1))
-        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
 
         return nodal_field_fnxyz
 
@@ -597,11 +597,14 @@ class Discretization:
     def integrate_over_cell(self, stress_field):
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        # stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
+        stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
         #
-        # integral = np.einsum('fdqxy...->fd', stress_field)
+        #integral = np.einsum('fdqxy...->fd', stress_field)
+        Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        # TODO change this to muGRID
+        integral = Reductor_numpi.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
 
-        return integrate_field(stress_field, self.quadrature_weights)
+        return integral
 
     def get_unknown_size_field(self):
         # return zero field with the shape of unknown

@@ -7,6 +7,9 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 
+from NuMPI.Tools import Reduction
+from mpi4py import MPI
+
 
 def objective_function_small_strain(discretization,
                                     actual_stress_ij,
@@ -21,6 +24,7 @@ def objective_function_small_strain(discretization,
     # stress difference potential: actual_stress_ij is homogenized stress
     # stress_difference_ij = actual_stress_ij - target_stress_ij
     stress_difference_ij = (actual_stress_ij - target_stress_ij)
+
     f_sigma = np.sum(stress_difference_ij ** 2) / np.sum(target_stress_ij ** 2)
 
     # double - well potential
@@ -32,11 +36,11 @@ def objective_function_small_strain(discretization,
 
     phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
-
+    print()
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
     f_rho = eta * f_rho_grad + f_dw / eta
-
+    print('rank' f'{MPI.COMM_WORLD.rank:6} ' )
     print('f_sigma linear=  {} '.format(f_sigma))
     print('f_rho_grad linear=  {} '.format(f_rho_grad))
     print('f_dw =  linear {} '.format(f_dw))
@@ -233,12 +237,18 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
                                                        + (1 / 12) * (rho3 ** 2 + rho1 ** 2 + rho2 ** 2) \
                                                        + (2 / 24) * (rho3 * rho1 + rho3 * rho2 + rho2 * rho1)
 
-    rho_squared = np.sum(rho_squared_pixel(phase_field_1nxyz[0, 0],
-                                           np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
-                                           np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
-                                           np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
-                                                   axis=(0, 1)))) * Jacobian_det
+    # rho_squared_old = np.sum(rho_squared_pixel(phase_field_1nxyz[0, 0],
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
+    #                                                axis=(0, 1)))) * Jacobian_det
 
+    rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(phase_field_1nxyz[0, 0],
+                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [-1,0], axis=(0,1)), #(2, -1)
+                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [0,-1] , axis=(0,1)),
+                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0],
+                                                                                 -1 * np.array([1, 1]),
+                                                                                 axis=(0, 1)))) * Jacobian_det
     rho_qubed_pixel = lambda rho0, rho1, rho2, rho3: (1 / 20) * (rho0 ** 3 + rho1 ** 3 + rho2 ** 3) \
                                                      + (3 / 60) * (rho0 ** 2 * rho1 + rho0 ** 2 * rho2 \
                                                                    + rho1 ** 2 * rho0 + rho1 ** 2 * rho2 \
@@ -249,11 +259,19 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
                                                                    + rho1 ** 2 * rho3 + rho1 ** 2 * rho2 \
                                                                    + rho2 ** 2 * rho3 + rho2 ** 2 * rho1) \
                                                      + (6 / 120) * (rho3 * rho1 * rho2)
-    rho_qubed = np.sum(rho_qubed_pixel(phase_field_1nxyz[0, 0],
-                                       np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
-                                       np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
+    # rho_qubed_old = np.sum(rho_qubed_pixel(phase_field_1nxyz[0, 0],
+    #                                    np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
+    #                                    np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
+    #                                    np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
+    #                                            axis=(0, 1)))) * Jacobian_det
+
+    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz[0, 0],
+                                       np.roll(phase_field_1nxyz[0, 0], [-1,0] , axis=(0,1)),
+                                       np.roll(phase_field_1nxyz[0, 0], [0,-1] , axis=(0,1)),
                                        np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
                                                axis=(0, 1)))) * Jacobian_det
+
+
 
     rho_quartic_pixel = lambda rho0, rho1, rho2, rho3: (1 / 30) * (rho0 ** 4 + rho1 ** 4 + rho2 ** 4) \
                                                        + (4 / 120) * (rho0 ** 3 * rho1 + rho0 ** 3 * rho2 \
@@ -275,9 +293,15 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
                                                        + (12 / 360) * (rho3 ** 2 * rho1 * rho2 \
                                                                        + rho3 * rho1 ** 2 * rho2 \
                                                                        + rho3 * rho1 * rho2 ** 2)
-    rho_quartic = np.sum(rho_quartic_pixel(phase_field_1nxyz[0, 0],
-                                           np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
-                                           np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
+    # rho_quartic_old = np.sum(rho_quartic_pixel(phase_field_1nxyz[0, 0],
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1, axis=(0)),
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1, axis=(1)),
+    #                                        np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
+    #                                                axis=(0, 1)))) * Jacobian_det
+
+    rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(phase_field_1nxyz[0, 0],
+                                           np.roll(phase_field_1nxyz[0, 0],[-1,0] , axis=(0,1)),
+                                           np.roll(phase_field_1nxyz[0, 0],[0,-1] , axis=(0,1)),
                                            np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
                                                    axis=(0, 1)))) * Jacobian_det
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
@@ -1424,10 +1448,10 @@ def sensitivity_with_adjoint_problem_pixel(discretization,
                                                          displacement_field=x,
                                                          formulation=formulation)
     # M_fun = lambda x: 1 * x
-    preconditioner = discretization.get_preconditioner(
+    preconditioner = discretization.get_preconditioner_NEW(
         reference_material_data_field_ijklqxyz=material_data_field_ijklqxyz)
-    M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
-                                                          nodal_field_fnxyz=x)
+    M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                              nodal_field_fnxyz=x)
 
     # solve the system
     adjoint_field_fnxyz, adjoint_norms = solvers.PCG(Afun=K_fun, B=df_du_field, x0=None, P=M_fun,
@@ -1582,10 +1606,10 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                                          displacement_field=x,
                                                          formulation=formulation)
     # M_fun = lambda x: 1 * x
-    preconditioner = discretization.get_preconditioner(
+    preconditioner = discretization.get_preconditioner_NEW(
         reference_material_data_field_ijklqxyz=material_data_field_ijklqxyz)
-    M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
-                                                          nodal_field_fnxyz=x)
+    M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                              nodal_field_fnxyz=x)
 
     # solve the system
     adjoint_field_fnxyz, adjoint_norms = solvers.PCG(Afun=K_fun, B=df_du_field, x0=None, P=M_fun,
