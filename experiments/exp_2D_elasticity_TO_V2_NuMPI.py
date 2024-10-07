@@ -21,7 +21,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (8, 8)
+number_of_pixels = (128, 128)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -250,7 +250,7 @@ if __name__ == '__main__':
                                       ftol=1e-6)
     bounds = False
 
-    phase_field_sol_FE_MPI = xopt_FE_MPI.x.reshape([1, 1, *number_of_pixels])
+    phase_field_sol_FE_MPI = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
     # print('phase_field_sol_FE_MPI  = {}'.format(phase_field_sol_FE_MPI))
 
     of = my_objective_function_FE(phase_field_sol_FE_MPI)
@@ -345,8 +345,6 @@ if __name__ == '__main__':
     # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
     # plt.clim(0, 1)
     plt.colorbar()
-    src = './figures/'  # source folder\
-    fig_data_name = f'muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_Poisson_{poison_target}_w{w}_eta{eta}_p{p}_bounds={bounds}_FE_NuMPI'
     plt.title(r" linear FE NuMPI " "\n"
               r" Target stress $[{} , {}],[ {}, {}] $" "\n"
               r" Stress  $[{} ,{},][ {}, {} ]$" "\n"
@@ -355,6 +353,12 @@ if __name__ == '__main__':
                                            homogenized_stress[0, 0], homogenized_stress[0, 1],
                                            homogenized_stress[1, 0], homogenized_stress[1, 1],
                                            xopt_FE_MPI.nit, p), wrap=True)
+    plt.show()
+
+    src = './figures/'  # source folder\
+    fig_data_name = f'muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_Poisson_{poison_target}_w{w}_eta{eta}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.rank}'   #    print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
+
     fname = src + fig_data_name + '{}'.format('.png')
     print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
     plt.savefig(fname, bbox_inches='tight')

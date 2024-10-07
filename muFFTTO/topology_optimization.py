@@ -40,7 +40,7 @@ def objective_function_small_strain(discretization,
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
     f_rho = eta * f_rho_grad + f_dw / eta
-    print('rank' f'{MPI.COMM_WORLD.rank:6} ' )
+    print('rank' f'{MPI.COMM_WORLD.rank:6} ')
     print('f_sigma linear=  {} '.format(f_sigma))
     print('f_rho_grad linear=  {} '.format(f_rho_grad))
     print('f_dw =  linear {} '.format(f_dw))
@@ -244,11 +244,17 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
     #                                                axis=(0, 1)))) * Jacobian_det
 
     rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(phase_field_1nxyz[0, 0],
-                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [-1,0], axis=(0,1)), #(2, -1)
-                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [0,-1] , axis=(0,1)),
-                                         discretization.roll(discretization.fft,phase_field_1nxyz[0, 0],
-                                                                                 -1 * np.array([1, 1]),
-                                                                                 axis=(0, 1)))) * Jacobian_det
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         [-1, 0], axis=(0, 1)),
+                                                                     # (2, -1)
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         [0, -1], axis=(0, 1)),
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         -1 * np.array([1, 1]),
+                                                                                         axis=(0, 1)))) * Jacobian_det
     rho_qubed_pixel = lambda rho0, rho1, rho2, rho3: (1 / 20) * (rho0 ** 3 + rho1 ** 3 + rho2 ** 3) \
                                                      + (3 / 60) * (rho0 ** 2 * rho1 + rho0 ** 2 * rho2 \
                                                                    + rho1 ** 2 * rho0 + rho1 ** 2 * rho2 \
@@ -266,12 +272,10 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
     #                                            axis=(0, 1)))) * Jacobian_det
 
     rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz[0, 0],
-                                       np.roll(phase_field_1nxyz[0, 0], [-1,0] , axis=(0,1)),
-                                       np.roll(phase_field_1nxyz[0, 0], [0,-1] , axis=(0,1)),
-                                       np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
-                                               axis=(0, 1)))) * Jacobian_det
-
-
+                                                                 np.roll(phase_field_1nxyz[0, 0], [-1, 0], axis=(0, 1)),
+                                                                 np.roll(phase_field_1nxyz[0, 0], [0, -1], axis=(0, 1)),
+                                                                 np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
+                                                                         axis=(0, 1)))) * Jacobian_det
 
     rho_quartic_pixel = lambda rho0, rho1, rho2, rho3: (1 / 30) * (rho0 ** 4 + rho1 ** 4 + rho2 ** 4) \
                                                        + (4 / 120) * (rho0 ** 3 * rho1 + rho0 ** 3 * rho2 \
@@ -300,10 +304,13 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz, 
     #                                                axis=(0, 1)))) * Jacobian_det
 
     rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(phase_field_1nxyz[0, 0],
-                                           np.roll(phase_field_1nxyz[0, 0],[-1,0] , axis=(0,1)),
-                                           np.roll(phase_field_1nxyz[0, 0],[0,-1] , axis=(0,1)),
-                                           np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
-                                                   axis=(0, 1)))) * Jacobian_det
+                                                                     np.roll(phase_field_1nxyz[0, 0], [-1, 0],
+                                                                             axis=(0, 1)),
+                                                                     np.roll(phase_field_1nxyz[0, 0], [0, -1],
+                                                                             axis=(0, 1)),
+                                                                     np.roll(phase_field_1nxyz[0, 0],
+                                                                             -1 * np.array([1, 1]),
+                                                                             axis=(0, 1)))) * Jacobian_det
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     integral = rho_squared - 2 * rho_qubed + rho_quartic
 
@@ -492,12 +499,19 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization, 
 
     # NODAL VALUES OF CONNECTED POINTS
     rho_00 = phase_field_1nxyz[0, 0]
-    rho_10 = np.roll(phase_field_1nxyz[0, 0], np.array([-1, 0]), axis=(0, 1))
-    rho_m10 = np.roll(phase_field_1nxyz[0, 0], np.array([1, 0]), axis=(0, 1))
-    rho_01 = np.roll(phase_field_1nxyz[0, 0], np.array([0, -1]), axis=(0, 1))
-    rho_0m1 = np.roll(phase_field_1nxyz[0, 0], np.array([0, 1]), axis=(0, 1))
-    rho_m11 = np.roll(phase_field_1nxyz[0, 0], np.array([1, -1]), axis=(0, 1))
-    rho_1m1 = np.roll(phase_field_1nxyz[0, 0], np.array([-1, 1]), axis=(0, 1))
+    # rho_10 = np.roll(phase_field_1nxyz[0, 0], np.array([-1, 0]), axis=(0, 1))
+    # rho_m10 = np.roll(phase_field_1nxyz[0, 0], np.array([1, 0]), axis=(0, 1))
+    # rho_01 = np.roll(phase_field_1nxyz[0, 0], np.array([0, -1]), axis=(0, 1))
+    # rho_0m1 = np.roll(phase_field_1nxyz[0, 0], np.array([0, 1]), axis=(0, 1))
+    # rho_m11 = np.roll(phase_field_1nxyz[0, 0], np.array([1, -1]), axis=(0, 1))
+    # rho_1m1 = np.roll(phase_field_1nxyz[0, 0], np.array([-1, 1]), axis=(0, 1))
+
+    rho_10 = discretization.roll(discretization.fft, phase_field_1nxyz[0, 0], np.array([-1, 0]), axis=(0, 1))
+    rho_m10 = discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], np.array([1, 0]), axis=(0, 1))
+    rho_01 =  discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], np.array([0, -1]), axis=(0, 1))
+    rho_0m1 = discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], np.array([0, 1]), axis=(0, 1))
+    rho_m11 = discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], np.array([1, -1]), axis=(0, 1))
+    rho_1m1 = discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], np.array([-1, 1]), axis=(0, 1))
 
     drho_squared = (rho_00 + 1 / 6 * (rho_10 + rho_m10 + rho_01
                                       + rho_0m1 + rho_m11 + rho_1m1)) * Jacobian_det
@@ -1532,6 +1546,8 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                                stress_field_ijqxyz)
     # Average over quad points in pixel !!!
     partial_derivative_xyz = np.zeros(phase_field_1nxyz.shape)
+    #partial_derivative_xyz_mpi = np.zeros(phase_field_1nxyz.shape)
+
     for pixel_node in np.ndindex(
             *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
         pixel_node = np.asarray(pixel_node)
@@ -1541,7 +1557,10 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                              N_at_quad_points_qnijk[(..., *pixel_node)],
                                              double_contraction_stress_qxyz)
 
-            partial_derivative_xyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2))
+            # partial_derivative_xyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2))
+            partial_derivative_xyz += discretization.roll(discretization.fft, div_fnxyz_pixel_node,
+                                                          1 * pixel_node, axis=(0, 1))
+
 
         elif discretization.domain_dimension == 3:
 
@@ -1549,7 +1568,9 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                              N_at_quad_points_qnijk[(..., *pixel_node)],
                                              double_contraction_stress_qxyz)
 
-            partial_derivative_xyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2, 3))
+            # partial_derivative_xyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2, 3))
+            partial_derivative_xyz += discretization.roll(discretization.fft, div_fnxyz_pixel_node,
+                                                          1 * pixel_node, axis=(0, 1, 2))
             warnings.warn('Gradient transposed is not tested for 3D.')
 
     dfstress_drho = 2 * partial_derivative_xyz / discretization.cell.domain_volume / np.sum(target_stress_ij ** 2)
@@ -1625,6 +1646,8 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                                stress_field_ijqxyz)
 
     dg_drho_nxyz = np.zeros(phase_field_1nxyz.shape)
+    dg_drho_nxyz_mpi = np.zeros(phase_field_1nxyz.shape)
+
     for pixel_node in np.ndindex(
             *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
         pixel_node = np.asarray(pixel_node)
@@ -1635,7 +1658,7 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                              double_contraction_stress_qxyz)
 
             dg_drho_nxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2))
-
+            dg_drho_nxyz_mpi += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1))
         elif discretization.domain_dimension == 3:
 
             div_fnxyz_pixel_node = np.einsum('dqn,dqxyz->nxyz',
@@ -1643,6 +1666,8 @@ def sensitivity_with_adjoint_problem_FE(discretization,
                                              double_contraction_stress_qxyz)
 
             dg_drho_nxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2, 3))
+            dg_drho_nxyz_mpi += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1,2))
+
             warnings.warn('Gradient transposed is not tested for 3D.')
 
     return df_drho + dg_drho_nxyz

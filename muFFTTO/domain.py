@@ -271,12 +271,19 @@ class Discretization:
                 *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
             pixel_node = np.asarray(pixel_node)
             if self.domain_dimension == 2:
+                # quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
+                #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3)))
+
                 quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
-                                               np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3)))
+                                                   self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node, axis=(0, 1)))
 
             elif self.domain_dimension == 3:  # TODO 3D interpolation is not tested
+                # quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
+                #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
+
                 quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
-                                               np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
+                                                   self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node,
+                                                             axis=(0, 1, 2)))
 
         return quad_field_fqnxyz, N_at_quad_points_qnijk
 
@@ -599,7 +606,7 @@ class Discretization:
 
         stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
         #
-        #integral = np.einsum('fdqxy...->fd', stress_field)
+        # integral = np.einsum('fdqxy...->fd', stress_field)
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
         # TODO change this to muGRID
         integral = Reductor_numpi.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
