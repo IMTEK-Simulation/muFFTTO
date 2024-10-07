@@ -42,12 +42,14 @@ def get_geometry(nb_voxels,
         case 'square_inclusion':
 
             phase_field = np.zeros(nb_voxels)
-            phase_field[np.logical_and(coordinates[0] < 0.5, coordinates[1] < 0.5)] = 1
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
+            np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 1
+
         case 'circle_inclusion':
             phase_field = np.zeros(nb_voxels)
-            if nb_voxels.size != 2:
+            if nb_voxels.size == 2:
                 phase_field[np.power(coordinates[0], 2) + np.power(coordinates[1], 2) < 0.3] = 1
-            elif nb_voxels.size != 3:
+            elif nb_voxels.size == 3:
                 phase_field[
                     np.power(coordinates[0], 2) +
                     np.power(coordinates[1], 2) +

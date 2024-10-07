@@ -523,11 +523,16 @@ class Discretization:
 
         # FFTn of the input field
         nodal_field_fnxyz = np.fft.fftn(nodal_field_fnxyz, [*self.nb_of_pixels])
+        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+
         # multiplication with a diagonals of preconditioner
         nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, nodal_field_fnxyz)
+       # print('rank' f'{MPI.COMM_WORLD.rank:6} einsum:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+
         # iFFTn
         nodal_field_fnxyz = np.real(np.fft.ifftn(nodal_field_fnxyz, [*self.nb_of_pixels]))
 
+        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
         return nodal_field_fnxyz
 
     def apply_preconditioner_NEW(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
@@ -543,9 +548,15 @@ class Discretization:
         # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
         # FFTn of input array
         ffield_fnqks = self.fft.fft(nodal_field_fnxyz)
+        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+            ffield_fnqks = np.expand_dims(ffield_fnqks,
+                                          axis=(0, 1))
+
+        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
 
         # multiplication with a diagonals of preconditioner
         ffield_fnqks = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks, ffield_fnqks)
+        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:einsum=' f'{ffield_fnqks}')
 
         # normalization
         ffield_fnqks *= self.fft.normalisation
@@ -554,7 +565,9 @@ class Discretization:
         # self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
         if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
             nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
-                                                                  axis=(0, 1))
+                                               axis=(0, 1))
+        #print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
+
         return nodal_field_fnxyz
 
     def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):

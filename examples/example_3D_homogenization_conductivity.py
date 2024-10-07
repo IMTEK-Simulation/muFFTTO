@@ -11,7 +11,7 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (5,)
+number_of_pixels = 3 * (32,)
 
 
 geometry_ID = 'circle_inclusion'
@@ -57,12 +57,12 @@ preconditioner = discretization.get_preconditioner_NEW(reference_material_data_f
 # preconditioner
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                       nodal_field_fnxyz=x)
-
+#M_fun = lambda x: 1 * x
 
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 # compute whole homogenized elastic tangent
-for i in [2]:#range(dim):
+for i in range(dim):
     # set macroscopic gradient
     macro_gradient = np.zeros([dim])
     macro_gradient[i] = 1

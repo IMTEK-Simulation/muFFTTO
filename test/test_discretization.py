@@ -562,7 +562,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
             for element_type in ['trilinear_hexahedron']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -599,7 +599,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
     def test_2D_homogenization_problem_solution(self):
         domain_size = [3, 4]
-        for problem_type in ['elasticity', 'conductivity']:  # TODO add 'elasticity'
+        for problem_type in ['conductivity','elasticity']:
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (4, 5)
@@ -607,7 +607,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -696,10 +696,10 @@ class DiscretizationTestCase(unittest.TestCase):
                 # test if the preconditioner does not change the solution
                 K = discretization.get_system_matrix(material_data_field)
 
-                preconditioner = discretization.get_preconditioner(
+                preconditioner = discretization.get_preconditioner_NEW(
                     reference_material_data_field_ijklqxyz=ref_material_data_field)
 
-                M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
+                M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
                 solution_M, norms_M = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-6)
                 # test homogenized stress
                 homogenized_stress_M = discretization.get_homogenized_stress(
@@ -835,9 +835,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
         global material_data_field
         domain_size = [2, 3]
-        for problem_type in [
-            'elasticity',
-            'conductivity']:  # 'conductivity','elasticity' 'elasticity', 'conductivity' # TODO add 'elasticity'
+        for problem_type in ['conductivity',
+                             'elasticity']:  # 'conductivity','elasticity' 'elasticity', 'conductivity' # TODO add 'elasticity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (3, 4)
@@ -845,7 +844,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -904,10 +903,10 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
-                preconditioner_Fourier = discretization.get_preconditioner(
+                preconditioner_Fourier = discretization.get_preconditioner_NEW(
                     reference_material_data_field_ijklqxyz=ref_material_data_field)
 
-                M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier, x)
+                M_fun = lambda x: discretization.get_preconditioner_NEW(preconditioner_Fourier, x)
 
                 # set up random field
                 x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
