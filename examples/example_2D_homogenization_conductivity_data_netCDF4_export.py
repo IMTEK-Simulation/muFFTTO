@@ -55,6 +55,7 @@ rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
 #M_fun = lambda x: 1 * x
 
+
 preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 

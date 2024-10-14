@@ -90,6 +90,11 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             my_domain.quad_points_coord[:, 0] = [h_x / 3, h_y / 3]
             my_domain.quad_points_coord[:, 1] = [h_x * 2 / 3, h_y * 2 / 3]
 
+            my_domain.quad_points_coord_parametric = np.zeros(
+                [my_domain.domain_dimension, my_domain.nb_quad_points_per_pixel])
+            my_domain.quad_points_coord_parametric[:, 0] = [1 / 3, 1 / 3]
+            my_domain.quad_points_coord_parametric[:, 1] = [2 / 3, 2 / 3]
+
             # @formatter:off   B(dim,number of nodal values,quad point ,element)
             my_domain.B_gradient[:, :,  0] = [[-1 / h_x,   1 / h_x,    0,          0],
                                               [-1 / h_y,         0,    1 / h_y,    0]]
@@ -197,7 +202,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                 [my_domain.domain_dimension, my_domain.nb_quad_points_per_pixel])
 
             my_domain.quad_points_coord[:, 0] = [h_x / 2 + h_x * coord_helper[0] / 2,
-                                 h_y / 2 + h_y * coord_helper[0] / 2]
+                                                 h_y / 2 + h_y * coord_helper[0] / 2]
             my_domain.quad_points_coord[:, 1] = [h_x / 2 + h_x * coord_helper[1] / 2,
                                                  h_y / 2 + h_y * coord_helper[0] / 2]
             my_domain.quad_points_coord[:, 2] = [h_x / 2 + h_x * coord_helper[0] / 2,

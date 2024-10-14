@@ -1,3 +1,82 @@
+
+import netCDF4
+import matplotlib as mpl
+import numpy as np
+import matplotlib.pyplot as plt
+
+lstep0='exp_data/last_stepf0.npy'
+phase_lstep0=np.load(lstep0)#.reshape(8,4)
+lstep1='exp_data/last_stepf1.npy'
+phase_lstep1=np.load(lstep1)#.reshape(8,4)
+#fp='exp_data/phase_optimized.npy'
+# fp='exp_data/muFFTTO_elasticity_random_init_N32_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI4.npy'
+# fp='exp_data/muFFTTO_elasticity_random_init_N256_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI10.npy'
+# fp='exp_data/muFFTTO_elasticity_random_init_N256_E_target_0.3_Poisson_0.25_w0.01_eta0.01_p2_bounds=False_FE_NuMPI12.npy'
+name='muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.1_w0.01_eta0.01_p2_bounds=False_FE_NuMPI8.npy'
+
+for w in np.arange(0.1, 2.1, 0.1):
+    for eta_mult in np.arange(1, 5, 1):
+        print(w, eta_mult)
+        pixel_size=0.0078125
+        eta = eta_mult * pixel_size
+        name=(f'1muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w{w}_eta{eta}_p2_bounds=False_FE_NuMPI10.npy')
+             #  '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.02_eta0.00390625_p2_bounds=False_FE_NuMPI12.npy'
+            # "1muFFTTO_elasticity_random_init_N258_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w1.0_eta0.003875968992248062_p2_bounds=False_FE_NuMPI12.npy"
+        fp='exp_data/'+name
+     #   '1muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.4_eta0.03125_p2_bounds=False_FE_NuMPI10.npy'
+
+        #fp='exp_data/muFFTTO_elasticity_random_init_N64_E_target_0.3_Poisson_0.25_w0.01_eta0.01_p2_bounds=False_FE_NuMPI6.npy'
+        #
+
+        phase_field=np.load(fp)
+        #sensitivity = np.load(f'sensitivity'+ fp)
+
+        log_name=(f'1muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w{w}_eta{eta}_p2_bounds=False_FE_NuMPI10.npyxopt_log.npz')
+                        #    '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.01_eta0.00390625_p2_bounds=False_FE_NuMPI12.npyxopt_log.npz'
+
+        fp_log = 'exp_data/' + log_name
+        #xopt=np.load('exp_data/' + log_name)
+        xopt=np.load(fp_log)
+
+        src = './figures/'  # source folder\
+        fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
+        plt.figure()
+        plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
+        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        plt.clim(0, 1)
+        plt.colorbar()
+        plt.title(f'w = {w},eta= {eta}\n, {xopt.f.message}')
+        fname = src + fig_data_name + '{}'.format('.png')
+        print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+        plt.savefig(fname, bbox_inches='tight')
+        plt.show()
+
+
+quit()
+
+plt.figure()
+fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
+plt.plot(np.tile(phase_field, (1, 2))[40,:].transpose())
+# nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+plt.grid(True)
+plt.minorticks_on()
+fname = src + fig_data_name + '{}'.format('.png')
+print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+plt.savefig(fname, bbox_inches='tight')
+
+
+plt.show()
+quit()
+plt.figure()
+#plt.contourf(phase_field_sol_FE_MPI[0, 0], cmap=mpl.cm.Greys)
+# nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+# plt.clim(0, 1)
+plt.colorbar()
+
+plt.show()
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -72,3 +151,7 @@ plt.xlabel(r'phase contrast $\rho$')
 plt.ylabel(r'Total error in  homogenized data $A_{11}^{FEM}-A_{11}^{Analytical}$')
 plt.legend(loc='best')
 plt.show()
+
+
+
+
