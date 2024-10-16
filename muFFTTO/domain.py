@@ -57,6 +57,7 @@ class Discretization:
                  discretization_type='finite_element',
                  element_type='linear_triangles',
                  communicator=MPI.COMM_WORLD):
+
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size

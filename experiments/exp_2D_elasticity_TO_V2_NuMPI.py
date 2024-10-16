@@ -26,7 +26,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (128, 128)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -123,7 +123,7 @@ print('target_stress = \n {}'.format(target_stress))
 # Auxetic metamaterials
 p = 2
 #for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
-for w in np.arange(0.1, 2.1, 0.1):
+for w in [1,]:#np.arange(0.1, 2.1, 0.1):
     for eta_mult in np.arange(1, 5, 1):
         # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
         # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *

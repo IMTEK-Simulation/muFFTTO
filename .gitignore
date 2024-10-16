@@ -12,3 +12,5 @@ dist
 *.nc
 
 experiments/figures/
+
+experiments/exp_data/
