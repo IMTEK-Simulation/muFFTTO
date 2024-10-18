@@ -26,7 +26,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (32, 32)
+number_of_pixels = (8, 8)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -60,7 +60,7 @@ macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
 # create material data of solid phase rho=1
 E_0 = 1
-poison_0 = 0.
+poison_0 = 0.2
 
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
 
@@ -90,7 +90,7 @@ print('init_stress = \n {}'.format(stress))
 # E_target = E_0 * 0.1
 
 # poison_target = 0.2
-poison_target = -0.3  # 1 / 3  # lambda = -10
+poison_target = -0.5  # 1 / 3  # lambda = -10
 
 # G_target_auxet =  (7 / 20) * E_0 #(3 / 10) * E_0  #
 G_target_auxet = (1 / 4) * E_0
@@ -122,13 +122,13 @@ print('target_stress = \n {}'.format(target_stress))
 # eta = 0.0555 #0.02125#08#1231925#1515#1430#145#357#3#33#5#25#4#7#250
 # Auxetic metamaterials
 p = 2
-#for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
-for w in [1,]:#np.arange(0.1, 2.1, 0.1):
-    for eta_mult in np.arange(1, 5, 1):
+# for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
+for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
+    for eta_mult in [0.1, ]:  # np.arange(0.01, 0.5, 0.05):#
         # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
         # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
         # eta =0.005#125#/discretization.pixel_size[0]
-        eta = eta_mult*discretization.pixel_size[0]
+        eta = eta_mult * discretization.pixel_size[0]
 
         print('p =   {}'.format(p))
         print('w  =  {}'.format(w))
@@ -144,6 +144,8 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             # reshape the field
             phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
 
+            # Material data in quadrature points
+            # phase_field_1nxyz[0, 0, 0:4, 0:4] = 0
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                              quad_field_fqnxyz=None,
@@ -151,43 +153,57 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
 
             material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
-            # TODO [Lars] is this proper formulation ? I want to multiply phase field [0,q,0,xyz] * material_data_field_C_0[ijkl,q,xyz]
+
             # Solve mechanical equilibrium constrain
             rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
                                          macro_gradient_field_ijqxyz=macro_gradient_field)
             if MPI.COMM_WORLD.size == 1:
                 print('rhs Of = {}'.format(np.linalg.norm(rhs)))
 
-            K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
-                                                                 displacement_field=x,
-                                                                 formulation='small_strain')
+            K_fun = lambda x: discretization.apply_system_matrix(
+                material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                displacement_field=x,
+                formulation='small_strain')
 
             # K_matrix=discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz)
             # print('K_matrix norm OF = {}'.format(np.linalg.norm(K_matrix)))
 
             # K_diag_alg = discretization.get_preconditioner_Jacoby(
             #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-            #
-            # M_fun_comb = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+            # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+            #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+            # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
             #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
             #     nodal_field_fnxyz=K_diag_alg * x)
+
+            # K_diag_blocks_alg_fnfnxyz = discretization.get_preconditioner_Jacoby_fast(
+            #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz, prec_type='full')
+            #
+            # # multiplication with a diagonals of preconditioner
+            # M_fun_block = lambda x: np.einsum('abcd...,cd...->ab...', K_diag_blocks_alg_fnfnxyz, x)
+            #
+            # M_fun = lambda x: M_fun_block(discretization.apply_preconditioner_NEW(
+            #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+            #     nodal_field_fnxyz=M_fun_block(x)))
 
             displacement_field, norms = solvers.PCG(Afun=K_fun,
                                                     B=rhs,
                                                     x0=None,
                                                     P=M_fun,
-                                                    steps=int(1500),
-                                                    toler=1e-6)
+                                                    steps=int(2000),
+                                                    toler=1e-10)
             if MPI.COMM_WORLD.rank == 0:
                 nb_it_comb = len(norms['residual_rz'])
-                print(' nb_ steps CG of =' f'{nb_it_comb}')
-            # compute homogenized stress field corresponding t
+                norm_rz = norms['residual_rz'][-1]
+                norm_rr = norms['residual_rr'][-1]
+                print(' nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+                # compute homogenized stress field corresponding t
             homogenized_stress = discretization.get_homogenized_stress(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
                 displacement_field_fnxyz=displacement_field,
                 macro_gradient_field_ijqxyz=macro_gradient_field,
                 formulation='small_strain')
-            # print('homogenized stress = \n'          ' {} '.format(homogenized_stress))
+            #print('homogenized stress = \n'          ' {} '.format(homogenized_stress)) # good in MPI
 
             objective_function = topology_optimization.objective_function_small_strain(
                 discretization=discretization,
@@ -196,7 +212,7 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
                 phase_field_1nxyz=phase_field_1nxyz,
                 eta=eta,
                 w=w)
-            # print('objective_function= \n'' {} '.format(objective_function))
+            print('objective_function= \n'' {} '.format(objective_function))
             # plt.figure()
             # plt.contourf(phase_field_1nxyz[0, 0], cmap=mpl.cm.Greys)
             # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
@@ -204,7 +220,7 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             # plt.colorbar()
             # plt.show()
             # print('Sensitivity_analytical')
-            sensitivity_analytical = topology_optimization.sensitivity_with_adjoint_problem_FE(
+            sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
                 discretization=discretization,
                 material_data_field_ijklqxyz=material_data_field_C_0,
                 displacement_field_fnxyz=displacement_field,
@@ -213,81 +229,16 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
                 target_stress_ij=target_stress,
                 actual_stress_ij=homogenized_stress,
                 preconditioner_fun=M_fun,
+                system_matrix_fun=K_fun,
                 formulation='small_strain',
                 p=p,
                 eta=eta,
                 weight=w)
+            objective_function += sensitivity_parts['adjoint_energy']
             # print('max_grad = {}'.format(np.max(np.abs(sensitivity_analytical.reshape(-1)))))
             # print('abs_grad = {}'.format(np.linalg.norm(sensitivity_analytical.reshape(-1))))
 
             return objective_function, sensitivity_analytical.reshape(-1)
-
-
-        def my_sensitivity_FE(phase_field_1nxyz):
-            # print('Sensitivity calculation')
-            quit()
-            phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
-
-            # Compute homogenized stress field for current phase field
-            # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field_1nxyz, p)
-
-            phase_field_at_quad_poits_1qnxyz = \
-                discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
-                                                             quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
-
-            material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
-                phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
-
-            # Solve mechanical equilibrium constrain for hom
-            rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                                         macro_gradient_field_ijqxyz=macro_gradient_field)
-            if MPI.COMM_WORLD.size == 1:
-                print('rhs sensitivty = {}'.format(np.linalg.norm(rhs)))
-
-            K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
-                                                                 displacement_field=x,
-                                                                 formulation='small_strain')
-            # M_fun = lambda x: 1 * x
-            preconditioner_fnfnqks = discretization.get_preconditioner_NEW(
-                reference_material_data_field_ijklqxyz=material_data_field_C_0)
-
-            M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-                                                                      nodal_field_fnxyz=x)
-
-            displacement_field, norms = solvers.PCG(Afun=K_fun,
-                                                    B=rhs,
-                                                    x0=None,
-                                                    P=M_fun,
-                                                    steps=int(1500),
-                                                    toler=1e-6)
-            if MPI.COMM_WORLD.rank == 0:
-                nb_it_comb = len(norms['residual_rz'])
-                print(' nb_ steps CG Sensitivity =' f'{nb_it_comb}')
-            # compute homogenized stress field corresponding t
-            homogenized_stress = discretization.get_homogenized_stress(
-                material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                displacement_field_fnxyz=displacement_field,
-                macro_gradient_field_ijqxyz=macro_gradient_field,
-                formulation='small_strain')
-
-            # print('Sensitivity_analytical')
-            sensitivity_analytical = topology_optimization.sensitivity_with_adjoint_problem_FE(
-                discretization=discretization,
-                material_data_field_ijklqxyz=material_data_field_C_0,
-                displacement_field_fnxyz=displacement_field,
-                macro_gradient_field_ijqxyz=macro_gradient_field,
-                phase_field_1nxyz=phase_field_1nxyz,
-                target_stress_ij=target_stress,
-                actual_stress_ij=homogenized_stress,
-                formulation='small_strain',
-                p=p,
-                eta=eta,
-                weight=w)
-            # print('max_grad = {}'.format(np.max(np.abs(sensitivity_analytical.reshape(-1)))))
-            # print('abs_grad = {}'.format(np.linalg.norm(sensitivity_analytical.reshape(-1))))
-
-            return sensitivity_analytical.reshape(-1)
 
 
         if __name__ == '__main__':
@@ -311,7 +262,7 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             # phase[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
             #                                                   microstructure_name='square_inclusion',
             #                                                   coordinates=discretization.fft.coords)
-            # phase*=np.random.random(discretization.get_scalar_sized_field().shape)
+            # # phase*=np.random.random(discretization.get_scalar_sized_field().shape)
             # phase[0,0,0, 0] = 0
             # phase[0,0,0, 1] = phase[0,0,1, 0] = phase[0,0,1, 1] = 0
             # phase[0,0,0, 2] = phase[0,0,2, 0] = phase[0,0,1, 2] = phase[0,0,2, 1] = phase[0,0,2, 2] = 0
@@ -324,8 +275,16 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             # plt.colorbar()
 
             # plt.show()
-
+            if MPI.COMM_WORLD.size == 1:
+               phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI2.npy')
             phase_field_0 = phase
+            # file_data_name = f'init_phase_FE_N{number_of_pixels[0]}_NuMPI{MPI.COMM_WORLD.size}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+            #
+            # folder_name = 'experiments/exp_data/'
+            # save_npy(folder_name + file_data_name, phase_field_0[0, 0],
+            #          tuple(discretization.fft.subdomain_locations),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            # print(folder_name + file_data_name)
             # phase_field_0[0, 0,
             # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4,
             # phase_field_0.shape[2] * 1 // 4:phase_field_0.shape[2] * 3 // 4] = 0
@@ -345,8 +304,10 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             xopt_FE_MPI = Optimization.l_bfgs(fun=my_objective_function_FE,
                                               x=phase_field_0,
                                               jac=True,
+                                              maxcor=10,
                                               gtol=1e-5,
                                               ftol=1e-6,
+                                              maxiter=15000,
                                               comm=discretization.fft.communicator,
                                               disp=True)
 
@@ -379,7 +340,7 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             #  file.append_frame().write()
             #  file.close()
 
-            file_data_name = f'1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{eta}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+            file_data_name = f'1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
             folder_name = 'experiments/exp_data/'
             save_npy(folder_name + file_data_name, phase_field_sol_FE_MPI[0, 0],
@@ -387,7 +348,7 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             print(folder_name + file_data_name)
 
-            save_npy(folder_name+f'sensitivity' + file_data_name, sensitivity_sol_FE_MPI[0, 0],
+            save_npy(folder_name + f'sensitivity' + file_data_name, sensitivity_sol_FE_MPI[0, 0],
                      tuple(discretization.fft.subdomain_locations),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             print(folder_name + file_data_name)
@@ -463,7 +424,8 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
                     # Solve mechanical equilibrium constrain
                     rhs_ij = discretization.get_rhs(material_data_field_C_0_rho_quad, macro_gradient_field)
 
-                    displacement_field_ij, norms = solvers.PCG(K_fun, rhs_ij, x0=None, P=M_fun, steps=int(500), toler=1e-8)
+                    displacement_field_ij, norms = solvers.PCG(K_fun, rhs_ij, x0=None, P=M_fun, steps=int(500),
+                                                               toler=1e-8)
 
                     # ----------------------------------------------------------------------
                     # compute homogenized stress field corresponding
@@ -484,8 +446,8 @@ for w in [1,]:#np.arange(0.1, 2.1, 0.1):
             elapsed_time = end_time - start_time
             print("Elapsed time: ", elapsed_time / 60)
             xopt_FE_MPI['elapsed_time'] = elapsed_time
-            #np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
-            np.savez(folder_name + file_data_name+f'xopt_log.npz', **xopt_FE_MPI)
+            # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
+            np.savez(folder_name + file_data_name + f'xopt_log.npz', **xopt_FE_MPI)
 
         #
         #

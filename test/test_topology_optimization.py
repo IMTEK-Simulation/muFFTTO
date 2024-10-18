@@ -148,7 +148,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                                                              x,
                                                              formulation='small_strain')
 
-        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-6)
+        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-14)
 
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
@@ -185,7 +185,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
             eta=eta,
             weight=w)
 
-        #objective_function += sensitivity_parts['adjoint_energy']
+        objective_function += sensitivity_parts['adjoint_energy']
         # print(f'objective_function= {objective_function}')
         # print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
 
@@ -207,6 +207,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_sized_field()
 
     error_fd_vs_analytical = []
+    error_fd_vs_analytical_max = []
     norm_fd_sensitivity_dsigma_dro = []
     norm_fd_sensitivity_df_dro = []
     norm_fd_sensitivity = []
@@ -217,7 +218,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                 # set phase_field to ones
                 phase_field = np.copy(phase_field_00)
                 #
-                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / 2
+                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon /2
                 phase_field_0 = phase_field.reshape(-1)
                 of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _, _ = my_objective_function(phase_field_0)
 
@@ -232,6 +233,8 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
         error_fd_vs_analytical.append(
             np.linalg.norm((fd_sensitivity - analytical_sensitivity)[0, 0], 'fro'))
+        error_fd_vs_analytical_max.append(
+            np.max((fd_sensitivity - analytical_sensitivity)[0, 0]))
         norm_fd_sensitivity.append(
             np.linalg.norm(fd_sensitivity[0, 0], 'fro'))
         norm_fd_sensitivity_df_dro.append(
@@ -251,6 +254,8 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         plt.figure()
         plt.loglog(epsilons, error_fd_vs_analytical,
                    label=r' error_fd_vs_analytical'.format())
+        plt.loglog(epsilons, error_fd_vs_analytical_max,
+                   label=r' error_fd_vs_analytical_max'.format())
         # plt.loglog(epsilons, norm_fd_sensitivity - np.linalg.norm(analytical_sensitivity[0, 0], 'fro'),
         #            label=r' error_fd_vs_analytical'.format())
         plt.loglog(epsilons, quad_fit_of_error,

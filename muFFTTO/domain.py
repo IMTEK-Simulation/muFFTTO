@@ -1,6 +1,7 @@
 import warnings
 
 import numpy as np
+import scipy as sc
 
 from muFFTTO import discretization_library
 
@@ -338,7 +339,6 @@ class Discretization:
         # total_sum = comm.reduce(local_data, op=MPI.SUM, root=0)
 
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
-        # TODO change this to muGRID
         homogenized_stress = Reductor_numpi.sum(stress, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
         return homogenized_stress / self.cell.domain_volume
@@ -411,7 +411,7 @@ class Discretization:
 
         return K_system_matrix
 
-    def get_preconditioner(self, reference_material_data_field_ijklqxyz,
+    def get_preconditioner_DELETE(self, reference_material_data_field_ijklqxyz,
                            formulation=None):
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
@@ -509,7 +509,6 @@ class Discretization:
             if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
                     0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
                 continue
-            # pick local matrix with size [f*n,f*n]
 
             local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)],
                                                (np.prod(unit_impulse_fnxyz.shape[0:2]),
@@ -541,7 +540,8 @@ class Discretization:
 
     def get_preconditioner_Jacoby_fast(self, material_data_field_ijklqxyz,
                                        gradient_of_u=None,
-                                       formulation=None):
+                                       formulation=None,
+                                       prec_type=None):
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -549,57 +549,107 @@ class Discretization:
         if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
             gradient_of_u = np.zeros(self.gradient_size)  # create gradient field
 
-        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:gradient_of_u_shape ' f'{gradient_of_u_shape}')
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:displacement_field_shape=' f'{u.shape}')
-        new_size=self.unknown_size
-        new_size[0] = self.domain_dimension
-
-       # grad_in_nodes=np.zeros(new_size)
-        grad_in_nodes=np.zeros(new_size[:2])
+        material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data=material_data_field_ijklqxyz)
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('get_preconditioner_Jacoby_fast is not tested for multiple nodal points per pixel.')
 
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
-        #grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
+        # grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
+        diagonal_fnxyz = self.get_unknown_size_field()
+        # !/usr/bin/env python3
+        if self.cell.problem_type == 'conductivity':
 
+            for pixel_node in np.ndindex(
+                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: loop over pixel node =' f'{pixel_node}')
 
-         # !/usr/bin/env python3
+                pixel_node = np.asarray(pixel_node)
+                for d in np.ndindex(*self.cell.unknown_shape):
+                    d = np.asarray(d)
+                    if self.domain_dimension == 2:
+                        gradient_of_u_fqnxy = np.einsum('fdqxy,dqn->fqnxy',
+                                                        material_data_field_ijklqxyz,
+                                                        self.B_grad_at_pixel_dqnijk[(..., *pixel_node)])
+                        div_fnxyz_pixel_node = np.einsum('dqn,fdqnxy->nxy',
+                                                         self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                         gradient_of_u_fqnxy)
+                        diagonal_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1))
 
-        for pixel_node in np.ndindex(
-                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-            # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: loop over pixel node =' f'{pixel_node}')
+                    elif self.domain_dimension == 3:
+                        gradient_of_u_fqnxy = np.einsum('fdqxyz,dqn->fqnxyz',
+                                                        material_data_field_ijklqxyz,
+                                                        self.B_grad_at_pixel_dqnijk[(..., *pixel_node)])
+                        div_fnxyz_pixel_node = np.einsum('dqn,fdqnxyz->nxyz',
+                                                         self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                         gradient_of_u_fqnxy)
+                        diagonal_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
+                        print('Jacoby preconditioner  is not tested in 3D ')
 
-            pixel_node = np.asarray(pixel_node)
-            if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless .. working for 3 as well
-                # gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                #                             np.roll(u, -1 * pixel_node, axis=(2, 3)))
-                # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: einsum =' f'{pixel_node}')
-                aaa = np.einsum('dqn,ijklqxy->ijqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                                    material_data_field_ijklqxyz)
-                #TODO : Sum gradient in quad point and assign it to node ...kurva
-                print()
+        elif self.cell.problem_type == 'elasticity':
+            if prec_type == 'full':
+                diagonal_matrices_fnfnxyz = np.zeros(diagonal_fnxyz.shape[:2] + diagonal_fnxyz.shape)
+            shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
+            for f in np.arange(0, self.cell.unknown_shape):
+                shape_function_gradients_fdnijk[f] = np.copy(self.B_grad_at_pixel_dqnijk)
+            for pixel_node in np.ndindex(
+                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: loop over pixel node =' f'{pixel_node}')
 
-            elif self.domain_dimension == 3:
-                # gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                #                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
+                pixel_node = np.asarray(pixel_node)
+                for d in np.ndindex(*self.cell.unknown_shape):
+                    d = np.asarray(d)
+                    if self.domain_dimension == 2:
 
-                gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                           self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1, 2)))
-        # TODO roll[u]= ifft (e^iq dx fft (u))
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: finish =' f'{gradient_of_u.shape}')
+                        gradient_of_u_ijqnxy = np.einsum('ijklqxy,lkqn->ijqnxy',
+                                                         material_data_field_ijklqxyz[:, :, :, d, ...],
+                                                         shape_function_gradients_fdnijk[(d, ..., *pixel_node)])
 
-        return gradient_of_u
+                        div_at_quad_fnxy = np.einsum('dqn,fdqnxy->fnxy',
+                                                     self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                     gradient_of_u_ijqnxy)
 
-        # print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
-        system_matrix = self.get_system_matrix(material_data_field=material_data_field_ijklqxyz)
-        K_diag = np.diag(system_matrix).reshape(self.unknown_size)
-        K_diag_inv_sym = K_diag ** (-1 / 2)
-        return K_diag_inv_sym
+                        diagonal_fnxyz[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node, axis=(0, 1))
+                        if prec_type == 'full':
+                            diagonal_matrices_fnfnxyz[d, 0, ...] += self.roll(self.fft, div_at_quad_fnxy,
+                                                                              1 * pixel_node,
+                                                                              axis=(0, 1))
+                    elif self.domain_dimension == 3:
+                        gradient_of_u_ijqnxy = np.einsum('ijklqxyz,lkqn->ijqnxyz',
+                                                         material_data_field_ijklqxyz[:, :, :, d, ...],
+                                                         shape_function_gradients_fdnijk[(d, ..., *pixel_node)])
 
-    def apply_preconditioner(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
+                        div_at_quad_fnxy = np.einsum('dqn,fdqnxyz->fnxyz',
+                                                     self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                     gradient_of_u_ijqnxy)
+
+                        diagonal_fnxyz[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node,
+                                                            axis=(0, 1, 2))
+
+                        print('Jacoby preconditioner  is not tested in 3D ')
+        if prec_type == 'full':
+            # compute inverse of diagonals
+            for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):
+                if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
+                        0,) * self.domain_dimension):  # avoid  inversion of zeros
+                    continue
+                # pick local matrix with size [f*n,f*n]
+                local_matrix_ij = np.reshape(diagonal_matrices_fnfnxyz[(..., *pixel_index)],
+                                             (np.prod(diagonal_matrices_fnfnxyz.shape[0:2]),
+                                              np.prod(diagonal_matrices_fnfnxyz.shape[0:2])))
+                # compute inversion
+                local_matrix_ij = np.linalg.inv(local_matrix_ij)
+                local_matrix_ij_ = sc.linalg.fractional_matrix_power(local_matrix_ij, 1 / 2)
+                # rearrange local inverse matrix into global field
+                diagonal_matrices_fnfnxyz[(..., *pixel_index)] = np.reshape(local_matrix_ij_, (
+                        diagonal_matrices_fnfnxyz.shape[0:2] + diagonal_matrices_fnfnxyz.shape[0:2]))
+                return diagonal_matrices_fnfnxyz
+        # return self.apply_quadrature_weights_elasticity(material_data)
+        # K_diag_inv_sym = K_diag ** (-1 / 2)
+        return diagonal_fnxyz ** (-1 / 2)
+
+    def apply_preconditioner_DELETE(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
         # apply preconditioner using FFT
         # nodal_field_fnxyz [f,n,x,y,z]
         # preconditioner_Fourier_fnfnxyz [f,n,f,n,x,y,z] # TODO find better indexing notation
@@ -763,7 +813,7 @@ class Discretization:
     def get_discretization_info(self, element_type):
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
-    def integrate_field(self, field_fnxyz,
+    def integrate_field_OLD(self, field_fnxyz,
                         nb_quad_points_per_pixel=None):
         # for scalar field only - evaluate in quadrature points
         if field_fnxyz.shape[0] != 1:
@@ -785,6 +835,10 @@ class Discretization:
             quad_points_coords_dq=quad_points_coord)[0]
         # Multiply with quadrature weights
         quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+
+        Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        integral_fq= self.mpi_reduction.sum(quad_field_fqnxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        # TODO: what kidn of sum I need here?
         return np.sum(quad_field_fqnxyz)
 
 
