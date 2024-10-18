@@ -412,7 +412,7 @@ class Discretization:
         return K_system_matrix
 
     def get_preconditioner_DELETE(self, reference_material_data_field_ijklqxyz,
-                           formulation=None):
+                                  formulation=None):
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -647,7 +647,10 @@ class Discretization:
                 return diagonal_matrices_fnfnxyz
         # return self.apply_quadrature_weights_elasticity(material_data)
         # K_diag_inv_sym = K_diag ** (-1 / 2)
-        return diagonal_fnxyz ** (-1 / 2)
+        diagonal_fnxyz[diagonal_fnxyz < 1e-15] = 0
+        diagonal_fnxyz[diagonal_fnxyz != 0] = diagonal_fnxyz[diagonal_fnxyz != 0] ** (-1 / 2)
+        #diagonal_fnxyz ** (-1 / 2)
+        return diagonal_fnxyz
 
     def apply_preconditioner_DELETE(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
         # apply preconditioner using FFT
@@ -814,7 +817,7 @@ class Discretization:
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
     def integrate_field_OLD(self, field_fnxyz,
-                        nb_quad_points_per_pixel=None):
+                            nb_quad_points_per_pixel=None):
         # for scalar field only - evaluate in quadrature points
         if field_fnxyz.shape[0] != 1:
             raise ValueError(
@@ -837,7 +840,7 @@ class Discretization:
         quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
-        integral_fq= self.mpi_reduction.sum(quad_field_fqnxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        integral_fq = self.mpi_reduction.sum(quad_field_fqnxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # TODO: what kidn of sum I need here?
         return np.sum(quad_field_fqnxyz)
 

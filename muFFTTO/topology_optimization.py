@@ -24,20 +24,20 @@ def objective_function_small_strain(discretization,
     # stress difference potential: actual_stress_ij is homogenized stress
     f_sigma = compute_stress_equivalence_potential(actual_stress_ij=actual_stress_ij,
                                                    target_stress_ij=target_stress_ij)
-    print('f_sigma= \n'          ' {} '.format(f_sigma)) # good in MPI
+   # print('f_sigma= \n'          ' {} '.format(f_sigma)) # good in MPI
 
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
     f_dw = compute_double_well_potential_analytical(discretization=discretization,
                                                     phase_field_1nxyz=phase_field_1nxyz)
-    print('f_dw= \n'          ' {} '.format(f_dw)) # wrong in MPI
+    #print('f_dw= \n'          ' {} '.format(f_dw)) # wrong in MPI
 
     # phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     # f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
     f_rho_grad = compute_gradient_of_phase_field_potential(discretization=discretization,
                                                            phase_field_1nxyz=phase_field_1nxyz)
-    print('f_rho_grad= \n'          ' {} '.format(f_rho_grad)) # good in MPI
+    #print('f_rho_grad= \n'          ' {} '.format(f_rho_grad)) # good in MPI
     # print()
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
@@ -307,7 +307,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                                          phase_field_1nxyz[0, 0],
                                                                                          -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
-    print('rho_squared= \n'          ' {} '.format(rho_squared)) #
+    #print('rho_squared= \n'          ' {} '.format(rho_squared)) #
 
     rho_qubed_pixel = lambda rho0, rho1, rho2, rho3: (1 / 20) * (rho0 ** 3 + rho1 ** 3 + rho2 ** 3) \
                                                      + (3 / 60) * (rho0 ** 2 * rho1 + rho0 ** 2 * rho2 \
@@ -331,7 +331,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                  discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [0, -1], axis=(0, 1)),
                                                                  discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
                                                                          axis=(0, 1)))) * Jacobian_det
-    print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
+   # print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
     rho_quartic_pixel = lambda rho0, rho1, rho2, rho3: (1 / 30) * (rho0 ** 4 + rho1 ** 4 + rho2 ** 4) \
                                                        + (4 / 120) * (rho0 ** 3 * rho1 + rho0 ** 3 * rho2 \
                                                                       + rho1 ** 3 * rho0 + rho1 ** 3 * rho2 \
@@ -2052,7 +2052,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
                                                      x0=None,
                                                      P=preconditioner_fun,
                                                      steps=int(2000),
-                                                     toler=1e-10)
+                                                     toler=1e-8)
     if MPI.COMM_WORLD.rank == 0:
         nb_it_comb = len(adjoint_norms['residual_rz'])
         norm_rz = adjoint_norms['residual_rz'][-1]

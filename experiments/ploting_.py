@@ -12,18 +12,18 @@ phase_lstep1 = np.load(lstep1)  # .reshape(8,4)
 # fp='exp_data/muFFTTO_elasticity_random_init_N256_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI10.npy'
 # fp='exp_data/muFFTTO_elasticity_random_init_N256_E_target_0.3_Poisson_0.25_w0.01_eta0.01_p2_bounds=False_FE_NuMPI12.npy'
 name = 'muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.1_w0.01_eta0.01_p2_bounds=False_FE_NuMPI1.npy'
-for w in  [.02, ]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# for w in np.arange(0.1, 2.1, 0.1):
+for w in  [.01, ]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# for w in np.arange(0.1, 2.1, 0.1):
 
-    for eta_mult in [.1, ]:  #np.arange(0.01, 0.5, 0.05):#[0.02, ]:# np.arange(1, 2, 1):  # for eta_mult in np.arange(1, 5, 1):
+    for eta_mult in [1, ]:  #np.arange(0.01, 0.5, 0.05):#[0.02, ]:# np.arange(1, 2, 1):  # for eta_mult in np.arange(1, 5, 1):
 
         print(w, eta_mult)
         pixel_size = 0.0078125
         eta = 0.03125#eta_mult * pixel_size
-        N=8
-        cores=2
+        N=128
+        cores=10
         p=2
         name = (
-            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.25_Poisson_-0.5_Poisson0_0.2_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}.npy')
+            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.25_Poisson_-0.5_Poisson0_0.0_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}.npy')
 
         #  '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.02_eta0.00390625_p2_bounds=False_FE_NuMPI12.npy'
         # "1muFFTTO_elasticity_random_init_N258_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w1.0_eta0.003875968992248062_p2_bounds=False_FE_NuMPI12.npy"
@@ -37,7 +37,7 @@ for w in  [.02, ]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# f
         # sensitivity = np.load(f'sensitivity'+ fp)
 
         log_name = (
-            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.25_Poisson_-0.5_Poisson0_0.2_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}.npyxopt_log.npz')
+            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.25_Poisson_-0.5_Poisson0_0.0_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}.npyxopt_log.npz')
         #    '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.01_eta0.00390625_p2_bounds=False_FE_NuMPI12.npyxopt_log.npz'
 
         fp_log = 'exp_data/' + log_name
@@ -57,13 +57,34 @@ for w in  [.02, ]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# f
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
         plt.savefig(fname, bbox_inches='tight')
         plt.show()
+        # plt.figure()
+        # plt.contourf(np.tile(phase_field, (1, 1)), cmap=mpl.cm.Greys)
+        # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        # plt.clim(0, 1)
+        # plt.colorbar()
+        # plt.title(f'w = {w},eta= {eta_mult}\n, {xopt.f.message}')
+        # fname = src + fig_data_name + '{}'.format('.png')
+        # print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+        # plt.savefig(fname, bbox_inches='tight')
+        # plt.show()
+        plt.figure()
+        fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
+        plt.plot(np.tile(phase_field, (1, 2))[60, :].transpose())
+        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        plt.grid(True)
+        plt.minorticks_on()
+        fname = src + fig_data_name + '{}'.format('.png')
+        print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+        #plt.savefig(fname, bbox_inches='tight')
+        plt.show()
 
 quit()
 
 plt.figure()
 fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-plt.plot(np.tile(phase_field, (1, 2))[40, :].transpose())
+plt.plot(np.tile(phase_field, (1, 2))[:,50].transpose())
 # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
 plt.grid(True)
 plt.minorticks_on()

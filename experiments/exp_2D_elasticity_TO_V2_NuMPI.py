@@ -26,7 +26,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (8, 8)
+number_of_pixels = (256,256)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -60,7 +60,7 @@ macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
 # create material data of solid phase rho=1
 E_0 = 1
-poison_0 = 0.2
+poison_0 = 0.
 
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
 
@@ -123,8 +123,8 @@ print('target_stress = \n {}'.format(target_stress))
 # Auxetic metamaterials
 p = 2
 # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
-for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
-    for eta_mult in [0.1, ]:  # np.arange(0.01, 0.5, 0.05):#
+for w in [.01, ]:  # np.arange(0.01, 1.5, 0.05):#
+    for eta_mult in [1, ]:  # np.arange(0.01, 0.5, 0.05):#
         # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
         # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
         # eta =0.005#125#/discretization.pixel_size[0]
@@ -170,11 +170,11 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
 
             # K_diag_alg = discretization.get_preconditioner_Jacoby(
             #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-            # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-            #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-            # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-            #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-            #     nodal_field_fnxyz=K_diag_alg * x)
+            K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+                material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+            M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                nodal_field_fnxyz=K_diag_alg * x)
 
             # K_diag_blocks_alg_fnfnxyz = discretization.get_preconditioner_Jacoby_fast(
             #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz, prec_type='full')
@@ -191,7 +191,7 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
                                                     x0=None,
                                                     P=M_fun,
                                                     steps=int(2000),
-                                                    toler=1e-10)
+                                                    toler=1e-8)
             if MPI.COMM_WORLD.rank == 0:
                 nb_it_comb = len(norms['residual_rz'])
                 norm_rz = norms['residual_rz'][-1]
@@ -212,7 +212,7 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
                 phase_field_1nxyz=phase_field_1nxyz,
                 eta=eta,
                 w=w)
-            print('objective_function= \n'' {} '.format(objective_function))
+            #print('objective_function= \n'' {} '.format(objective_function))
             # plt.figure()
             # plt.contourf(phase_field_1nxyz[0, 0], cmap=mpl.cm.Greys)
             # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
@@ -276,7 +276,7 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
 
             # plt.show()
             if MPI.COMM_WORLD.size == 1:
-               phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI2.npy')
+               phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
             phase_field_0 = phase
             # file_data_name = f'init_phase_FE_N{number_of_pixels[0]}_NuMPI{MPI.COMM_WORLD.size}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
             #
@@ -292,7 +292,7 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
             # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
             phase_field_0 = phase_field_0.reshape(-1)  # b
 
-            print('Init objective function FE  = {}'.format(my_objective_function_FE(phase_field_00)))
+            print('Init objective function FE  = {}'.format(my_objective_function_FE(phase_field_00)[0]))
             # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
 
             # xopt = sp.optimize.minimize(my_objective_function_FE,
@@ -304,9 +304,9 @@ for w in [.02, ]:  # np.arange(0.01, 1.5, 0.05):#
             xopt_FE_MPI = Optimization.l_bfgs(fun=my_objective_function_FE,
                                               x=phase_field_0,
                                               jac=True,
-                                              maxcor=10,
+                                              maxcor=20,
                                               gtol=1e-5,
-                                              ftol=1e-6,
+                                              ftol=1e-7,
                                               maxiter=15000,
                                               comm=discretization.fft.communicator,
                                               disp=True)
