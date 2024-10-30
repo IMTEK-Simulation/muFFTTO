@@ -4,6 +4,8 @@ import numpy as np
 import scipy as sc
 import time
 
+from reportlab.lib.rl_accel import testing
+
 from muFFTTO import domain
 from muFFTTO import solvers
 
@@ -16,7 +18,8 @@ def objective_function_small_strain(discretization,
                                     target_stress_ij,
                                     phase_field_1nxyz,
                                     eta,
-                                    w):
+                                    w,
+                                    double_well_depth=1):
     # evaluate objective functions
     # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
     # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
@@ -24,24 +27,27 @@ def objective_function_small_strain(discretization,
     # stress difference potential: actual_stress_ij is homogenized stress
     f_sigma = compute_stress_equivalence_potential(actual_stress_ij=actual_stress_ij,
                                                    target_stress_ij=target_stress_ij)
-   # print('f_sigma= \n'          ' {} '.format(f_sigma)) # good in MPI
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_sigma= \n'          ' {} '.format(f_sigma))  # good in MPI
 
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
     f_dw = compute_double_well_potential_analytical(discretization=discretization,
                                                     phase_field_1nxyz=phase_field_1nxyz)
-    #print('f_dw= \n'          ' {} '.format(f_dw)) # wrong in MPI
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_dw= \n'          ' {} '.format(f_dw))  # wrong in MPI
 
     # phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     # f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
     f_rho_grad = compute_gradient_of_phase_field_potential(discretization=discretization,
                                                            phase_field_1nxyz=phase_field_1nxyz)
-    #print('f_rho_grad= \n'          ' {} '.format(f_rho_grad)) # good in MPI
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_rho_grad= \n'          ' {} '.format(f_rho_grad))  # good in MPI
     # print()
     # gradient_of_phase_field = compute_gradient_of_phase_field(phase_field_gradient)
 
-    f_rho = eta * f_rho_grad + f_dw / eta
+    f_rho = eta * f_rho_grad + double_well_depth * f_dw / eta
     # if MPI.COMM_WORLD.rank == 0:
     # print('f_sigma linear=  {} '.format(f_sigma))
     # print('f_rho_grad linear=  {} '.format(f_rho_grad))
@@ -51,7 +57,35 @@ def objective_function_small_strain(discretization,
     # print('w * f_rho linear =  {} '.format(w * f_rho))
     # print('objective_function linear = {} '.format(f_sigma + w * f_rho))
 
-    return f_sigma + w * f_rho  # / discretization.cell.domain_volume
+    return w * f_sigma + f_rho  # / discretization.cell.domain_volume
+
+
+def objective_function_phase_field(discretization,
+                                   phase_field_1nxyz,
+                                   eta,
+                                   double_well_depth=1):
+    # evaluate objective functions
+    # f =  w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
+    # f =  eta* f_rho_grad  + f_dw/eta
+
+    # double - well potential
+    # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
+    # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    f_dw = compute_double_well_potential_analytical(discretization=discretization,
+                                                    phase_field_1nxyz=phase_field_1nxyz)
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_dw= '          ' {} '.format(f_dw))  # good in MPI
+        print('f_dw / eta= '          ' {} '.format(f_dw / eta))  # good in MPI
+    # phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
+    # f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
+    f_rho_grad = compute_gradient_of_phase_field_potential(discretization=discretization,
+                                                           phase_field_1nxyz=phase_field_1nxyz)
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_rho_grad= '          ' {} '.format(f_rho_grad))  # good in MPI
+        print('eta*f_rho_grad= '          ' {} '.format(eta * f_rho_grad))
+    f_rho = eta * f_rho_grad + double_well_depth * f_dw / eta
+
+    return f_rho
 
 
 def compute_stress_equivalence_potential(actual_stress_ij,
@@ -61,11 +95,41 @@ def compute_stress_equivalence_potential(actual_stress_ij,
 
     # stress difference potential: actual_stress_ij is homogenized stress
     # stress_difference_ij = actual_stress_ij - target_stress_ij
-    stress_difference_ij = (target_stress_ij - actual_stress_ij)
+    stress_difference_ij = target_stress_ij - actual_stress_ij
 
     f_sigma = np.sum(stress_difference_ij ** 2) / np.sum(target_stress_ij ** 2)
-
+    if MPI.COMM_WORLD.rank == 0:
+        print('f_sigma = '          ' {} '.format(f_sigma))  # good in MPI
     return f_sigma
+
+
+def compute_elastic_energy_equivalence_potential(discretization,
+                                                 actual_stress_ij,
+                                                 target_stress_ij,
+                                                 macro_gradient_ij,
+                                                 actual_strain_ijqxyz,
+                                                 target_energy):
+    # evaluate objective functions
+    # stress_difference_ij = actual_stress_ij - target_stress_ij
+    stress_difference_ij = target_stress_ij - actual_stress_ij
+    actual_energy_difference = np.einsum('ij,ij->...',
+                                         stress_difference_ij,
+                                         macro_gradient_ij)
+    # actual_strain_ijqxyz = macro_gradient_field_ijqxyz + actual_strain_fluctuation_ijqxyz
+    # apply quadrature weights
+    # actual_strain_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(actual_strain_ijqxyz)
+    # macro_gradient_field_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(macro_gradient_field_ijqxyz)
+    #
+    # actual_energy_qxyz = np.einsum('ij,ij...->...',
+    #                                stress_difference_ij,
+    #                                macro_gradient_field_ijqxyz)
+    # # actual_energy_qxyz2 = np.einsum('ij,ij...->...',
+    # #                                actual_stress_ij,
+    # #                                macro_gradient_field_ijqxyz)
+    # actual_energy = discretization.mpi_reduction.sum(actual_energy_qxyz)
+    # actual_energy2 = discretization.mpi_reduction.sum(actual_energy_qxyz2)
+    # (actual_energy / 2 - target_energy / 2) ** 2 / (target_energy / 2) ** 2
+    return (actual_energy_difference / 1.) ** 2 / (target_energy / 1) ** 2
 
 
 def objective_function_small_strain_testing(discretization,
@@ -307,7 +371,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                                          phase_field_1nxyz[0, 0],
                                                                                          -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
-    #print('rho_squared= \n'          ' {} '.format(rho_squared)) #
+    # print('rho_squared= \n'          ' {} '.format(rho_squared)) #
 
     rho_qubed_pixel = lambda rho0, rho1, rho2, rho3: (1 / 20) * (rho0 ** 3 + rho1 ** 3 + rho2 ** 3) \
                                                      + (3 / 60) * (rho0 ** 2 * rho1 + rho0 ** 2 * rho2 \
@@ -327,11 +391,17 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                            axis=(0, 1)))) * Jacobian_det
 
     rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz[0, 0],
-                                                                 discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [-1, 0], axis=(0, 1)),
-                                                                 discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [0, -1], axis=(0, 1)),
-                                                                 discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
-                                                                         axis=(0, 1)))) * Jacobian_det
-   # print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
+                                                                 discretization.roll(discretization.fft,
+                                                                                     phase_field_1nxyz[0, 0], [-1, 0],
+                                                                                     axis=(0, 1)),
+                                                                 discretization.roll(discretization.fft,
+                                                                                     phase_field_1nxyz[0, 0], [0, -1],
+                                                                                     axis=(0, 1)),
+                                                                 discretization.roll(discretization.fft,
+                                                                                     phase_field_1nxyz[0, 0],
+                                                                                     -1 * np.array([1, 1]),
+                                                                                     axis=(0, 1)))) * Jacobian_det
+    # print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
     rho_quartic_pixel = lambda rho0, rho1, rho2, rho3: (1 / 30) * (rho0 ** 4 + rho1 ** 4 + rho2 ** 4) \
                                                        + (4 / 120) * (rho0 ** 3 * rho1 + rho0 ** 3 * rho2 \
                                                                       + rho1 ** 3 * rho0 + rho1 ** 3 * rho2 \
@@ -359,13 +429,18 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                                axis=(0, 1)))) * Jacobian_det
 
     rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(phase_field_1nxyz[0, 0],
-                                                                     discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [-1, 0],
-                                                                             axis=(0, 1)),
-                                                                     discretization.roll(discretization.fft,phase_field_1nxyz[0, 0], [0, -1],
-                                                                             axis=(0, 1)),
-                                                                     discretization.roll(discretization.fft,phase_field_1nxyz[0, 0],
-                                                                             -1 * np.array([1, 1]),
-                                                                             axis=(0, 1)))) * Jacobian_det
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         [-1, 0],
+                                                                                         axis=(0, 1)),
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         [0, -1],
+                                                                                         axis=(0, 1)),
+                                                                     discretization.roll(discretization.fft,
+                                                                                         phase_field_1nxyz[0, 0],
+                                                                                         -1 * np.array([1, 1]),
+                                                                                         axis=(0, 1)))) * Jacobian_det
 
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     integral = rho_squared - 2 * rho_qubed + rho_quartic
@@ -820,6 +895,94 @@ def objective_function_stress_equivalence(discretization,
     f_sigma = np.sum(stress_difference_ij ** 2) / np.sum(target_stress_ij ** 2)
     # can be done np.tensordot(stress_difference, stress_difference,axes=2)
     return f_sigma
+
+
+def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
+                                                                material_data_field_ijklqxyz,
+                                                                displacement_field_fnxyz,
+                                                                macro_gradient_field_ijqxyz,
+                                                                phase_field_1nxyz,
+                                                                target_stress_ij,
+                                                                actual_stress_ij,
+                                                                target_energy,
+                                                                p):
+    # Input: phase_field [1,n,x,y,z]
+    #        material_data_field [d,d,d,d,q,x,y,z] - elasticity
+    #        target_stress_ij [d,d]
+    #        actual_stress_ij [d,d]
+    # -- -- -- -- -- -- -- -- -- -- --
+
+    # Gradient of material data with respect to phase field
+    # % interpolation of rho into quad points
+    # -----    stress difference potential ----- #
+    # Gradient of material data with respect to phase field
+    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=None)  # TODO[Martin] missing exact integration
+    # apply material distribution
+    # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], p)
+
+    # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
+    #         p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
+
+    dmaterial_data_field_drho_ijklqxyz_FE = material_data_field_ijklqxyz[..., :, :, :] * np.power(
+        p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
+    # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
+    # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
+    # p = 2
+    # dmaterial_data_field_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
+    #        p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
+
+    # int(∂ C/ ∂ rho_i  * (macro_grad + micro_grad)) dx / | domain |
+
+    # compute strain field from to displacement and macro gradient
+    strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+
+    strain_ijqxyz = macro_gradient_field_ijqxyz + strain_fluctuation_ijqxyz
+
+    # compute stress field
+    # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
+    # stress_field_ijqxyz_pixel = np.einsum('ijkl...,lk...->ij...', dmaterial_data_field_ijklqxyz, strain_ijqxyz)
+    # stress_field_ijqxyz_FE = np.einsum('ijkl...,lk...->ij...', dmaterial_data_field_drho_ijklqxyz_FE, strain_ijqxyz)
+    stress_field_ijqxyz_FE = discretization.apply_material_data(dmaterial_data_field_drho_ijklqxyz_FE, strain_ijqxyz)
+
+    # apply quadrature weights
+    # stress_ijqxyz_pixel = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz_pixel)
+    # stress_field_ijqxyz_FE = np.ones(stress_field_ijqxyz_FE.shape)
+
+    stress_ijqxyz_FE = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz_FE)
+
+    # stress differenc
+    double_contraction_stress_qxyz_FE = np.einsum('ijqxy...,ijqxy...->qxy...',
+                                                  strain_ijqxyz,
+                                                  stress_ijqxyz_FE)
+
+    dfstress_drho_OLD = np.zeros(phase_field_1nxyz.shape)
+    for pixel_node in np.ndindex(
+            *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+        pixel_node = np.asarray(pixel_node)
+        if discretization.domain_dimension == 2:
+            # N_at_quad_points_qnijk
+            dfstress_drho_pixel_node = np.einsum('qn,qxy->nxy',
+                                                 N_at_quad_points_qnijk[(..., *pixel_node)],
+                                                 double_contraction_stress_qxyz_FE)
+
+            # dg_drho_nxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2))
+            dfstress_drho_OLD += discretization.roll(discretization.fft, dfstress_drho_pixel_node, 1 * pixel_node,
+                                                     axis=(0, 1))
+        elif discretization.domain_dimension == 3:
+            dfstress_drho_pixel_node = np.einsum('dqn,dqxyz->nxyz',
+                                                 N_at_quad_points_qnijk[(..., *pixel_node)],
+                                                 double_contraction_stress_qxyz_FE)
+
+            # dg_drho_nxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(1, 2, 3))
+            dfstress_drho_OLD += discretization.roll(discretization.fft, dfstress_drho_pixel_node, 1 * pixel_node,
+                                                     axis=(0, 1, 2))
+
+            warnings.warn('Gradient transposed is not tested for 3D.')
+
+    return dfstress_drho_OLD / discretization.cell.domain_volume
 
 
 def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE(discretization,
@@ -1975,7 +2138,8 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
                                             formulation,
                                             p,
                                             eta,
-                                            weight):
+                                            weight,
+                                            double_well_depth=1):
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -2033,7 +2197,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
                                                                             phase_field_1nxyz=phase_field_1nxyz)
 
     # sum of all parts of df_drho
-    df_drho = dstress_drho + weight * (dgradrho_drho * eta + ddw_drho / eta)
+    df_drho = weight * dstress_drho + (dgradrho_drho * eta + double_well_depth * ddw_drho / eta)
 
     # Adjoint problem
     stress_difference_ij = target_stress_ij - actual_stress_ij
@@ -2045,14 +2209,14 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
                                               macro_gradient_field_ijqxyz=stress_difference_ijqxyz)
                    / discretization.cell.domain_volume)  # minus sign is already there
     # Normalization
-    df_du_field = df_du_field / np.sum(target_stress_ij ** 2)
+    df_du_field = weight * df_du_field / np.sum(target_stress_ij ** 2)
 
     adjoint_field_fnxyz, adjoint_norms = solvers.PCG(Afun=system_matrix_fun,
                                                      B=-df_du_field,
                                                      x0=None,
                                                      P=preconditioner_fun,
-                                                     steps=int(2000),
-                                                     toler=1e-8)
+                                                     steps=int(10000),
+                                                     toler=1e-14)
     if MPI.COMM_WORLD.rank == 0:
         nb_it_comb = len(adjoint_norms['residual_rz'])
         norm_rz = adjoint_norms['residual_rz'][-1]
@@ -2091,10 +2255,319 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
                              'adjoint_energy': adjoint_energy}
         # print(sensitivity_parts)
 
-        return df_drho + dadjoin_drho + adjoint_energy, sensitivity_parts
+        return df_drho + dadjoin_drho, sensitivity_parts
 
     else:
-        return df_drho + dadjoin_drho + adjoint_energy
+        return df_drho + dadjoin_drho
+
+
+def sensitivity_stress_and_adjoint_FE_NEW(discretization,
+                                          material_data_field_ijklqxyz,
+                                          displacement_field_fnxyz,
+                                          adjoint_field_last_step_fnxyz,
+                                          macro_gradient_field_ijqxyz,
+                                          phase_field_1nxyz,
+                                          target_stress_ij,
+                                          actual_stress_ij,
+                                          preconditioner_fun,
+                                          system_matrix_fun,
+                                          formulation,
+                                          target_energy,
+                                          p,
+                                          weight):
+    # Input:
+    #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
+    #        displacement_field_fnxyz [f,n,x,y,z]
+    #        phase_field_1nxyz [1,n,x,y,z]
+    #        macro_gradient_field_ijqxyz [d,d,q,x,y,z]
+    #        target_stress_ij [d,d]
+    #        actual_stress_ij [d,d] # homogenized stress
+    #        formulation  - 'finite_strain', 'small_strain'
+    #        p [1]  # polynomial order of a material interpolation
+    #        eta [1] # weight parameter for balancing the phase field terms
+
+    # Output:
+    #        df_drho_fnxyz [1,n,x,y,z]
+    # -- -- -- -- -- -- -- -- -- -- --
+
+    # -----    stress difference potential ----- #
+    # Gradient of material data with respect to phase field
+    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=None)
+
+    material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
+        np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
+
+    # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * np.power(
+    #     p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
+
+    # d_stress_d_rho phase field gradient potential for a phase field without perturbation
+    dstress_drho = partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE(
+        discretization=discretization,
+        phase_field_1nxyz=phase_field_1nxyz,
+        target_stress_ij=target_stress_ij,
+        actual_stress_ij=actual_stress_ij,
+        material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+        displacement_field_fnxyz=displacement_field_fnxyz,
+        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        p=p)
+
+    # Adjoint problem
+    # compute strain field from to displacement and macro gradient
+    strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+
+    stress_difference_ij = target_stress_ij - actual_stress_ij
+    stress_difference_ijqxyz = discretization.get_gradient_size_field()
+    stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
+        (...,) + (np.newaxis,) * (stress_difference_ijqxyz.ndim - 2)]
+    # minus sign is already there
+    # df_du_field = (2 * discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+    #                                           macro_gradient_field_ijqxyz=stress_difference_ijqxyz)
+    #                / discretization.cell.domain_volume)  # minus sign is already there
+    # minus sign is already there
+    df_du_field = (2 * discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+                                              macro_gradient_field_ijqxyz=stress_difference_ijqxyz)
+                   / discretization.cell.domain_volume)  # minus sign is already there
+    # Normalization
+    df_du_field = weight * df_du_field / np.sum(target_stress_ij ** 2)
+
+    adjoint_field_fnxyz, adjoint_norms = solvers.PCG(Afun=system_matrix_fun,
+                                                     B=-df_du_field,
+                                                     x0=adjoint_field_last_step_fnxyz,
+                                                     P=preconditioner_fun,
+                                                     steps=int(10000),
+                                                     toler=1e-10)
+    if MPI.COMM_WORLD.rank == 0:
+        nb_it_comb = len(adjoint_norms['residual_rz'])
+        norm_rz = adjoint_norms['residual_rz'][-1]
+        print(' nb_ steps CG adjoint =' f'{nb_it_comb}, residual_rz = {norm_rz}')
+    dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
+        discretization=discretization,
+        material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+        displacement_field_fnxyz=displacement_field_fnxyz,
+        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        phase_field_1nxyz=phase_field_1nxyz,
+        adjoint_field_fnxyz=adjoint_field_fnxyz,
+        p=p)
+
+    stress_field = discretization.get_stress_field(
+        material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+        displacement_field_fnxyz=displacement_field_fnxyz,
+        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        formulation='small_strain')
+
+    adjoint_energy = adjoint_potential(
+        discretization=discretization,
+        stress_field_ijqxyz=stress_field,
+        adjoint_field_fnxyz=adjoint_field_fnxyz)
+
+    return weight * dstress_drho + dadjoin_drho, adjoint_field_fnxyz, adjoint_energy
+
+
+def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
+                                                  material_data_field_ijklqxyz,
+                                                  displacement_field_fnxyz,
+                                                  macro_gradient_field_ijqxyz,
+                                                  phase_field_1nxyz,
+                                                  target_stress_ij,
+                                                  actual_stress_ij,
+                                                  preconditioner_fun,
+                                                  system_matrix_fun,
+                                                  formulation,
+                                                  target_energy,
+                                                  p,
+                                                  weight):
+    # Input:
+    #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
+    #        displacement_field_fnxyz [f,n,x,y,z]
+    #        phase_field_1nxyz [1,n,x,y,z]
+    #        macro_gradient_field_ijqxyz [d,d,q,x,y,z]
+    #        target_stress_ij [d,d]
+    #        actual_stress_ij [d,d] # homogenized stress
+    #        formulation  - 'finite_strain', 'small_strain'
+    #        p [1]  # polynomial order of a material interpolation
+    #        eta [1] # weight parameter for balancing the phase field terms
+
+    # Output:
+    #        df_drho_fnxyz [1,n,x,y,z]
+    # -- -- -- -- -- -- -- -- -- -- --
+
+    # -----    stress difference potential ----- #
+    # Gradient of material data with respect to phase field
+    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=None)
+
+    material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
+        np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
+
+    strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+    strain_ijqxyz = macro_gradient_field_ijqxyz + strain_fluctuation_ijqxyz
+    stress_fluctuation_ijqxyz = discretization.apply_material_data(material_data_field_rho_ijklqxyz,
+                                                                   strain_fluctuation_ijqxyz)
+    stress_field_ijqxyz = discretization.apply_material_data(material_data_field_rho_ijklqxyz,
+                                                             strain_ijqxyz)
+    # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * np.power(
+    #     p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
+    # compute strain field from to displacement and macro gradient
+    # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+    # compute strain field from to displacement and macro gradient
+
+    # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+    # strain_ijqxyz = macro_gradient_field_ijqxyz + strain_fluctuation_ijqxyz
+
+    stress_difference_ij = actual_stress_ij - target_stress_ij
+    # stress_difference_ijqxyz = discretization.get_gradient_size_field()
+    # stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
+    #     (...,) + (np.newaxis,) * (stress_difference_ijqxyz.ndim - 2)]
+    stress_difference_ijqxyz = stress_field_ijqxyz - target_stress_ij[
+        (...,) + (np.newaxis,) * (stress_field_ijqxyz.ndim - 2)]
+    # stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
+    #     (...,) + (np.newaxis,) * (stress_difference_ijqxyz.ndim - 2)]
+
+    f_sigmas_energy = np.einsum('ij,ij->...',
+                                stress_difference_ij,
+                                macro_gradient_field_ijqxyz[..., 0, 0, 0])
+    # f_sigmas_energy -= target_energy
+    # d_stress_d_rho phase field gradient potential for a phase field without perturbation
+
+    dstress_drho = partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization=discretization,
+                                                                               phase_field_1nxyz=phase_field_1nxyz,
+                                                                               target_stress_ij=target_stress_ij,
+                                                                               actual_stress_ij=actual_stress_ij,
+                                                                               material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+                                                                               displacement_field_fnxyz=displacement_field_fnxyz,
+                                                                               macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+                                                                               target_energy=target_energy,
+                                                                               p=p)
+
+    dstress_drho = weight * (2 * f_sigmas_energy * dstress_drho) / target_energy ** 2
+    # Adjoint problem
+
+    # compute strain field from to displacement and macro gradient
+    # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+    # compute strain field from to displacement and macro gradient
+
+    # df_du_field_CE = -(discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+    #                                           macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+    #                    / discretization.cell.domain_volume)
+    # df_du_field_Cgradu = -(discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+    #                                           macro_gradient_field_ijqxyz=stress_difference_ijqxyz)
+    #                    / discretization.cell.domain_volume)
+    # df_du_field_BtSdiff = -(discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+    #                                               macro_gradient_field_ijqxyz=stress_difference_ijqxyz)
+    #                        / discretization.cell.domain_volume)
+    stress_difference_ijqxyz = discretization.apply_quadrature_weights_on_gradient_field(stress_difference_ijqxyz)
+    df_du_field_BtSdiff = 2 * discretization.apply_gradient_transposed_operator(stress_difference_ijqxyz)
+    # stress_field_ijqxyz
+    # df_du_field_C_0E = -(discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+    #                                             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+    #                      / discretization.cell.domain_volume)
+    # # minus sign is already there
+    # df_du_field_homo = -  (discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
+    #                                               macro_gradient_field_ijqxyz=strain_fluctuation_ijqxyz)
+    #                        / discretization.cell.domain_volume)
+    #
+    # energy_fluctuation = adjoint_potential(
+    #     discretization=discretization,
+    #     stress_field_ijqxyz=stress_fluctuation_ijqxyz,
+    #     adjoint_field_fnxyz=displacement_field_fnxyz) / discretization.cell.domain_volume
+
+    # df_du_field_target = (discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+    #                                                   macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+    #                            / discretization.cell.domain_volume)
+    # Normalization
+    df_du_field = weight * (2 * f_sigmas_energy * 2 * df_du_field_BtSdiff) / target_energy ** 2
+
+    adjoint_field_fnxyz, adjoint_norms = solvers.PCG(Afun=system_matrix_fun,
+                                                     B=-df_du_field,
+                                                     x0=None,
+                                                     P=preconditioner_fun,
+                                                     steps=int(10000),
+                                                     toler=1e-10)
+    if MPI.COMM_WORLD.rank == 0:
+        nb_it_comb = len(adjoint_norms['residual_rz'])
+        norm_rz = adjoint_norms['residual_rz'][-1]
+        print(' nb_ steps CG adjoint =' f'{nb_it_comb}, residual_rz = {norm_rz}')
+    dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
+        discretization=discretization,
+        material_data_field_ijklqxyz=material_data_field_ijklqxyz,
+        displacement_field_fnxyz=displacement_field_fnxyz,
+        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        phase_field_1nxyz=phase_field_1nxyz,
+        adjoint_field_fnxyz=adjoint_field_fnxyz,
+        p=p)
+
+    adjoint_energy = adjoint_potential(
+        discretization=discretization,
+        stress_field_ijqxyz=stress_field_ijqxyz,
+        adjoint_field_fnxyz=adjoint_field_fnxyz)
+    test = True
+    if test == True:
+        print({'dfstress_drho': np.linalg.norm(dstress_drho),
+               'df_du_field': np.linalg.norm(df_du_field),
+               'f_sigmas_energy': np.linalg.norm(f_sigmas_energy),
+               'df_du_field_BtSdiff': np.linalg.norm(df_du_field_BtSdiff),
+               'dstress_drho': np.linalg.norm(dstress_drho),
+               'adjoint_energy': adjoint_energy})
+    return dstress_drho + dadjoin_drho, adjoint_energy
+
+
+def sensitivity_phase_field_term_FE_NEW(discretization,
+                                        material_data_field_ijklqxyz,
+                                        phase_field_1nxyz,
+                                        p,
+                                        eta,
+                                        double_well_depth=1):
+    # Input:
+    #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
+    #        displacement_field_fnxyz [f,n,x,y,z]
+    #        phase_field_1nxyz [1,n,x,y,z]
+    #        macro_gradient_field_ijqxyz [d,d,q,x,y,z]
+    #        target_stress_ij [d,d]
+    #        actual_stress_ij [d,d] # homogenized stress
+    #        formulation  - 'finite_strain', 'small_strain'
+    #        p [1]  # polynomial order of a material interpolation
+    #        eta [1] # weight parameter for balancing the phase field terms
+
+    # Output:
+    #        df_drho_fnxyz [1,n,x,y,z]
+    # -- -- -- -- -- -- -- -- -- -- --
+
+    # -----    stress difference potential ----- #
+    # Gradient of material data with respect to phase field
+    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=None)
+
+    material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
+        np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
+
+    # -----    Double well potential ----- #
+
+    # Derivative of the double-well potential with respect to phase-field
+    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
+    # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
+    # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
+
+    ddw_drho = partial_der_of_double_well_potential_wrt_density_analytical(discretization=discretization,
+                                                                           phase_field_1nxyz=phase_field_1nxyz)
+
+    # -----    phase field gradient potential ----- #
+    # partial derivative of  phase field gradient potential = 2/eta int (  (grad(rho))^2 )    dx
+    #  (D rho, D I) ==  ( D I, D rho) and thus  == I D_t D rho
+
+    dgradrho_drho = partial_derivative_of_gradient_of_phase_field_potential(discretization=discretization,
+                                                                            phase_field_1nxyz=phase_field_1nxyz)
+
+    # sum of all parts of df_drho
+    dphase_drho = (dgradrho_drho * eta + double_well_depth * ddw_drho / eta)
+
+    return dphase_drho
 
 
 def sensitivity_with_adjoint_problem_FE_weights(discretization,

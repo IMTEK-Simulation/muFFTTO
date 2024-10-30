@@ -13,7 +13,8 @@ def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  coordinates=None,
                  parameter=None):
-    if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'sine_wave','linear',
+    if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
+                                   'sine_wave', 'linear',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -54,10 +55,27 @@ def get_geometry(nb_voxels,
                     np.power(coordinates[0], 2) +
                     np.power(coordinates[1], 2) +
                     np.power(coordinates[2], 2) < 0.3] = 1
+        case 'circle_inclusions':
+            # Image resolution
+            size = np.size(coordinates, -1)
+            number_of_holes = 3  # 3x3 grid of holes
+            spacing = size // (number_of_holes + 1)
+            radius = spacing // 3  # Radius of each hole
+
+            # Initialize the image array
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.5 * np.sin(2 * 2 * np.pi * coordinates[0]) * np.sin(
+                    2 * 2 * np.pi * coordinates[1])
+
+            if nb_voxels.size == 3:
+                phase_field = 0.5 + 0.5 * np.sin(2 * 2 * np.pi * coordinates[0]) * np.sin(
+                    2 * 2 * np.pi * coordinates[1]) * np.sin(
+                    2 * 2 * np.pi * coordinates[3])
+
         case 'sine_wave':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field = np.sin(33 * coordinates[0] * coordinates[1])
+                phase_field = 0.5 + 0.5 * np.sin(32 * 2 * np.pi * coordinates[0] * coordinates[1])
             elif nb_voxels.size == 3:
                 phase_field = np.sin(coordinates)
         case 'linear':
@@ -65,7 +83,7 @@ def get_geometry(nb_voxels,
             if nb_voxels.size == 2:
                 phase_field = coordinates[0] * coordinates[1]
             elif nb_voxels.size == 3:
-                phase_field = coordinates[0] * coordinates[1]*coordinates[2]
+                phase_field = coordinates[0] * coordinates[1] * coordinates[2]
 
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
@@ -912,6 +930,14 @@ def check_dimension(nb_voxels, microstructure_name):
 
 
 if __name__ == '__main__':
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Display the image
+    plt.imshow(image, cmap='gray')
+    plt.axis('off')
+    plt.show()
+
     # plot  geometry
     geometry_ID = 'geometry_III_5_3D'
     N = 60
