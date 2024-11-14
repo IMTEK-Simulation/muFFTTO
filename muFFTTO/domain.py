@@ -64,12 +64,15 @@ class Discretization:
         self.domain_size = cell.domain_size
         # number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = nb_of_pixels_global
+        print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=communicator)
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
+        self.sub_domain_size = np.prod(self.fft.nb_subdomain_grid_pts)
+
         if not discretization_type in ['finite_element']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
@@ -80,7 +83,11 @@ class Discretization:
         # print('nb sub points ' f'{self.fft.nb_subdomain_grid_pts}')
 
         # pixel properties
+        #print('before pixel_size = \n {} core {}'.format(self.domain_size / self.nb_of_pixels_global,
+        #                                                 MPI.COMM_WORLD.rank))
+
         self.pixel_size = self.domain_size / self.nb_of_pixels_global
+        #print('pixel_size = \n {} core {}'.format(self.pixel_size / self.nb_of_pixels_global, MPI.COMM_WORLD.rank))
         # self.nb_elements_per_pixel = None
         self.nb_nodes_per_pixel = None
         self.nodal_points_coordinates = None
@@ -133,10 +140,27 @@ class Discretization:
         return quad_points_coordinates
 
     def roll(self, fft, u, shift, axis):
+        #if self.sub_domain_size == 0:
+        #    #return u
+
         phase = -2 * np.pi * sum(s * fft.fftfreq[a] for s, a in zip(shift, axis))
+        # MPI.COMM_WORLD.Barrier()
+
+        #print('fft.fftfreq[a]= {} \n   core {}'.format(sum(s * fft.fftfreq[a] for s, a in zip(shift, axis)),
+                   #                                    MPI.COMM_WORLD.rank))
         # a= fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation
         # a=a.reshape(u.shape)
+        #MPI.COMM_WORLD.Barrier()
+        #print('u size= {} \n   core {}'.format(u.shape, MPI.COMM_WORLD.rank))
+
+       # MPI.COMM_WORLD.Barrier()
+        #print('fft.fft(u)= {} \n   core {}'.format(fft.fft(u), MPI.COMM_WORLD.rank))
+        #
+        #print('np.exp(1j * phase) = {} \n   core {}'.format(np.exp(1j * phase), MPI.COMM_WORLD.rank))
+
         return (fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation).reshape(u.shape)
+
+        # MPI.COMM_WORLD.Barrier()
 
     def apply_gradient_operator(self, u, gradient_of_u=None):
         if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
@@ -164,12 +188,35 @@ class Discretization:
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: loop over pixel node =' f'{pixel_node}')
 
             pixel_node = np.asarray(pixel_node)
+
             if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless .. working for 3 as well
                 # gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                 #                             np.roll(u, -1 * pixel_node, axis=(2, 3)))
                 # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: einsum =' f'{pixel_node}')
+
+                # print('3.20 = \n   core {}'.format(MPI.COMM_WORLD.rank))
+                # print('3.20 = B= {} \n   core {}'.format(self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],MPI.COMM_WORLD.rank))
+                # MPI.COMM_WORLD.Barrier()
+                # print('3.20 = u shape = {} \n   core {}'.format(u.shape,MPI.COMM_WORLD.rank))
+                # print('3.20 = -1 * pixel_node= {} \n   core {}'.format(-1 * pixel_node,MPI.COMM_WORLD.rank))
+                # MPI.COMM_WORLD.Barrier()
+                # print('3.20 = einsum= {} \n   core {}'.format( np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                #                            u),MPI.COMM_WORLD.rank))
+
+                # print('3.20 = elf.roll(self.fft, u, -1 * pixel_node, axis=(0, 1))= {} \n   core {}'.format(self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1)),MPI.COMM_WORLD.rank))
+                # MPI.COMM_WORLD.Barrier()
+
+                # print('roll= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
+
+                rolled_disp_field = self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1))
+                # print('einsum= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
+                # MPI.COMM_WORLD.Barrier()
+                # print('self.sub_domain_size != 0 = {} \n   core {}'.format(self.sub_domain_size != 0,
+                #                                                                  MPI.COMM_WORLD.rank))
+
                 gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                           self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1)))
+                                           rolled_disp_field)
+                # print('gradient_of_u= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
 
             elif self.domain_dimension == 3:
                 # gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
@@ -179,6 +226,8 @@ class Discretization:
                                            self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1, 2)))
         # TODO roll[u]= ifft (e^iq dx fft (u))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: finish =' f'{gradient_of_u.shape}')
+        # MPI.COMM_WORLD.Barrier()
+        # print('gradient_of_u= {} \n   core {}'.format(1, MPI.COMM_WORLD.rank))
 
         return gradient_of_u
 
@@ -205,28 +254,28 @@ class Discretization:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
         div_u_fnxyz.fill(0)
+        if self.sub_domain_size != 0:
+            for pixel_node in np.ndindex(
+                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                pixel_node = np.asarray(pixel_node)
+                if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
 
-        for pixel_node in np.ndindex(
-                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-            pixel_node = np.asarray(pixel_node)
-            if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
+                    div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                     gradient_of_u_fdqxyz)
 
-                div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                                 gradient_of_u_fdqxyz)
+                    # div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
+                    div_u_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1))
 
-                # div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3))
-                div_u_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1))
+                elif self.domain_dimension == 3:
 
-            elif self.domain_dimension == 3:
+                    div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
+                                                     self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                                     gradient_of_u_fdqxyz)
 
-                div_fnxyz_pixel_node = np.einsum('dqn,fdqxyz->fnxyz',
-                                                 self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                                 gradient_of_u_fdqxyz)
+                    # div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
+                    div_u_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
 
-                # div_u_fnxyz += np.roll(div_fnxyz_pixel_node, 1 * pixel_node, axis=(2, 3, 4))
-                div_u_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
-
-                warnings.warn('Gradient transposed is not tested for 3D.')
+                    warnings.warn('Gradient transposed is not tested for 3D.')
 
         return div_u_fnxyz
 
@@ -270,24 +319,24 @@ class Discretization:
             for pixel_node in np.ndindex(*np.ones([self.domain_dimension], dtype=int) * 2):
                 N_at_quad_points_qnijk[(quad_point_idx, 0, *pixel_node)] = self.N_basis_interpolator_array[pixel_node](
                     *quad_point_coords)
+        if self.sub_domain_size != 0:
+            for pixel_node in np.ndindex(
+                    *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+                pixel_node = np.asarray(pixel_node)
+                if self.domain_dimension == 2:
+                    # quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
+                    #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3)))
 
-        for pixel_node in np.ndindex(
-                *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-            pixel_node = np.asarray(pixel_node)
-            if self.domain_dimension == 2:
-                # quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
-                #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3)))
+                    quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
+                                                   self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node, axis=(0, 1)))
 
-                quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
-                                               self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node, axis=(0, 1)))
+                elif self.domain_dimension == 3:  # TODO 3D interpolation is not tested
+                    # quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
+                    #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
 
-            elif self.domain_dimension == 3:  # TODO 3D interpolation is not tested
-                # quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
-                #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
-
-                quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
-                                               self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node,
-                                                         axis=(0, 1, 2)))
+                    quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
+                                                   self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node,
+                                                             axis=(0, 1, 2)))
 
         return quad_field_fqnxyz, N_at_quad_points_qnijk
 
@@ -474,6 +523,7 @@ class Discretization:
 
         # TODO self.fft.icoords == 0, axis = 0
         # loop over all types of degree of freedom [f,n]
+
         for impulse_position in np.ndindex(unit_impulse_fnxyz.shape[0:2]):
             # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
 
@@ -488,7 +538,9 @@ class Discretization:
                 material_data_field=reference_material_data_field_ijklqxyz,
                 displacement_field=unit_impulse_fnxyz,
                 formulation=formulation)
+            MPI.COMM_WORLD.Barrier()
 
+            # print('4 = \n   core {}'.format(MPI.COMM_WORLD.rank))
         # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
         # print(preconditioner_diagonals_fnfnxyz.reshape([2, 2, *preconditioner_diagonals_fnfnxyz.shape[-2:]]))
@@ -503,6 +555,9 @@ class Discretization:
         # compute inverse of diagonals
         # zero_indices = np.all(array == 0, axis=0)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} preconditioner_diagonals_fnfnqks_NEW=' f'{preconditioner_diagonals_fnfnqks_NEW}')
+        MPI.COMM_WORLD.Barrier()
+
+        # print('5 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
         for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
 
@@ -517,12 +572,13 @@ class Discretization:
             # print(pixel_index)
             # print(local_matrix_ijkl_NEW)
             # compute inversion
+            # print('6 = \n   core {}'.format(MPI.COMM_WORLD.rank))
             local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
 
             # rearrange local inverse matrix into global field
             preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
                     unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
-
+        # print('7 = \n   core {}'.format(MPI.COMM_WORLD.rank))
         return preconditioner_diagonals_fnfnqks_NEW
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
@@ -647,9 +703,9 @@ class Discretization:
                 return diagonal_matrices_fnfnxyz
         # return self.apply_quadrature_weights_elasticity(material_data)
         # K_diag_inv_sym = K_diag ** (-1 / 2)
-        diagonal_fnxyz[diagonal_fnxyz < 1e-15] = 0
+        diagonal_fnxyz[diagonal_fnxyz < 1e-16] = 0
         diagonal_fnxyz[diagonal_fnxyz != 0] = diagonal_fnxyz[diagonal_fnxyz != 0] ** (-1 / 2)
-        #diagonal_fnxyz ** (-1 / 2)
+        # diagonal_fnxyz ** (-1 / 2)
         return diagonal_fnxyz
 
     def apply_preconditioner_DELETE(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
@@ -711,21 +767,28 @@ class Discretization:
 
         if formulation == 'small_strain':
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
-
+            # print('3.02 = \n   core {}'.format(MPI.COMM_WORLD.rank))
             strain = self.apply_gradient_operator_symmetrized(displacement_field)
 
         else:
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=' f'{displacement_field}')
+            # print('3.03 = \n   core {}'.format(MPI.COMM_WORLD.rank))
             strain = self.apply_gradient_operator(displacement_field)
+        MPI.COMM_WORLD.Barrier()
 
+        # print('apply_quadrature_weights = \n   core {}'.format(MPI.COMM_WORLD.rank))
+        # print('3.1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
         material_data_field = self.apply_quadrature_weights(material_data_field)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
 
         stress = self.apply_material_data(material_data_field, strain)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
+        MPI.COMM_WORLD.Barrier()
 
+        # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
         force = self.apply_gradient_transposed_operator(stress)
+
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:force=')  # f'{force}')
 
         return force

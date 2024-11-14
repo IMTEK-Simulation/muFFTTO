@@ -1,7 +1,7 @@
-import netCDF4
 import matplotlib as mpl
 import numpy as np
 import matplotlib.pyplot as plt
+from mpmath import arange
 
 lstep0 = 'exp_data/last_stepf0.npy'
 phase_lstep0 = np.load(lstep0)  # .reshape(8,4)
@@ -11,23 +11,26 @@ phase_lstep1 = np.load(lstep1)  # .reshape(8,4)
 # fp='exp_data/muFFTTO_elasticity_random_init_N32_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI4.npy'
 # fp='exp_data/muFFTTO_elasticity_random_init_N256_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI10.npy'
 # fp='exp_data/muFFTTO_elasticity_random_init_N256_E_target_0.3_Poisson_0.25_w0.01_eta0.01_p2_bounds=False_FE_NuMPI12.npy'
-name = 'muFFTTO_elasticity_random_init_N128_E_target_0.35_Poisson_-0.3_Poisson0_0.1_w0.01_eta0.01_p2_bounds=False_FE_NuMPI1.npy'
-for w_mult in [25.0]:  #np.arange(0.1, 1., 0.1):# [1]:  # np.arange(1, 5,1):#3[1]:  # np.arange(1, 5,1):#[1]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# for w in np.arange(0.1, 2.1, 0.1):
+for w_mult in [
+    4.0]:  # np.arange(0.1, 1., 0.1):# [1]:  # np.arange(1, 5,1):#3[1]:  # np.arange(1, 5,1):#[1]:  #np.arange(0.01, 0.5, 0.05):  # np.arange(0.1, 2.1, 0.1):# for w in np.arange(0.1, 2.1, 0.1):
 
-    for eta_mult in [0.1]:  #np.arange(0.05, 0.5, 0.05):#[0.1 ]:  #np.arange(0.001, 0.01, 0.002):#[0.005, ]:  #np.arange(0.01, 0.5, 0.05):#[0.02, ]:# np.arange(1, 2, 1):  # for eta_mult in np.arange(1, 5, 1):
+    for eta_mult in [
+        0.01, ]:  # np.arange(0.05, 0.5, 0.05):#[0.1 ]:  #np.arange(0.001, 0.01, 0.002):#[0.005, ]:  #np.arange(0.01, 0.5, 0.05):#[0.02, ]:# np.arange(1, 2, 1):  # for eta_mult in np.arange(1, 5, 1):
         energy_objective = False
         print(w_mult, eta_mult)
         pixel_size = 0.0078125
-        eta = 0.03125#eta_mult * pixel_size
-        N=32
-        cores=4
-        p=2
-        nb_load_cases=2
-        random_initial_geometry = False
-
+        eta = 0.03125  # eta_mult * pixel_size
+        N = 256
+        cores = 12
+        p = 2
+        nb_load_cases = 3
+        random_initial_geometry = True
         name = (
-            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy')
+            f'eta_2muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy')
+
         # name = (
+        #     f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy')
+        #  name = (
         #     f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_Fire.npy')
 
         #  '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.02_eta0.00390625_p2_bounds=False_FE_NuMPI12.npy'
@@ -42,12 +45,11 @@ for w_mult in [25.0]:  #np.arange(0.1, 1., 0.1):# [1]:  # np.arange(1, 5,1):#3[1
         # sensitivity = np.load(f'sensitivity'+ fp)
 
         log_name = (
-            f'1muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npyxopt_log.npz')
+            f'eta_2muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}xopt_log.npz')
         #    '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.01_eta0.00390625_p2_bounds=False_FE_NuMPI12.npyxopt_log.npz'
 
         fp_log = 'exp_data/' + log_name
-        xopt=np.load('exp_data/' + log_name)
-       # xopt = np.load(fp_log)
+        xopt = np.load('exp_data/' + log_name, allow_pickle=True)
 
         src = './figures/'  # source folder\
         fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
@@ -57,19 +59,20 @@ for w_mult in [25.0]:  #np.arange(0.1, 1., 0.1):# [1]:  # np.arange(1, 5,1):#3[1
         # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
         plt.clim(0, 1)
         plt.colorbar()
-        plt.title(f'w = {w_mult},eta= {eta_mult}\n, {xopt.f.homogenized_stresses}')
+        # plt.title(f'w = {w_mult},eta= {eta_mult}\n, {xopt.f.homogenized_stresses}')
         fname = src + fig_data_name + '{}'.format('.png')
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
         plt.savefig(fname, bbox_inches='tight')
         plt.show()
+
         plt.figure()
         plt.contourf(np.tile(phase_field, (1, 1)), cmap=mpl.cm.Greys)
-        plt.title(f'w = {w_mult},eta= {eta_mult}\n, {xopt.f.homogenized_stresses}')
+        # plt.title(f'w = {w_mult},eta= {eta_mult}\n, {xopt.f.homogenized_stresses}')
 
         # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
         plt.clim(0, 1)
         plt.colorbar()
-        #plt.title(f'w = {w},eta= {eta_mult}\n, {xopt.f.message}')
+        # plt.title(f'w = {w},eta= {eta_mult}\n, {xopt.f.message}')
         fname = src + fig_data_name + '{}'.format('.png')
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
         plt.savefig(fname, bbox_inches='tight')
@@ -77,21 +80,89 @@ for w_mult in [25.0]:  #np.arange(0.1, 1., 0.1):# [1]:  # np.arange(1, 5,1):#3[1
         plt.figure()
         fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-        plt.plot(np.tile(phase_field, (1, 1))[N//2, :].transpose())
+        plt.plot(np.tile(phase_field, (1, 1))[:, 3].transpose())
         # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
         plt.grid(True)
         plt.minorticks_on()
         fname = src + fig_data_name + '{}'.format('.png')
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
-        #plt.savefig(fname, bbox_inches='tight')
+        # plt.savefig(fname, bbox_inches='tight')
         plt.show()
+        plt.figure()
+        fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        # plt.semilogy(xopt.f.norms_f-xopt.f.norms_f[-1], label='objective f')
+        # plt.semilogy(xopt.f.norms_pf-xopt.f.norms_pf[-1], label='phase field')
+        # plt.semilogy(np.abs(xopt.f.norms_sigma[:,0]-xopt.f.norms_pf - xopt.f.norms_sigma[-1,0]+xopt.f.norms_pf[-1]), label='stress')
+        plt.semilogy(xopt.f.norms_f , label='objective f')
+        plt.semilogy(xopt.f.norms_pf, label='phase field')
+        plt.semilogy(xopt.f.norms_sigma[:, 0] - xopt.f.norms_pf,
+            label='stress')
+#-xopt.f.norms_sigma[-1,0]+xopt.f.norms_pf[-1]
+        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        plt.grid(True)
+        # plt.minorticks_on()
+        fname = src + fig_data_name + '{}'.format('.png')
+        print(('create figure: {}'.format(fname)))
 
+        plt.figure()
+        fig_data_name = f'muFFTTO_{phase_field.shape}_line relative'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        # plt.semilogy(xopt.f.norms_f-xopt.f.norms_f[-1], label='objective f')
+        # plt.semilogy(xopt.f.norms_pf-xopt.f.norms_pf[-1], label='phase field')
+        # plt.semilogy(np.abs(xopt.f.norms_sigma[:,0]-xopt.f.norms_pf - xopt.f.norms_sigma[-1,0]+xopt.f.norms_pf[-1]), label='stress')
+        plt.semilogy(xopt.f.norms_f-xopt.f.norms_f[-1], label='objective f')
+        plt.semilogy(np.abs(xopt.f.norms_pf - xopt.f.norms_pf[-1]), label='phase field')
+        plt.semilogy(np.abs(xopt.f.norms_sigma[:, 0] - xopt.f.norms_pf - xopt.f.norms_sigma[-1, 0] + xopt.f.norms_pf[-1]),
+                     label='stress')
+        # -xopt.f.norms_sigma[-1,0]+xopt.f.norms_pf[-1]
+        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        plt.grid(True)
+        # plt.minorticks_on()
+        fname = src + fig_data_name + '{}'.format('.png')
+        print(('create figure: {}'.format(fname)))
+        plt.legend()
+        plt.show()
+        plt.figure()
+        fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        plt.semilogy(xopt.f.norms_f, label='objective f')
+
+        plt.semilogy(xopt.f.norms_delta_f, label='Δf')
+        plt.semilogy(xopt.f.norms_max_grad_f, label='max ∇ f')
+
+        plt.semilogy(xopt.f.norms_norm_grad_f, label='|∇ f|')
+       # plt.semilogy(xopt.f.norms_max_delta_x, label='max Δx')
+       # plt.semilogy(xopt.f.norms_norm_delta_x, label='|Δx|')
+       # plt.semilogy(np.abs(xopt.f.norms_sigma[:,0]-xopt.f.norms_pf - xopt.f.norms_sigma[-1,0]+xopt.f.norms_pf[-1]), label='stress')
+
+        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        plt.grid(True)
+        # plt.minorticks_on()
+        fname = src + fig_data_name + '{}'.format('.png')
+        print(('create figure: {}'.format(fname)))
+        plt.legend()
+        plt.show()
+quit()
+
+for iteration in np.arange(1, 714, 5, dtype=int):
+    log_name_it = (
+        f'eta_2muFFTTO_elasticity_random_init_N{N}_E_target_0.33333333333333337_Poisson_-0.3333333333333333_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}.npy')
+    #    '1muFFTTO_elasticity_random_init_N256_E_target_0.35_Poisson_-0.3_Poisson0_0.0_w0.01_eta0.00390625_p2_bounds=False_FE_NuMPI12.npyxopt_log.npz'
+
+    fp_log = 'exp_data/' + log_name
+    xopt_it = np.load('exp_data/' + log_name_it, allow_pickle=True)
+    plt.figure()
+    plt.contourf(xopt_it, cmap=mpl.cm.Greys)
+    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+    plt.clim(0, 1)
+    plt.colorbar()
+
+    plt.show()
+    print(('create figure: {}'.format(fp_log)))
 quit()
 
 plt.figure()
 fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-plt.plot(np.tile(phase_field, (1, 2))[:,50].transpose())
+plt.plot(np.tile(phase_field, (1, 2))[:, 50].transpose())
 # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
 plt.grid(True)
 plt.minorticks_on()

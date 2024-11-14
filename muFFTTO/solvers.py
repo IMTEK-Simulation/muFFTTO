@@ -191,6 +191,73 @@ def optimize_fire2(x0, f, df, params, atol=1e-4, dt=0.002, logoutput=False):
     return [x, f(x, params), i]
 
 
+
+
+
+# Update parameters using Adam
+def update_parameters_with_adam(x, grads, m, v,
+                                t, learning_rate,
+                                beta1, beta2,
+                                epsilon=1e-8):
+    m = beta1 * m + (1.0 - beta1) * grads
+    v = beta2 * v + (1.0 - beta2) * grads ** 2
+    m_hat = m / (1.0 - beta1 ** (t + 1))
+    v_hat = v / (1.0 - beta2 ** (t + 1))
+    x = x - learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+    return x, m, v
+
+
+# Adam optimization algorithm
+def adam(f, df, x0,
+         n_iter, alpha, beta1, beta2, eps=1e-8,callback=None,gtol=1e-5, ftol=2.2e-9):
+    #phi=[]
+    #phi_change=[]
+    # Generate an initial point
+    x = x0
+    phi_old= f(x)
+
+    # Initialize Adam moments
+    #m, v = initialize_adam()
+    m = np.zeros_like(x0)
+    v = np.zeros_like(x0)
+    # Run the gradient descent updates
+    for t in range(n_iter):
+        # Calculate gradient g(t)
+        grad = df(x)
+
+        # Update parameters using Adam
+        x, m, v = update_parameters_with_adam(x=x, grads=grad, m=m,
+                                              v=v, t=t,learning_rate= alpha,
+                                              beta1=beta1, beta2=beta2,
+                                              epsilon =eps)
+
+
+        # Evaluate candidate point
+        phi=f(x)
+
+        phi_change= phi_old - phi
+
+        phi_old = phi
+
+        max_grad = Reduction(MPI.COMM_WORLD).max(np.abs(grad))
+        # abs_grad = np.linalg.norm(grad)
+        abs_grad = np.sqrt(Reduction(MPI.COMM_WORLD).sum(grad ** 2))
+        norms__ = [phi, phi_change, max_grad, abs_grad, x, t]
+        callback(norms__)
+        # Report progress
+        print('-------------- >>%d = %.5f' % (t, phi))
+
+        if (max_grad < gtol):
+            print("CONVERGED because gradient tolerance was reached")
+            return [x, phi, t]
+        if (phi_change <= ftol * max((1, abs(phi), abs(phi_old)))):
+            print("CONVERGED because function tolerance was reached")
+            return [x, phi, t]
+
+    return [x, phi, t]
+
+
+
 ############################################
 if __name__ == "__main__":
     ###############

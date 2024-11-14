@@ -1,13 +1,17 @@
 import numpy as np
+import scipy as sc
 import time
 
 from muFFTTO import domain
 from muFFTTO import solvers
+from muFFTTO import microstructure_library
+
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
 formulation = 'small_strain'
+geometry_ID = 'sine_wave'
 
 domain_size = [1, 1]
 number_of_pixels = (32, 32)
@@ -16,7 +20,7 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 
 discretization = domain.Discretization(cell=my_cell,
-                                       number_of_pixels=number_of_pixels,
+                                       nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
 start_time = time.time()
@@ -39,26 +43,42 @@ material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
 print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
 # material distribution
-
-phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
-
-phase = 1 * np.ones(number_of_pixels)
+phase_field_l = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                  microstructure_name=geometry_ID,
+                                                  coordinates=discretization.fft.coords)
+#phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution
+phase_field_l = np.load('../experiments/exp_data/lbfg_muFFTTO_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_E_target_0.15_Poisson_-0.5_Poisson0_0.0_w4.0_eta0.0203_p2_bounds=False_FE_NuMPI6_nb_load_cases_3_energy_objective_False_random_True_it20.npy', allow_pickle=True)
+#phase = 1 * np.ones(number_of_pixels)
 inc_contrast = 0.
 # phase[10:30, 10:30] = phase[10:30, 10:30] * inc_contrast
 # Square inclusion with: Obsonov solution
-phase[phase.shape[0] * 1 // 4:phase.shape[0] * 3 // 4,
-phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
+# phase[phase.shape[0] * 1 // 4:phase.shape[0] * 3 // 4,
+# phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
 
 phase_fem = np.zeros([2, *number_of_pixels])
-phase_fem[:] = phase
+phase_fem[:] = phase_field_l
+
+phase_field=discretization.get_scalar_sized_field()
+phase_field[0,0]=np.power(phase_field_l, 2)
+#np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
+#sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
+
+phase_field_at_quad_poits_1qnxyz = \
+                    discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field,
+                                                                 quad_field_fqnxyz=None,
+                                                                 quad_points_coords_dq=None)[0]
 
 # apply material distribution
 #material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
-material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
-material_data_field_C_0_rho +=10*material_data_field_C_0[..., :, :] * (1-phase_fem)
+#material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
+#material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
+material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
+                    phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
 
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+
+
 
 # Solve mechanical equilibrium constrain
 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
@@ -66,15 +86,33 @@ rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
                                                      formulation='small_strain')
 # M_fun = lambda x: 1 * x
+K= discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
-preconditioner = discretization.get_preconditioner(
+preconditioner = discretization.get_preconditioner_NEW(
     reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
-M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnxyz=preconditioner,
+M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                       nodal_field_fnxyz=x)
 
-displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-12)
 
+K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+    material_data_field_ijklqxyz=material_data_field_C_0_rho)
+
+M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                        preconditioner_Fourier_fnfnqks=preconditioner,
+                        nodal_field_fnxyz=K_diag_alg * x)
+# #
+M_fun = lambda x: K_diag_alg *  K_diag_alg * x
+
+displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1000), toler=1e-12)
+nb_it_comb = len(norms['residual_rz'])
+norm_rz = norms['residual_rz'][-1]
+norm_rr = norms['residual_rr'][-1]
+
+
+print(
+    '   nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+print(norms)
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(

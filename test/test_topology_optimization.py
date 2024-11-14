@@ -76,8 +76,8 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                                            discretization_type=discretization_type,
                                            element_type=element_type)
 
-    macro_gradient = np.array([[2.01, 1.0],
-                               [1.0, 1.1]])
+    macro_gradient = np.array([[1.0, .0],
+                               [0.0, 0.]])
     print('macro_gradient = \n {}'.format(macro_gradient))
 
     # create material data of solid phase rho=1
@@ -125,7 +125,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
     p = 2
     w = 1  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
-    eta =1
+    eta = 1
 
     def my_objective_function(phase_field_1nxyz):
         # print('Objective function:')
@@ -171,7 +171,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
             w=w)
 
         # print('objective_function= \n'' {} '.format(objective_function))
-        objective_function =  w *f_sigma + f_rho
+        objective_function = w * f_sigma + f_rho
 
         # print('Sensitivity_analytical')
         sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
@@ -191,7 +191,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
         objective_function += sensitivity_parts['adjoint_energy']
         # print(f'objective_function= {objective_function}')
-        print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
+        print('adjoint_energy={}'.format(sensitivity_parts ))
 
         return objective_function, f_sigma, f_rho, sensitivity_analytical, sensitivity_parts
 
@@ -215,7 +215,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
     norm_fd_sensitivity_dsigma_dro = []
     norm_fd_sensitivity_df_dro = []
     norm_fd_sensitivity = []
-    fd_scheme=2.
+    fd_scheme = 2.
     for epsilon in epsilons:
         # loop over every single element of phase field
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
@@ -223,7 +223,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                 # set phase_field to ones
                 phase_field = np.copy(phase_field_00)
                 #
-                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon /fd_scheme
+                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / fd_scheme
                 phase_field_0 = phase_field.reshape(-1)
                 of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _, _ = my_objective_function(phase_field_0)
 
@@ -275,6 +275,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         #   "for partial derivative of double well potential ")
         plt.show()
 
+
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([1, 1], 0, [6, 6])])
 def test_finite_difference_check_of_whole_objective_function_energy_equivalence(discretization_fixture, plot=True):
@@ -293,8 +294,10 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
                                            discretization_type=discretization_type,
                                            element_type=element_type)
 
-    macro_gradient = np.array([[2.01, 1.0],
-                               [1.0, 1.1]])
+    macro_gradient = np.array([[1.0, 0.0],
+                               [0.0, 0.0]])
+    left_macro_gradient = np.array([[0.0, .0],
+                                    [.0, 1.0]])
     print('macro_gradient = \n {}'.format(macro_gradient))
 
     # create material data of solid phase rho=1
@@ -331,10 +334,10 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
     # # target_stress = np.array([[0.0, 0.05],
     # #                           [0.05, 0.0]])
     target_stress = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradient)
-    #target_stress = np.array([[1, 0.], [0., 2]])
+    # target_stress = np.array([[1, 0.], [0., 2]])
 
-    target_energy= np.einsum('ij,ijkl,lk->', macro_gradient, elastic_C_target,
-                                         macro_gradient)
+    target_energy = np.einsum('ij,ijkl,lk->', left_macro_gradient, elastic_C_target,
+                              macro_gradient)
     print('target_stress = \n {}'.format(target_stress))
     # Set up the equilibrium system
     macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
@@ -345,7 +348,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
                                                               nodal_field_fnxyz=x)
 
     p = 2
-    w = 100  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
+    w = 0.001  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
     eta = 1.0
 
     def my_objective_function_energy(phase_field_1nxyz):
@@ -385,7 +388,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
         #     preconditioner_Fourier_fnfnqks=preconditioner,
         #     nodal_field_fnxyz=K_diag_alg * x)
 
-        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-14)
+        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-10)
 
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
@@ -398,17 +401,15 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
             displacement_field)
         actual_strain_ijqxyz = macro_gradient_field + strain_fluctuation_ijqxyz
 
-        f_sigma=( topology_optimization.compute_elastic_energy_equivalence_potential(
+        f_sigma = (topology_optimization.compute_elastic_energy_equivalence_potential(
             discretization=discretization,
             actual_stress_ij=homogenized_stress,
             target_stress_ij=target_stress,
-            macro_gradient_ij=macro_gradient,
-            actual_strain_ijqxyz=actual_strain_ijqxyz,
+            left_macro_gradient_ij=left_macro_gradient,
             target_energy=target_energy))
 
+        print('f_sigma= \n'' {} '.format(f_sigma))
 
-        # print('objective_function= \n'' {} '.format(objective_function))
-        objective_function =  w *f_sigma + f_phase_field
 
         # print('Sensitivity_analytical')
         # sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
@@ -430,6 +431,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
             material_data_field_ijklqxyz=material_data_field_C_0,
             displacement_field_fnxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
+            left_macro_gradient_ij=left_macro_gradient,
             phase_field_1nxyz=phase_field_1nxyz,
             target_stress_ij=target_stress,
             actual_stress_ij=homogenized_stress,
@@ -440,11 +442,11 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
             p=p,
             weight=w)
 
-        objective_function += adjoint_energies
-        # print(f'objective_function= {objective_function}')
+        objective_function = w * f_sigma + f_phase_field+adjoint_energies
+        print(f'objective_function= {objective_function}')
         #print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
 
-        return objective_function, f_sigma, f_phase_field, sensitivity_analytical+s_phase_field
+        return objective_function, f_sigma, f_phase_field, sensitivity_analytical + s_phase_field
 
     np.random.seed(1)
     phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 1
@@ -454,9 +456,9 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
     phase_field_0 = phase_field_0.reshape(-1)
     analytical_sensitivity = my_objective_function_energy(phase_field_0)[-1]
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
-    #print(sensitivity_parts)
+    # print(sensitivity_parts)
 
-    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1,1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     fd_sensitivity = discretization_fixture.get_scalar_sized_field()
     fd_sensitivity_drho_dro = discretization_fixture.get_scalar_sized_field()
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_sized_field()
@@ -473,7 +475,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
                 # set phase_field to ones
                 phase_field = np.copy(phase_field_00)
                 #
-                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon /2
+                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / 2
                 phase_field_0 = phase_field.reshape(-1)
                 of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _ = my_objective_function_energy(phase_field_0)
 
@@ -496,13 +498,13 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
             np.linalg.norm(fd_sensitivity_drho_dro[0, 0], 'fro'))
         norm_fd_sensitivity_dsigma_dro.append(
             np.linalg.norm(fd_sensitivity_dsigma_dro[0, 0], 'fro'))
-    print()
+    print(np.linalg.norm(analytical_sensitivity[0, 0], 'fro'))
     print(error_fd_vs_analytical)
     print(norm_fd_sensitivity)
     print(norm_fd_sensitivity_df_dro)
     print(norm_fd_sensitivity_dsigma_dro)
-    print(error_fd_vs_analytical)
-    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 2)
+    #print(error_fd_vs_analytical)
+    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], (np.asarray(epsilons)/2) ** 2)
     lin_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 1)
     if plot:
         import matplotlib.pyplot as plt
@@ -513,7 +515,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
                    label=r' error_fd_vs_analytical_max'.format())
         # plt.loglog(epsilons, norm_fd_sensitivity - np.linalg.norm(analytical_sensitivity[0, 0], 'fro'),
         #            label=r' error_fd_vs_analytical'.format())
-        plt.loglog(epsilons, quad_fit_of_error,
+        plt.loglog(np.asarray(epsilons)/2, quad_fit_of_error,
                    label=r' quad_fit_of_error'.format())
         plt.loglog(epsilons, lin_fit_of_error,
                    label=r' lin_fit_of_error'.format())
@@ -524,6 +526,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
         #   "Finite difference derivative do not corresponds to the analytical expression "
         #   "for partial derivative of double well potential ")
         plt.show()
+
 
 # @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
 #     ([3, 4], 0, [5, 8]),
