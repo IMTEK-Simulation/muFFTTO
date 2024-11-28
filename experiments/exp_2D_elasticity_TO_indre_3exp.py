@@ -71,14 +71,14 @@ M_fun = lambda x: discretization.apply_preconditioner_NEW(
     nodal_field_fnxyz=x)
 
 # set up load cases
-nb_load_cases = 3
+nb_load_cases = 1
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_gradients[0] = np.array([[1.0, 0.],
-                               [ 0., .0]])
-macro_gradients[1] = np.array([[  .0, .0],
-                               [ .0, 1.0]])
-macro_gradients[2] = np.array([[.0, 0.5],
-                               [0.5, .0]])
+macro_gradients[0] = np.array([[1.0, 0.5],
+                               [ 0.5, 1.0]])
+# macro_gradients[1] = np.array([[  .0, .0],
+#                                [ .0, 1.0]])
+# macro_gradients[2] = np.array([[.0, 0.5],
+#                                [0.5, .0]])
 # macro_gradients[3] = np.array([[.0, .0],
 #                                [.0, 1.0]])
 # macro_gradients[2] = np.array([[.0, 0.5],
@@ -87,10 +87,10 @@ macro_gradients[2] = np.array([[.0, 0.5],
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
 left_macro_gradients[0] = np.array([[.0,  .0],
                                     [.0, 1.0]])
-left_macro_gradients[1] = np.array([[1.0, .0],
-                                    [ .0, .0]])
-left_macro_gradients[2] = np.array([[.0, .5],
-                                    [0.5, 0.0]])
+# left_macro_gradients[1] = np.array([[1.0, .0],
+#                                     [ .0, .0]])
+# left_macro_gradients[2] = np.array([[.0, .5],
+#                                     [0.5, 0.0]])
 # left_macro_gradients[3] =  np.array([[.0, .0],
 #                                     [.0, 1.0]])
 # left_macro_gradients[5] = np.array([[0., .5],
@@ -157,7 +157,7 @@ for ration in [-0.5 ]:
 
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     for w_mult in [4., ]:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
-        for eta_mult in [0.01   , ]:
+        for eta_mult in [0.0101  , ]:
             # np.arange(0.05, 0.5, 0.05):#[0.1, ]:  # np.arange(0.001, 0.01, 0.002):#[0.005, ]:  # np.arange(0.01, 0.5, 0.05):#
             # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
             # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
@@ -202,12 +202,12 @@ for ration in [-0.5 ]:
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 
-                K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                    material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+                # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+                #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
                 # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                 #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
                 #     nodal_field_fnxyz=K_diag_alg * x)
-                M_fun = lambda x: K_diag_alg * K_diag_alg * x
+                #M_fun = lambda x: K_diag_alg * K_diag_alg * x
 
                 K_fun = lambda x: discretization.apply_system_matrix(
                     material_data_field=material_data_field_C_0_rho_ijklqxyz,

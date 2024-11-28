@@ -207,9 +207,10 @@ class Discretization:
                 # MPI.COMM_WORLD.Barrier()
 
                 # print('roll= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
+                #print('u= {} \n   core {}'.format( np.shape(u), MPI.COMM_WORLD.rank))
 
                 rolled_disp_field = self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1))
-                # print('einsum= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
+                #print('rolled_disp_field= {} \n   core {}'.format( np.shape(rolled_disp_field), MPI.COMM_WORLD.rank))
                 # MPI.COMM_WORLD.Barrier()
                 # print('self.sub_domain_size != 0 = {} \n   core {}'.format(self.sub_domain_size != 0,
                 #                                                                  MPI.COMM_WORLD.rank))
@@ -547,9 +548,9 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
         # construct diagonals from unit impulses responses using FFT
         preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
-            preconditioner_diagonals_fnfnqks_NEW = np.expand_dims(preconditioner_diagonals_fnfnqks_NEW,
-                                                                  axis=(0, 1, 2, 3))
+        # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+        #     preconditioner_diagonals_fnfnqks_NEW = np.expand_dims(preconditioner_diagonals_fnfnqks_NEW,
+        #                                                           axis=(0, 1, 2, 3))
 
         # THE SIZE OF   DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
         # compute inverse of diagonals
@@ -703,6 +704,8 @@ class Discretization:
                 return diagonal_matrices_fnfnxyz
         # return self.apply_quadrature_weights_elasticity(material_data)
         # K_diag_inv_sym = K_diag ** (-1 / 2)
+        print(f'number of nearly zero diagonal = {np.size(diagonal_fnxyz[diagonal_fnxyz < 1e-16])}')
+
         diagonal_fnxyz[diagonal_fnxyz < 1e-16] = 0
         diagonal_fnxyz[diagonal_fnxyz != 0] = diagonal_fnxyz[diagonal_fnxyz != 0] ** (-1 / 2)
         # diagonal_fnxyz ** (-1 / 2)
@@ -740,9 +743,9 @@ class Discretization:
         # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
         # FFTn of input array
         ffield_fnqks = self.fft.fft(nodal_field_fnxyz)
-        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
-            ffield_fnqks = np.expand_dims(ffield_fnqks,
-                                          axis=(0, 1))
+        # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+        #     ffield_fnqks = np.expand_dims(ffield_fnqks,
+        #                                   axis=(0, 1))
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
 
@@ -755,9 +758,9 @@ class Discretization:
         # iFFTn
         nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
         # self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
-        if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
-            nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
-                                               axis=(0, 1))
+        # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
+        #     nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
+        #                                        axis=(0, 1))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
 
         return nodal_field_fnxyz

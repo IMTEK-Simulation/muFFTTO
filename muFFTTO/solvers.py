@@ -60,15 +60,104 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
 
-        if r_1z_1 < toler:  # TODO[Solver] check out stopping criteria
+        # if r_1z_1 < toler:  # TODO[Solver] check out stopping criteria
+        #     break
+        if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
             break
-
         beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0
 
         r_0z_0 = r_1z_1
 
     return x_k, norms
+
+
+def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
+    # print('I am in PCG')
+    """
+    Richardson iteration
+    𝑥𝑘+1=𝑥𝑘−𝜏(𝐴𝑥𝑘−𝑓)
+    Parameters
+    ----------
+    Afun : Matrix, LinOper, or numpy.array of shape (n, n)
+        it stores the matrix data of linear system and provides a matrix by
+        vector multiplication
+    B : VecTri or numpy.array of shape (n,)
+        it stores a right-hand side of linear system
+    x0 : VecTri or numpy.array of shape (n,)
+        initial approximation of solution of linear system
+
+    """
+    if x0 is None:
+        x0 = np.zeros(B.shape)
+    if P is None:
+        P = lambda x: 1 * x
+
+    norms = dict()
+    norms['residual_rr'] = []
+    ##
+    k = 0
+    x_k = np.copy(x0)
+    ##
+    for k in np.arange(1, steps):
+        Ax = Afun(x_k)
+
+        r_0 = B - Ax
+        x_k += omega * P(r_0)
+
+        norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
+        #print(norms['residual_rr'][-1])
+        if norms['residual_rr'][-1] < toler:
+            break
+
+    return x_k, norms
+
+def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
+    # print('I am in PCG')
+    """
+
+    ----------
+    Afun : Matrix, LinOper, or numpy.array of shape (n, n)
+        it stores the matrix data of linear system and provides a matrix by
+        vector multiplication
+    B : VecTri or numpy.array of shape (n,)
+        it stores a right-hand side of linear system
+    x0 : VecTri or numpy.array of shape (n,)
+        initial approximation of solution of linear system
+
+    """
+    if x0 is None:
+        x0 = np.zeros(B.shape)
+    if P is None:
+        P = lambda x: 1 * x
+
+    norms = dict()
+    norms['residual_rr'] = []
+    ##
+    k = 0
+    x_k = np.copy(x0)
+    ##
+    for k in np.arange(1, steps):
+        Ax = Afun(x_k)
+
+
+        r_0 = B - Ax
+        z_0 = P(r_0)
+
+        r_0z_0 = scalar_product_mpi(r_0, z_0)
+        alpha = float(r_0z_0 / scalar_product_mpi(r_0, Afun(r_0)))
+
+
+        x_k = x_k + alpha * r_0
+
+
+        norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
+
+        if norms['residual_rr'][-1] < toler:
+            break
+
+    return x_k, norms
+
 
 
 def scalar_product_mpi(a, b):
@@ -109,7 +198,7 @@ def optimize_fire(x0, f, df, params, atol=1e-4, dt=0.002, logoutput=False):
 
     for i in range(Nmax):
 
-        #P = (F * V).sum()  # dissipated power
+        # P = (F * V).sum()  # dissipated power
         P = Reduction(MPI.COMM_WORLD).sum(F * V)
         if (P > 0):
             Npos = Npos + 1
@@ -123,22 +212,22 @@ def optimize_fire(x0, f, df, params, atol=1e-4, dt=0.002, logoutput=False):
             V = np.zeros(x.shape)
 
         V = V + 0.5 * dt * F
-        norm_of_V=np.sqrt( scalar_product_mpi(V, V))
-        norm_of_F=np.sqrt(scalar_product_mpi(F, F))
+        norm_of_V = np.sqrt(scalar_product_mpi(V, V))
+        norm_of_F = np.sqrt(scalar_product_mpi(F, F))
         V = (1 - alpha) * V + alpha * F * norm_of_V / norm_of_F
-        #V = (1 - alpha) * V + alpha * F * np.linalg.norm(V) / np.linalg.norm(F)
+        # V = (1 - alpha) * V + alpha * F * np.linalg.norm(V) / np.linalg.norm(F)
 
         x = x + dt * V
         F = -df(x)  # , params
         V = V + 0.5 * dt * F
 
-        #error = max(abs(F))
+        # error = max(abs(F))
         error = Reduction(MPI.COMM_WORLD).max(abs(F))
         if error < atol: break
 
         if logoutput:
             print('{} - iteration of FIRE-1 \n'
-                  'f(x)= {}, error = {}'.format(i,f(x), error))
+                  'f(x)= {}, error = {}'.format(i, f(x), error))
 
     del V, F
     return [x, f(x), i]  # , params
@@ -191,9 +280,6 @@ def optimize_fire2(x0, f, df, params, atol=1e-4, dt=0.002, logoutput=False):
     return [x, f(x, params), i]
 
 
-
-
-
 # Update parameters using Adam
 def update_parameters_with_adam(x, grads, m, v,
                                 t, learning_rate,
@@ -209,15 +295,15 @@ def update_parameters_with_adam(x, grads, m, v,
 
 # Adam optimization algorithm
 def adam(f, df, x0,
-         n_iter, alpha, beta1, beta2, eps=1e-8,callback=None,gtol=1e-5, ftol=2.2e-9):
-    #phi=[]
-    #phi_change=[]
+         n_iter, alpha, beta1, beta2, eps=1e-8, callback=None, gtol=1e-5, ftol=2.2e-9):
+    # phi=[]
+    # phi_change=[]
     # Generate an initial point
     x = x0
-    phi_old= f(x)
+    phi_old = f(x)
 
     # Initialize Adam moments
-    #m, v = initialize_adam()
+    # m, v = initialize_adam()
     m = np.zeros_like(x0)
     v = np.zeros_like(x0)
     # Run the gradient descent updates
@@ -227,15 +313,14 @@ def adam(f, df, x0,
 
         # Update parameters using Adam
         x, m, v = update_parameters_with_adam(x=x, grads=grad, m=m,
-                                              v=v, t=t,learning_rate= alpha,
+                                              v=v, t=t, learning_rate=alpha,
                                               beta1=beta1, beta2=beta2,
-                                              epsilon =eps)
-
+                                              epsilon=eps)
 
         # Evaluate candidate point
-        phi=f(x)
+        phi = f(x)
 
-        phi_change= phi_old - phi
+        phi_change = phi_old - phi
 
         phi_old = phi
 
@@ -255,7 +340,6 @@ def adam(f, df, x0,
             return [x, phi, t]
 
     return [x, phi, t]
-
 
 
 ############################################

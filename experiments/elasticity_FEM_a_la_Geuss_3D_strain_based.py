@@ -11,7 +11,7 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-6, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-6, callback=callback)
     return x, status, num_iters
 
 

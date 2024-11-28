@@ -14,7 +14,7 @@ def get_geometry(nb_voxels,
                  coordinates=None,
                  parameter=None):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
-                                   'sine_wave', 'linear',
+                                   'sine_wave', 'linear','tanh',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -47,9 +47,9 @@ def get_geometry(nb_voxels,
                                        np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
 
         case 'circle_inclusion':
-            phase_field = np.zeros(nb_voxels)
+            phase_field = np.ones(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field[np.power(coordinates[0], 2) + np.power(coordinates[1], 2) < 0.3] = 1
+                phase_field[(np.sqrt(np.power(coordinates[0]-0.5, 2) + np.power(coordinates[1]-0.5, 2)) )< 0.2] = 0
             elif nb_voxels.size == 3:
                 phase_field[
                     np.power(coordinates[0], 2) +
@@ -75,7 +75,13 @@ def get_geometry(nb_voxels,
         case 'sine_wave':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field = 0.5 + 0.5 * np.sin(32 * 2 * np.pi * coordinates[0] * coordinates[1])
+                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0])+ 0.25 * np.cos(3 * 2 * np.pi * coordinates[1])
+            elif nb_voxels.size == 3:
+                phase_field = np.sin(coordinates)
+        case 'tanh':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = np.tanh( (coordinates[0]-0.5)/0.3 * (coordinates[1]-0.5)/0.3 )
             elif nb_voxels.size == 3:
                 phase_field = np.sin(coordinates)
         case 'linear':

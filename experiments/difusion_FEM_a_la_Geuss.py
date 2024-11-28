@@ -9,7 +9,7 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-12, maxiter=1000, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-12, maxiter=1000, callback=callback)
     return x, status, num_iters
 
 
@@ -62,7 +62,7 @@ quadrature_weights = np.zeros([nb_quad_points_per_pixel])
 quadrature_weights[:] = delta_x * delta_y / 2
 
 
-def get_gradient(u_ixy, grad_u_ijqxy=None):
+def B(u_ixy, grad_u_ijqxy=None):
     # apply gradient operator
     if grad_u_ijqxy is None:
         grad_u_ijqxy = np.zeros([1, ndim, nb_quad_points_per_pixel, *N])
@@ -76,7 +76,7 @@ def get_gradient(u_ixy, grad_u_ijqxy=None):
     return grad_u_ijqxy
 
 
-def get_gradient_transposed(flux_ijqxyz, div_flux_ixy=None):
+def B_t(flux_ijqxyz, div_flux_ixy=None):
     if div_flux_ixy is None:  # if div_u_fnxyz is not specified, determine the size
         div_flux_ixy = np.zeros([1, *N])
 
@@ -119,11 +119,11 @@ E_jqxy = np.einsum('j,qxy', macro_grad_j,
 E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
 
 # System matrix function
-K_fun_I = lambda x: get_gradient_transposed(
+K_fun_I = lambda x: B_t(
     dot21(mat_data_ijqxy,
-          get_gradient(u_ixy=x.reshape(temp_shape)))).reshape(-1)
+          B(u_ixy=x.reshape(temp_shape)))).reshape(-1)
 # right hand side vector
-b_I = -get_gradient_transposed(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
+b_I = -B_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
 
 # Preconditioner IN FOURIER SPACE #############################################
 ref_mat_data_ij = np.array([[1, 0], [0, 1]])
@@ -135,8 +135,8 @@ for d in range(n_u_dofs):
     unit_impuls_ixy[d, 0, 0] = 1
     # M_diag_ixy[:, d, 0, 0] = 1
     # response of the system to unit impulses
-    M_diag_ixy[d, ...] = get_gradient_transposed(
-        dot21(A=ref_mat_data_ij, v=get_gradient(u_ixy=unit_impuls_ixy)))  # TODO {change back!!!!§}
+    M_diag_ixy[d, ...] = B_t(
+        dot21(A=ref_mat_data_ij, v=B(u_ixy=unit_impuls_ixy)))  # TODO {change back!!!!§}
 
 # Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
 M_diag_ixy = (fft(x=M_diag_ixy))  # imaginary part is zero
@@ -146,7 +146,7 @@ M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
 
 # Preconditioner function
 dot11 = lambda A, v: np.einsum('i...,i...  ->i...', A, v)  # dot product between precon and
-M_fun_I = lambda x: (ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape)))).reshape(-1))
+M_fun_I = lambda x: np.real((ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape))))).reshape(-1))
 
 ###### Solver ######
 u_sol_vec, status, num_iters = solve_sparse(
@@ -154,27 +154,27 @@ u_sol_vec, status, num_iters = solve_sparse(
     b=b_I,
     M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
 
-print('Number of steps = {}'.format(num_iters))
+print('Number of steps  PCG = {}'.format(num_iters))
 
-du_sol_ijqxy = get_gradient(u_ixy=u_sol_vec.reshape(temp_shape))
+du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
 A_eff = np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol
 print('homogenised properties preconditioned A11 = {}'.format(A_eff))
 print('END PCG')
 
 # Reference solution without preconditioner
-# u_sol_plain_I, status, num_iters = solve_sparse(
-#     A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
-#     b=b_I,
-#     M=None)
-# print('Number of steps = {}'.format(num_iters))
-#
-# du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(temp_shape))
-#
-# aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
-# print('homogenised properties plain A11 = {}'.format(
-#     np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
-# print('END CG')
+u_sol_plain_I, status, num_iters = solve_sparse(
+    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+    b=b_I,
+    M=None)
+print('Number of steps plain= {}'.format(num_iters))
+
+du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
+print('homogenised properties plain A11 = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END CG')
 
 J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
 print('Analytical effective properties A11 = {}'.format(J_eff))
