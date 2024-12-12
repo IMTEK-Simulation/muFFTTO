@@ -13,8 +13,6 @@ from muGrid import FileIONetCDF, OpenMode, Communicator
 
 plt.rcParams['text.usetex'] = True
 
-import time
-
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
@@ -22,16 +20,16 @@ from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
+element_type = 'linear_triangles_tilled'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
 formulation = 'small_strain'
 
-domain_size = [1, 1]
-number_of_pixels = (32,32)
+domain_size = [1,np.sqrt(3)/2]#
+number_of_pixels = (128, 128)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 start_time = time.time()
-print('number_of_pixels = \n {} core {}'.format(number_of_pixels,MPI.COMM_WORLD.rank ))
+print('number_of_pixels = \n {} core {}'.format(number_of_pixels, MPI.COMM_WORLD.rank))
 if MPI.COMM_WORLD.rank == 0:
     print('  Rank   Size          Domain       Subdomain        Location')
     print('  ----   ----          ------       ---------        --------')
@@ -49,19 +47,19 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 # create material data of solid phase rho=1
 E_0 = 1
 poison_0 = 0.0
-G_0=E_0/(2*(1+poison_0))
+G_0 = E_0 / (2 * (1 + poison_0))
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
-print('1 = \n   core {}'.format( MPI.COMM_WORLD.rank ))
+print('1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
-print('2 = \n   core {}'.format( MPI.COMM_WORLD.rank ))
+print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                       *discretization.nb_of_pixels])))
-print('3 = \n   core {}'.format( MPI.COMM_WORLD.rank ))
+print('3 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 # Set up preconditioner
 preconditioner_fnfnqks = discretization.get_preconditioner_NEW(
     reference_material_data_field_ijklqxyz=material_data_field_C_0)
@@ -71,26 +69,26 @@ M_fun = lambda x: discretization.apply_preconditioner_NEW(
     nodal_field_fnxyz=x)
 
 # set up load cases
-nb_load_cases = 1
+nb_load_cases = 3
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_gradients[0] = np.array([[1.0, 0.5],
-                               [ 0.5, 1.0]])
-# macro_gradients[1] = np.array([[  .0, .0],
-#                                [ .0, 1.0]])
-# macro_gradients[2] = np.array([[.0, 0.5],
-#                                [0.5, .0]])
+macro_gradients[0] = np.array([[1.0, 0.],
+                               [0., .0]]) * 0.01
+macro_gradients[1] = np.array([[.0, .0],
+                               [.0, 1.0]]) * 0.01
+macro_gradients[2] = np.array([[.0, 0.5],
+                               [0.5, .0]]) * 0.01
 # macro_gradients[3] = np.array([[.0, .0],
 #                                [.0, 1.0]])
 # macro_gradients[2] = np.array([[.0, 0.5],
 #                                [0.5, .0]])
 
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
-left_macro_gradients[0] = np.array([[.0,  .0],
+left_macro_gradients[0] = np.array([[.0, .0],
                                     [.0, 1.0]])
-# left_macro_gradients[1] = np.array([[1.0, .0],
-#                                     [ .0, .0]])
-# left_macro_gradients[2] = np.array([[.0, .5],
-#                                     [0.5, 0.0]])
+left_macro_gradients[1] = np.array([[1.0, .0],
+                                    [.0, .0]])
+left_macro_gradients[2] = np.array([[.0, .5],
+                                    [0.5, 0.0]])
 # left_macro_gradients[3] =  np.array([[.0, .0],
 #                                     [.0, 1.0]])
 # left_macro_gradients[5] = np.array([[0., .5],
@@ -112,17 +110,16 @@ for load_case in np.arange(nb_load_cases):
 # poison_target = -0.5
 # E_target = E_0 * 0.1
 # poison_target = 0.2
-for ration in [-0.5 ]:
+for ration in [0.0]:
     poison_target = ration
     G_target_auxet = (3 / 20) * E_0  # (3 / 10) * E_0  #
     # G_target_auxet = (1 / 4) * E_0
     E_target = 2 * G_target_auxet * (1 + poison_target)
-    #E_target = 0.5
+    # E_target = 0.5
     # Auxetic metamaterials
     # G_target_auxet = (1 / 4) * E_0  #23   25
     # E_target=2*G_target_auxet*(1+poison_target)
     # test materials
-
 
     K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
@@ -154,10 +151,13 @@ for ration in [-0.5 ]:
     norms_pf = []
     num_iteration_ = []
 
-
+    # np.concatenate([np.arange(0.1, 1., 0.2),np.arange(1, 10, 2),np.arange(10, 110, 10)])
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
-    for w_mult in [4., ]:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
-        for eta_mult in [0.0101  , ]:
+    weights = np.concatenate(
+        [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20)])
+    #weights = np.concatenate([np.arange(0.2, 2., 1)])
+    for w_mult in weights:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
+        for eta_mult in [0.01, ]:
             # np.arange(0.05, 0.5, 0.05):#[0.1, ]:  # np.arange(0.001, 0.01, 0.002):#[0.005, ]:  # np.arange(0.01, 0.5, 0.05):#
             # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
             # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
@@ -202,12 +202,12 @@ for ration in [-0.5 ]:
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 
-                # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-                # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-                #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-                #     nodal_field_fnxyz=K_diag_alg * x)
-                #M_fun = lambda x: K_diag_alg * K_diag_alg * x
+                K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+                M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                    preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                    nodal_field_fnxyz=K_diag_alg * x)
+                # M_fun = lambda x: K_diag_alg * K_diag_alg * x
 
                 K_fun = lambda x: discretization.apply_system_matrix(
                     material_data_field=material_data_field_C_0_rho_ijklqxyz,
@@ -230,7 +230,8 @@ for ration in [-0.5 ]:
 
                     displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
                                                                                  B=rhs_load_case,
-                                                                                 x0=displacement_field_load_case[load_case],
+                                                                                 x0=displacement_field_load_case[
+                                                                                     load_case],
                                                                                  P=M_fun,
                                                                                  steps=int(10000),
                                                                                  toler=1e-10)
@@ -309,7 +310,6 @@ for ration in [-0.5 ]:
                             preconditioner_fun=M_fun,
                             system_matrix_fun=K_fun,
                             formulation='small_strain',
-                            target_energy=target_energy[load_case],
                             p=p,
                             weight=w)
                         s_phase_field += s_stress_and_adjoint_load_cases[load_case]
@@ -350,6 +350,7 @@ for ration in [-0.5 ]:
                                                                               microstructure_name='square_inclusion',
                                                                               coordinates=discretization.fft.coords)
 
+
                 # TODO CREATE random field from the same frequenciess all the same time
                 def apply_filter(phase):
                     f_field = discretization.fft.fft(phase)
@@ -374,7 +375,7 @@ for ration in [-0.5 ]:
                 # file_data_name = (
                 #     f'1muFFTTO_elasticity_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{1}_p{p}_bounds=False_FE_NuMPI{6}.npy')
                 file_data_name = (
-                    f'1muFFTTO_elasticity_{script_name}_N{64}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{2}_p{p}_bounds=False_FE_NuMPI{6}.npy')
+                    f'1muFFTTO_elasticity_{script_name}_N{64}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w:}_eta{2}_p{p}_bounds=False_FE_NuMPI{6}.npy')
 
                 load_init_from_same_grid = False
                 if load_init_from_same_grid:
@@ -410,7 +411,8 @@ for ration in [-0.5 ]:
                 # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
                 phase_field_0 = phase_field_0.reshape(-1)  # b
 
-                print('Init objective function FE  = {}'.format(objective_function_multiple_load_cases(phase_field_00)[0]))
+                print('Init objective function FE  = {}'.format(
+                    objective_function_multiple_load_cases(phase_field_00)[0]))
                 # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
 
                 if run_adam:
@@ -474,7 +476,7 @@ for ration in [-0.5 ]:
                     _info['norms_max_grad_f'] = norms_max_grad_f_adam
                     _info['norms_norm_grad_f'] = norms_norm_grad_f_adam
 
-                    file_data_name = f'adam_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                    file_data_name = f'adam_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
                     save_npy(folder_name + file_data_name + f'.npy', solution_phase[0, 0],
                              tuple(discretization.fft.subdomain_locations),
@@ -503,7 +505,7 @@ for ration in [-0.5 ]:
                         norms_norm_grad_f.append(result_norms[3])
                         norms_max_delta_x.append(result_norms[4])
                         norms_norm_delta_x.append(result_norms[5])
-                        file_data_name_it = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                        file_data_name_it = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
                         save_npy(folder_name + file_data_name_it + f'.npy',
                                  result_norms[6].reshape([*discretization.nb_of_pixels]),
@@ -551,7 +553,7 @@ for ration in [-0.5 ]:
                     _info['norms_pf'] = norms_pf
                     _info['num_iteration_'] = num_iteration_
 
-                    file_data_name = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                    file_data_name = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
                     save_npy(folder_name + file_data_name + f'.npy', solution_phase[0, 0],
                              tuple(discretization.fft.subdomain_locations),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
@@ -618,6 +620,7 @@ for ration in [-0.5 ]:
                         domain.compute_Voigt_notation_4order(homogenized_C_ijkl)))
 
                 _info['homogenized_C_ijkl'] = domain.compute_Voigt_notation_4order(homogenized_C_ijkl)
+                _info['target_C_ijkl'] = domain.compute_Voigt_notation_4order(elastic_C_target)
 
                 # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
                 if MPI.COMM_WORLD.rank == 0:

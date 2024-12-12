@@ -4,7 +4,7 @@ from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 
-def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
+def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None):
     # print('I am in PCG')
     """
     Conjugate gradients solver.
@@ -40,6 +40,10 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
 
     norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
     norms['residual_rz'].append(r_0z_0)
+    if norm_energy_upper_bound:
+        norms['energy_lb'] = []
+        gamma_mu = 1 / lambda_min
+        norms['energy_lb'].append(gamma_mu * r_0z_0)
     p_0 = np.copy(z_0)
 
     for k in np.arange(1, steps):
@@ -55,6 +59,9 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
 
         z_0 = P(r_0)
 
+        if norm_energy_upper_bound:
+            norms['energy_lb'].append(gamma_mu * r_0z_0)
+
         r_1z_1 = scalar_product_mpi(r_0, z_0)
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
@@ -68,6 +75,10 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6):
         p_0 = z_0 + beta * p_0
 
         r_0z_0 = r_1z_1
+
+        if norm_energy_upper_bound:
+            # updade upper bound on energy error estim parameter
+            gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
 
     return x_k, norms
 
@@ -106,11 +117,12 @@ def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
         x_k += omega * P(r_0)
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
-        #print(norms['residual_rr'][-1])
+        # print(norms['residual_rr'][-1])
         if norms['residual_rr'][-1] < toler:
             break
 
     return x_k, norms
+
 
 def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
     # print('I am in PCG')
@@ -140,16 +152,13 @@ def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
     for k in np.arange(1, steps):
         Ax = Afun(x_k)
 
-
         r_0 = B - Ax
         z_0 = P(r_0)
 
         r_0z_0 = scalar_product_mpi(r_0, z_0)
         alpha = float(r_0z_0 / scalar_product_mpi(r_0, Afun(r_0)))
 
-
         x_k = x_k + alpha * r_0
-
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
 
@@ -157,7 +166,6 @@ def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
             break
 
     return x_k, norms
-
 
 
 def scalar_product_mpi(a, b):

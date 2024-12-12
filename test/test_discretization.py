@@ -4,7 +4,7 @@ import numpy as np
 
 from muFFTTO import domain
 from muFFTTO import solvers
-
+from muFFTTO import topology_optimization
 
 class DiscretizationTestCase(unittest.TestCase):
     def test_discretization_initialization(self):
@@ -35,17 +35,17 @@ class DiscretizationTestCase(unittest.TestCase):
         self.assertTrue(hasattr(discretization, "nb_nodes_per_pixel"), 'Discretization has no "nb_nodes_per_pixel" ')
 
     def test_2D_gradients_linear_conductivity(self):
-        domain_size = [3, 4]
+        domain_size = [3, 3]
         problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
 
-        number_of_pixels = (4, 5)
+        number_of_pixels = (3, 3)
 
         discretization_type = 'finite_element'
-        for element_type in ['linear_triangles', 'bilinear_rectangle']:
+        for element_type in [ 'linear_triangles','bilinear_rectangle','linear_triangles_tilled']:
             discretization = domain.Discretization(cell=my_cell,
-                                                   number_of_pixels=number_of_pixels,
+                                                   nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
 
@@ -60,8 +60,8 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient = discretization.get_temperature_gradient_size_field()
             temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
 
-            temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                                 nodal_coordinates[1, 0, :, :])
+            temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                 nodal_coordinates[1, :, :])
             temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
             temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
@@ -312,7 +312,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
         for element_type in ['linear_triangles', 'bilinear_rectangle']:
             discretization = domain.Discretization(cell=my_cell,
-                                                   number_of_pixels=number_of_pixels,
+                                                   nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
 
@@ -1102,6 +1102,69 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 plt.show()
 
+
+
+    def test_2D_gradients_linear_fem_and_tilled_linear_fem(self):
+        domain_size = [3, np.sqrt(3)/2]
+        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        number_of_pixels = (2, 5)
+
+        discretization_type = 'finite_element'
+        discretization_right_angle = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='linear_triangles')
+        discretization_60_angle = domain.Discretization(cell=my_cell,
+                                                           nb_of_pixels_global=number_of_pixels,
+                                                           discretization_type=discretization_type,
+                                                           element_type='linear_triangles_tilled')
+
+        diff_B_=discretization_right_angle.B_gradient-discretization_60_angle.B_gradient
+        diff_B_dqnijk = discretization_right_angle.B_grad_at_pixel_dqnijk - discretization_60_angle.B_grad_at_pixel_dqnijk
+        print(diff_B_)
+
+        quad_points_coords_right_angle_dq = discretization_right_angle.quad_points_coord_parametric  # quad_points_coord[:,q]=[x_q,y_q,z_q]
+        quad_points_coords_60_angle_dq = discretization_60_angle.quad_points_coord_parametric
+
+        nb_quad_points_per_pixel_right_angle = quad_points_coords_right_angle_dq.shape[-1]
+        nb_quad_points_per_pixel_60_angle = quad_points_coords_60_angle_dq.shape[-1]
+        for pixel_node in np.ndindex(
+                *np.ones([discretization_right_angle.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+            #pixel_node = np.asarray(pixel_node)
+            print(f'pixel_node  f{pixel_node}')
+            for quad_point_idx in range(nb_quad_points_per_pixel_right_angle):
+                quad_point_coords = quad_points_coords_right_angle_dq[:, quad_point_idx]
+                print(f'quad_point_coords _right_angle f{quad_point_coords}')
+                N_at_qp_right_angle= discretization_right_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
+                N_at_qp_60_angle=discretization_60_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
+                print(N_at_qp_right_angle-N_at_qp_60_angle)
+
+            for quad_point_idx in range(nb_quad_points_per_pixel_60_angle):
+                quad_point_coords = quad_points_coords_right_angle_dq[:, quad_point_idx]
+                print(f'quad_point_coords l_60_angle f{quad_point_coords}')
+                N_at_qp_right_angle= discretization_right_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
+                N_at_qp_60_angle=discretization_60_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
+                print(N_at_qp_right_angle-N_at_qp_60_angle)
+
+
+        #phase_field_0 = np.random.randint(0, high=2, size=discretization_60_angle.get_scalar_sized_field().shape) ** 1
+        phase_field_0 = np.random.random(size=discretization_60_angle.get_scalar_sized_field().shape) ** 1
+
+        #phase_field_0 = discretization_60_angle.get_scalar_sized_field()+0.5
+        f_dw_quad_60_angle =topology_optimization.compute_double_well_potential_Gauss_quad(discretization=discretization_60_angle,
+                                                             phase_field_1nxyz=phase_field_0)
+
+        f_dw_quad_right_angle = topology_optimization.compute_double_well_potential_Gauss_quad(
+            discretization=discretization_right_angle,
+            phase_field_1nxyz=phase_field_0)
+        f_dw = topology_optimization.compute_double_well_potential_analytical(discretization=discretization_right_angle,
+                                                        phase_field_1nxyz=phase_field_0)
+        f_dw_60_angle = topology_optimization.compute_double_well_potential_analytical(discretization=discretization_60_angle,
+                                                                              phase_field_1nxyz=phase_field_0)
+        print( )
 
 if __name__ == '__main__':
     unittest.main()

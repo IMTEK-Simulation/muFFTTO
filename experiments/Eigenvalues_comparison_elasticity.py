@@ -12,6 +12,7 @@ from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
 from sympy.physics.quantum.sho1d import omega
 
+from experiments.exp_jacobi_full_vs_jacobi_diag import nb_it_combi_full
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
@@ -35,7 +36,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.arange(60)
+ratios = np.arange(5)
 
 
 nb_it = np.zeros((len(nb_pix_multips), ratios.size), )
@@ -93,7 +94,7 @@ eigen_LB=[]
 for kk in np.arange(np.size(nb_pix_multips)):
     nb_pix_multip = nb_pix_multips[kk]
     number_of_pixels = (nb_pix_multip * 32, nb_pix_multip * 32)
-    #number_of_pixels = (16,16)
+    number_of_pixels = (16,16)
 
     shape = tuple((number_of_pixels[0] for _ in range(2)))
 
@@ -129,7 +130,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     I4rt = np.einsum('ik,jl', ii, ii)
     I4s = (I4 + I4rt) / 2.
 
-    refmaterial_data_field_ = np.einsum('ijkl,qxy->ijklqxy', I4s,
+    refmaterial_data_field_ = np.einsum('ijkl,qxy->ijklqxy', I4,
                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                              *discretization.nb_of_pixels])))
 
@@ -137,8 +138,9 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
     # material distribution
     # 'sine_wave',
+    geometry_ID ='square_inclusion'#'circle_inclusion'#
     initial_phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                             microstructure_name='circle_inclusion',
+                                                             microstructure_name=geometry_ID,
                                                              coordinates=discretization.fft.coords)
 
     #phase_field = np.abs(initial_phase_field-1)
@@ -243,11 +245,15 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
 
         K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-            material_data_field_ijklqxyz=material_data_field_C_0_rho)
+            material_data_field_ijklqxyz=material_data_field_C_0_rho, prec_type='full')
 
-        M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-            preconditioner_Fourier_fnfnqks=preconditioner,
-            nodal_field_fnxyz=K_diag_alg * x)
+        M_fun_combi = lambda x:  discretization.apply_preconditioner_Green_Jacobi_full(green_fnfnqks=preconditioner,
+                                                                                            jacobi_half_fnfnxyz=K_diag_alg,
+                                                                                            nodal_field_fnxyz=x)
+
+        # M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+        #     preconditioner_Fourier_fnfnqks=preconditioner,
+        #     nodal_field_fnxyz=K_diag_alg * x)
         # #
         M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
@@ -337,6 +343,9 @@ ax.set_ylabel('size')
 ax.set_zlabel('# CG iterations')
 plt.legend(['DGO', 'Jacobi', 'DGO + Jacobi','Richardson'])
 plt.show()
+
+
+quit()
 
 for i in np.arange(ratios.size,step=1):
     kappa_Green=kontrast[i]

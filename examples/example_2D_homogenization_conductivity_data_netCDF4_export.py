@@ -8,12 +8,12 @@ from muFFTTO import microstructure_library
 
 problem_type = 'conductivity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'
+element_type = 'linear_triangles' #  #'linear_triangles'# linear_triangles_tilled
 #formulation = 'small_strain'
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (32,32)
+number_of_pixels = (128,128)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -90,8 +90,9 @@ elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
 
 J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
-print("J_eff: ", J_eff)
-
+print("J_eff : ", J_eff)
+J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
+print("J_eff : ", J_eff)
 # nc = Dataset('temperatures.nc', 'w', format='NETCDF3_64BIT_OFFSET')
 # nc.createDimension('coords', 1)
 # nc.createDimension('number_of_dofs_x', number_of_pixels[0])

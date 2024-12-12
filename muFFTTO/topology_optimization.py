@@ -73,8 +73,13 @@ def objective_function_phase_field(discretization,
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+   # if discretization.element_type == 'linear_triangles':
     f_dw = compute_double_well_potential_analytical(discretization=discretization,
                                                     phase_field_1nxyz=phase_field_1nxyz)
+    # if discretization.element_type != 'linear_triangles' :
+    #     f_dw=compute_double_well_potential_Gauss_quad(discretization=discretization,
+    #                                                 phase_field_1nxyz=phase_field_1nxyz)
+
     if disp and MPI.COMM_WORLD.rank == 0:
         print('f_dw= '          ' {} '.format(f_dw))  # good in MPI
         print('f_dw / eta= '          ' {} '.format(f_dw / eta))  # good in MPI
@@ -301,7 +306,7 @@ def compute_double_well_potential_interpolated(discretization, phase_field_1nxyz
     return integral_precise / eta
 
 
-def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz, eta=1):
+def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz):
     # The double-well potential
     # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
     # double - well potential
@@ -309,11 +314,11 @@ def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz, 
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
-    if discretization.element_type != 'linear_triangles':
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
 
-    nb_quad_points_per_pixel = 8
+    nb_quad_points_per_pixel = 18 #
     quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
         element_type=discretization.element_type,
         nb_quad_points_per_pixel=nb_quad_points_per_pixel)
@@ -332,7 +337,7 @@ def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz, 
     # Multiply with quadrature weights
     quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 
-    return np.sum(quad_field_fqnxyz) / eta
+    return discretization.mpi_reduction.sum(quad_field_fqnxyz)
 
 
 def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
@@ -343,7 +348,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     # Phase field rho is considered as a linear combination of nodal values phase_field_1nxyz and shape FE functions
 
-    if discretization.element_type != 'linear_triangles':
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
         raise ValueError(
             'Analytical evaluation works only for linear triangles. You provided {} '.format(
                 discretization.element_type))
@@ -466,7 +471,7 @@ def compute_double_well_potential_analytical_fast(discretization, phase_field_1n
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     # Phase field rho is considered as a linear combination of nodal values phase_field_1nxyz and shape FE functions
 
-    if discretization.element_type != 'linear_triangles':
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
         raise ValueError(
             'Analytical evaluation works only for linear triangles. You provided {} '.format(
                 discretization.element_type))
@@ -545,7 +550,7 @@ def partial_der_of_double_well_potential_wrt_density_NEW(discretization, phase_f
     # gradient phase field potential = int ((2 * phase_field - 6 * phase_field^2  +  4 * phase_field^3 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2ρ -6ρ^2 + 4ρ^3
     # TODO[Martin]: do this part first ' integration of double well potential
-    if discretization.element_type != 'linear_triangles':
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
     nb_quad_points_per_pixel = 8
@@ -630,7 +635,7 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization, 
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
     # d/dρ(ρ^2 (1 - ρ)^2) = 2ρ -6ρ^2 + 4ρ^3
-    if discretization.element_type != 'linear_triangles':
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
         raise ValueError(
             'Analytical  evaluation works only for linear triangles. You provided {} '.format(
                 discretization.element_type))
@@ -679,6 +684,43 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization, 
                     ) * Jacobian_det
 
     return (drho_squared - 2 * drho_cubed + drho_quartic)
+
+def partial_der_of_double_well_potential_wrt_density_Gauss_quad(discretization, phase_field_1nxyz):
+    raise ValueError(
+        'NOT FINISHED{} '.format(discretization.element_type))
+    # The double-well potential
+    # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
+    # double - well potential
+    # with interpolation for more precise integration
+    # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
+    # integral = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
+    if discretization.element_type != 'linear_triangles' and discretization.element_type != 'linear_triangles_tilled':
+        raise ValueError(
+            'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
+
+    nb_quad_points_per_pixel = 18 #
+    quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
+        element_type=discretization.element_type,
+        nb_quad_points_per_pixel=nb_quad_points_per_pixel)
+
+    Jacobian_matrix = np.diag(discretization.pixel_size)
+    Jacobian_det = np.linalg.det(
+        Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    quad_points_weights = quad_points_weights * Jacobian_det
+    # Evaluate field on the quadrature points
+    quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+        nodal_field_fnxyz=phase_field_1nxyz,
+        quad_field_fqnxyz=None,
+        quad_points_coords_dq=quad_points_coord)
+
+    quad_field_fqnxyz = (quad_field_fqnxyz ** 2) * (1 - quad_field_fqnxyz) ** 2
+    # Multiply with quadrature weights
+    quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
+
+    return discretization.mpi_reduction.sum(quad_field_fqnxyz)
+
+
 
 
 def partial_der_of_double_well_potential_wrt_density_analytical_fast(discretization, phase_field_1nxyz, eta=1):
@@ -2282,7 +2324,6 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
                                           preconditioner_fun,
                                           system_matrix_fun,
                                           formulation,
-                                          target_energy,
                                           p,
                                           weight, disp=False):
     # Input:

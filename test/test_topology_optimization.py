@@ -14,7 +14,7 @@ from muFFTTO import microstructure_library
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
     problem_type = 'elasticity'
-    element_types = ['linear_triangles', 'bilinear_rectangle']
+    element_types = ['linear_triangles_tilled','linear_triangles', 'bilinear_rectangle']
 
     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                       problem_type=problem_type)
@@ -59,7 +59,7 @@ def test_discretization_init(discretization_fixture):
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([1, 1], 0, [6, 6])])
+    ([1, 2], 0, [4, 5])])
 def test_finite_difference_check_of_whole_objective_function(discretization_fixture, plot=True):
     problem_type = 'elasticity'
     discretization_type = 'finite_element'
