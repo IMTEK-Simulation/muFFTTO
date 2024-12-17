@@ -23,8 +23,8 @@ discretization_type = 'finite_element'
 element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
 formulation = 'small_strain'
 
-domain_size = [1,np.sqrt(3)/2]#
-number_of_pixels = (32, 32)
+domain_size = [1, 1]  # np.sqrt(3)/2
+number_of_pixels = (64, 64)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -154,10 +154,12 @@ for ration in [0.0]:
     # np.concatenate([np.arange(0.1, 1., 0.2),np.arange(1, 10, 2),np.arange(10, 110, 10)])
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     # weights = np.concatenate(
-    #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20)])
-    weights = np.concatenate([np.arange(0.1, 2., 1)])
+    #     [np.arange(110, 1, -10), np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2)])
+    weights = np.concatenate([np.arange(1, 2., 1)])
     for w_mult in weights:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
-        for eta_mult in [0.01, ]:
+
+        for eta_mult in np.arange(0.005, 0.01, 0.001) :#np.concatenate([np.arange(0.005, 0.05, 0.005)])
+
             # np.arange(0.05, 0.5, 0.05):#[0.1, ]:  # np.arange(0.001, 0.01, 0.002):#[0.005, ]:  # np.arange(0.01, 0.5, 0.05):#
             # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
             # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
@@ -329,7 +331,7 @@ for ration in [0.0]:
 
 
             if __name__ == '__main__':
-                script_name = 'exp_2D_elasticity_TO_indre_3exp'
+                script_name = 'exp_2D_elasticity_TO_indre_2exp'
 
                 run_adam = False
                 run_lbfg = True
@@ -429,7 +431,7 @@ for ration in [0.0]:
                         norms_delta_f_adam.append(result_norms[1])
                         norms_max_grad_f_adam.append(result_norms[2])
                         norms_norm_grad_f_adam.append(result_norms[3])
-                        file_data_name_it = f'adam_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                        file_data_name_it = f'adam_muFFTTO_{problem_type}_{element_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
                         save_npy(folder_name + file_data_name_it + f'.npy',
                                  result_norms[4].reshape([*discretization.nb_of_pixels]),
@@ -476,7 +478,7 @@ for ration in [0.0]:
                     _info['norms_max_grad_f'] = norms_max_grad_f_adam
                     _info['norms_norm_grad_f'] = norms_norm_grad_f_adam
 
-                    file_data_name = f'adam_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                    file_data_name = f'adam_muFFTTO_{problem_type}_{element_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
                     save_npy(folder_name + file_data_name + f'.npy', solution_phase[0, 0],
                              tuple(discretization.fft.subdomain_locations),
@@ -505,7 +507,7 @@ for ration in [0.0]:
                         norms_norm_grad_f.append(result_norms[3])
                         norms_max_delta_x.append(result_norms[4])
                         norms_norm_delta_x.append(result_norms[5])
-                        file_data_name_it = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                        file_data_name_it = f'lbfg_muFFTTO_{problem_type}_{element_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}_it{iteration}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
                         save_npy(folder_name + file_data_name_it + f'.npy',
                                  result_norms[6].reshape([*discretization.nb_of_pixels]),
@@ -553,7 +555,7 @@ for ration in [0.0]:
                     _info['norms_pf'] = norms_pf
                     _info['num_iteration_'] = num_iteration_
 
-                    file_data_name = f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+                    file_data_name = f'lbfg_muFFTTO_{problem_type}_{element_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
                     save_npy(folder_name + file_data_name + f'.npy', solution_phase[0, 0],
                              tuple(discretization.fft.subdomain_locations),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)

@@ -66,8 +66,8 @@ gs = fig.add_gridspec(nrows=1, ncols=1)
 
 ax = fig.add_subplot(gs[0, 0])
 ax.set_aspect('equal')
-ax.set_xlabel('Position x')
-ax.set_ylabel('Position y')
+#ax.set_xlabel('Position x')
+#ax.set_ylabel('Position y')
 ax.set_yticklabels([])
 ax.set_xticklabels([])
 
@@ -153,32 +153,38 @@ cell_points = np.stack((cell_points_x, cell_points_y))*N
 
 #ax.add_collection(p)
 ### ----- Finish plot ----- ###
-contour = ax.contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
+contour = ax.contourf(np.tile(phase_field, (3, 3)), cmap='gray_r', vmin=0, vmax=1)
 
 
 # Colorbar
-divider = make_axes_locatable(ax)
-
-ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-fig.add_axes(ax_cb)
-
-# cbar = fig.colorbar(contour, cax=ax_cb)
-
-cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-                    ticks=np.arange(0, 1.2, 0.2))
-cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
+# divider = make_axes_locatable(ax)
+#
+# ax_cb = divider.new_horizontal(size="5%", pad=0.05)
+# fig.add_axes(ax_cb)
+#
+# # cbar = fig.colorbar(contour, cax=ax_cb)
+#
+# cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
+#                     ticks=np.arange(0, 1.2, 0.2))
+# cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
 #ax.add_collection(p)
 
 for i in range(3):
-    ax.hlines(y=1024 * i, xmin=0, xmax=N * nb_tiles, colors='black', linestyles='-', linewidth=1)
-    ax.vlines(x=1024 * i, ymin=0, ymax=N * nb_tiles, colors='black', linestyles='-', linewidth=1)
+    ax.hlines(y=1024 * i, xmin=0, xmax=N * nb_tiles,  colors='white', linestyles='--', linewidth=0.3)
+    ax.vlines(x=1024 * i, ymin=0, ymax=N * nb_tiles,  colors='white', linestyles='--', linewidth=0.3)
 ax.set_xlim(0, 1024 * nb_tiles)
 ax.set_ylim(0, 1024 * nb_tiles)
+ax.set_yticks([0, 1024, 2*1024, 3*1024])
+ax.set_xticks([0, 1024, 2*1024, 3*1024])
+ax.xaxis.set_ticks(np.arange(0, 4*1024, 1024))
+ax.xaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%0.0f'))
+ax.yaxis.set_ticks(np.arange(0, 4*1024, 1024))
+ax.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%0.0f'))
 # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
 # plt.clim(0, 1)
 # Add a colorbar
 # Colorbar
-
+ax.text(-0.17, 0.97, '(a)', transform=ax.transAxes)
 #
 # divider = make_axes_locatable(ax)
 # ax_cb = divider.new_horizontal(size="5%", pad=0.05)
@@ -188,20 +194,17 @@ ax.set_ylim(0, 1024 * nb_tiles)
 # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
 #
 
-
-
-
-# Show and save
-folder = '/mnt/d/joedicke/Dokumente/Ubuntu_Dateien/optimization/'
-folder = folder + 'paper_adjoint_method/'
-#name = 'result_optimization_negativ_poisson'
 src = os.getcwd()  + '/figures/'
-fname = src + name + '{}'.format('1.pdf')
+fname = src + 'exp3_rect{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+
+
 print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
 
 fig.savefig(fname, bbox_inches='tight')
 plt.show()
-
+quit()
 plot_figs = False
 plot_movie = False
 if plot_movie:
