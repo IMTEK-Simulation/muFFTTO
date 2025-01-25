@@ -152,8 +152,8 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     ax5 = fig.add_subplot(gs[:, :])
 
     # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2, label=r'stress difference -  $f_{\sigma}$')
-    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1, label=r'phase field - $f_{\rho}$')
+    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2,marker='|', label=r'stress difference -  $f_{\sigma}$')
+    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1,marker='|', label=r'phase field - $f_{\rho}$')
     #ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
 
     # ax.set_aspect('equal')
@@ -270,6 +270,10 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         # create repeatable cells
         nb_cells = [3, 3]
         nb_additional_cells = 2
+        ax1.set_yticklabels([])
+        ax1.set_xticklabels([])
+        ax1.xaxis.set_ticks_position('none')
+        ax1.yaxis.set_ticks_position('none')
         ax1.set_aspect('equal')
         #ax1.set_xlim(xmin, nb_cells[0])
         #ax1.set_ylim(ymin, nb_cells[1] * +ymax)

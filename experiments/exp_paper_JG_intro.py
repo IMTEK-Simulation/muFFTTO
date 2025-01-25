@@ -27,7 +27,7 @@ formulation = 'small_strain'
 
 
 domain_size = [1, 1]
-nb_pix_multips = [4]  # ,2,3,3,2,
+nb_pix_multips = [1]  # ,2,3,3,2,
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -35,7 +35,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.arange(120)
+ratios = np.arange(20)
 
 
 nb_it = np.zeros((len(nb_pix_multips), ratios.size), )

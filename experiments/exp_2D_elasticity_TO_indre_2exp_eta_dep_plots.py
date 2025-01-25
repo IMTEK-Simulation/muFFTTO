@@ -236,9 +236,15 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         # phase_field=phase_field**2
         phase_field = np.roll(phase_field, roll_x, axis=1)
         phase_field = np.roll(phase_field, roll_y, axis=0)
-
+        x = np.arange(0, nb_reps*N)
+        y = np.arange(0, nb_reps*N)
+        X, Y = np.meshgrid(x, y)
         levels = [-0.1,0.2,0.3,0.4,0.5,0.6, 0.7, 0.8,0.9,1.1] #levels,
-        contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)),levels, cmap='gray_r', vmin=0, vmax=1)
+        #levels =np.arange(-0.1, 1.1,1.2/64)
+        #contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)),levels, cmap='gray_r', vmin=0, vmax=1)
+        contour = ax1.pcolormesh(X,Y,np.tile(phase_field, (nb_reps, nb_reps)),  cmap='gray_r', vmin=0, vmax=1,linewidth=0,rasterized=True)
+        contour.set_edgecolor('face')
+
         ax1.plot([0, 1], [0, 1], color=colors[i], linestyle=linestyles[i], linewidth=1., transform=ax1.transAxes)
 
         if i == 0:
@@ -268,12 +274,22 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         ax1.set_ylim(0, N - 1)
         ax1.set_yticklabels([])
         ax1.set_xticklabels([])
+        ax1.xaxis.set_ticks_position('none')
+        ax1.yaxis.set_ticks_position('none')
         ax1.set_aspect('equal')
+        #ax1.axis('off')
 
         #ax1.hlines(y=32, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
         #ax1.vlines(x=32, ymin=0, ymax=N, colors='black', linestyles='--', linewidth=1.)
 
         ax0.plot(np.diag(phase_field),color=colors[i], linestyle=linestyles[i])
+    #ax0.grid(axis='x')
+    number_of_runs = range(1, N)  # use your actual number_of_runs
+    ax0.set_xticks(number_of_runs, minor=False)
+    ax0.xaxis.grid(True,color='grey', linestyle='-', linewidth=0.01)
+    ax0.set_xticklabels([])
+    ax0.xaxis.set_ticks_position('none')
+    #ax0.yaxis.set_ticks_position('none')
     ax0.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
     ax0.set_xlim(0, N - 1)
     ax0.text(0.01, 0.8, '(a)', transform=ax0.transAxes)

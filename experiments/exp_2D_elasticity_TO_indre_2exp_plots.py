@@ -188,8 +188,8 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     ax5 = fig.add_subplot(gs[:, :])
 
     # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2, label=r'stress difference -  $f_{\sigma}$')
-    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1, label=r'phase field - $f_{\rho}$')
+    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2,marker='|', label=r'stress difference -  $f_{\sigma}$')
+    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1,marker='|', label=r'phase field - $f_{\rho}$')
 
     #ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
     # ax.set_aspect('equal')
@@ -288,6 +288,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                          )
             ax5.text(letter_offset, 1.05, '(e)', transform=ax1.transAxes)
 
+
         name = (
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{weight:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
         phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
@@ -328,7 +329,10 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         parall.set_facecolor('none')
 
         tpc = ax1.add_collection(parall)
-
+        ax1.set_yticklabels([])
+        ax1.set_xticklabels([])
+        ax1.xaxis.set_ticks_position('none')
+        ax1.yaxis.set_ticks_position('none')
         ax1.set_aspect('equal')
         # ax1.set_xlabel(f'w={weight:.1f}'.rstrip('0').rstrip('.'))
         # ax1.xaxis.set_label_position('bottom')

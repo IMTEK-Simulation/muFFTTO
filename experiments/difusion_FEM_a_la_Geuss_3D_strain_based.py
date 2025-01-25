@@ -21,7 +21,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 8
 # PARAMETERS ##############################################################
 ndim = 3  # number of dimensions (works for 2D and 3D)
-N_x = N_y = N_z = 32  # number of voxels (assumed equal for all directions)
+N_x = N_y = N_z = 16  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y, N_z)  # number of voxels
 
 del_x, del_y, del_z = 1, 1, 1  # pixel size / grid spacing
@@ -246,7 +246,7 @@ length = end - start
 print("It took", length, "seconds!")
 
 
-du_sol_ijqxy = D(u_ixy=u_sol_vec.reshape(temp_shape))
+du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
 print('homogenised properties Displacement-Based A11 = {}'.format(
     np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))

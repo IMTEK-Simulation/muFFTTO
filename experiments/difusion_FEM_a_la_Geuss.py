@@ -18,7 +18,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 2048  # number of voxels (assumed equal for all directions)
+N_x = N_y = 48  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1, 1  # pixel size / grid spacing
@@ -169,7 +169,7 @@ u_sol_plain_I, status, num_iters = solve_sparse(
     M=None)
 print('Number of steps plain= {}'.format(num_iters))
 
-du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(temp_shape))
+du_sol_plain_ijqxy = B(u_ixy=u_sol_plain_I.reshape(temp_shape))
 
 aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
 print('homogenised properties plain A11 = {}'.format(

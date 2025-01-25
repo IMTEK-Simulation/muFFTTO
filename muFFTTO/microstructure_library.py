@@ -12,7 +12,8 @@ from muFFTTO import geometries_indre_joedicke
 def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  coordinates=None,
-                 parameter=None):
+                 parameter=None,
+                 contrast=None):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'linear', 'bilinear','tanh','square_inclusion_equal_volfrac','laminate', 'laminate2',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
@@ -51,15 +52,23 @@ def get_geometry(nb_voxels,
             phase_field[coordinates[0] < 0.5 ] = 0
         case 'laminate2':
 
-            phase_field = np.zeros(nb_voxels)
-            division=1/parameter
-            divisions=np.arange(0, 1, 1 / parameter)
-            divisions2 = np.arange(0, 1, 1 /( parameter-1))
-            positions = np.arange(0, 1+1 / parameter, 1 / parameter)
-            for i in np.arange(divisions.size-1):
-                section=divisions[i]
-                phase_field[coordinates[0] >= section] = divisions2[i]
-            phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            phase_field = np.zeros(nb_voxels)+contrast
+            #division=1/parameter
+            #divisions=np.arange(0, 1, 1 / parameter)
+            #divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            #divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.linspace(contrast, 1, parameter)
+
+            #positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter+1)
+            for i in np.arange(phases.size-1):
+                #section=divisions[i]
+                #phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i+1]] = phases[i+1]
+
+            #phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            print()
         case 'square_inclusion_equal_volfrac':
 
             phase_field = np.ones(nb_voxels)

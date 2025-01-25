@@ -19,7 +19,9 @@ nb_quad_points_per_pixel = 8
 
 # PARAMETERS ##############################################################
 ndim = 3  # number of dimensions (works for 2D and 3D)
-N_x = N_y = N_z = 27  # number of voxels (assumed equal for all directions)
+N_x     = 31             # number of voxels in x-direction
+N_y     = 31             # number of voxels in y-direction
+N_z     = 1            # number of voxels in z-direction
 N = (N_x, N_y, N_z)  # number of voxels
 
 del_x, del_y, del_z = 1, 1, 1  # pixel size / grid spacing
@@ -36,6 +38,17 @@ grad_shape = (ndim, ndim, nb_quad_points_per_pixel) + N  # shape of the gradient
 # OPERATORS #
 dot21 = lambda A, v: np.einsum('ij...,j...  ->i...', A, v)
 ddot42 = lambda A, B: np.einsum('ijkl...,lk... ->ij...  ', A, B)  # dot product between data and gradient
+
+trans2 = lambda A2   : np.einsum('ij...          ->ji...  ',A2   )
+ddot22 = lambda A2,B2: np.einsum('ij...  ,ji...  ->...    ',A2,B2)
+ddot44 = lambda A4,B4: np.einsum('ijkl...,lkmn...->ijmn...',A4,B4)
+dot11  = lambda A1,B1: np.einsum('i...   ,i...   ->...    ',A1,B1)
+dot22  = lambda A2,B2: np.einsum('ij...  ,jk...  ->ik...  ',A2,B2)
+dot24  = lambda A2,B4: np.einsum('ij...  ,jkmn...->ikmn...',A2,B4)
+dot42  = lambda A4,B2: np.einsum('ijkl...,lm...  ->ijkm...',A4,B2)
+dyad22 = lambda A2,B2: np.einsum('ij...  ,kl...  ->ijkl...',A2,B2)
+
+
 # (inverse) Fourier transform (for each tensor component in each direction)
 fft = lambda x: np.fft.fftn(x, [*N])
 ifft = lambda x: np.fft.ifftn(x, [*N])
@@ -176,20 +189,122 @@ phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= 0
 
 # identity tensors                                                      [single tensors]
 i = np.eye(ndim)
+I      = i
 I4 = np.einsum('il,jk', i, i)
 I4rt = np.einsum('ik,jl', i, i)
 I4s = (I4 + I4rt) / 2.
 II = np.einsum('ij,kl ', i, i)
+I4d    = (I4s-II/3.)
+
+# ------------------- PROBLEM DEFINITION / CONSTITIVE MODEL -------------------
+
+
+# constitutive response to a certain loading and history
+# NB: completely uncoupled from the FFT-solver, but implemented as a regular
+#     grid of quadrature points, to have an efficient code;
+#     each point is completely independent, just evaluated at the same time
+def constitutive(eps, eps_t, epse_t, ep_t):
+    # elastic stiffness tensor
+    C4e = K * II + 2. * mu * I4d
+
+    # trial state
+    epse_s = epse_t + (eps - eps_t)
+    sig_s = ddot42(C4e, epse_s)
+    sigm_s = ddot22(sig_s, I) / 3.
+    sigd_s = sig_s - sigm_s * I
+    sigeq_s = np.sqrt(3. / 2. * ddot22(sigd_s, sigd_s))
+    # avoid zero division below ("phi_s" is corrected below)
+    Z = sigeq_s == 0.
+    sigeq_s[Z] = 1.
+
+    # evaluate yield surface, set to zero if elastic (or stress-free)
+    sigy, dH = yield_function(ep_t)
+    phi_s = sigeq_s - sigy
+    phi_s = 1. / 2. * (phi_s + np.abs(phi_s))
+    phi_s[Z] = 0.
+    el = phi_s <= 0.
+
+    # plastic multiplier, based on non-linear hardening
+    # - initialize
+    dgamma = np.zeros(ep_t.shape, dtype='float64')
+    res = np.array(phi_s, copy=True)
+    # - incrementally solve scalar non-linear return-map equation
+    while np.max(np.abs(res) / sigy0) > 1.e-6:
+        dgamma -= res / (-3. * mu - dH)
+        sigy, dH = yield_function(ep_t + dgamma)
+        res = sigeq_s - 3. * mu * dgamma - sigy
+        res[el] = 0.
+    # - enforce elastic quadrature points to stay elastic
+    dgamma[el] = 0.
+    dH[el] = 0.
+
+    # return map
+    N = 3. / 2. * sigd_s / sigeq_s
+    ep = ep_t + dgamma
+    sig = sig_s - dgamma * N * 2. * mu
+    epse = epse_s - dgamma * N
+
+    # plastic tangent stiffness
+    C4ep = C4e - \
+           6. * (mu ** 2.) * dgamma / sigeq_s * I4d + \
+           4. * (mu ** 2.) * (dgamma / sigeq_s - 1. / (3. * mu + dH)) * dyad22(N, N)
+    # consistent tangent operator: elastic/plastic switch
+    el = el.astype(np.float64)
+    K4 = C4e * el + C4ep * (1. - el)
+
+    # return 3-D stress, 2-D stress/tangent, and history
+    return sig, sig[:2, :2, :, :], K4[:2, :2, :2, :2, :, :], epse, ep
+
+# yield function: return yield stress and incremental hardening modulus
+# NB: all integration points are independent, but treated at the same time
+def yield_function(ep):
+    # - distinguish very low plastic strains -> linear hardening for "ep<=h"
+    h = 0.0001
+    low = ep <= h
+    ep_hgh = np.array(ep, copy=True)
+    ep_hgh[low] = h
+    # - normal non-linear hardening
+    Sy_hgh = sigy0 + H * ep_hgh ** n
+    dH_hgh = n * H * ep_hgh ** (n - 1.)
+    # - linearized hardening for "ep<=h": ensure continuity at "ep==h"
+    dH_low = n * H * h ** (n - 1.)
+    Sy_low = (sigy0 + H * h ** n - dH_low * h) + dH_low * ep
+    # - combine initial linear hardening with non-linear hardening
+    low = low.astype(np.float64)
+    sigy = (1. - low) * Sy_hgh + low * Sy_low
+    dH = (1. - low) * dH_hgh + low * dH_low
+    # - return yield stress and linearized hardening modulus
+    return sigy, dH
+
+# function to convert material parameters to grid of scalars
+param = lambda soft, hard: soft * np.ones([nb_quad_points_per_pixel,N_x, N_y, N_z], dtype='float64') * (1. - phase[:N_x, :N_y]) + \
+                           hard * np.ones([nb_quad_points_per_pixel,N_x, N_y, N_z], dtype='float64') * phase[:N_x, :N_y]
+
+# material parameters
+K = param(0.833, 0.833)  # bulk  modulus
+mu = param(0.386, 0.386)  # shear modulus
+sigy0 = param(0.005, 0.005 * 2.)  # initial yield stress
+H = param(0.005, 0.005 * 2.)  # hardening modulus
+n = param(0.2, 0.2)  # hardening exponent
+# ----------------------------- NEWTON ITERATIONS -----------------------------
+
+# initialize: stress and strain tensor, history
+sig    = np.zeros([3,3,N_x,N_y,N_z])
+eps    = np.zeros([3,3,N_x,N_y,N_z])
+eps_t  = np.zeros([3,3,N_x,N_y,N_z])
+epse_t = np.zeros([3,3,N_x,N_y,N_z])
+ep_t   = np.zeros([    N_x,N_y,N_z])
+
+# initial constitutive response / tangent
+sig,K4,epse,ep = constitutive(eps,eps_t,epse_t,ep_t)
 
 #                                                                       [local tensors]
 K_0, K_1 = 1., 100.  # bulk  modulus
-mu_0, mu_1 = 55.5, 0.1  # shear modulus
+mu_0, mu_1 = 55.5, 0.1  # shear modulus`
 
 # stiffness tensor
 K4_0 = K_0 * II + 2. * mu_0 * (I4s - 1. / 3. * II)
 K4_1 = K_1 * II + 2. * mu_1 * (I4s - 1. / 3. * II)
-
-
 # Material data matrix --- stiffness tensor K_ij per quad point q          [grid of tensors]
 mat_data_ijklqxy = np.einsum('ijkl,qxy...->ijklqxy...', K4_0, phase)
 mat_data_ijklqxy += np.einsum('ijkl,qxy...->ijklqxy...', K4_1, 1 - phase)
@@ -197,11 +312,13 @@ mat_data_ijklqxy += np.einsum('ijkl,qxy...->ijklqxy...', K4_1, 1 - phase)
 # apply quadrature weights
 mat_data_ijklqxy = np.einsum('ijklq...,q->ijklq...', mat_data_ijklqxy, quadrature_weights)
 
+
 # Macroscopic gradient ---  loading
 macro_grad_ij = np.zeros([ndim, ndim])  # set macroscopic gradient loading
 macro_grad_ij[0, 0] = 1
 E_ijqxy = np.einsum('ij,qxy...->ijqxy...', macro_grad_ij,
                     np.ones([nb_quad_points_per_pixel, *N]))
+
 
 # System matrix function
 K_fun_I = lambda x: get_gradient_transposed(

@@ -161,7 +161,7 @@ print('Number of steps = {}'.format(num_iters))
 
 du_sol_ijqxy = get_gradient(u_ixy=u_sol_I.reshape(displacement_shape))
 aux_ijqxy = du_sol_ijqxy + macro_grad_ij[:, :, np.newaxis, np.newaxis, np.newaxis]
-print('Homogenised properties PCG C_11 = {}'.format(
+print('Homogenised properties displacement based PCG C_11 = {}'.format(
     np.inner(ddot42(mat_data_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
 print('END PCG')
 
@@ -175,6 +175,6 @@ print('Number of steps = {}'.format(num_iters))
 du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(displacement_shape))
 
 aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
-print('Homogenised properties CG C_11 = {}'.format(
+print('Homogenised properties displacement based CG C_11 = {}'.format(
     np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
 print('END CG')
