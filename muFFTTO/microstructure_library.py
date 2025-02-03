@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 
-
 from muFFTTO import geometries_indre_joedicke
 
 
@@ -13,9 +12,12 @@ def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
                  coordinates=None,
                  parameter=None,
-                 contrast=None):
+                 contrast=None,
+                 **kwargs):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
-                                   'sine_wave', 'linear', 'bilinear','tanh','square_inclusion_equal_volfrac','laminate', 'laminate2',
+                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh','sine_wave_inv',
+                                   'square_inclusion_equal_volfrac',
+                                   'laminate', 'laminate2',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -38,7 +40,8 @@ def get_geometry(nb_voxels,
 
     match microstructure_name:
         case 'random_distribution':
-
+            seed = kwargs['seed']
+            np.random.seed(seed)
             phase_field = np.random.rand(*nb_voxels)
 
         case 'square_inclusion':
@@ -49,31 +52,31 @@ def get_geometry(nb_voxels,
         case 'laminate':
 
             phase_field = np.ones(nb_voxels)
-            phase_field[coordinates[0] < 0.5 ] = 0
+            phase_field[coordinates[0] < 0.5] = 0
         case 'laminate2':
 
-            phase_field = np.zeros(nb_voxels)+contrast
-            #division=1/parameter
-            #divisions=np.arange(0, 1, 1 / parameter)
-            #divisionss= np.linspace(0, 1, parameter, endpoint = False)
+            phase_field = np.zeros(nb_voxels) + contrast
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
 
-            #divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
             phases = np.linspace(contrast, 1, parameter)
 
-            #positions = np.arange(0, 1+1 / parameter, 1 / parameter)
-            positions = np.linspace(0, 1, parameter+1)
-            for i in np.arange(phases.size-1):
-                #section=divisions[i]
-                #phase_field[coordinates[0] >= section] = divisions2[i]
-                phase_field[coordinates[0] >= positions[i+1]] = phases[i+1]
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
 
-            #phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
             print()
         case 'square_inclusion_equal_volfrac':
 
             phase_field = np.ones(nb_voxels)
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
-                               np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
         case 'circle_inclusion':
             phase_field = np.ones(nb_voxels)
             if nb_voxels.size == 1:
@@ -81,7 +84,7 @@ def get_geometry(nb_voxels,
             elif nb_voxels.size == 2 and nb_voxels[1] == 1:
                 phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2))) < 0.2] = 0
             elif nb_voxels.size == 2:
-                phase_field[(np.sqrt(np.power(coordinates[0]-0.5, 2) + np.power(coordinates[1]-0.5, 2)) )< 0.2] = 0
+                phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2) + np.power(coordinates[1] - 0.5, 2))) < 0.2] = 0
             elif nb_voxels.size == 3:
                 phase_field[
                     np.power(coordinates[0], 2) +
@@ -107,13 +110,36 @@ def get_geometry(nb_voxels,
         case 'sine_wave':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0])+ 0.25 * np.cos(3 * 2 * np.pi * coordinates[1])
+                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                    3 * 2 * np.pi * coordinates[1])
             elif nb_voxels.size == 3:
                 phase_field = np.sin(coordinates)
+        case 'sine_wave_':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]) + 0.25 * np.cos(
+                    2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0])
+            elif nb_voxels.size == 3:
+                phase_field = (0.5 + 0.25 * np.cos(2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]- 2 * np.pi * coordinates[2]) +
+                                     0.25 * np.cos(2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0]+ 2 * np.pi * coordinates[2]))
+
+
+        case 'sine_wave_inv':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 - 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]) - 0.25 * np.cos(
+                    2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0])
+            elif nb_voxels.size == 3:
+                phase_field = (0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 2 * np.pi * coordinates[2]) +
+                               0.25 * np.cos(
+                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 2 * np.pi * coordinates[2]))
         case 'tanh':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field = np.tanh( (coordinates[0]-0.5)/0.3 * (coordinates[1]-0.5)/0.3 )
+                phase_field = np.tanh((coordinates[0] - 0.5) / 0.3 * (coordinates[1] - 0.5) / 0.3)
             elif nb_voxels.size == 3:
                 phase_field = np.sin(coordinates)
         case 'linear':

@@ -1,18 +1,20 @@
 import numpy as np
+import scipy as sc
+
 import scipy.sparse.linalg as sp
+import muFFTTO.solvers as solvers
 # Import the time library
 import time
 
 
-
-def solve_sparse(A, b, M=None):
+def solve_sparse(A, b, x0=None, M=None):
     num_iters = 0
 
     def callback(xk):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, atol=1e-6, maxiter=1000, callback=callback)
+    x, status = sp.cg(A, b, x0=x0, M=M, rtol=1e-10, atol=1e-5, maxiter=1000, callback=callback)
     return x, status, num_iters
 
 
@@ -141,6 +143,7 @@ B_dqijk = np.einsum('dt,tqijk->dqijk', inv_jacobian, B_dqijk)
 
 B_direct_dqij = B_dqijk
 
+
 ####### Gradient operator #############
 def B(u_ixy, grad_u_ijqxy=None):
     # apply gradient operator
@@ -154,6 +157,7 @@ def B(u_ixy, grad_u_ijqxy=None):
                                   B_direct_dqij[(..., *pixel_node)],
                                   np.roll(u_ixy, -1 * pixel_node, axis=tuple(range(1, ndim + 1))))
     return grad_u_ijqxy
+
 
 ####### Gradient transposed operator  (Divergence) #############
 def B_t(flux_ijqxyz, div_flux_ixy=None):
@@ -177,33 +181,104 @@ def B_t(flux_ijqxyz, div_flux_ixy=None):
 phase = np.ones([nb_quad_points_per_pixel, *N])
 phase[:, phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4,
 phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4, :] *= 0
+phase[:, phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4,
+phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4, :] = 1e-4
+
+
+def apply_smoother_log10(phase):
+    # Define a 2D smoothing kernel
+    kernel = np.array([[0.0625, 0.125, 0.0625],
+                       [0.125, 0.25, 0.125],
+                       [0.0625, 0.125, 0.0625]])
+    # kernel = np.array([[0.0, 0.25, 0.0],
+    #                    [0.25, 0., 0.25],
+    #                    [0.0, 0.25, 0.0]])
+    # Apply convolution for smoothing
+    smoothed_arr = np.zeros_like(phase)
+    for q in range(8):
+
+        for z in range(phase.shape[-1]):
+            smoothed_arr[q, :, :, z] = sc.signal.convolve2d(np.log10(phase[q, :, :, z]), kernel, mode='same',
+                                                            boundary='wrap')
+    # Fix center point
+    # smoothed_arr[number_of_pixels[0] // 2 - 1:number_of_pixels[0] // 2 + 1,
+    # number_of_pixels[0] // 2 - 1:number_of_pixels[0] // 2 + 1] = -4
+    # Fix boarders for laminate
+    # smoothed_arr[ :, 0, :, :] = -4
+    # smoothed_arr[3 *  phase.shape[0] // 4 - 1: 3 *  phase.shape[1] // 4 + 1, :] = 0
+
+    smoothed_arr = 10 ** smoothed_arr
+
+    return smoothed_arr
+
+
+# apply smoothening x times
+for s in range(5):
+    phase = apply_smoother_log10(phase)
 
 # material data --- thermal_conductivity
-mat_contrast = 1.
+mat_contrast =  1.
 inc_contrast = 20.
 
-A2_0 = mat_contrast * np.eye(ndim)
-A2_1 = inc_contrast * np.eye(ndim)
+A2_0 =  np.eye(ndim)
+A2_0[1, 1] = 5
+A2_0[2, 2] = 10
+
+
+# A2_1 = inc_contrast * np.eye(ndim)
 
 # Material data matrix --- conductivity matrix A_ij per quad point           [grid of tensors]
-mat_data_ijqxy = np.einsum('ij,qxy...->ijqxy...', A2_0, phase)
-mat_data_ijqxy += np.einsum('ij,qxy...->ijqxy...', A2_1, 1 - phase)
+mat_data_pure_ijqxy = np.einsum('ij,qxy...->ijqxy...', A2_0, phase)
+# mat_data_ijqxy += np.einsum('ij,qxy...->ijqxy...', A2_1, 1 - phase)
 
 # apply quadrature weights
-mat_data_ijqxy = np.einsum('ijq...,q->ijq...', mat_data_ijqxy, quadrature_weights)
+mat_data_ijqxy = np.einsum('ijq...,q->ijq...', mat_data_pure_ijqxy, quadrature_weights)
+
+mat_data_pure_inverse_ijqxy = np.zeros_like(mat_data_pure_ijqxy)
+mat_data_inverse_ijqxy = np.zeros_like(mat_data_pure_ijqxy)
+
+for q in range(phase.shape[0]):
+    for x in range(phase.shape[1]):
+        for y in range(phase.shape[2]):
+            for z in range(phase.shape[3]):
+                mat_data_pure_inverse_ijqxy[:, :, q, x, y, z] = np.linalg.inv(mat_data_pure_ijqxy[:, :, q, x, y, z])
+                mat_data_inverse_ijqxy[:, :, q, x, y, z] = np.linalg.inv(mat_data_ijqxy[:, :, q, x, y, z])
 
 # Macroscopic gradient ---  loading
 macro_grad_j = np.zeros(ndim)
-macro_grad_j[0] = 1
+macro_grad_j[:] = 1
 E_jqxy = np.einsum('j,qxy...->jqxy...', macro_grad_j,
                    np.ones([nb_quad_points_per_pixel, *N]))  # set macroscopic gradient loading
 E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
 
 # Preconditioner IN FOURIER SPACE #############################################
 ref_mat_data_ij = np.eye(ndim)
+ref_mat_data_ij[1, 1] = 5
+ref_mat_data_ij[2, 2] = 10
 # apply quadrature weights
-ref_mat_data_ij = ref_mat_data_ij * quadrature_weights[0]
+ref_mat_data_ij = ref_mat_data_ij* quadrature_weights[0]
+ref_mat_data_ijqxy = np.einsum('ij,qxy...->ijqxy...', ref_mat_data_ij, phase ** 0)
+ref_mat_I_data_ijqxy = np.einsum('ij,qxy...->ijqxy...', np.eye(ndim)* quadrature_weights[0], phase ** 0)
 
+inv_ref_mat_data_ijqxy = np.einsum('ij,qxy...->ijqxy...', np.linalg.inv(ref_mat_data_ij), phase ** 0)
+
+# Assembly preconditioned with reference material I
+M_diag_I_ixy = np.zeros([n_u_dofs, n_u_dofs, *N])
+for d in range(n_u_dofs):
+    unit_impuls_ixy = np.zeros(temp_shape)
+    unit_impuls_ixy[d, 0, 0, 0] = 1
+    # M_diag_ixy[:, d, 0, 0, 0] = 1
+    # response of the system to unit impulses
+    M_diag_I_ixy[:, d, ...] = B_t(dot21(A=ref_mat_I_data_ijqxy, v=B(u_ixy=unit_impuls_ixy)))
+# Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
+M_diag_I_ixy = np.real(fft(x=M_diag_I_ixy))  # imaginary part is zero
+# Compute the inverse of preconditioner
+M_diag_I_ixy[M_diag_I_ixy != 0] = 1 / M_diag_I_ixy[M_diag_I_ixy != 0]
+M_diag_I_ixy[0, 0, 0, 0, 0] = 0
+# Preconditioner function
+M_fun_I = lambda x: ifft(M_diag_I_ixy * fft(x=x.reshape(temp_shape))).real  # .reshape(-1)
+
+# Assembly preconditioned with reference material C_
 M_diag_ixy = np.zeros([n_u_dofs, n_u_dofs, *N])
 for d in range(n_u_dofs):
     unit_impuls_ixy = np.zeros(temp_shape)
@@ -211,30 +286,247 @@ for d in range(n_u_dofs):
     # M_diag_ixy[:, d, 0, 0, 0] = 1
     # response of the system to unit impulses
     M_diag_ixy[:, d, ...] = B_t(dot21(A=ref_mat_data_ij, v=B(u_ixy=unit_impuls_ixy)))
-
 # Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
 M_diag_ixy = np.real(fft(x=M_diag_ixy))  # imaginary part is zero
 # Compute the inverse of preconditioner
 M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
+M_diag_ixy[0, 0, 0, 0, 0] = 0
 # Preconditioner function
-M_fun_I = lambda x: ifft(M_diag_ixy * fft(x=x.reshape(temp_shape))).real # .reshape(-1)
+M_fun_C = lambda x: ifft(M_diag_ixy * fft(x=x.reshape(temp_shape))).real  # .reshape(-1)
+
+
+# Compute the Jacobi
+# J_diag_ixy = np.zeros([n_u_dofs, n_u_dofs, *N])
+# for d in range(n_u_dofs):
+#     for x in range(phase.shape[1]):
+#         for y in range(phase.shape[2]):
+#             for z in range(phase.shape[3]):
+#                 unit_impuls_ixy = np.zeros(temp_shape)
+#                 unit_impuls_ixy[d, x, y, z] = 1
+#                 J_diag_ixy[:, d, x, y, z] = (B_t(dot21(A=mat_data_ijqxy, v=B(u_ixy=unit_impuls_ixy)))[d, x, y, z])**-1
+
+
+# material data operator:
+apply_data = lambda x: dot21(mat_data_ijqxy, x.reshape(grad_shape)).reshape(-1)
+# reference material data operator:
+apply_ref_data = lambda x: dot21(ref_mat_data_ijqxy, x.reshape(grad_shape))
+apply_I_data = lambda x: dot21(ref_mat_I_data_ijqxy, x.reshape(grad_shape))
 
 # System matrix function
-K_fun_I = lambda x: B_t(dot21(mat_data_ijqxy, B(u_ixy=x.reshape(temp_shape)))) # .reshape(-1)
+K_fun_I = lambda x: B_t(dot21(mat_data_ijqxy, B(u_ixy=x.reshape(temp_shape))))  # .reshape(-1)
 
+# G_c operator  : G_c  -                  D:M:Dt:C_ref
+G_I = lambda x: B(M_fun_I(B_t( apply_I_data(x) ) )[0]).reshape(-1)
+G_c = lambda x: B(M_fun_C(B_t( apply_ref_data(x) ) )[0]).reshape(-1)
+# G_c_T operator  : G_c transpose   C_ref:D:M:Dt
+G_I_T = lambda x: apply_I_data(B(M_fun_I(B_t(x.reshape(grad_shape)))[0])).reshape(-1)
+G_c_T = lambda x: apply_ref_data(B(M_fun_C(B_t(x.reshape(grad_shape)))[0])).reshape(-1)
+
+G_I_T_C = lambda x: G_I_T(dot21(mat_data_ijqxy,  x.reshape(grad_shape))[0]).reshape(-1)
+G_c_T_C = lambda x: G_c_T(dot21(mat_data_ijqxy,  x.reshape(grad_shape))[0]).reshape(-1)
+
+G_I_T_C_G_I= lambda x: G_I_T(dot21(mat_data_ijqxy, G_I(x).reshape(grad_shape))[0]).reshape(-1)
+G_c_T_C_G_c= lambda x: G_c_T(dot21(mat_data_ijqxy, G_c(x).reshape(grad_shape))[0]).reshape(-1)
+
+# Gamma operator  : Gamma_0
+gamma_0 = lambda x: B(M_fun_I(B_t(x.reshape(grad_shape)))[0]).reshape(-1)
 # Projection operator with material data evaluation: Gamma_0 *A(gradient)
-gamma_0 = lambda x: B(M_fun_I(B_t(dot21(mat_data_ijqxy, x.reshape(grad_shape))))[0]).reshape(-1)
+gamma_0_C = lambda x: gamma_0(dot21(mat_data_ijqxy, x.reshape(grad_shape))[0]).reshape(-1)
+# Projection operator with material data evaluation: Gamma_0 *A(gradient)
+gamma_0_C_gamma_0 = lambda x: gamma_0(dot21(mat_data_ijqxy, gamma_0(x).reshape(grad_shape))[0]).reshape(-1)
+
+do_nothing = lambda x: 1 * x
+
+
+apply_ref_data_inverse = lambda x: dot21(inv_ref_mat_data_ijqxy, x.reshape(grad_shape)).reshape(-1)
+
+# inverse of material data operator: Datacobi
+jacobi_data = np.eye(ndim)
+jacobi_data[1, 1] = 5
+jacobi_data[2, 2] = 10
+mat_data_I_ijqxy = np.einsum('ij,qxy...->ijqxy...', jacobi_data, phase ** 0)
+
+
+
+apply_data_inverse = lambda x: dot21(mat_data_inverse_ijqxy, x.reshape(grad_shape)).reshape(-1)
+apply_pure_data_inverse = lambda x: dot21(mat_data_pure_inverse_ijqxy, x.reshape(grad_shape)).reshape(-1)
+
+apply_pure_data = lambda x: dot21(mat_data_pure_ijqxy, x.reshape(grad_shape)).reshape(-1)
+
+
+# Apply jacobi preconditioner
 
 # right hand side vectors
-b_grad_I = -gamma_0(E_ijqxy)
+b_grad_I = -gamma_0_C(E_ijqxy)
 b_disp_I = -B_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
 
-# Calculate the start time
+# Calculate the start time ############################################################################################
+######################################################################################################################
+
+print(' 1 ............... STRAIN BASED PCG  .....  1/C  : G_c : C      : e ...........  ')
+print(' 1 ................ STRAIN BASED PCG  .....  M   :     K      : e ...........  ')
 start = time.time()
-###### Solver ######
+random_x0_disp=np.random.random(b_disp_I.shape)
+random_x0_disp-=random_x0_disp.mean()
+random_x0_grad=B(u_ixy=random_x0_disp.reshape(temp_shape))
+
+
+du_sol_vec_muFFTTO_Jacobi, norms = solvers.PCG(Afun=G_c_T_C,
+                                               x0=random_x0_grad.reshape(b_grad_I.shape),
+                                               B=-G_c_T_C(E_ijqxy ),  # .reshape(grad_shape),
+                                               P=apply_ref_data_inverse,
+                                               steps=int(5000),
+                                               toler=1e-5,
+                                               norm_type='rr')
+
+# print('Number of steps  C Jacobi= {}'.format(num_iters))
+print('Number of steps  PCG muFFTTO solvers 1/C : G_c  : C :    e = {}'.format(norms['residual_rr'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+# du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_vec_muFFTTO_Jacobi.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11 C Jacobi = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END STRAIN BASED PCG    \n .............................................')
+
+print(' 2 ................ STRAIN BASED PCG  .....  1/C : G_c  : C :  G_c  : e...........  ')
+print(' 2 ................ STRAIN BASED PCG  .....  M   :        K      : e...........  ')
+start = time.time()
+
+du_sol_vec_muFFTTO_Jacobi, norms = solvers.PCG(Afun=G_c_T_C_G_c,
+                                               x0=random_x0_grad.reshape(b_grad_I.shape),
+                                               B=-G_c_T_C(E_ijqxy),  # .reshape(grad_shape),
+                                               P=apply_ref_data_inverse,
+                                               steps=int(5000),
+                                               toler=1e-5,
+                                               norm_type='rz')
+
+# print('Number of steps  C Jacobi= {}'.format(num_iters))
+print('Number of steps  PCG muFFTTO solvers         1/C : G_c  : C :  G_c : e = {}'.format(norms['residual_rr'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+# du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_vec_muFFTTO_Jacobi.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11 C Jacobi = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END STRAIN BASED PCG    \n .............................................')
+
+print(' 3................ STRAIN BASED PCG  .....       : G_I  : C :  G_I  : e...........  ')
+print(' 3 ................ STRAIN BASED PCG  .....  M   :        K      : e...........  ')
+start = time.time()
+
+du_sol_vec_muFFTTO_Jacobi, norms = solvers.PCG(Afun=G_I_T_C_G_I,
+                                               x0=random_x0_grad.reshape(b_grad_I.shape),
+                                               B=-G_I_T_C(E_ijqxy),  # .reshape(grad_shape),
+                                               P=do_nothing,
+                                               steps=int(5000),
+                                               toler=1e-5,
+                                               norm_type='rr')
+
+
+#du_sol_vec_muFFTTO_Jacobi=apply_data(du_sol_vec_muFFTTO_Jacobi)
+# print('Number of steps  C Jacobi= {}'.format(num_iters))
+print('Number of steps  PCG muFFTTO solvers              : G_I  : C :  G_I : e = {}'.format(norms['residual_rr'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+# du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_vec_muFFTTO_Jacobi.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11  = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+
+
+
+
+###### Solver  Strain - based  plus material preconditioner ######
+print(' 4 ................ STRAIN BASED PCG  .....  1 : Γ_c : C : Γ_c : e...........  ')
+print(' 4 ................ STRAIN BASED PCG  .....  M :       K      : e...........  ')
+start = time.time()
+
+du_sol_vec_muFFTTO_Jacobi, norms = solvers.PCG(Afun=gamma_0_C_gamma_0,
+                                               x0=random_x0_grad.reshape(b_grad_I.shape),  # .reshape(grad_shape),
+                                               B=-gamma_0_C(E_ijqxy),  # .reshape(grad_shape),
+                                               P=do_nothing,
+                                               steps=int(1500),
+                                               toler=1e-5,
+                                               norm_type='rr')
+
+# print('Number of steps  C Jacobi= {}'.format(num_iters))
+print('Number of steps  PCG muFFTTO solvers       1 : Γ_c : C :  Γ_c : e = {}'.format(norms['residual_rr'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+# du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_vec_muFFTTO_Jacobi.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11 C Jacobi = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END STRAIN BASED CG    \n .............................................')
+
+###### Solver  Strain - based  plus material preconditioner ######
+print(' ................ STRAIN BASED PCG  ..... Γ_c : C : e...........  ')
+print(' ................ STRAIN BASED PCG  .....  M  : K : e...........  ')
+
+start = time.time()
+
+du_sol_vec_muFFTTO_Jacobi, norms = solvers.PCG(Afun=apply_data,
+                                               x0=np.zeros_like(b_grad_I),  # .reshape(grad_shape),
+                                               B=-gamma_0_C(E_ijqxy),  # .reshape(grad_shape),
+                                               P=gamma_0,
+                                               steps=int(500),
+                                               toler=1e-5,
+                                               norm_type='rz')
+
+# print('Number of steps  C Jacobi= {}'.format(num_iters))
+print('Number of steps  PCG muFFTTO solvers  C Jacobi = {}'.format(norms['residual_rz'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+# du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
+
+aux_plain_ijqxy = du_sol_vec_muFFTTO_Jacobi.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11 C Jacobi = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+print('END STRAIN BASED PCG  Γ G C e  \n .............................................')
+
+print('................  DISPLACEMENT BASED PCG  Scipy solvers  ................ ')
+
+start = time.time()
+###### Solver  Displacement based ######
 u_sol_vec, status, num_iters = solve_sparse(
     A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
     b=b_disp_I,
+    x0=np.zeros_like(b_disp_I),
     M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
 
 print('Number of steps  Displacement-Based = {}'.format(num_iters))
@@ -244,21 +536,45 @@ length = end - start
 # Show the results : this can be altered however you like
 print("It took", length, "seconds!")
 
-
 du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
 print('homogenised properties Displacement-Based A11 = {}'.format(
     np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
-print('END PCG')
+print('END DISPLACEMENT BASED PCG   \n ...............')
+
+print('DISPLACEMENT BASED PCG muFFTTO solvers  ')
+u_sol_vec_muFFTTO, norms = solvers.PCG(Afun=K_fun_I,
+                                       x0=np.zeros_like(b_disp_I).reshape(temp_shape),
+                                       B=b_disp_I.reshape(temp_shape),
+                                       P=M_fun_I,
+                                       steps=int(500),
+                                       toler=1e-5)
+print('Number of steps  PCG muFFTTO solvers = {}'.format(norms['residual_rz'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+
+du_sol_ijqxy = B(u_ixy=u_sol_vec_muFFTTO.reshape(temp_shape))
+aux_ijqxy = du_sol_ijqxy + E_ijqxy
+print('homogenised properties Displacement-Based A11 = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
+print('END DISPLACEMENT BASED PCG muFFTTO solvers   \n ...............')
 
 # Calculate the start time
+print('........solve_sparse........  STRAIN BASED CG ........      :  Γ_c : C    : e...........   ............. ')
+print('........solve_sparse........  STRAIN BASED CG ........  M   :      K      : e...........   ............. ')
+
 start = time.time()
-# Reference solution without preconditioner
+###### Solver  Strain - based ######
 du_sol_plain_I, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(np.prod(grad_shape), np.prod(grad_shape)), matvec=gamma_0, dtype='float'),
+    A=sp.LinearOperator(shape=(np.prod(grad_shape), np.prod(grad_shape)), matvec=gamma_0_C, dtype='float'),
     b=b_grad_I,
     M=None)
-print('Number of steps = {}'.format(num_iters))
+print('Number of steps  Strain-Based  ZR= {}'.format(num_iters))
 # Calculate the end time and time taken
 end = time.time()
 length = end - start
@@ -270,7 +586,36 @@ print("It took", length, "seconds!")
 aux_plain_ijqxy = du_sol_plain_I.reshape(grad_shape) + E_ijqxy
 print('homogenised properties Strain-Based A11 = {}'.format(
     np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
-print('END CG')
+print('END STRAIN BASED CG   \n ...............')
+
+print('................ STRAIN BASED CG  --- muFFTTOO solver.....      :   Γ_c : C    : e...........  ')
+print('................ STRAIN BASED CG  --- muFFTTOO solver.....  M   :       K      : e...........  ')
+
+start = time.time()
+
+du_sol_vec_muFFTTO, norms = solvers.PCG(Afun=gamma_0_C,
+                                        x0=np.zeros_like(b_grad_I),  # .reshape(grad_shape),
+                                        B=b_grad_I,  # .reshape(grad_shape),
+                                        P=do_nothing,
+                                        steps=int(500),
+                                        toler=1e-5,
+                                        norm_type='rr'
+                                        )
+print('Number of steps  CG muFFTTO solvers  rz = {}'.format(norms['residual_rz'].__len__()))
+print('   rr = {}'.format(norms['residual_rr'][-1]))
+print('   rz = {}'.format(norms['residual_rz'][-1]))
+
+# Calculate the end time and time taken
+end = time.time()
+length = end - start
+# Show the results : this can be altered however you like
+print("It took", length, "seconds!")
+#
+aux_plain_ijqxy = du_sol_vec_muFFTTO.reshape(grad_shape) + E_ijqxy
+print('homogenised properties Strain-Based A11 = {}'.format(
+    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+
+print('END STRAIN BASED CG  --- muFFTTOO solver  \n ...............')
 
 J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
-print('Analytical effective properties A11 = {}'.format(J_eff))
+print('WRONG !!!! Analytical effective properties A11 = {}'.format(J_eff))

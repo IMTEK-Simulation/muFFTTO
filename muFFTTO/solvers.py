@@ -4,7 +4,7 @@ from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 
-def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None):
+def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz'):
     # print('I am in PCG')
     """
     Conjugate gradients solver.
@@ -69,8 +69,12 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
 
         # if r_1z_1 < toler:  # TODO[Solver] check out stopping criteria
         #     break
-        if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
-            break
+        if norm_type == 'rz':
+            if norms['residual_rz'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
+        if norm_type == 'rr':
+            if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
         beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0
 
