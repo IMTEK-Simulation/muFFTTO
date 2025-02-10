@@ -25,7 +25,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [4]  # ,2,3,3,2,
+nb_pix_multips = [1]  # ,2,3,3,2,
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -33,7 +33,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.arange(2, 65)  # 17  33
+ratios = np.arange(2,16)  #  65 17  33
 
 nb_it = np.zeros((len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), ratios.size), )
@@ -47,6 +47,7 @@ norm_rr_Jacobi = []
 norm_rz_Jacobi = []
 norm_rr = []
 norm_rz = []
+norm_rMr_combi=[]
 
 kontrast = []
 kontrast_2 = []
@@ -236,9 +237,12 @@ for kk in np.arange(np.size(nb_pix_multips)):
         print(nb_it)
         #########
         displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_combi, steps=int(1000),
-                                                            toler=1e-12)
+                                                            toler=1e-12,
+                                                                norm_type='data_scaled_rr',
+                                                                norm_metric=M_fun)
         nb_it_combi[kk - 1, i] = (len(norms_combi['residual_rz']))
         norm_rz_combi.append(norms_combi['residual_rz'])
+        norm_rMr_combi.append(norms_combi['data_scaled_rr'])
         norm_rr_combi.append(norms_combi['residual_rr'])
         #
         displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_Jacobi, steps=int(1000),
@@ -353,8 +357,9 @@ for i in np.arange(ratios.size, step=1):
     ax_1.set_title(f'{i}', wrap=True)
     ax_1.semilogy(convergence, '--', label='estim', color='k')
 
-    ax_1.semilogy(norm_rr[i], label='PCG: Green', color='r')
+    ax_1.semilogy(norm_rr[i], label='PCG: Green', color='g')
     ax_1.semilogy(norm_rr_Jacobi[i], label='PCG: Jacobi', color='b')
+    ax_1.semilogy(norm_rMr_combi[i], label='PCG: Jacobi Green', color='r')
 
     # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
     # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')

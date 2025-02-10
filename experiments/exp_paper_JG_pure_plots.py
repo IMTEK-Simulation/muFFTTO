@@ -14,14 +14,12 @@ def scale_field(field, min_val, max_val):
     return scaled_field * (max_val - min_val) + min_val  # Scale to [min_val, max_val]
 
 
-
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-
 
 src = './figures/'
 
@@ -57,26 +55,76 @@ print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 
 plt.show()
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+ratio= 1
+greeen
+[[ 4.  0.  0.  0.  0.  0.  0.  0.  0.]
+ [ 7.  8.  0.  0.  0.  0.  0.  0.  0.]
+ [ 8. 10. 10.  0.  0.  0.  0.  0.  0.]
+ [ 8. 10. 10. 10.  0.  0.  0.  0.  0.]
+ [ 9. 10. 10. 10. 10.  0.  0.  0.  0.]
+ [10. 10. 10. 10. 10. 10.  0.  0.  0.]
+ [10. 10. 10. 10. 10. 10. 10.  0.  0.]
+ [10. 10. 10. 10. 10. 10. 10. 10.  0.]
+ [10. 10. 10. 10. 10. 10. 10. 10. 10.]]
+combi
+[[ 5.  0.  0.  0.  0.  0.  0.  0.  0.]
+ [ 5.  4.  0.  0.  0.  0.  0.  0.  0.]
+ [ 6.  5.  4.  0.  0.  0.  0.  0.  0.]
+ [ 7.  6.  5.  4.  0.  0.  0.  0.  0.]
+ [ 9.  7.  5.  4.  4.  0.  0.  0.  0.]
+ [11.  8.  6.  5.  4.  4.  0.  0.  0.]
+ [16. 10.  8.  6.  5.  4.  4.  0.  0.]
+ [27. 14. 10.  7.  6.  5.  4.  4.  0.]
+ [49. 21. 13.  9.  7.  6.  5.  4.  4.]]
+ratio= 4
+greeen
+[[ 5.  0.  0.  0.  0.  0.  0.  0.  0.]
+ [ 8. 10.  0.  0.  0.  0.  0.  0.  0.]
+ [ 9. 14. 19.  0.  0.  0.  0.  0.  0.]
+ [11. 17. 25. 30.  0.  0.  0.  0.  0.]
+ [11. 17. 28. 43. 48.  0.  0.  0.  0.]
+ [11. 17. 30. 45. 67. 62.  0.  0.  0.]
+ [11. 19. 30. 49. 68. 76. 67.  0.  0.]
+ [11. 20. 31. 50. 69. 78. 68. 68.  0.]
+ [11. 20. 32. 51. 72. 79. 69. 69. 69.]]
+combi
+[[  5.   0.   0.   0.   0.   0.   0.   0.   0.]
+ [  5.   5.   0.   0.   0.   0.   0.   0.   0.]
+ [  8.   6.   4.   0.   0.   0.   0.   0.   0.]
+ [ 10.   9.   5.   4.   0.   0.   0.   0.   0.]
+ [ 15.  11.   9.   5.   4.   0.   0.   0.   0.]
+ [ 25.  19.  13.   8.   5.   4.   0.   0.   0.]
+ [ 47.  33.  20.  13.   8.   4.   4.   0.   0.]
+ [ 87.  58.  37.  21.  13.   7.   4.   4.   0.]
+ [176. 106.  72.  36.  20.  13.   7.   4.   4.]]
+#### numbers of iterations
+#### sine_wave_ geometry
 
-nb_it_Green_4 = np.array(
-    [[5., 0., 0., 0., 0., 0., 0., 0.],
-     [8., 11., 0., 0., 0., 0., 0., 0.],
-     [10., 16., 20., 0., 0., 0., 0., 0.],
-     [11., 18., 27., 35., 0., 0., 0., 0.],
-     [11., 17., 32., 47., 53., 0., 0., 0.],
-     [11., 17., 31., 48., 73., 87., 0., 0.],
-     [11., 19., 30., 49., 69., 85., 84., 0.],
-     [11., 19., 29., 48., 65., 79., 66., 52.]])
+# nb_pix_multips =              [2, 3,     4, 5, 6, 7, 8, 9  ]
+nb_it_Green_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [8., 11., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [10., 16., 20., 0., 0., 0., 0., 0., 0., 0.],
+                          [11., 18., 27., 35., 0., 0., 0., 0., 0., 0.],
+                          [11., 17., 32., 47., 53., 0., 0., 0., 0., 0.],
+                          [11., 17., 31., 48., 73., 87., 0., 0., 0., 0.],
+                          [11., 19., 30., 49., 69., 85., 84., 0., 0., 0.],
+                          [11., 19., 29., 48., 65., 79., 66., 52., 0., 0.],
+                          [0., 0., 0., 0., 0., 0.,       48., 33., 20., 0.],
+                          [0., 0., 0., 0., 0., 0.,       31., 19., 12., 7.]])
 
-nb_it_Green_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
-                          [7., 9., 0., 0., 0., 0., 0., 0.],
-                          [9., 10., 11., 0., 0., 0., 0., 0.],
-                          [9., 10., 11., 11., 0., 0., 0., 0.],
-                          [10., 10., 10., 10., 10., 0., 0., 0.],
-                          [10., 10., 9., 10., 9., 8., 0., 0.],
-                          [10., 9., 9., 9., 8., 8., 7., 0.],
-                          [10., 9., 9., 8., 8., 7., 7., 6.]])
+nb_it_Green_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [7., 9., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [9., 10., 11., 0., 0., 0., 0., 0., 0., 0.],
+                          [9., 10., 11., 11., 0., 0., 0., 0., 0., 0.],
+                          [10., 10., 10., 10., 10., 0., 0., 0., 0., 0.],
+                          [10., 10., 9., 10., 9., 8., 0., 0., 0., 0.],
+                          [10., 9., 9., 9., 8., 8., 7., 0., 0., 0.],
+                          [10., 9., 9., 8., 8., 7., 7., 6., 0., 0.],
+                          [0., 0., 0., 0., 0., 0., 6., 5., 5., 0.],
+                          [0., 0., 0., 0., 0., 0., 5., 5., 4., 3.]])
 
+#### sine_wave_ geometry with zero insterad of smallest phase
 nb_it_Green_1_0 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                             [8., 9., 0., 0., 0., 0., 0., 0.],
                             [10., 13., 14., 0., 0., 0., 0., 0.],
@@ -93,6 +141,7 @@ nb_it_Green_4_0 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                             [11., 17., 31., 48., 76., 89., 0., 0.],
                             [11., 19., 30., 49., 72., 97., 100., 0.],
                             [11., 19., 29., 49., 68., 88., 73., 53.]])
+#### sine_wave_ geometry with zero insterad of smallest phase and inverted geoemtry
 nb_it_Green_4_0_inv = np.array(
     [[5., 0., 0., 0., 0., 0., 0., 0.],
      [8., 11., 0., 0., 0., 0., 0., 0.],
@@ -102,23 +151,29 @@ nb_it_Green_4_0_inv = np.array(
      [11., 17., 31., 48., 76., 89., 0., 0.],
      [11., 19., 30., 49., 72., 97., 100., 0.],
      [11., 19., 29., 49., 68., 88., 73., 53.]])
-nb_it_combi_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
-                          [6., 5., 0., 0., 0., 0., 0., 0.],
-                          [8., 6., 5., 0., 0., 0., 0., 0.],
-                          [10., 9., 5., 4., 0., 0., 0., 0.],
-                          [15., 11., 8., 5., 3., 0., 0., 0.],
-                          [24., 19., 12., 8., 5., 3., 0., 0.],
-                          [45., 32., 20., 13., 8., 4., 3., 0.],
-                          [82., 56., 35., 20., 11., 8., 4., 3.]])
 
-nb_it_combi_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
-                          [5., 4., 0., 0., 0., 0., 0., 0.],
-                          [6., 5., 4., 0., 0., 0., 0., 0.],
-                          [7., 6., 5., 3., 0., 0., 0., 0.],
-                          [9., 6., 5., 5., 3., 0., 0., 0.],
-                          [11., 7., 6., 5., 4., 3., 0., 0.],
-                          [15., 10., 7., 6., 5., 4., 3., 0.],
-                          [24., 13., 9., 7., 6., 5., 3., 3.]])
+#### sine_wave_ geometry with zero insterad of smallest phase and inverted geoemtry
+nb_it_combi_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [6., 5., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [8., 6., 5., 0., 0., 0., 0., 0., 0., 0.],
+                          [10., 9., 5., 4., 0., 0., 0., 0., 0., 0.],
+                          [15., 11., 8., 5., 3., 0., 0., 0., 0., 0.],
+                          [24., 19., 12., 8., 5., 3., 0., 0., 0., 0.],
+                          [45., 32., 20., 13., 8., 4., 3., 0., 0., 0.],
+                          [82., 56., 35., 20., 11., 8., 4., 3., 0., 0.],
+                          [0., 0., 0., 0., 0., 0., 8., 3., 2., 0.],
+                          [0., 0., 0., 0., 0., 0., 11., 8., 3., 2.]])
+
+nb_it_combi_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [5., 4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                          [6., 5., 4., 0., 0., 0., 0., 0., 0., 0.],
+                          [7., 6., 5., 3., 0., 0., 0., 0., 0., 0.],
+                          [9., 6., 5., 5., 3., 0., 0., 0., 0., 0.],
+                          [11., 7., 6., 5., 4., 3., 0., 0., 0., 0.],
+                          [15., 10., 7., 6., 5., 4., 3., 0., 0., 0.],
+                          [24., 13., 9., 7., 6., 5., 3., 3., 0., 0.],
+                          [0., 0., 0., 0., 0., 0., 5., 3., 2., 0.],
+                          [0., 0., 0., 0., 0., 0., 6., 5., 2., 2.]])
 
 nb_it_combi_1_0 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                             [6., 5., 0., 0., 0., 0., 0., 0.],
@@ -147,6 +202,7 @@ nb_it_combi_4_0_inv = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                                 [14., 16., 14., 10., 8., 4., 3., 0.],
                                 [22., 24., 20., 16., 10., 8., 4., 3.]])
 
+#### JACOBIIII sine_wave_ geometry with zero insterad of smallest phase and inverted geoemtry
 nb_it_Jacobi_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                            [11., 10., 0., 0., 0., 0., 0., 0.],
                            [20., 17., 16., 0., 0., 0., 0., 0.],
@@ -164,6 +220,1142 @@ nb_it_Jacobi_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
                            [104., 85., 78., 70., 60., 50., 0., 0.],
                            [201., 154., 144., 134., 119., 97., 92., 0.],
                            [352., 299., 265., 243., 211., 176., 156., 156.]])
+#### abs geometry
+nb_it_Green_abs_1 = np.array([[7., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [9., 9., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [10., 11., 10., 0., 0., 0., 0., 0., 0., 0.],
+                              [10., 11., 10., 10., 0., 0., 0., 0., 0., 0.],
+                              [10., 11., 10., 9., 9., 0., 0., 0., 0., 0.],
+                              [10., 10., 9., 9., 8., 8., 0., 0., 0., 0.],
+                              [9., 9., 9., 8., 8., 7., 7., 0., 0., 0.],
+                              [9., 8., 8., 8., 7., 6., 27., 5., 0., 0.],
+                              [0., 0., 0., 0., 0., 0., 18., 12., 4., 0.],
+                              [0., 0., 0., 0., 0., 0., 12., 8., 5., 2.]])
+
+nb_it_combi_abs_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [5., 4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [6., 5., 4., 0., 0., 0., 0., 0., 0., 0.],
+                              [7., 5., 4., 4., 0., 0., 0., 0., 0., 0.],
+                              [8., 6., 5., 4., 4., 0., 0., 0., 0., 0.],
+                              [9., 7., 5., 5., 4., 3., 0., 0., 0., 0.],
+                              [12., 8., 6., 5., 5., 4., 3., 0., 0., 0.],
+                              [17., 11., 7., 6., 5., 5., 4., 3., 0., 0.],
+                              [0., 0., 0., 0., 0., 0., 5., 3., 3., 0.],
+                              [0., 0., 0., 0., 0., 0., 10., 5., 3., 3.]])
+
+nb_it_Green_abs_4 = np.array([[8., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [12., 12., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [15., 16., 18., 0., 0., 0., 0., 0., 0., 0.],
+                              [15., 19., 22., 23., 0., 0., 0., 0., 0., 0.],
+                              [15., 19., 25., 28., 27., 0., 0., 0., 0., 0.],
+                              [15., 19., 24., 30., 35., 32., 0., 0., 0., 0.],
+                              [16., 19., 23., 31., 35., 40., 32., 0., 0., 0.],
+                              [16., 19., 23., 30., 34., 35., 27., 18., 0., 0.],
+                              [0., 0., 0., 0., 0., 0., 18., 12., 8., 0.],
+                              [0., 0., 0., 0., 0., 0., 12., 8., 5., 3.]])
+
+nb_it_combi_abs_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [6., 5., 0., 0., 0., 0., 0., 0., 0., 0.],
+                              [8., 6., 5., 0., 0., 0., 0., 0., 0., 0.],
+                              [11., 8., 6., 4., 0., 0., 0., 0., 0., 0.],
+                              [16., 11., 8., 5., 4., 0., 0., 0., 0., 0.],
+                              [24., 17., 11., 8., 4., 4., 0., 0., 0., 0.],
+                              [42., 26., 17., 11., 8., 4., 3., 0., 0., 0.],
+                              [76., 46., 27., 16., 10., 7., 4., 3., 0., 0.],
+                              [0., 0., 0., 0., 0., 0., 5., 3., 3., 0.],
+                              [0., 0., 0., 0., 0., 0., 10., 5., 3., 3.]])
+
+#  without MPI
+# nb_it_Green_abs_1 = np.array([[7., 0., 0., 0., 0., 0., 0., 0.],
+#                               [9., 9., 0., 0., 0., 0., 0., 0.],
+#                               [10., 11., 10., 0., 0., 0., 0., 0.],
+#                               [10., 11., 10., 10., 0., 0., 0., 0.],
+#                               [10., 11., 10., 9., 9., 0., 0., 0.],
+#                               [10., 10., 9., 9., 8., 8., 0., 0.],
+#                               [9., 9., 9., 8., 8., 7., 6., 0.],
+#                               [9., 8., 8., 8., 7., 6., 6., 5.]])
+#
+# nb_it_combi_abs_1 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
+#                               [5., 4., 0., 0., 0., 0., 0., 0.],
+#                               [6., 5., 4., 0., 0., 0., 0., 0.],
+#                               [7., 5., 4., 4., 0., 0., 0., 0.],
+#                               [8., 6., 5., 4., 4., 0., 0., 0.],
+#                               [9., 7., 5., 5., 4., 3., 0., 0.],
+#                               [12., 8., 6., 5., 5., 4., 3., 0.],
+#                               [17., 11., 7., 6., 5., 5., 3., 3.]])
+#
+# nb_it_Green_abs_4 = np.array([[8., 0., 0., 0., 0., 0., 0., 0.],
+#                               [12., 12., 0., 0., 0., 0., 0., 0.],
+#                               [15., 16., 18., 0., 0., 0., 0., 0.],
+#                               [15., 19., 22., 23., 0., 0., 0., 0.],
+#                               [15., 19., 25., 28., 27., 0., 0., 0.],
+#                               [15., 19., 24., 30., 35., 32., 0., 0.],
+#                               [16., 19., 23., 31., 35., 40., 32., 0.],
+#                               [16., 19., 23., 30., 34., 35., 27., 18.]])
+#
+# nb_it_combi_abs_4 = np.array([[5., 0., 0., 0., 0., 0., 0., 0.],
+#                               [6., 5., 0., 0., 0., 0., 0., 0.],
+#                               [8., 6., 5., 0., 0., 0., 0., 0.],
+#                               [11., 8., 6., 4., 0., 0., 0., 0.],
+#                               [16., 11., 8., 5., 4., 0., 0., 0.],
+#                               [24., 17., 11., 8., 4., 4., 0., 0.],
+#                               [42., 26., 17., 11., 8., 4., 3., 0.],
+#                               [76., 46., 27., 16., 10., 7., 4., 3.]])
+#                 nb_pix_multips = [  2, 3,  4,   5,  6,  7,  8,  9, 10,]
+nb_it_Green_laminate2_1 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 11., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 11., 12., 0., 0., 0., 0., 0.],
+                                    [4., 8., 10., 11., 11., 0., 0., 0., 0.],
+                                    [4., 8., 10., 10., 10., 10., 0., 0., 0.],
+                                    [4., 8., 10., 10., 10., 10., 8., 0., 0.],
+                                    [4., 8., 9., 9., 9., 8., 8., 8., 0.],
+                                    [4., 7., 9., 9., 8., 8., 8., 6., 6.]])
+
+nb_it_combi_laminate2_1 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                    [5., 4., 0., 0., 0., 0., 0., 0., 0.],
+                                    [6., 6., 4., 0., 0., 0., 0., 0., 0.],
+                                    [8., 6., 5., 4., 0., 0., 0., 0., 0.],
+                                    [9., 8., 6., 5., 4., 0., 0., 0., 0.],
+                                    [9., 9., 7., 6., 5., 5., 0., 0., 0.],
+                                    [9., 11., 9., 7., 7., 5., 5., 0., 0.],
+                                    [9., 15., 12., 9., 7., 7., 5., 5., 0.],
+                                    [10., 19., 15., 12., 11., 9., 7., 5., 5.]])
+
+nb_it_Green_laminate2_4 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 15., 0., 0., 0., 0., 0., 0.],
+                                    [4., 8., 15., 23., 0., 0., 0., 0., 0.],
+                                    [4., 8., 15., 22., 33., 0., 0., 0., 0.],
+                                    [4., 8., 15., 22., 32., 46., 0., 0., 0.],
+                                    [4., 8., 14., 22., 31., 44., 63., 0., 0.],
+                                    [4., 8., 14., 21., 30., 43., 61., 85., 0.],
+                                    [4., 8., 14., 21., 30., 42., 59., 83., 113.]])
+
+nb_it_combi_laminate2_4 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                    [7., 4., 0., 0., 0., 0., 0., 0., 0.],
+                                    [8., 7., 5., 0., 0., 0., 0., 0., 0.],
+                                    [9., 9., 8., 6., 0., 0., 0., 0., 0.],
+                                    [9., 11., 10., 8., 6., 0., 0., 0., 0.],
+                                    [9., 13., 13., 12., 9., 6., 0., 0., 0.],
+                                    [9., 19., 16., 15., 14., 10., 7., 0., 0.],
+                                    [11., 22., 23., 21., 17., 15., 11., 8., 0.],
+                                    [13., 27., 33., 29., 24., 21., 18., 12., 10.]])
+
+# nb_pix_multips = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+#
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 10]
+# material distribution
+geometry_ID = 'laminate2'  # laminate2       # 'abs_val'
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+
+for phase_contrast in [1, 4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(11, 3.5))
+    gs = fig.add_gridspec(1, 3, hspace=0.2, wspace=0.1, width_ratios=[3, 2,3],
+                          height_ratios=[1])
+    # rigth subplots
+    gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.01, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.1, width_ratios=[0.1, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 1:
+        nb_iterations = (nb_it_combi_laminate2_1[:, :])
+    elif phase_contrast == 4:
+         nb_iterations = (nb_it_combi_laminate2_4[:, :])
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0 :
+                pass
+            elif nb_iterations[i, j] < 50:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{  nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='white')
+    #divnorm = mpl.colors.LogNorm(vmin=1, vmax=100)
+    divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations , label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.set_title('Total number of iteration \n Jacobi-Green  ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# of material phases')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    ax.set_aspect('equal')
+
+    # Adding a color bar with custom ticks and labels
+    #cbar_ax = fig.add_subplot(gs1[0, 0])
+
+    #cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+    # cbar.ax.invert_yaxis()
+    # # cbar.set_ticks(ticks=[  0, 1,10])
+    #cbar.set_ticks([0, 50, 100])
+    # cbar.ax.set_yticklabels(
+    #     ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+    #      'Jacobi-Green \n needs more'])
+    ax.annotate(text='',
+                xy=(1.15, 0.15), xycoords='axes fraction',# endpoint
+                xytext=(1.01, 0.05),# Start point
+                arrowprops=dict(arrowstyle='-',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+
+    # arrow 1
+    ax.annotate(text='',
+                xy=(1.15, 0.55),
+                xycoords='axes fraction',
+                xytext=(1.01, 0.28),
+                arrowprops=dict(arrowstyle='-',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 2
+    ax.annotate(text='',
+                xy=(1.15, 0.83), xycoords='axes fraction',
+                xytext=(1.01, 0.95),
+                arrowprops=dict(arrowstyle='-',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+
+
+
+# right graph
+    gs3 = gs[0, 2].subgridspec(1, 2, wspace=0.1, width_ratios=[5, 0.2])
+    ax = fig.add_subplot(gs3[0, 0])
+    ax.set_aspect('equal')
+    if phase_contrast == 1:
+        nb_iterations =  nb_it_Green_laminate2_1[:, :]
+    elif phase_contrast == 4:
+        nb_iterations = nb_it_Green_laminate2_4[:, :]
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0 :
+                pass
+            elif nb_iterations[i, j] < 50:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{ nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='white')
+
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.set_title('Total number of iteration \n Green ')
+    # ax.set_zlim(1 ,100)
+    #ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs3[0, 1])
+
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
+    # cbar.ax.invert_yaxis()
+    # # cbar.set_ticks(ticks=[  0, 1,10])
+    # cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    # cbar.ax.set_yticklabels(
+    #     ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+    #      'Jacobi-Green \n needs more'])
+
+
+    # ax.set_zlabel('# CG iterations')
+    ax.text(-0.1, 1.09, '(d)', transform=ax.transAxes)
+    #
+    counter = 0
+    for kk in np.arange(np.size(nb_pix_multips)):
+        nb_pix_multip = nb_pix_multips[kk]
+        print(f'kk = {kk}')
+        print(f'nb_pix_multip = {nb_pix_multip}')
+        # system set up
+        number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # if kk == 0:
+        phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords,
+                                                          seed=1,
+                                                          parameter=number_of_pixels[0],
+                                                          contrast=1 / 10 ** ratio
+                                                          )
+        phase_field += 1 / 10 ** ratio
+        phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+        # phase_fied_small_grid=np.copy(phase_field_smooth)
+        phase_field = np.copy(phase_field)
+
+        x = np.arange(0, 1 * number_of_pixels[0])
+        y = np.arange(0, 1 * number_of_pixels[1])
+        X_, Y_ = np.meshgrid(x, y)
+
+        print(f'kk = {kk}')
+
+        ax0 = fig.add_subplot(gs2[2 - kk, 0])
+        ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                       cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                       rasterized=True)
+        # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+        #           linestyle=linestyles[counter], linewidth=1.)
+        # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+        extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+        extended_y = np.append(np.diag(phase_field), np.diag(phase_field)[-1])
+
+        # ax0.plot([-0.5, number_of_pixels[0] - 0.5], [-0.5, number_of_pixels[1] - 0.5], color=colors[counter],
+        #          linestyle=linestyles[counter], linewidth=1., transform=ax0.transAxes)
+        ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+        ax0.set_xticks([])
+        ax0.set_yticks([])
+        ax0.set_aspect('equal')
+        if kk == 0:
+            ax0.set_xlabel('x coordinate')
+        if kk == 2:
+            ax0.set_title(f'Phase' + r' $\rho$')
+
+            ax0.text(-0.1, 1.3, '(b)', transform=ax0.transAxes)
+        ax1 = fig.add_subplot(gs2[2 - kk, 1])
+
+        ax1.step(extended_x, extended_y
+                 , where='post',
+                 linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+                 label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+        #ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+        ax1.set_ylim([1 / 10 ** ratio - 0.5 / 10 ** ratio, 1.1])
+        ax1.set_xlim([0, 1])
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        # ax1.set_yticks([1 / 10 ** ratio, 0.50, 1.0001])
+        # ax1.set_yticklabels([1 / 10 ** ratio, 0.50, 1.00])
+        ax1.set_yticks([])
+        ax1.set_yticklabels([])
+
+        ax1.yaxis.set_label_position('right')
+        ax1.yaxis.tick_right()
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_aspect('equal')
+        if kk == 0:
+            ax1.set_xlabel('x coordinate')
+        if kk == 1:
+            #ax1.set_ylabel(f'Phase' + r' $\rho$')  # f' \n  (linear scale)')
+            pass
+        if kk == 2:
+            ax1.set_title(f'Cross sections')#, loc='bottom'
+            # Add the title below the plot
+            #ax1.text(0.5, 0.05, 'My Plot Title', ha='center', fontsize=14)
+            ax1.text(-0.1, 1.3, '(c)', transform=ax1.transAxes)
+        counter += 1
+    fname = src + 'JG_exp4_GRID_DEP_nb_its_laminate2_rho{}{}'.format(phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+
+
+######                                                                laminate  2 ratio of nb iterations
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 10]
+# material distribution
+geometry_ID = 'laminate2'  # laminate2       # 'abs_val'
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+
+for phase_contrast in [1, 4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(11, 4.5))
+    gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.1, width_ratios=[3, 2],
+                          height_ratios=[1])
+    # rigth subplots
+    gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.01, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.3, width_ratios=[0.2, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 1:
+        relative_nb_iterations_1 = (nb_it_combi_laminate2_1[:, :]) / nb_it_Green_laminate2_1[:, :]
+    elif phase_contrast == 4:
+        relative_nb_iterations_1 = (nb_it_combi_laminate2_4[:, :]) / nb_it_Green_laminate2_4[:, :]
+
+    relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+    for i in range(relative_nb_iterations_1.shape[0]):
+        for j in range(relative_nb_iterations_1.shape[1]):
+            if relative_nb_iterations_1[i, j] > 1:
+                ax.text(i + Nx[0], j + Nx[0], f'{relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{1 / relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+    divnorm = mpl.colors.LogNorm(vmin=0.1, vmax=10)
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs1[0, 0])
+
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+    cbar.ax.invert_yaxis()
+    # cbar.set_ticks(ticks=[  0, 1,10])
+    cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    cbar.ax.set_yticklabels(
+        ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+         'Jacobi-Green \n needs more'])
+    # ax2.set_yticks(Nx)
+    # ax2.set_yticklabels([f'$2^{i}$' for i in Nx])
+    # plt.show()
+    # arrow 0
+    ax.annotate(text='',
+                xy=(1.17, 0.16), xycoords='axes fraction',
+                xytext=(1.01, 0.06),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 1
+    ax.annotate(text='',
+                xy=(1.17, 0.50),
+                xycoords='axes fraction',
+                xytext=(1.01, 0.31),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 2
+    ax.annotate(text='',
+                xy=(1.17, 0.83), xycoords='axes fraction',
+                xytext=(1.01, 0.94),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+    # ax.set_zlabel('# CG iterations')
+
+    #
+    counter = 0
+    for kk in np.arange(np.size(nb_pix_multips)):
+        nb_pix_multip = nb_pix_multips[kk]
+        print(f'kk = {kk}')
+        print(f'nb_pix_multip = {nb_pix_multip}')
+        # system set up
+        number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # if kk == 0:
+        phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords,
+                                                          seed=1,
+                                                          parameter=number_of_pixels[0],
+                                                          contrast=1 / 10 ** ratio
+                                                          )
+        phase_field += 1 / 10 ** ratio
+        phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+        # phase_fied_small_grid=np.copy(phase_field_smooth)
+        phase_field = np.copy(phase_field)
+
+        x = np.arange(0, 1 * number_of_pixels[0])
+        y = np.arange(0, 1 * number_of_pixels[1])
+        X_, Y_ = np.meshgrid(x, y)
+
+        print(f'kk = {kk}')
+
+        ax0 = fig.add_subplot(gs2[2 - kk, 0])
+        ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                       cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                       rasterized=True)
+        # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+        #           linestyle=linestyles[counter], linewidth=1.)
+        # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+        extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+        extended_y = np.append(np.diag(phase_field), np.diag(phase_field)[-1])
+        #
+        # ax0.plot([-0.5, number_of_pixels[0] - 0.5], [-0.5, number_of_pixels[1] - 0.5], color=colors[counter],
+        #          linestyle=linestyles[counter], linewidth=1., transform=ax0.transAxes)
+
+        ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+        ax0.set_xticks([])
+        ax0.set_yticks([])
+        ax0.set_aspect('equal')
+        if kk == 0:
+            ax0.set_xlabel('x coordinate')
+        if kk == 2:
+            ax0.set_title(r'Geometries')
+
+            ax0.text(-0.3, 1.3, '(b)', transform=ax0.transAxes)
+        ax1 = fig.add_subplot(gs2[2 - kk, 1])
+
+        ax1.step(extended_x, extended_y
+                 , where='post',
+                 linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+                 label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+        # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+        ax1.set_ylim([1 / 10 ** ratio - 0.5 / 10 ** ratio, 1.1])
+        ax1.set_xlim([0, 1])
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_yticks([1 / 10 ** ratio, 0.50, 1.0001])
+        ax1.set_yticklabels([1 / 10 ** ratio, 0.50, 1.00])
+        ax1.yaxis.set_label_position('right')
+        ax1.yaxis.tick_right()
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_aspect('equal')
+        if kk == 0:
+            ax1.set_xlabel('x coordinate')
+        if kk == 1:
+            ax1.set_ylabel(f'Phase' + r' $\rho$')  # f' \n  (linear scale)')
+        if kk == 2:
+            ax1.set_title(f'Cross sections')
+
+            ax1.text(-0.3, 1.3, '(c)', transform=ax1.transAxes)
+        counter += 1
+    fname = src + 'JG_exp4_GRID_DEP_geometry_laminate2_rho{}{}'.format(phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+
+### plot geometry ################################### abs_val
+
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 9]
+# material distribution
+geometry_ID = 'abs_val'  # laminate2       # 'abs_val'
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+
+for phase_contrast in [1, 4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(11, 4.5))
+    gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.1, width_ratios=[3, 2],
+                          height_ratios=[1])
+    # rigth subplots
+    gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.01, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.3, width_ratios=[0.2, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 1:
+        relative_nb_iterations_1 = (nb_it_combi_abs_1[:, :]) / nb_it_Green_abs_1[:, :]
+    elif phase_contrast == 4:
+        relative_nb_iterations_1 = (nb_it_combi_abs_4[:, :]) / nb_it_Green_abs_4[:, :]
+
+    relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+    for i in range(relative_nb_iterations_1.shape[0]):
+        for j in range(relative_nb_iterations_1.shape[1]):
+            if relative_nb_iterations_1[i, j] > 1:
+                ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+            else:
+                ax.text(i + 2, j + 2, f'{1 / relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+    divnorm = mpl.colors.LogNorm(vmin=0.1, vmax=10)
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs1[0, 0])
+
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+    cbar.ax.invert_yaxis()
+    # cbar.set_ticks(ticks=[  0, 1,10])
+    cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    cbar.ax.set_yticklabels(
+        ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+         'Jacobi-Green \n needs more'])
+    # ax2.set_yticks(Nx)
+    # ax2.set_yticklabels([f'$2^{i}$' for i in Nx])
+    # plt.show()
+    # arrow 0
+    ax.annotate(text='',
+                xy=(1.17, 0.16), xycoords='axes fraction',
+                xytext=(1.01, 0.06),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 1
+    ax.annotate(text='',
+                xy=(1.17, 0.50),
+                xycoords='axes fraction',
+                xytext=(1.01, 0.31),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 2
+    ax.annotate(text='',
+                xy=(1.17, 0.83), xycoords='axes fraction',
+                xytext=(1.01, 0.94),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+    # ax.set_zlabel('# CG iterations')
+
+    #
+    counter = 0
+    for kk in np.arange(np.size(nb_pix_multips)):
+        nb_pix_multip = nb_pix_multips[kk]
+        print(f'kk = {kk}')
+        print(f'nb_pix_multip = {nb_pix_multip}')
+        # system set up
+        number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # if kk == 0:
+        phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords,
+                                                          seed=1,
+                                                          parameter=number_of_pixels[0],
+                                                          contrast=1 / 10 ** ratio
+                                                          )
+        phase_field += 1 / 10 ** ratio
+        phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+        # phase_fied_small_grid=np.copy(phase_field_smooth)
+        phase_field = np.copy(phase_field)
+
+        x = np.arange(0, 1 * number_of_pixels[0])
+        y = np.arange(0, 1 * number_of_pixels[1])
+        X_, Y_ = np.meshgrid(x, y)
+
+        print(f'kk = {kk}')
+
+        ax0 = fig.add_subplot(gs2[2 - kk, 0])
+        ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                       cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                       rasterized=True)
+        # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+        #           linestyle=linestyles[counter], linewidth=1.)
+        # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+        extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+        extended_y = np.append(np.diag(phase_field), np.diag(phase_field)[-1])
+
+        ax0.plot([-0.5, number_of_pixels[0] - 0.5], [-0.5, number_of_pixels[1] - 0.5], color=colors[counter],
+                 linestyle=linestyles[counter], linewidth=1., transform=ax0.transAxes)
+        ax0.set_xticks([])
+        ax0.set_yticks([])
+        ax0.set_aspect('equal')
+        if kk == 0:
+            ax0.set_xlabel('x coordinate')
+        if kk == 2:
+            ax0.set_title(r'Geometries')
+
+            ax0.text(-0.3, 1.3, '(b)', transform=ax0.transAxes)
+        ax1 = fig.add_subplot(gs2[2 - kk, 1])
+        ax1.step(extended_x, extended_y
+                 , where='post',
+                 linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+                 label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+
+        # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+        ax1.set_ylim([1 / 10 ** ratio - 0.5 / 10 ** ratio, 1.1])
+        ax1.set_xlim([0, 1])
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_yticks([1 / 10 ** ratio, 0.50, 1.0001])
+        ax1.set_yticklabels([1 / 10 ** ratio, 0.50, 1.00])
+        ax1.yaxis.set_label_position('right')
+        ax1.yaxis.tick_right()
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_aspect('equal')
+        if kk == 0:
+            ax1.set_xlabel('x coordinate')
+        if kk == 1:
+            ax1.set_ylabel(f'Phase' + r' $\rho$')  # f' \n  (linear scale)')
+        if kk == 2:
+            ax1.set_title(f'Cross sections')
+
+            ax1.text(-0.3, 1.3, '(c)', transform=ax1.transAxes)
+        counter += 1
+    fname = src + 'JG_exp4_GRID_DEP_geometry_abs_rho{}{}'.format(phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+
+### plot geometry ################################### sine_wave_
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 9]
+# material distribution
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+
+geometry_ID = 'sine_wave_'
+for phase_contrast in [1, 4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(11, 4.5))
+    gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.1, width_ratios=[3, 2],
+                          height_ratios=[1])
+    # rigth subplots
+    gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.01, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.3, width_ratios=[0.2, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 1:
+        relative_nb_iterations_1 = (nb_it_combi_1[:, :]) / nb_it_Green_1[:, :]
+    elif phase_contrast == 4:
+        relative_nb_iterations_1 = (nb_it_combi_4[:, :]) / nb_it_Green_4[:, :]
+
+    relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+    for i in range(relative_nb_iterations_1.shape[0]):
+        for j in range(relative_nb_iterations_1.shape[1]):
+            if relative_nb_iterations_1[i, j] > 1:
+                ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+            else:
+                ax.text(i + 2, j + 2, f'{1 / relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+    #    divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations_1.max())
+    divnorm = mpl.colors.LogNorm(vmin=0.1, vmax=10)
+
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+
+    # ax2.set_yticks(Nx)
+    # ax2.set_yticklabels([f'$2^{i}$' for i in Nx])
+
+    # arrow 0
+    ax.annotate(text='',
+                xy=(1.17, 0.16), xycoords='axes fraction',
+                xytext=(1.01, 0.06),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 1
+    ax.annotate(text='',
+                xy=(1.17, 0.50),
+                xycoords='axes fraction',
+                xytext=(1.01, 0.31),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 2
+    ax.annotate(text='',
+                xy=(1.17, 0.83), xycoords='axes fraction',
+                xytext=(1.01, 0.94),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+    # ax.set_zlabel('# CG iterations')
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs1[0, 0])
+
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+    cbar.ax.invert_yaxis()
+    # cbar.set_ticks(ticks=[  0, 1,10])
+    cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    cbar.ax.set_yticklabels(
+        ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+         'Jacobi-Green \n needs more'])
+    #
+    counter = 0
+    for kk in np.arange(np.size(nb_pix_multips)):
+        nb_pix_multip = nb_pix_multips[kk]
+        print(f'kk = {kk}')
+        print(f'nb_pix_multip = {nb_pix_multip}')
+        # system set up
+        number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # if kk == 0:
+        phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords,
+                                                          seed=1)
+        phase_field += 1 / 10 ** ratio
+        phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+        # phase_fied_small_grid=np.copy(phase_field_smooth)
+        phase_field = np.copy(phase_field)
+
+        x = np.arange(0, 1 * number_of_pixels[0])
+        y = np.arange(0, 1 * number_of_pixels[1])
+        X_, Y_ = np.meshgrid(x, y)
+
+        print(f'kk = {kk}')
+
+        ax0 = fig.add_subplot(gs2[2 - kk, 0])
+        ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                       cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                       rasterized=True)
+        # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+        #           linestyle=linestyles[counter], linewidth=1.)
+        # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+        extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+        extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                               phase_field[:, phase_field.shape[0] // 2][-1])
+        ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+        ax0.set_xticks([])
+        ax0.set_yticks([])
+        ax0.set_aspect('equal')
+        if kk == 0:
+            ax0.set_xlabel('x coordinate')
+        if kk == 2:
+            ax0.set_title(r'Geometries')
+
+            ax0.text(-0.3, 1.3, '(b)', transform=ax0.transAxes)
+        ax1 = fig.add_subplot(gs2[2 - kk, 1])
+        ax1.step(extended_x, extended_y
+                 , where='post',
+                 linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+                 label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+
+        # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+        ax1.set_ylim([1 / 10 ** ratio - 0.5 / 10 ** ratio, 1.1])
+        ax1.set_xlim([0, 1])
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_yticks([1 / 10 ** ratio, 0.50, 1.0001])
+        ax1.set_yticklabels([1 / 10 ** ratio, 0.50, 1.00])
+        ax1.yaxis.set_label_position('right')
+        ax1.yaxis.tick_right()
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_aspect('equal')
+        if kk == 0:
+            ax1.set_xlabel('x coordinate')
+        if kk == 1:
+            ax1.set_ylabel(f'Phase' + r' $\rho$')  # f' \n  (linear scale)')
+        if kk == 2:
+            ax1.set_title(f'Cross sections')
+
+            ax1.text(-0.3, 1.3, '(c)', transform=ax1.transAxes)
+        counter += 1
+    fname = src + 'JG_exp4_GRID_DEP_geometry_rho{}{}'.format(phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+### plot geometry ################################### sine_wave_inv
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 9]
+# material distribution
+geometry_ID = 'sine_wave_inv'
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+
+for phase_contrast in [4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(11, 4.5))
+    gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.1, width_ratios=[3, 2],
+                          height_ratios=[1])
+    # rigth subplots
+    gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.01, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.3, width_ratios=[0.2, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 4:
+        relative_nb_iterations_1 = (nb_it_combi_4_0_inv[:, :]) / nb_it_Green_4_0_inv[:, :]
+
+    relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+    for i in range(relative_nb_iterations_1.shape[0]):
+        for j in range(relative_nb_iterations_1.shape[1]):
+            if relative_nb_iterations_1[i, j] > 1:
+                ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+            else:
+                ax.text(i + 2, j + 2, f'{1 / relative_nb_iterations_1[i, j]:.1f}',
+                        ha='center', va='center', color='white')
+    #    divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations_1.max())
+    divnorm = mpl.colors.LogNorm(vmin=0.1, vmax=10)
+
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+    ax.text(0.1, 0.8, r'Total phase contrast $\kappa=\infty$', transform=ax.transAxes)
+    ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{i}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{i}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+
+    # ax2.set_yticks(Nx)
+    # ax2.set_yticklabels([f'$2^{i}$' for i in Nx])
+
+    # arrow 0
+    ax.annotate(text='',
+                xy=(1.17, 0.16), xycoords='axes fraction',
+                xytext=(1.01, 0.06),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 1
+    ax.annotate(text='',
+                xy=(1.17, 0.50),
+                xycoords='axes fraction',
+                xytext=(1.01, 0.31),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    # arrow 2
+    ax.annotate(text='',
+                xy=(1.17, 0.83), xycoords='axes fraction',
+                xytext=(1.01, 0.94),
+                arrowprops=dict(arrowstyle='->',
+                                color='black',
+                                lw=1,
+                                ls='-')
+                )
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+    # ax.set_zlabel('# CG iterations')
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs1[0, 0])
+
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+    cbar.ax.invert_yaxis()
+    # cbar.set_ticks(ticks=[  0, 1,10])
+    cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    cbar.ax.set_yticklabels(
+        ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+         'Jacobi-Green \n needs more'])
+    #
+    counter = 0
+    for kk in np.arange(np.size(nb_pix_multips)):
+        nb_pix_multip = nb_pix_multips[kk]
+        print(f'kk = {kk}')
+        print(f'nb_pix_multip = {nb_pix_multip}')
+        # system set up
+        number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # if kk == 0:
+        phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords,
+                                                          seed=1)
+        # phase_field += 1 / 10 ** ratio
+        phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+        # phase_fied_small_grid=np.copy(phase_field_smooth)
+        phase_field = np.copy(phase_field)
+
+        x = np.arange(0, 1 * number_of_pixels[0])
+        y = np.arange(0, 1 * number_of_pixels[1])
+        X_, Y_ = np.meshgrid(x, y)
+
+        print(f'kk = {kk}')
+
+        ax0 = fig.add_subplot(gs2[2 - kk, 0])
+        ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                       cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                       rasterized=True)
+        # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+        #           linestyle=linestyles[counter], linewidth=1.)
+        # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+        extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+        extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                               phase_field[:, phase_field.shape[0] // 2][-1])
+        ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+        ax0.set_xticks([])
+        ax0.set_yticks([])
+        ax0.set_aspect('equal')
+        if kk == 0:
+            ax0.set_xlabel('x coordinate')
+        if kk == 2:
+            ax0.set_title(r'Geometries')
+
+            ax0.text(-0.3, 1.3, '(b)', transform=ax0.transAxes)
+        ax1 = fig.add_subplot(gs2[2 - kk, 1])
+        ax1.step(extended_x, extended_y
+                 , where='post',
+                 linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+                 label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+
+        # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+        ax1.set_ylim([0, 1.1])
+        ax1.set_xlim([0, 1])
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_yticks([0, 0.50, 1.0001])
+        ax1.set_yticklabels([0, 0.50, 1.00])
+        ax1.yaxis.set_label_position('right')
+        ax1.yaxis.tick_right()
+        ax1.set_xticks([])
+        ax1.set_xticklabels([])
+
+        ax1.set_aspect('equal')
+        if kk == 0:
+            ax1.set_xlabel('x coordinate')
+        if kk == 1:
+            ax1.set_ylabel(f'Phase' + r' $\rho$')  # f' \n  (linear scale)')
+        if kk == 2:
+            ax1.set_title(f'Cross sections')
+
+            ax1.text(-0.3, 1.3, '(c)', transform=ax1.transAxes)
+        counter += 1
+    fname = src + 'JG_exp4_GRID_DEP_geometry_sine_inv_inf_rho{}{}'.format(phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+quit()
 
 nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9]
 Nx = (np.asarray(nb_pix_multips))
@@ -185,10 +1377,19 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 # Replace NaN values with zero
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+# Add text annotations
+for i in range(relative_nb_iterations.shape[0]):
+    for j in range(relative_nb_iterations.shape[1]):
+        if relative_nb_iterations[i, j] > 1:
+            ax.text(i + 2, j + 2, f'{relative_nb_iterations[i, j]:.1f}',
+                    ha='center', va='center', color='white')
+        else:
+            ax.text(i + 2, j + 2, f'{1 / relative_nb_iterations[i, j]:.1f}',
+                    ha='center', va='center', color='white')
 
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n' + r' nb_{JG}/nb_{G}'
-             '\n cosine function')
+                                                 '\n cosine function')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel('# data/geometry sampling points (x direction)')
 ax.set_xlabel('# of nodal points (x direction)')
@@ -204,7 +1405,7 @@ cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
 cbar.ax.set_yticklabels(
     ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
 # plt.legend(['PCG: Green'])
-fname = src + 'JG_exp4_GRID_DEP_matrix_rho4{}'.format( '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho4{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
@@ -220,7 +1421,10 @@ ax = fig.add_subplot(111)
 # ax.plot_surface(X, Y, nb_it_combi[:, :], label='PCG: Green + Jacobi', color='red')
 relative_nb_iterations_1 = (nb_it_combi_1[:, :]) / nb_it_Green_1[:, :]
 relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
-
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
 divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
 # Replace NaN values with zero
 
@@ -243,7 +1447,7 @@ cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
 cbar.ax.set_yticklabels(
     ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
 # plt.legend(['PCG: Green'])
-fname = src + 'JG_exp4_GRID_DEP_matrix_rho1{}'.format( '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho1{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
@@ -259,7 +1463,10 @@ ax = fig.add_subplot(111)
 # ax.plot_surface(X, Y, nb_it_combi[:, :], label='PCG: Green + Jacobi', color='red')
 relative_nb_iterations_1 = (nb_it_combi_1_0[:, :]) / nb_it_Green_1_0[:, :]
 relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
-
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
 divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
 # Replace NaN values with zero
 
@@ -282,7 +1489,7 @@ cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
 cbar.ax.set_yticklabels(
     ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
 # plt.legend(['PCG: Green'])
-fname = src + 'JG_exp4_GRID_DEP_matrix_rho1_inf{}'.format(0, '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho1_inf{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
@@ -298,7 +1505,10 @@ ax = fig.add_subplot()
 # ax.plot_surface(X, Y, nb_it_combi[:, :], label='PCG: Green + Jacobi', color='red')
 relative_nb_iterations_1 = (nb_it_combi_4_0[:, :]) / nb_it_Green_4_0[:, :]
 relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
-
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
 divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
 # Replace NaN values with zero
 
@@ -321,43 +1531,24 @@ cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
 cbar.ax.set_yticklabels(
     ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
 # plt.legend(['PCG: Green'])
-fname = src + 'JG_exp4_GRID_DEP_matrix_rho4_inf{}'.format(0, '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho4_inf{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
 
 fig = plt.figure(figsize=(5.5, 4.5))
 # ax = fig.add_subplot(111, projection='3d')
 ax = fig.add_subplot()
 relative_nb_iterations_1 = (nb_it_combi_4_0_inv[:, :]) / nb_it_Green_4_0_inv[:, :]
 relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
-
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
 divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
 # Replace NaN values with zero
 
@@ -380,11 +1571,85 @@ cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
 cbar.ax.set_yticklabels(
     ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
 # plt.legend(['PCG: Green'])
-fname = src + 'JG_exp4_GRID_DEP_matrix_rho4_inf_{}{}'.format(0, '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho4_inf_inv{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
 
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+fig = plt.figure(figsize=(5.5, 4.5))
+# ax = fig.add_subplot(111, projection='3d')
+ax = fig.add_subplot()
+relative_nb_iterations_1 = (nb_it_combi_abs_4[:, :]) / nb_it_Green_abs_4[:, :]
+relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
+divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations_1.max())
+# Replace NaN values with zero
+
+pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
+ax.set_title('Relative number of iteration \n abs function ')
+# ax.set_zlim(1 ,100)
+ax.set_ylabel('# data/geometry sampling points (x direction)')
+ax.set_xlabel('# of nodal points (x direction)')
+ax.set_xticks(Nx)
+ax.set_xticklabels([f'$2^{i:}$' for i in Nx])
+ax.set_yticks(Nx)
+ax.set_yticklabels([f'$2^{i}$' for i in Nx])
+# ax.set_zlabel('# CG iterations')
+# Adding a color bar with custom ticks and labels
+cbar = plt.colorbar(pcm)  # Specify the ticks
+# cbar.set_ticks(ticks=[  0, 1,10])
+cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
+cbar.ax.set_yticklabels(
+    ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
+# plt.legend(['PCG: Green'])
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho4_abs{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
+
+fig = plt.figure(figsize=(5.5, 4.5))
+# ax = fig.add_subplot(111, projection='3d')
+ax = fig.add_subplot()
+relative_nb_iterations_1 = (nb_it_combi_abs_1[:, :]) / nb_it_Green_abs_1[:, :]
+relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
+divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
+# Replace NaN values with zero
+
+pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.set_title('Relative number of iteration \n abs function ')
+# ax.set_zlim(1 ,100)
+ax.set_ylabel('# data/geometry sampling points (x direction)')
+ax.set_xlabel('# of nodal points (x direction)')
+ax.set_xticks(Nx)
+ax.set_xticklabels([f'$2^{i}$' for i in Nx])
+ax.set_yticks(Nx)
+ax.set_yticklabels([f'$2^{i}$' for i in Nx])
+# ax.set_zlabel('# CG iterations')
+# Adding a color bar with custom ticks and labels
+cbar = plt.colorbar(pcm)  # Specify the ticks
+# cbar.set_ticks(ticks=[  0, 1,10])
+cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
+cbar.ax.set_yticklabels(
+    ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
+# plt.legend(['PCG: Green'])
+fname = src + 'JG_exp4_GRID_DEP_matrix_rho1_abs{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
 ## number of iteration in 3D
 # [[ 5.  0.  0.  0.  0.]
 #  [ 7.  9.  0.  0.  0.]
@@ -401,6 +1666,163 @@ plt.show()
 #  [ 7.  5.  5.  0.  0.]
 #  [10.  6.  5.  4.  0.]
 #  [15.  9.  6.  4.  3.]]
+
+
+quit()
+
+### plot geometry
+nb_pix_multips = [2, 4, 9]
+
+# material distribution
+geometry_ID = 'sine_wave_'
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+ratio = np.arange(1, 2)
+
+fig = plt.figure(figsize=(11, 4.5))
+gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.2, width_ratios=[3, 2],
+                      height_ratios=[1])
+# rigth subplots
+gs2 = gs[0, 1].subgridspec(3, 2, hspace=0.1, wspace=0.1, width_ratios=[1, 1], height_ratios=[1, 1, 1])
+# plot nb its
+gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.1, width_ratios=[0.2, 5])
+ax = fig.add_subplot(gs1[0, 1])
+
+relative_nb_iterations_1 = (nb_it_combi_1[:, :]) / nb_it_Green_1[:, :]
+relative_nb_iterations_1 = np.nan_to_num(relative_nb_iterations_1, nan=1.0)
+for i in range(relative_nb_iterations_1.shape[0]):
+    for j in range(relative_nb_iterations_1.shape[1]):
+        ax.text(i + 2, j + 2, f'{relative_nb_iterations_1[i, j]:.2f}',
+                ha='center', va='center', color='white')
+divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iterations.max())
+# Replace NaN values with zero
+
+pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
+
+ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
+# ax.set_zlim(1 ,100)
+ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+ax.yaxis.set_label_position('right')
+ax.yaxis.tick_right()
+ax.set_xlabel('# of nodal points (x direction)')
+ax.set_xticks(Nx)
+ax.set_xticklabels([f'$2^{i}$' for i in Nx])
+ax.set_yticks(Nx)
+ax.set_yticklabels([f'$2^{i}$' for i in Nx])
+# ax.set_zlabel('# CG iterations')
+# Adding a color bar with custom ticks and labels
+cbar_ax = fig.add_subplot(gs1[0, 0])
+
+cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
+cbar.ax.invert_yaxis()
+# cbar.set_ticks(ticks=[  0, 1,10])
+cbar.set_ticks([0, 0.2, 0.5, 1, 2, 5, relative_nb_iterations.max()])
+cbar.ax.set_yticklabels(
+    ['Jacobi-Green \n is better', '5 times', '2 times', 'Equal', '2 times', '5 times', 'Green \n is better'])
+#
+counter = 0
+for kk in np.arange(np.size(nb_pix_multips)):
+    nb_pix_multip = nb_pix_multips[kk]
+    print(f'kk = {kk}')
+    print(f'nb_pix_multip = {nb_pix_multip}')
+    # system set up
+    number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           nb_of_pixels_global=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    # if kk == 0:
+    phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                      microstructure_name=geometry_ID,
+                                                      coordinates=discretization.fft.coords,
+                                                      seed=1)
+    phase_field += 1 / 10 ** ratio
+    phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+    # phase_fied_small_grid=np.copy(phase_field_smooth)
+    phase_field = np.copy(phase_field)
+    # if kk > 0:
+    #     # phase_field_smooth = sc.ndimage.zoom(phase_fied_small_grid, zoom=nb_pix_multip, order=0)
+    #     phase_field_smooth = np.repeat(phase_fied_small_grid, 2 ** (kk), axis=0)
+    #     phase_field_smooth = np.repeat(phase_field_smooth, 2 ** (kk), axis=1)
+
+    # print(phase_field)
+
+    x = np.arange(0, 1 * number_of_pixels[0])
+    y = np.arange(0, 1 * number_of_pixels[1])
+    X_, Y_ = np.meshgrid(x, y)
+
+    print(f'kk = {kk}')
+
+    ax0 = fig.add_subplot(gs2[2 - kk, 0])
+    ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                   cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                   rasterized=True)
+    ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+               linestyle=linestyles[counter], linewidth=1.)
+    # ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+    extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+    extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                           phase_field[:, phase_field.shape[0] // 2][-1])
+
+    ax0.set_xticks([])
+    ax0.set_yticks([])
+    ax0.set_aspect('equal')
+    if kk == 2:
+        ax0.set_title(r'Geometries')
+    ax1 = fig.add_subplot(gs2[2 - kk, 1])
+    ax1.step(extended_x, extended_y
+             , where='post',
+             linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+             label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+    # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    ax1.set_ylim([0.05, 1.1])
+    ax1.set_xlim([0, 1])
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
+
+    ax1.set_yticks([0.1, 0.25, 0.50, 0.75, 1.0001])
+    ax1.set_yticklabels([0.1, 0.25, 0.50, 0.75, 1.00])
+    ax1.yaxis.set_label_position('right')
+    ax1.yaxis.tick_right()
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
+
+    ax1.set_aspect('equal')
+    if kk == 0:
+        ax1.set_xlabel('x coordinate')
+    if kk == 2:
+        ax1.set_ylabel(f'Phase' + r' $\rho$' f' \n  (linear scale)')
+        ax1.set_title(f'Cross sections')
+
+    # log scale plot
+    # ax2.step(extended_x, extended_y
+    #          , where='post',
+    #          linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+    #          label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+    # # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    # ax2.set_ylim([0.05, 1.1])
+    # ax2.set_xlim([0, 1])
+    #
+    # ax2.set_yticks([0.1, 0.25, 0.50, 0.75, 1.0001])
+    # ax2.set_yticklabels([0.1, 0.25, 0.50, 0.75, 1.00])
+    # ax2.set_yscale('log')
+    # ax2.set_xlabel('x coordinate')
+    # ax2.set_ylabel(f'phase' + r' $\rho$' f' \n  (log scale)')
+    #
+    counter += 1
+fname = src + 'JG_exp4_GRID_DEP_geometry_rho1{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+quit()
 ### plot geometry
 nb_pix_multips = [2, 4, 9]
 
@@ -464,7 +1886,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
                            phase_field[:, phase_field.shape[0] // 2][-1])
 
-    ax0.set_xticks( [])
+    ax0.set_xticks([])
     ax0.set_yticks([])
     if kk == 0:
         ax0.set_ylabel(r'Geometries')
@@ -476,8 +1898,8 @@ for kk in np.arange(np.size(nb_pix_multips)):
     # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
     ax1.set_ylim([0.05, 1.1])
     ax1.set_xlim([0, 1])
-    ax1.set_xticks( [])
-    ax1.set_xticklabels([ ])
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
 
     ax1.set_yticks([0.1, 0.25, 0.50, 0.75, 1.0001])
     ax1.set_yticklabels([0.1, 0.25, 0.50, 0.75, 1.00])
@@ -490,7 +1912,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
              label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
     # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
     ax2.set_ylim([0.05, 1.1])
-    ax2.set_xlim([0, 1]) 
+    ax2.set_xlim([0, 1])
 
     ax2.set_yticks([0.1, 0.25, 0.50, 0.75, 1.0001])
     ax2.set_yticklabels([0.1, 0.25, 0.50, 0.75, 1.00])
@@ -499,7 +1921,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     ax2.set_ylabel(f'phase' + r' $\rho$' f' \n  (log scale)')
     #
     counter += 1
-fname = src + 'JG_exp4_GRID_DEP_geometry_rho1{}'.format( '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_geometry_rho1{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 
@@ -568,7 +1990,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
                            phase_field[:, phase_field.shape[0] // 2][-1])
 
-    ax0.set_xticks( [])
+    ax0.set_xticks([])
     ax0.set_yticks([])
     if kk == 0:
         ax0.set_ylabel(r'Geometries')
@@ -580,8 +2002,8 @@ for kk in np.arange(np.size(nb_pix_multips)):
     # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
     ax1.set_ylim([0.0, 1.1])
     ax1.set_xlim([0, 1])
-    ax1.set_xticks( [])
-    ax1.set_xticklabels([ ])
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
 
     ax1.set_yticks([0.0001, 0.25, 0.50, 0.75, 1.0001])
     ax1.set_yticklabels([0.0001, 0.25, 0.50, 0.75, 1.00])
@@ -604,13 +2026,10 @@ for kk in np.arange(np.size(nb_pix_multips)):
     ax2.set_ylabel(f'phase' + r' $\rho$' f' \n  (log scale)')
     #
     counter += 1
-fname = src + 'JG_exp4_GRID_DEP_geometry_rho4{}'.format( '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_geometry_rho4{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
-
-
-
 
 ### plot geometry
 nb_pix_multips = [2, 4, 9]
@@ -648,7 +2067,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
                                                       microstructure_name=geometry_ID,
                                                       coordinates=discretization.fft.coords,
                                                       seed=1)
-    #phase_field += 1 / 10 ** ratio
+    # phase_field += 1 / 10 ** ratio
     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
     # phase_fied_small_grid=np.copy(phase_field_smooth)
     phase_field = np.copy(phase_field)
@@ -675,7 +2094,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
                            phase_field[:, phase_field.shape[0] // 2][-1])
 
-    ax0.set_xticks( [])
+    ax0.set_xticks([])
     ax0.set_yticks([])
     if kk == 0:
         ax0.set_ylabel(r'Geometries')
@@ -687,8 +2106,8 @@ for kk in np.arange(np.size(nb_pix_multips)):
     # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
     ax1.set_ylim([0.0, 1.1])
     ax1.set_xlim([0, 1])
-    ax1.set_xticks( [])
-    ax1.set_xticklabels([ ])
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
 
     ax1.set_yticks([0.00, 0.25, 0.50, 0.75, 1.0001])
     ax1.set_yticklabels([0.0, 0.25, 0.50, 0.75, 1.00])
@@ -711,13 +2130,114 @@ for kk in np.arange(np.size(nb_pix_multips)):
     ax2.set_ylabel(f'phase' + r' $\rho$' f' \n  (semilog scale)')
     #
     counter += 1
-fname = src + 'JG_exp4_GRID_DEP_geometry_rho4_0{}'.format( '.pdf')
+fname = src + 'JG_exp4_GRID_DEP_geometry_rho4_inf{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
 
+### plot geometry
+nb_pix_multips = [2, 4, 9]
 
+# material distribution
+geometry_ID = 'sine_wave_inv'
 
+ratio = np.arange(4, 5)
+
+fig = plt.figure()
+gs = fig.add_gridspec(3, 3)
+
+ax1 = fig.add_subplot(gs[1, :])
+ax2 = fig.add_subplot(gs[2, :])
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+counter = 0
+for kk in np.arange(np.size(nb_pix_multips)):
+    nb_pix_multip = nb_pix_multips[kk]
+    print(f'kk = {kk}')
+    print(f'nb_pix_multip = {nb_pix_multip}')
+    # system set up
+    number_of_pixels = (2 ** nb_pix_multip, 2 ** nb_pix_multip)
+
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           nb_of_pixels_global=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    # if kk == 0:
+    phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                      microstructure_name=geometry_ID,
+                                                      coordinates=discretization.fft.coords,
+                                                      seed=1)
+    # phase_field += 1 / 10 ** ratio
+    phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+    # phase_fied_small_grid=np.copy(phase_field_smooth)
+    phase_field = np.copy(phase_field)
+    # if kk > 0:
+    #     # phase_field_smooth = sc.ndimage.zoom(phase_fied_small_grid, zoom=nb_pix_multip, order=0)
+    #     phase_field_smooth = np.repeat(phase_fied_small_grid, 2 ** (kk), axis=0)
+    #     phase_field_smooth = np.repeat(phase_field_smooth, 2 ** (kk), axis=1)
+
+    # print(phase_field)
+
+    x = np.arange(0, 1 * number_of_pixels[0])
+    y = np.arange(0, 1 * number_of_pixels[1])
+    X, Y = np.meshgrid(x, y)
+
+    print(f'kk = {kk}')
+    ax0 = fig.add_subplot(gs[0, kk])
+    ax0.pcolormesh(X, Y, np.transpose(phase_field),
+                   cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                   rasterized=True)
+    ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+               linestyle=linestyles[counter], linewidth=1.)
+    ax0.set_title(f'Resolution $(2^{nb_pix_multip})^{2}$')
+    extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+    extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                           phase_field[:, phase_field.shape[0] // 2][-1])
+
+    ax0.set_xticks([])
+    ax0.set_yticks([])
+    if kk == 0:
+        ax0.set_ylabel(r'Geometries')
+
+    ax1.step(extended_x, extended_y
+             , where='post',
+             linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+             label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+    # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    ax1.set_ylim([0.0, 1.1])
+    ax1.set_xlim([0, 1])
+    ax1.set_xticks([])
+    ax1.set_xticklabels([])
+
+    ax1.set_yticks([0.00, 0.25, 0.50, 0.75, 1.0001])
+    ax1.set_yticklabels([0.0, 0.25, 0.50, 0.75, 1.00])
+    ax1.set_ylabel(f'phase' + r' $\rho$' f' \n  (linear scale)')
+    ax1.set_title(f'Cross sections')
+    # log scale plot
+    ax2.step(extended_x, extended_y
+             , where='post',
+             linewidth=1, color=colors[counter], linestyle=linestyles[counter],  # marker='|',
+             label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+    # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    # ax2.set_ylim([0.0, 1.1])
+    ax2.set_xlim([0, 1])
+    #
+    ax2.set_yticks([0.0, 0.25, 0.50, 0.75, 1.0001])
+    ax2.set_yticklabels([0.0, 0.25, 0.50, 0.75, 1.00])
+
+    ax2.set_yscale('log')
+    ax2.set_xlabel('x coordinate')
+    ax2.set_ylabel(f'phase' + r' $\rho$' f' \n  (semilog scale)')
+    #
+    counter += 1
+fname = src + 'JG_exp4_GRID_DEP_geometry_rho4_inf_inv{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
 
 ### plot geometry
 nb_pix_multips = [2, 5, 9]

@@ -4,7 +4,8 @@ from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 
-def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz'):
+def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',
+        **kwargs):
     # print('I am in PCG')
     """
     Conjugate gradients solver.
@@ -25,6 +26,11 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
     norms = dict()
     norms['residual_rr'] = []
     norms['residual_rz'] = []
+    norms['data_scaled_rz'] = []
+    norms['data_scaled_rr'] = []
+
+    norms['energy_lb'] = []
+
     ##
     k = 0
     x_k = np.copy(x0)
@@ -41,9 +47,17 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
     norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
     norms['residual_rz'].append(r_0z_0)
     if norm_energy_upper_bound:
-        norms['energy_lb'] = []
         gamma_mu = 1 / lambda_min
         norms['energy_lb'].append(gamma_mu * r_0z_0)
+    if norm_type == 'data_scaled_rz':
+        r_1_C_z_1 = scalar_product_mpi(r_0, P(kwargs['norm_metric'](r_0)))
+        norms['data_scaled_rz'].append(r_1_C_z_1)
+    if norm_type == 'data_scaled_rr':
+        r_1_C_r_1 = scalar_product_mpi(r_0, kwargs['norm_metric'](r_0))
+        norms['data_scaled_rr'].append(r_1_C_r_1)
+
+
+
     p_0 = np.copy(z_0)
 
     for k in np.arange(1, steps):
@@ -59,10 +73,10 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
 
         z_0 = P(r_0)
 
-        if norm_energy_upper_bound:
-            norms['energy_lb'].append(gamma_mu * r_0z_0)
-
         r_1z_1 = scalar_product_mpi(r_0, z_0)
+
+        if norm_energy_upper_bound:
+            norms['energy_lb'].append(gamma_mu * r_1z_1)
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
@@ -74,6 +88,19 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
                 break
         if norm_type == 'rr':
             if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
+        if norm_type == 'energy':
+            if norms['energy_lb'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
+        if norm_type == 'data_scaled_rz':
+            r_1_C_z_1 = scalar_product_mpi(r_0, P(kwargs['norm_metric'](r_0)))
+            norms['data_scaled_rz'].append(r_1_C_z_1)
+            if norms['data_scaled_rz'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
+        if norm_type == 'data_scaled_rr':
+            r_1_C_r_1 = scalar_product_mpi(r_0, kwargs['norm_metric'](r_0))
+            norms['data_scaled_rr'].append(r_1_C_r_1)
+            if norms['data_scaled_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
         beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0

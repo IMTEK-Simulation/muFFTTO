@@ -15,7 +15,7 @@ def get_geometry(nb_voxels,
                  contrast=None,
                  **kwargs):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
-                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh','sine_wave_inv',
+                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh','sine_wave_inv','abs_val',
                                    'square_inclusion_equal_volfrac',
                                    'laminate', 'laminate2',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
@@ -106,6 +106,12 @@ def get_geometry(nb_voxels,
                 phase_field = 0.5 + 0.5 * np.sin(2 * 2 * np.pi * coordinates[0]) * np.sin(
                     2 * 2 * np.pi * coordinates[1]) * np.sin(
                     2 * 2 * np.pi * coordinates[3])
+        case 'abs_val':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = np.abs( coordinates[0]-0.5) + np.abs( coordinates[1]-0.5)
+            elif nb_voxels.size == 3:
+                np.abs( coordinates[0]-0.5) + np.abs( coordinates[1]-0.5)+ np.abs( coordinates[2]-0.5)
 
         case 'sine_wave':
             phase_field = np.zeros(nb_voxels)

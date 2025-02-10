@@ -6,6 +6,7 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from mpi4py import MPI
+from NuMPI.Tools import Reduction
 
 import matplotlib.pyplot as plt
 from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
@@ -32,7 +33,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [ 5,6,7,8,9,10,11]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]  # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -54,7 +55,10 @@ norm_rr_Jacobi = []
 norm_rz_Jacobi = []
 norm_rr = []
 norm_rz = []
-
+norm_energy_lb = []
+norm_energy_lb_combi = []
+norm_rMr_combi = []
+norm_rMr = []
 kontrast = []
 kontrast_2 = []
 eigen_LB = []
@@ -121,12 +125,12 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
         print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
         # material distribution
-        geometry_ID = 'abs_val'  # 'square_inclusion'#'circle_inclusion'#random_distribution
+        geometry_ID = 'sine_wave_'  # laminate2 #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
 
 
         def scale_field(field, min_val, max_val):
             """Scales a 2D random field to be within [min_val, max_val]."""
-            field_min, field_max = field.min(), field.max()
+            field_min, field_max = Reduction(MPI.COMM_WORLD).min(field), Reduction(MPI.COMM_WORLD).max(field)
             scaled_field = (field - field_min) / (field_max - field_min)  # Normalize to [0,1]
             return scaled_field * (max_val - min_val) + min_val  # Scale to [min_val, max_val]
 
@@ -138,7 +142,9 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                 phase_fied_small_grid = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                                             microstructure_name=geometry_ID,
                                                                             coordinates=discretization.fft.coords,
-                                                                            seed=1)
+                                                                            seed=1,
+                                                                            parameter=number_of_pixels[0],
+                                                                            contrast=1 / 10 ** ratio)
                 phase_fied_small_grid += 1 / 10 ** ratio
 
                 # phase_fied_small_grid=np.copy(phase_field_smooth)
@@ -171,29 +177,31 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # nb_it_combi=[]
             # nb_it_Jacobi=[]
             phase_field = np.abs(phase_field_smooth)
-            # phase_field=scale_field(phase_field, min_val=1/10**ratio, max_val=1.0)
+            phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
 
             # phase_field[phase_field<=1/10**ratio]= 0
 
             phase_fem = np.zeros([2, *number_of_pixels])
             phase_fnxyz = discretization.get_scalar_sized_field()
-            phase_fnxyz[0, 0, ...] = phase_field
-
-            # np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
-            # sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
-
-            phase_field_at_quad_poits_1qnxyz = \
-                discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
-                                                             quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
-
-            phase_field_at_quad_poits_1qnxyz[0, :, 0, ...] = phase_fnxyz
+            # phase_fnxyz[0, 0, ...] = phase_field
+            #
+            # # np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
+            # # sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
+            #
+            # phase_field_at_quad_poits_1qnxyz = \
+            #     discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
+            #                                                  quad_field_fqnxyz=None,
+            #                                                  quad_points_coords_dq=None)[0]
+            #
+            # phase_field_at_quad_poits_1qnxyz[0, :, 0, ...] = phase_fnxyz
             # apply material distribution
             # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
             # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
             # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
+            # material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
+            #     phase_field, 1)[0, :, 0, ...]
             material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-                phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+                phase_field, 1)
             # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
             # Set up right hand side
             macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
@@ -207,15 +215,15 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                                  formulation='small_strain')
 
             # plotting eigenvalues
-            ##  K = discretization.get_system_matrix(material_data_field_C_0_rho)
-            ## M = discretization.get_system_matrix(refmaterial_data_field_I4s)
-
-            ## eig = sc.linalg.eigh(a=K, b=M, eigvals_only=True)
-
-            # min_val = np.min(phase_field)
-            # max_val = np.max(phase_field)
+            # K = discretization.get_system_matrix(material_data_field_C_0_rho)
+            # M = discretization.get_system_matrix(refmaterial_data_field_I4s)
             #
-            # kontrast.append(max_val / min_val)
+            # eig = sc.linalg.eigh(a=K, b=M, eigvals_only=True)
+
+            min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
+            max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
+
+            kontrast.append(max_val / min_val)
             # eigen_LB.append(min_val)
             #
             # # kontrast_2.append(eig[-3] / eig[np.argmax(eig > 0)])
@@ -257,18 +265,40 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # #
             M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
+            # K = discretization.get_system_matrix(material_data_field_C_0_rho)
+            # M = discretization.get_system_matrix(refmaterial_data_field_I4s)
+            #
+            # eig_G, _ = sc.linalg.eig(a=K, b=M)  # , eigvals_only=True
+            # eig_G = np.real(eig_G)
+            # K_diag_half = np.copy(np.diag(K))
+            # K_diag_half[K_diag_half < 9.99e-16] = 0
+            # K_diag_half[K_diag_half != 0] = 1 / np.sqrt(K_diag_half[K_diag_half != 0])
+            #
+            # DKDsym = np.matmul(np.diag(K_diag_half), np.matmul(K, np.diag(K_diag_half)))
+            # eig_JG, _ = sc.linalg.eig(a=DKDsym, b=M)  # , eigvals_only=True
+            # eig_JG = np.real(eig_JG)
+            # print(f'eig_G.min() = {eig_G[eig_G > 0].min()}')
             displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1000), toler=1e-6,
-                                                    norm_type='rr')
+                                                    norm_type='rz')
             nb_it[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms['residual_rr']))
+            print('nb it  = {} '.format(len(norms['residual_rr'])))
+
             norm_rz.append(norms['residual_rz'])
             norm_rr.append(norms['residual_rr'])
+            # norm_rMr.append(norms['data_scaled_rr'])
+
             # print(nb_it)
             #########
             displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_combi, steps=int(1000),
-                                                                toler=1e-6, norm_type='rr')
+                                                                toler=1e-6,
+                                                                norm_type='data_scaled_rr',
+                                                                norm_metric=M_fun
+                                                                )
             nb_it_combi[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms_combi['residual_rr']))
             norm_rz_combi.append(norms_combi['residual_rz'])
             norm_rr_combi.append(norms_combi['residual_rr'])
+            norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+
             #
             displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_Jacobi, steps=int(1),
                                                                   toler=1e-6, norm_type='rr')
@@ -290,6 +320,36 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # norm_rr_Richardson_combi = norms_Richardson_combi['residual_rr'][-1]
 
             # print(ratio)
+
+            # fig = plt.figure()  ######################################### PLOT convergence curves
+            # # kappa = kontrast[-1]
+            #
+            # # print(f'convergecnce \n {convergence}')
+            # # fig = plt.figure()
+            # gs = fig.add_gridspec(1, 1)
+            # ax_1 = fig.add_subplot(gs[0, 0])
+            # ax_1.set_title(f'{nb_pix_multips[0]}', wrap=True)
+            #
+            # ax_1.semilogy(norm_rr[-1], label='rr PCG: Green', color='green')
+            # ax_1.semilogy(norm_rr_combi[-1], label='rr PCG: Jacobi-Green', color='b')
+            #
+            # ax_1.semilogy(norm_rz[-1], label='rz PCG: Green', color='green', linestyle='--')
+            # ax_1.semilogy(norm_rz_combi[-1], label='rz PCG: Jacobi-Green', color='b', linestyle='--')
+            #
+            # ax_1.semilogy(norm_rMr[-1], label='rMr PCG: Green', color='green', linestyle='-.', marker='x')
+            # ax_1.semilogy(norm_rMr_combi[-1], label='rMr PCG: Jacobi-Green', color='b', linestyle='-.', marker='x')
+            #
+            # # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
+            # # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
+            # ax_1.set_xlabel('CG iterations')
+            # ax_1.set_ylabel('Norm of residua')
+            # # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
+            # plt.legend()
+            # ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
+            # print(max(map(len, norm_rr)))
+            # # ax_1.set_xlim([0, max(map(len, norm_rr))])
+            #
+            # plt.show()
 
             # fig = plt.figure()
 
