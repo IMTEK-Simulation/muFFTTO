@@ -21,7 +21,7 @@ from mpl_toolkits import mplot3d
 plt.ion()
 
 
-src = './figures/'
+src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'

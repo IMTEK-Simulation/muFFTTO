@@ -31,7 +31,7 @@ if MPI.COMM_WORLD.rank == 0:
     print('  ----   ----          ------       ---------        --------')
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
-src = './figures/'
+src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -47,7 +47,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.array([0])  # np.arange(1,5)  # 17  33
+ratios = np.array([4])  # np.arange(1,5)  # 17  33
 
 nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
@@ -68,7 +68,7 @@ kontrast = []
 kontrast_2 = []
 eigen_LB = []
 
-for geometry_ID in ['sine_wave_']:#,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3'
+for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3'
     # material distribution
     # geometry_ID =   # right_cluster_linear  laminate_log laminate2 #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
     # right_cluster_x3  left_cluster_x3  linear
@@ -230,9 +230,12 @@ for geometry_ID in ['sine_wave_']:#,'sine_wave_','linear', 'right_cluster_x3', '
                 # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
                 # Set up right hand side
                 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-                # perturb=np.random.random(macro_gradient_field.shape)
-                # macro_gradient_field += perturb#-np.mean(perturb)
-
+                # np.random.seed(seed=1)
+                # perturb_dis = np.random.random(discretization.get_displacement_sized_field().shape)
+                #
+                # perturb=discretization.apply_gradient_operator_symmetrized( u=perturb_dis )
+                # perturb=scale_field(perturb, -0.1, 0.1)
+                # macro_gradient_field += (perturb-Reduction(MPI.COMM_WORLD).mean(perturb))
                 # Solve mechanical equilibrium constrain
                 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
@@ -393,8 +396,8 @@ for geometry_ID in ['sine_wave_']:#,'sine_wave_','linear', 'right_cluster_x3', '
                     ax_0.set_yticks([0, 0.5, 1])
                     ax_0.set_yticklabels([0, 0.5, 1])
                 else:
-                    ax_0.set_yticks([1e-4, 0.5, 1])
-                    ax_0.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                    ax_0.set_yticks([1/np.power(10,ratio), 0.5, 1])
+                    ax_0.set_yticklabels([f'$10^{{{-ratio}}}$', 0.5, 1])
 
 
 

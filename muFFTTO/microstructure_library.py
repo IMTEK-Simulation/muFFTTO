@@ -15,9 +15,10 @@ def get_geometry(nb_voxels,
                  contrast=None,
                  **kwargs):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
-                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh','sine_wave_inv','abs_val',
-                                   'square_inclusion_equal_volfrac',
-                                   'laminate', 'laminate2',
+                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
+                                   'right_cluster_x3','left_cluster_x3','uniform_x1','n_laminate','symmetric_linear',
+                                   'square_inclusion_equal_volfrac','sine_wave_rapid',
+                                   'laminate', 'laminate2', 'laminate_log',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -55,13 +56,56 @@ def get_geometry(nb_voxels,
             phase_field[coordinates[0] < 0.5] = 0
         case 'laminate2':
 
-            phase_field = np.zeros(nb_voxels) + contrast
+            phase_field = np.zeros(nb_voxels)
             # division=1/parameter
             # divisions=np.arange(0, 1, 1 / parameter)
             # divisionss= np.linspace(0, 1, parameter, endpoint = False)
 
             # divisions2 = np.arange(0, 1, 1 /( parameter-1))
             phases = np.linspace(contrast, 1, parameter)
+
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
+
+            # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            print()
+        case 'n_laminate':
+
+            phase_field = np.zeros(nb_voxels)
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.linspace(0, 1, parameter)
+
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
+
+        case 'right_cluster_x3':
+
+            phase_field =   1-(1- coordinates[0])**3
+        case 'left_cluster_x3':
+
+            phase_field = (1 - coordinates[0]) ** 3
+
+        case 'laminate_log':
+
+            phase_field = np.zeros(nb_voxels) + np.power(10., contrast)
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.logspace(contrast, 0, parameter)
 
             # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
             positions = np.linspace(0, 1, parameter + 1)
@@ -109,10 +153,17 @@ def get_geometry(nb_voxels,
         case 'abs_val':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
-                phase_field = np.abs( coordinates[0]-0.5) + np.abs( coordinates[1]-0.5)
+                phase_field = np.abs(coordinates[0] - 0.5) + np.abs(coordinates[1] - 0.5)
             elif nb_voxels.size == 3:
-                np.abs( coordinates[0]-0.5) + np.abs( coordinates[1]-0.5)+ np.abs( coordinates[2]-0.5)
+                np.abs(coordinates[0] - 0.5) + np.abs(coordinates[1] - 0.5) + np.abs(coordinates[2] - 0.5)
 
+        case 'sine_wave_rapid':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.25 * np.cos(30 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                   10 * 2 * np.pi * coordinates[1])
+            elif nb_voxels.size == 3:
+                phase_field = np.sin(coordinates)
         case 'sine_wave':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
@@ -127,9 +178,10 @@ def get_geometry(nb_voxels,
                     2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]) + 0.25 * np.cos(
                     2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0])
             elif nb_voxels.size == 3:
-                phase_field = (0.5 + 0.25 * np.cos(2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]- 2 * np.pi * coordinates[2]) +
-                                     0.25 * np.cos(2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0]+ 2 * np.pi * coordinates[2]))
-
+                phase_field = (0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 2 * np.pi * coordinates[2]) +
+                               0.25 * np.cos(
+                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 2 * np.pi * coordinates[2]))
 
         case 'sine_wave_inv':
             phase_field = np.zeros(nb_voxels)
@@ -161,6 +213,16 @@ def get_geometry(nb_voxels,
             elif nb_voxels.size == 3:
                 phase_field = coordinates[0] * coordinates[1] * coordinates[2]
 
+        case 'symmetric_linear':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+
+                phase_field = coordinates[0]
+                phase_field[nb_voxels[0] // 2:] = np.flipud(phase_field[:nb_voxels[0] // 2])
+
+
+            elif nb_voxels.size == 3:
+                raise "Not IMPLEMENTED"
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)

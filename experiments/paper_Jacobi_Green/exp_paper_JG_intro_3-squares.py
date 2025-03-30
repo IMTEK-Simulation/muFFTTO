@@ -17,7 +17,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 
-src = './figures/'
+src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'

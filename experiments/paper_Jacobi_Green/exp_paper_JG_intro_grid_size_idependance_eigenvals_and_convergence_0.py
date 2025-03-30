@@ -10,6 +10,7 @@ from NuMPI.Tools import Reduction
 
 import matplotlib.pyplot as plt
 
+
 # Enable LaTeX rendering
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
@@ -68,7 +69,7 @@ kontrast = []
 kontrast_2 = []
 eigen_LB = []
 
-for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3'
+for geometry_ID in ['symmetric_linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3'
     # material distribution
     # geometry_ID =   # right_cluster_linear  laminate_log laminate2 #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
     # right_cluster_x3  left_cluster_x3  linear
@@ -76,7 +77,16 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
     for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
         # valid_nb_muiltips=nb_pix_multips[nb_pixels:]
         print(f'nb_starting_phases = {nb_starting_phases}')
+        fig = plt.figure(figsize=(11, 5.5))
+        gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.4, width_ratios=[2,2, 2],
+                              height_ratios=[1, 1])
 
+        ax_0 = fig.add_subplot(gs[0, 0])
+
+        ax_1 = fig.add_subplot(gs[0, 1:])
+        colors = ['red', 'blue', 'green', 'orange', 'purple']
+        linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
+        markers = ['x', 'o', '|', '>']
         for kk in np.arange(np.size(nb_pix_multips[nb_starting_phases:])):
             nb_pix_multip = nb_pix_multips[nb_starting_phases:][kk]
             print(f'kk = {kk}')
@@ -199,6 +209,9 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                     phase_field = scale_field(phase_field, min_val=0, max_val=1.0)
                 else:
                     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+
+                #phase_field = scale_field(phase_field, min_val=1 , max_val=10 ** ratio)
+
                 #phase_field[phase_field>0.3]=1
                 #phase_field[phase_field < 0.51] = 1 / 10 ** ratio
                 # phase_field = scale_field(phase_field, min_val=1 , max_val=10**ratio)
@@ -231,12 +244,19 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 # Set up right hand side
                 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
                 # np.random.seed(seed=1)
-                # perturb_dis = np.random.random(discretization.get_displacement_sized_field().shape)
-                #
+                # perturb_dis=np.random.random(discretization.get_displacement_sized_field().shape)
+                # perturb_disx=microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                #                                     microstructure_name='sine_wave_',
+                #                                     coordinates=discretization.fft.coords,
+                #                                     seed=1,
+                #                                     parameter=number_of_pixels[0],
+                #                                     contrast=-ratio)
+                # perturb_dis[0, 0] = perturb_disx**2
+                # perturb_dis[1, 0] = perturb_disx
                 # perturb=discretization.apply_gradient_operator_symmetrized( u=perturb_dis )
-                # perturb=scale_field(perturb, -0.1, 0.1)
+                # perturb=scale_field(perturb, -0.4, 0.4)
                 # macro_gradient_field += (perturb-Reduction(MPI.COMM_WORLD).mean(perturb))
-                # Solve mechanical equilibrium constrain
+                #Solve mechanical equilibrium constrain
                 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
@@ -367,11 +387,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 # norm_rr_Richardson_combi = norms_Richardson_combi['residual_rr'][-1]
 
                 # print(ratio)
-                fig = plt.figure(figsize=(11, 3.5))
-                gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.4, width_ratios=[2, 4, 3],
-                                      height_ratios=[1, 1])
 
-                ax_0 = fig.add_subplot(gs[0, 0])
                 x = np.arange(0, 1 * number_of_pixels[0])
                 y = np.arange(0, 1 * number_of_pixels[1])
                 X_, Y_ = np.meshgrid(x, y)
@@ -403,36 +419,8 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
 
                 ax_0.text(-0.25, 1.1, '(a)', transform=ax_0.transAxes)
 
-                ax_10 = fig.add_subplot(gs[1, 0])
-                ax_10.axis('off')
-                ax_10.text(0., 0.0,
-                           r'Green : $\lambda_{min}$ =' + f'{sorted(eig_G)[2]:.4g}, \n ' +
-                           r'        $\lambda_{max}$=' + f'{sorted(eig_G)[-1]:.4g} \n '+
-                           r'Jacobi-Green :$\lambda_{min}$ =' + f'{sorted(eig_JG)[2]:.4g}, \n '+
-                           r'              $\lambda_{max}$=' + f'{sorted(eig_JG)[-1]:.4g}  \n'+
-                           r'Green :       $\kappa $ =' + f'{sorted(eig_G)[-1] / sorted(eig_G)[2]:.4g}\n '
-                                                                                                r'Jacobi-Green :$\kappa $ =' + f'{sorted(eig_JG)[-1] / sorted(eig_JG)[2]:.4g}',
-                           transform=ax_10.transAxes)
-                # s2 = r'''\begin{tabular}{ c | c | c | c }
-                #         & $\lambda_{min}$ & $\lambda_{max}$ & $\kappa $ \\ \hline
-                #         Green & f{sorted(eig_G)[2] &         sorted(eig_G)[-1] & sorted(eig_G)[-1] / sorted(eig_G)[2] \\ \hline
-                #         Jacobi-Green & 2 & 4& 2
-                #         \end{tabular}'''.format()
-                # (r'\begin{tabular}{ c | c  } &Green '
-                #  r': $\lambda_{min}$ =') + f'{sorted(eig_G)[2]:.4g}, \n ' +
-                #            r'        $\lambda_{max}$=' + f'{sorted(eig_G)[-1]:.4g} \n '
-                #                                          r'Jacobi-Green :$\lambda_{min}$ =' + f'{sorted(eig_JG)[2]:.4g}, \n '
-                #            + r'              $\lambda_{max}$=' + f'{sorted(eig_JG)[-1]:.4g}  \n'
-                #                                                  r'Green :       $\kappa $ =' + f'{sorted(eig_G)[-1] / sorted(eig_G)[2]:.4g}\n '
-                #                                                                                 r'Jacobi-Green :$\kappa $ =' + f'{sorted(eig_JG)[-1] / sorted(eig_JG)[2]:.4g}'
-                # ax_10.text(0.5, 0.8, s2, ha="center", va="center", transform=ax_10.transAxes)
-
-                #table = ax_10.table(cellText=data, loc='center', cellLoc='center')
-
-                ax_10.text(-0.2, 1.05, '(b)', transform=ax_10.transAxes)
-
-                # kappa = kontrast[-1]
-                k = np.arange(max(map(len, norm_rr)))
+#                k = np.arange(max(map(len, norm_rr)))
+                k = np.arange(15)
                 print(f'k \n {k}')
                 lb_G = eig_G[eig_G > 0].min()
                 print(f'lb \n {lb_G}')
@@ -444,23 +432,24 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 convergence = ((np.sqrt(kappa_JG) - 1) / (np.sqrt(kappa_JG) + 1)) ** k
                 convergence_JG = convergence * norm_rr_combi[-1][0]
 
-                ax_1 = fig.add_subplot(gs[:, 1])
                 ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
-                # ax_1.semilogy(convergence_G, ':', label='estim Green', color='green')
-                # ax_1.semilogy(convergence_JG, ':', label='estim Jacobi-Green', color='r')
-                #
-                # ax_1.semilogy(norm_rr[-1], label='rr PCG: Green', color='green')
-                # ax_1.semilogy(norm_rr_combi[-1], label='rr PCG: Jacobi-Green', color='b')
 
-                ax_1.semilogy(np.arange(1, len(norm_rz[-1]) + 1), norm_rz[-1],
-                              label=r'$||r_{k}||_{G^{-1}} $  --- Green', color='green', linestyle='--')
-                ax_1.semilogy(np.arange(1, len(norm_rz_combi[-1]) + 1), norm_rz_combi[-1],
-                              label=r'$||r_{k}||_{G^{-1}} $ --- Jacobi-Green', color='b', linestyle='-.')
+                if kk==0:
+                    ax_1.semilogy(convergence_G, ':', label=r'$\kappa$ est. - Green', color='green')
+                    ax_1.semilogy(convergence_JG, ':', label=r'$\kappa$ est. - Jacobi-Green', color='b')
 
-                # ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
-                #               label='Upper bound --- Green', color='green', linestyle='--', marker='v')
-                # ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
-                #               label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
+               # ax_1.semilogy(norm_rr[-1], label='rr PCG: Green', color='green')
+                #ax_1.semilogy(norm_rr_combi[-1], label='rr PCG: Jacobi-Green', color='b')
+
+                ax_1.semilogy(np.arange(1, len(norm_rz[-1]) + 1), norm_rz[-1]/norm_rz[-1][0],
+                              label=r'$||r_{k}||_{G^{-1}} $  - Green '+r'$N_{I}$'+f'{number_of_pixels[0]}' , color='green', linestyle='--',marker=markers[kk])
+                ax_1.semilogy(np.arange(1, len(norm_rz_combi[-1]) + 1), norm_rz_combi[-1]/norm_rz_combi[-1][0],
+                              label=r'$||r_{k}||_{G^{-1}} $ - Jacobi-Green  '+r'$N_{I}$' +f'{number_of_pixels[0]}', color='b', linestyle='-.',marker=markers[kk])
+
+                ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
+                              label='Upper bound --- Green', color='green', linestyle='--', marker='v')
+                ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
+                              label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
                 ax_1.text(-0.2, 1.05, '(c)', transform=ax_1.transAxes)
                 # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
                 # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
@@ -469,57 +458,53 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 ax_1.set_title(f'Convergence')
 
                 # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
-                plt.legend(loc='upper right')
-                ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
+
+                ax_1.set_ylim([1e-14, 1e1])  # norm_rz[i][0]]/lb)
                 print(max(map(len, norm_rr)))
-                ax_1.set_xlim([1, 60])
+                ax_1.set_xlim([1, 15])
+                ax_1.set_xticks([1,5, 8, 10,15])
+                ax_1.set_xticklabels([1,5, 8, 10,15])
+                #ax_1.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                # ax_2 = fig.add_subplot(gs[1, 0])
+                # # Number of bins (fine-grained)
+                # num_bins = eig_G.size
+                # # Define the bin width
+                # bin_width = 0.05
+                #
+                # # Calculate the bin edges
+                # min_edge = np.min(sorted(eig_JG)[2:])
+                # max_edge = np.max(sorted(eig_JG)[2:])
+                # bins = np.arange(min_edge, max_edge + bin_width, bin_width)
+                # bins = 50
+                # # Create the histogram
+                # # ax_2.hist(sorted(eig_G)[2:],bins=bins, color='red',label=f'Green',edgecolor = 'green', alpha = 0.5)#, marker='.', linewidth=0, markersize=5)
+                # # ax_2.hist(sorted(eig_JG)[2:],bins=bins, color='b',label=f'Jacobi-Green',edgecolor = 'black', alpha = 0.5)#, marker='.', linewidth=0, markersize=5)
+                # ax_2.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
+                #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+                # ax_2.plot(sorted(eig_JG)[2:], color='b', label=f'Jacobi-Green',
+                #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+                # ax_2.text(-0.15, 1.05, '(d)', transform=ax_2.transAxes)
+                #
+                #   #ax_3.set_ylim([1e-4, 1e2])
+                # #ax_2.set_yticks([1e-4, 0.5, 1])
+                # #ax_2.set_yticklabels([1e-4, 0.5, 1])
+                # #ax_2.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                # if ratio == 0:
+                #     #ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                #     ax_2.set_ylim([0, 1e0])
+                #     ax_2.set_yticks([0, 0.5, 1])
+                #     ax_2.set_yticklabels([0, 0.5, 1])
+                # else:
+                #     #ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                #     ax_2.set_ylim([1e-4, 1e0])
+                #     ax_2.set_yticks([1e-4, 0.5, 1])
+                #     ax_2.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
 
-                ax_2 = fig.add_subplot(gs[0, 2])
-                # Number of bins (fine-grained)
-                num_bins = eig_G.size
-                # Define the bin width
-                bin_width = 0.05
 
-                # Calculate the bin edges
-                min_edge = np.min(sorted(eig_JG)[2:])
-                max_edge = np.max(sorted(eig_JG)[2:])
-                bins = np.arange(min_edge, max_edge + bin_width, bin_width)
-                bins = 50
-                # Create the histogram
-                # ax_2.hist(sorted(eig_G)[2:],bins=bins, color='red',label=f'Green',edgecolor = 'green', alpha = 0.5)#, marker='.', linewidth=0, markersize=5)
-                # ax_2.hist(sorted(eig_JG)[2:],bins=bins, color='b',label=f'Jacobi-Green',edgecolor = 'black', alpha = 0.5)#, marker='.', linewidth=0, markersize=5)
-                ax_2.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
-                          alpha=0.5, marker='.', linewidth=0, markersize=5)
-                ax_2.plot(sorted(eig_JG)[2:], color='b', label=f'Jacobi-Green',
-                          alpha=0.5, marker='.', linewidth=0, markersize=5)
-                ax_2.text(-0.15, 1.05, '(d)', transform=ax_2.transAxes)
+                #x_2.set_title(r'Sorted eigenvalues')
+                #plt.legend()
 
-                  #ax_3.set_ylim([1e-4, 1e2])
-                #ax_2.set_yticks([1e-4, 0.5, 1])
-                #ax_2.set_yticklabels([1e-4, 0.5, 1])
-                #ax_2.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
-                if ratio == 0:
-                    #ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
-                    ax_2.set_ylim([0, 1e0])
-                    ax_2.set_yticks([0, 0.5, 1])
-                    ax_2.set_yticklabels([0, 0.5, 1])
-                else:
-                    #ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
-                    ax_2.set_ylim([1e-4, 1e0])
-                    ax_2.set_yticks([1e-4, 0.5, 1])
-                    ax_2.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
-
-
-
-                # ax_2.set_xlim(left=0)
-                # ax_2.set_yscale('log')
-                # ax_2.set_xscale('log')
-                ax_2.set_title(r'Sorted eigenvalues')
-                # ax_1.set_xlabel('')
-                # ax_2.set_ylabel('Eigenvalues ')
-                plt.legend()
-
-                ax_3 = fig.add_subplot(gs[1, 2])
+                ax_3 = fig.add_subplot(gs[1, kk])
                 # Number of bins (fine-grained)
                 num_bins = eig_G.size
                 # Define the bin width
@@ -550,12 +535,14 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                     ax_3.set_xticks([1e-4, 0.5, 1])
                     ax_3.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
                 #ax_3.set_xticklabels([1e-4, 0.5, 1])
+                if kk==0:
+                    ax_3.set_ylabel(r'Histogram of eigenvalues')
 
-
+                ax_3.set_ylim([1, 1e3])
                 #ax_2.set_xtics([1e-4, 1e0])
                 ax_3.set_yscale('log')
                 # ax_3.set_xscale('log')
-                ax_3.set_xlim([0, 1])#max(sorted(eig_G)[2:])
+                #ax_3.set_xlim([0, 1])#max(sorted(eig_G)[2:])
 #                plt.ticklabel_format(axis='both', style='sci', scilimits=(4, 4))
                 # set the y axis ticks to 10^x
                # ax_3.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda x, _: '{:.0e}'.format(x)))
@@ -563,122 +550,18 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                # ax_3.set_yticklabels(['$10^{' + str(int(np.log10(y))) + '}$' for y in ax_3.get_yticks()])
                 #ax_3.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(scientific_formatter))
                 #ax_3.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-                ax_3.set_title(r'Histogram of eigenvalues')
-
-                plt.legend()
-                fname = src + 'JG_exp4_eigenvals_geom_{}_rho{}{}'.format(geometry_ID, ratio,
-                                                                         '.pdf')
-                print(('create figure: {}'.format(fname)))
-                plt.savefig(fname, bbox_inches='tight')
-                plt.show()
-
-                # fig = plt.figure()
-
-                #
-                # fig, axs = plt.subplots(nrows=2, ncols=2,
-                #                         figsize=(6, 6)  )
-                #         fig = plt.figure()
-                #         gs = fig.add_gridspec(2, 3)
-                #
-                #         ax1 = fig.add_subplot(gs[1, :])
-                #         # axs[0] = plt.axes(xlim=(0, nb_tiles * N), ylim=(0, nb_tiles * N))
-                #         # ax1.imshow(phase_field, cmap=mpl.cm.Greys, vmin=1e-4, vmax=1)
-                #
-                #         ax1.step(np.arange(phase_field[:, phase_field.shape[0] // 2].size), phase_field[:, phase_field.shape[0] // 2],
-                #                  linewidth=0)
-                #         # ax3.plot(phase_field[:,phase_field.shape[0]//2], linewidth=0)
-                #         ax1.set_ylim([1e-4, 1])
-                #
-                #         x = np.arange(0, 1 * number_of_pixels[0])
-                #         y = np.arange(0, 1 * number_of_pixels[1])
-                #         X, Y = np.meshgrid(x, y)
-                #         linestyles = ['-', '--', ':']
-                #         colors = ['red', 'blue', 'green', 'orange', 'purple']
-                #
-                #         counter = 0
-                #         for i in np.array([0, ratios.size // 2, ratios.size - 1]):
-                #
-                #             ratio = ratios[i]
-                #
-                #             phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                #                                                               microstructure_name=geometry_ID,
-                #                                                               coordinates=discretization.fft.coords,
-                #                                                               seed=1
-                #                                                               )
-                #
-                #             phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
-                #             phase_field[phase_field<=1/10**ratio]= 0
-                #
-                #             ax0 = fig.add_subplot(gs[0, counter])
-                #
-                #             ax0.pcolormesh(X, Y, np.transpose(phase_field), cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
-                #                            rasterized=True)
-                #             ax0.set_xticks(np.arange(-.5, number_of_pixels[0], int(number_of_pixels[0] / 4)))
-                #             ax0.set_yticks(np.arange(-.5, number_of_pixels[1], int(number_of_pixels[1] / 4)))
-                #             ax0.set_xticklabels(np.arange(0, number_of_pixels[0] + 1, int(number_of_pixels[0] / 4)))
-                #             ax0.set_yticklabels(np.arange(0, number_of_pixels[1] + 1, int(number_of_pixels[1] / 4)))
-                #             # ax0.set_title(f'{ratios[i]} phases')
-                #             ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
-                #                        linestyle=linestyles[counter], linewidth=1.)
-                #             if counter == 0:
-                #                 ax0.set_ylabel('y coordinate')
-                #                 ax0.set_xlabel('x coordinate')
-                #             # ax0.hlines(y=1, xmin=0, xmax=number_of_pixels[0], colors='black', linestyles='--', linewidth=1.)
-                #             # phase_field = np.abs(phase_field)  # -1
-                #             # phase_field += 1e-4
-                #             # min_val = np.min(phase_field)
-                #             # max_val = np.max(phase_field)
-                #             # phase_field = 9.99e-1 + (phase_field - min_val) * (1 - 9.99e-1) / (max_val - min_val)
-                #             # phase_field = ratio * phase_field_smooth + (1 - ratio) * phase_field_pwconst
-                #
-                #             # ax1.clear()
-                #             # ax1.imshow(np.transpose( phase_field), cmap=mpl.cm.Greys, vmin=1e-4, vmax=1)
-                #             # ax1.set_title(r'Density $\rho$', wrap=True)
-                #
-                #             # #: {np.max(phase_field)/np.min(phase_field):.1e}  \n'                          f'  min = {np.min(phase_field):.1e}
-                #             # ax3.clear()
-                #
-                #             extended_x = np.arange(phase_field[:, phase_field.shape[0] // 2].size + 1)
-                #             extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
-                #                                    phase_field[:, phase_field.shape[0] // 2][-1])
-                #             ax1.step(extended_x, extended_y
-                #                      , where='post',
-                #                      linewidth=1, color=colors[counter], linestyle=linestyles[counter], marker='|',
-                #                      label=r'phase contrast -' + f'1e{ratios[i]} ')
-                #             # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
-                #             ax1.set_ylim([0.000009, 1.1])
-                #             ax1.set_xlim([0, phase_field.shape[0]])
-                #             ax1.set_yticks([0.001, 0.25, 0.50, 0.75, 1.0001])
-                #             ax1.set_yticklabels([0.001, 0.25, 0.50, 0.75, 1.00])
-                #             ax1.set_yscale('log')  # ax1.yaxis.set_ticks_position([0.001,0.25,0.5,0.75, 1])
-                #             # ax2.legend(['2 phases', f'{ratio} phases', 'Jacobi', 'Green + Jacobi'])
-                #             ax1.legend(loc="lower right")
-                #
-                #             ax1.set_title(f'Cross sections')
-                #             ax1.set_ylabel('Young modulus (Pa)')
-                #             ax1.set_xlabel('x coordinate')
-                #
-                #             # ax2.plot(ratios[0:i + 1], nb_it[0, 0:i + 1], 'g', marker='|', label=' Green', linewidth=1)
-                #             # axs[1].plot(xopt2.f.num_iteration_.transpose()[1:3*i+1:3],"r", label='DGO ',linewidth=1)
-                #             # axs[1].plot(xopt2.f.num_iteration_.transpose()[2:3*i+2:3],"r", label='DGO ',linewidth=1)
-                #
-                #             # ax2.plot(ratios[0:i + 1], nb_it_Jacobi[0, 0:i + 1], "b", marker='o', label='PCG Jacobi', linewidth=1)
-                #             # ax2.plot(ratios[0:i + 1], nb_it_combi[0, 0:i + 1], "k", marker='x', label='PCG Green + Jacobi', linewidth=1)
-                #             #  ax2.semilogy(ratios[0:i + 1], nb_it_Richardson[0, 0:i + 1], "g", label=' Richardson Green ', linewidth=1)
-                #             #  ax2.semilogy(ratios[0:i + 1], nb_it_Richardson_combi[0, 0:i + 1], "y",  label=' Richardson Green + Jacobi ', linewidth=1)
-                #             # ax2.set_ylim(bottom=0)
-                #             # axs[1].legend()
-                #             # ax2.legend(['', 'Green', 'Jacobi', 'Green + Jacobi'])
-                #             counter += 1
-                #         plt.tight_layout()
-                #         fname = src + 'introduction_geometry_exp3_sine_{}{}'.format(number_of_pixels[0], '.pdf')
-                #         print(('create figure: {}'.format(fname)))
-                #         #plt.savefig(fname, bbox_inches='tight')
-                #     plt.show()
+                ax_3.set_title(r'\# of nodal points (x direction) '+f'  {number_of_pixels[0]}', wrap=True)
+                ax_3.legend()
 
                 print(f'ratios = {ratios}')
                 print(f'nb_pix_multips = {nb_pix_multips}')
+        ax_1.legend(loc='lower right')
 
+        fname = src + 'JG_exp_evol_geom_{}_rho{}{}'.format(geometry_ID, ratio,
+                                                                 '.pdf')
+        print(('create figure: {}'.format(fname)))
+        plt.savefig(fname, bbox_inches='tight')
+        plt.show()
     if MPI.COMM_WORLD.rank == 0:
         print('  Rank   Size          Domain       Subdomain        Location')
         print('  ----   ----          ------       ---------        --------')

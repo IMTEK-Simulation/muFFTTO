@@ -40,7 +40,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [3  ]  # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+geom_n = [2,3,4]  # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -48,13 +48,13 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.array([4])  # np.arange(1,5)  # 17  33
+ratios = np.array([1])  # np.arange(1,5)  # 17  33
 
-nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
-nb_it_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
-nb_it_Jacobi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
-nb_it_Richardson = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
-nb_it_Richardson_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
+nb_it = np.zeros((len(geom_n), len(geom_n), ratios.size), )
+nb_it_combi = np.zeros((len(geom_n), len(geom_n), ratios.size), )
+nb_it_Jacobi = np.zeros((len(geom_n), len(geom_n), ratios.size), )
+nb_it_Richardson = np.zeros((len(geom_n), len(geom_n), ratios.size), )
+nb_it_Richardson_combi = np.zeros((len(geom_n), len(geom_n), ratios.size), )
 
 norm_rr_combi = []
 norm_rz_combi = []
@@ -74,11 +74,11 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
     # geometry_ID =   # right_cluster_linear  laminate_log laminate2 #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
     # right_cluster_x3  left_cluster_x3  linear
 
-    for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
-        # valid_nb_muiltips=nb_pix_multips[nb_pixels:]
+    for nb_starting_phases in np.arange(np.size(geom_n)):
+        # valid_nb_muiltips=geom_n[nb_pixels:]
         print(f'nb_starting_phases = {nb_starting_phases}')
         fig = plt.figure(figsize=(11, 5.5))
-        gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.4, width_ratios=[2,2, 2],
+        gs = fig.add_gridspec(2, np.size(geom_n), hspace=0.5, wspace=0.4, width_ratios=np.size(geom_n)*(1,),
                               height_ratios=[1, 1])
 
         ax_0 = fig.add_subplot(gs[0, 0])
@@ -87,8 +87,8 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
         colors = ['red', 'blue', 'green', 'orange', 'purple']
         linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
         markers = ['x', 'o', '|', '>']
-        for kk in np.arange(np.size(nb_pix_multips[nb_starting_phases:])):
-            nb_pix_multip = nb_pix_multips[nb_starting_phases:][kk]
+        for kk in np.arange(np.size(geom_n[nb_starting_phases:])):
+            nb_pix_multip = geom_n[nb_starting_phases:][kk]
             print(f'kk = {kk}')
             print(f'nb_pix_multip = {nb_pix_multip}')
             # system set up
@@ -166,49 +166,24 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
             for i in np.arange(ratios.size):
                 ratio = ratios[i]
 
-                if kk == 0:
-                    phase_fied_small_grid = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                                                microstructure_name=geometry_ID,
-                                                                                coordinates=discretization.fft.coords,
-                                                                                seed=1,
-                                                                                parameter=number_of_pixels[0])  # ,
-                    #                                                                           contrast=-ratio) # $1 / 10 ** ratio
-                    if ratio != 0:
-                        phase_fied_small_grid += 1 / 10 ** ratio
+                phase_fied_small_grid = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                                            microstructure_name=geometry_ID,
+                                                                            coordinates=discretization.fft.coords,
+                                                                            seed=1,
+                                                                            parameter=number_of_pixels[0])  # ,
+                #                                                                           contrast=-ratio) # $1 / 10 ** ratio
+                if ratio != 0:
+                    phase_fied_small_grid += 1 / 10 ** ratio
 
-                    phase_field_smooth = np.copy(phase_fied_small_grid)
-                if kk > 0:
-                    # phase_field_smooth = sc.ndimage.zoom(phase_fied_small_grid, zoom=nb_pix_multip, order=0)
-                    phase_field_smooth = np.repeat(phase_fied_small_grid, 2 ** (kk), axis=0)
-                    phase_field_smooth = np.repeat(phase_field_smooth, 2 ** (kk), axis=1)
+                phase_field_smooth = np.copy(phase_fied_small_grid)
 
-                # phase_field_smooth = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                #                                                             microstructure_name=geometry_ID,
-                #                                                             coordinates=discretization.fft.coords,
-                #                                                             seed=1)
-
-                # print(i + 2)
-                # print(f'parametr = {i + 2}')
-                # phase_field_smooth = np.abs(phase_field_smooth)
-                # phase_field_smooth_ref = np.copy(phase_field_smooth)
-
-                # phase_field_smooth[phase_field_smooth_ref<=0.6]=2
-                # phase_field_smooth[phase_field_smooth_ref <  0.6]=0.1
-                # phase_field_smooth[phase_field_smooth_ref >= 0.4] = 1
-
-                # phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
-
-                # phase = 1 * np.ones(number_of_pixels)
-                inc_contrast = 0.
-
-                # nb_it=[]
-                # nb_it_combi=[]
-                # nb_it_Jacobi=[]
                 phase_field = np.abs(phase_field_smooth)
                 if ratio == 0:
                     phase_field = scale_field(phase_field, min_val=0, max_val=1.0)
                 else:
                     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+                phase_field = scale_field(phase_field, min_val=1, max_val=1e4)
+
                 #phase_field[phase_field>0.3]=1
                 #phase_field[phase_field < 0.51] = 1 / 10 ** ratio
                 # phase_field = scale_field(phase_field, min_val=1 , max_val=10**ratio)
@@ -244,7 +219,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 # perturb_dis = np.random.random(discretization.get_displacement_sized_field().shape)
                 #
                 # perturb=discretization.apply_gradient_operator_symmetrized( u=perturb_dis )
-                # perturb=scale_field(perturb, -0.1, 0.1)
+                # perturb=scale_field(perturb, -0.5, 0.5)
                 # macro_gradient_field += (perturb-Reduction(MPI.COMM_WORLD).mean(perturb))
                 # Solve mechanical equilibrium constrain
                 rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
@@ -393,7 +368,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 ax_0.step(extended_x, extended_y
                           , where='post',
                           linewidth=1, color='black', linestyle='-',  # marker='|',
-                          label=r'phase contrast -' + f'1e{nb_pix_multips[kk]} ')
+                          label=r'phase contrast -' + f'1e{geom_n[kk]} ')
                 ax_0.set_xlabel('x coordinate')
                 ax_0.set_ylabel(f'Phase' + r' $\rho$')
                 ax_0.set_title(f'Cross section')
@@ -410,11 +385,13 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 ax_0.text(-0.25, 1.1, '(a)', transform=ax_0.transAxes)
 
 #                k = np.arange(max(map(len, norm_rr)))
-                k = np.arange(15)
+                k = np.arange(50)
                 print(f'k \n {k}')
                 lb_G = eig_G[eig_G > 0].min()
                 print(f'lb \n {lb_G}')
                 kappa_G = eig_G.max() / eig_G[eig_G > 0].min()
+                #kappa_G = 10 ** ratio
+
                 convergence = ((np.sqrt(kappa_G) - 1) / (np.sqrt(kappa_G) + 1)) ** k
                 convergence_G = convergence * norm_rr[-1][0]
 
@@ -424,7 +401,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
 
                 ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-                if kk==0:
+                if kk==np.size(geom_n)-1:
                     ax_1.semilogy(convergence_G, ':', label=r'$\kappa$ est. - Green', color='green')
                     ax_1.semilogy(convergence_JG, ':', label=r'$\kappa$ est. - Jacobi-Green', color='b')
 
@@ -435,14 +412,14 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                               label=r'$||r_{k}||_{G^{-1}} $  - Green '+r'$N_{I}$'+f'{number_of_pixels[0]}' , color='green', linestyle='--',marker=markers[kk])
                 ax_1.semilogy(np.arange(1, len(norm_rz_combi[-1]) + 1), norm_rz_combi[-1],
                               label=r'$||r_{k}||_{G^{-1}} $ - Jacobi-Green  '+r'$N_{I}$' +f'{number_of_pixels[0]}', color='b', linestyle='-.',marker=markers[kk])
-
-                ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
-                              label='Upper bound --- Green', color='green', linestyle='--', marker='v')
-                ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
-                              label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
+                #
+                # ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
+                #               label='Upper bound --- Green', color='green', linestyle='--', marker='v')
+                # ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
+                #               label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
                 ax_1.text(-0.2, 1.05, '(c)', transform=ax_1.transAxes)
-                # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
-                # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
+                # x_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
+                # ax_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
                 ax_1.set_xlabel('PCG iteration - k')
                 ax_1.set_ylabel('Norm of residua')
                 ax_1.set_title(f'Convergence')
@@ -451,7 +428,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
 
                 ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
                 print(max(map(len, norm_rr)))
-                ax_1.set_xlim([1, 15])
+                ax_1.set_xlim([1, 40])
                 ax_1.set_xticks([1,5, 8, 10,15])
                 ax_1.set_xticklabels([1,5, 8, 10,15])
                 #ax_1.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
@@ -521,8 +498,8 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                     ax_3.set_xticks([0, 0.5, 1])
                     ax_3.set_xticklabels([0, 0.5, 1])
                 else:
-                    ax_3.set_xlim([1e-4, 1e0])
-                    ax_3.set_xticks([1e-4, 0.5, 1])
+                    ax_3.set_xlim([1/np.power(10,ratio), 1e0])
+                    ax_3.set_xticks([1/np.power(10,ratio), 0.5, 1])
                     ax_3.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
                 #ax_3.set_xticklabels([1e-4, 0.5, 1])
                 if kk==0:
@@ -544,21 +521,22 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                 ax_3.legend()
 
                 print(f'ratios = {ratios}')
-                print(f'nb_pix_multips = {nb_pix_multips}')
-        ax_1.legend(loc='lower right')
+                print(f'geom_n = {geom_n}')
+        #ax_1.legend(loc='lower right')
 
-        fname = src + 'JG_exp_evol_geom_{}_rho{}{}'.format(geometry_ID, ratio,
+        fname = src + 'exp_paper_JG_linear_conv_2_{}_rho{}{}'.format(geometry_ID, ratio,
                                                                  '.pdf')
         print(('create figure: {}'.format(fname)))
         plt.savefig(fname, bbox_inches='tight')
         plt.show()
+        quit()
     if MPI.COMM_WORLD.rank == 0:
         print('  Rank   Size          Domain       Subdomain        Location')
         print('  ----   ----          ------       ---------        --------')
         # Barrier so header is printed first
 
         print(f'ratios = {ratios}')
-        print(f'nb_pix_multips = {nb_pix_multips}')
+        print(f'geom_n = {geom_n}')
         for i in np.arange(ratios.size):
             ratio = ratios[i]
             print(f'ratio= {ratio}')
@@ -577,13 +555,13 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
 # ax = fig.add_subplot(111, projection='3d')
 #
 # # Plot each line with a different z offset
-# Nx = (2 ** np.asarray(nb_pix_multips)) ** 2
-# for i in np.arange(len(nb_pix_multips)):
+# Nx = (2 ** np.asarray(geom_n)) ** 2
+# for i in np.arange(len(geom_n)):
 #     ax.plot(Nx, Nx[i], zs=nb_it[:, i, 0], label='PCG: Green', color='blue')
 #     ax.plot(Nx, Nx[i], zs=nb_it_Jacobi[:, i, 0], label='PCG: Jacobi', color='black')
 #     ax.plot(Nx, Nx[i], zs=nb_it_combi[:, i, 0], label='PCG: Green + Jacobi', color='red')
-# # ax.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
-# # ax.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
+# # ax.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
+# # ax.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
 # ax.set_zlim(10, 100)
 # ax.set_ylabel('nb of phases')
 # ax.set_xlabel('Nb pixels')

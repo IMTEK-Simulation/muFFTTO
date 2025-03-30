@@ -24,7 +24,7 @@ if MPI.COMM_WORLD.rank == 0:
     print('  ----   ----          ------       ---------        --------')
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
-src = './figures/'
+src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
