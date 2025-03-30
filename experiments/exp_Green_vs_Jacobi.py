@@ -111,7 +111,7 @@ for nb_pix_multip in nb_pix_multips:
                                                       coordinates=discretization.fft.coords)
     phase_field_smooth=np.abs(phase_field_smooth)
     #phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
-    load_micro=False
+    load_micro=True
     if load_micro:
         phase_field_smooth_32 = np.load('../experiments/exp_data/lbfg_muFFTTO_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_E_target_0.15_Poisson_-0.5_Poisson0_0.0_w4.0_eta0.0203_p2_bounds=False_FE_NuMPI6_nb_load_cases_3_energy_objective_False_random_True_it20.npy', allow_pickle=True)
 

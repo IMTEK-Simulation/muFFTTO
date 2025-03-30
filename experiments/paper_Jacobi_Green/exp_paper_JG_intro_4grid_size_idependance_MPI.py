@@ -33,7 +33,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [2, 3, 4]  # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [ 2,3, 4,5,6,7,8   ] #,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -41,6 +41,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
+#ratios = np.array([1, 1e4,1e8, ])  # np.arange(1,5)  # 17  33
 ratios = np.array([ 4])  # np.arange(1,5)  # 17  33
 
 nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
@@ -57,7 +58,8 @@ norm_rr = []
 norm_rz = []
 norm_energy_lb = []
 norm_energy_lb_combi = []
-
+norm_rMr_combi = []
+norm_rMr = []
 kontrast = []
 kontrast_2 = []
 eigen_LB = []
@@ -117,14 +119,14 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                             np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                               *discretization.nb_of_pixels])))
 
-        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', I4s,
+        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                  *discretization.nb_of_pixels])))
 
         print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
         # material distribution
-        geometry_ID = 'laminate2'  # laminate2 #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
+        geometry_ID = 'sine_wave_rapid'  #left_cluster_x2  laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
 
 
         def scale_field(field, min_val, max_val):
@@ -143,10 +145,12 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                                             coordinates=discretization.fft.coords,
                                                                             seed=1,
                                                                             parameter=number_of_pixels[0],
-                                                                            contrast=1 / 10 ** ratio)
+                                                                            contrast= -ratio)#1 / 10 ** ratio
                 phase_fied_small_grid += 1 / 10 ** ratio
-
-                # phase_fied_small_grid=np.copy(phase_field_smooth)
+                #phase_fied_small_grid *= ratio
+                #phase_fied_small_grid += phase_fied_small_grid
+                #phase_fied_small_grid *=1e14
+                #phase_fied_small_grid += np.abs(np.sort(phase_fied_small_grid)[0, -2] - np.sort(phase_fied_small_grid)[0, -1])                # phase_fied_small_grid=np.copy(phase_field_smooth)
                 phase_field_smooth = np.copy(phase_fied_small_grid)
             if kk > 0:
                 # phase_field_smooth = sc.ndimage.zoom(phase_fied_small_grid, zoom=nb_pix_multip, order=0)
@@ -157,7 +161,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             #                                                             microstructure_name=geometry_ID,
             #                                                             coordinates=discretization.fft.coords,
             #                                                             seed=1)
-
+            #print(phase_field_smooth)
             # print(i + 2)
             # print(f'parametr = {i + 2}')
             # phase_field_smooth = np.abs(phase_field_smooth)
@@ -176,7 +180,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # nb_it_combi=[]
             # nb_it_Jacobi=[]
             phase_field = np.abs(phase_field_smooth)
-            phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+            phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)#
 
             # phase_field[phase_field<=1/10**ratio]= 0
 
@@ -204,8 +208,12 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
             # Set up right hand side
             macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-            # perturb=np.random.random(macro_gradient_field.shape)
-            # macro_gradient_field += perturb#-np.mean(perturb)
+            np.random.seed(seed=1)
+            perturb_dis=np.random.random(discretization.get_displacement_sized_field().shape)
+
+            # perturb=discretization.apply_gradient_operator_symmetrized( u=perturb_dis )
+            # perturb=scale_field(perturb, -0.3, 0.3)
+            # macro_gradient_field += (perturb-Reduction(MPI.COMM_WORLD).mean(perturb))
 
             # Solve mechanical equilibrium constrain
             rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
@@ -264,38 +272,40 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # #
             M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
-            K = discretization.get_system_matrix(material_data_field_C_0_rho)
-            M = discretization.get_system_matrix(refmaterial_data_field_I4s)
-
-            eig_G, _ = sc.linalg.eig(a=K, b=M)  # , eigvals_only=True
-            eig_G = np.real(eig_G)
-            K_diag_half = np.copy(np.diag(K))
-            K_diag_half[K_diag_half < 9.99e-16] = 0
-            K_diag_half[K_diag_half != 0] = 1 / np.sqrt(K_diag_half[K_diag_half != 0])
-
-            DKDsym = np.matmul(np.diag(K_diag_half), np.matmul(K, np.diag(K_diag_half)))
-            eig_JG, _ = sc.linalg.eig(a=DKDsym, b=M)  # , eigvals_only=True
-            eig_JG = np.real(eig_JG)
-            print(f'eig_G.min() = {eig_G[eig_G>0].min()}')
-            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1000), toler=1e-12,
-                                                    norm_energy_upper_bound=True, lambda_min=eig_G[eig_G>0].min(),
-                                                    norm_type='energy', )
+            # K = discretization.get_system_matrix(material_data_field_C_0_rho)
+            # M = discretization.get_system_matrix(refmaterial_data_field_I4s)
+            #
+            # eig_G, _ = sc.linalg.eig(a=K, b=M)  # , eigvals_only=True
+            # eig_G = np.real(eig_G)
+            # K_diag_half = np.copy(np.diag(K))
+            # K_diag_half[K_diag_half < 9.99e-16] = 0
+            # K_diag_half[K_diag_half != 0] = 1 / np.sqrt(K_diag_half[K_diag_half != 0])
+            #
+            # DKDsym = np.matmul(np.diag(K_diag_half), np.matmul(K, np.diag(K_diag_half)))
+            # eig_JG, _ = sc.linalg.eig(a=DKDsym, b=M)  # , eigvals_only=True
+            # eig_JG = np.real(eig_JG)
+            # print(f'eig_G.min() = {eig_G[eig_G > 0].min()}')
+            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(5000), toler=1e-14,
+                                                    norm_type='rr')
             nb_it[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms['residual_rr']))
             print('nb it  = {} '.format(len(norms['residual_rr'])))
 
             norm_rz.append(norms['residual_rz'])
             norm_rr.append(norms['residual_rr'])
-            norm_energy_lb.append(norms['energy_lb'])
+            # norm_rMr.append(norms['data_scaled_rr'])
+
             # print(nb_it)
             #########
             displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_combi, steps=int(1000),
-                                                                toler=1e-12,
-                                                                norm_energy_upper_bound=True,
-                                                                lambda_min=np.sort(eig_JG)[2], norm_type='energy')
+                                                                toler=1e-14,
+                                                                norm_type='rr',
+                                                                norm_metric=M_fun
+                                                                )
             nb_it_combi[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms_combi['residual_rr']))
             norm_rz_combi.append(norms_combi['residual_rz'])
             norm_rr_combi.append(norms_combi['residual_rr'])
-            norm_energy_lb_combi.append(norms_combi['energy_lb'])
+            norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+
             #
             displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_Jacobi, steps=int(1),
                                                                   toler=1e-6, norm_type='rr')
@@ -318,50 +328,35 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
 
             # print(ratio)
 
-            fig = plt.figure()
-           # kappa = kontrast[-1]
-            k = np.arange(max(map(len, norm_rr)))
-            print(f'k \n {k}')
-            lb_G = eig_G[eig_G>0].min()
-            print(f'lb \n {lb_G}')
-            kappa_G=eig_G.max() /eig_G[eig_G>0].min()
-            convergence = ((np.sqrt(kappa_G) - 1) / (np.sqrt(kappa_G) + 1)) ** k
-            convergence_G = convergence * norm_rr[-1][0]
-
-            kappa_JG = eig_JG[np.isfinite(eig_JG)].max() /np.sort(eig_JG)[2]
-            convergence = ((np.sqrt(kappa_JG) - 1) / (np.sqrt(kappa_JG) + 1)) ** k
-            convergence_JG = convergence * norm_rr_combi[-1][0]
-
-
-            # print(f'convergecnce \n {convergence}')
-            # fig = plt.figure()
-            gs = fig.add_gridspec(1, 1)
-            ax_1 = fig.add_subplot(gs[0, 0])
-            ax_1.set_title(f'nb phases {nb_starting_phases}, nb pixels {number_of_pixels[0]}', wrap=True)
-            ax_1.semilogy(convergence_G, ':', label='estim Green', color='green')
-            ax_1.semilogy(convergence_JG, ':', label='estim Jacobi-Green', color='r')
-
-            ax_1.semilogy(norm_rr[-1], label='rr PCG: Green', color='green')
-            ax_1.semilogy(norm_rr_combi[-1], label='rr PCG: Jacobi-Green', color='b')
-
-            ax_1.semilogy(norm_rz[-1], label='rz PCG: Green', color='green', linestyle='--')
-            ax_1.semilogy(norm_rz_combi[-1], label='rz PCG: Jacobi-Green', color='b', linestyle='--')
-
-            ax_1.semilogy(norm_energy_lb[-1], label='energy lb PCG: Green', color='green', linestyle='-.', marker='x')
-            ax_1.semilogy(norm_energy_lb_combi[-1], label='energy lb PCG: Jacobi-Green', color='b', linestyle='-.',
-                          marker='x')
-
-            # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
-            # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
-            ax_1.set_xlabel('CG iterations')
-            ax_1.set_ylabel('Norm of residua')
-            # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
-            plt.legend()
-            ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
-            print(max(map(len, norm_rr)))
-            ax_1.set_xlim([0,50])
-
-            plt.show()
+            # fig = plt.figure()  ######################################### PLOT convergence curves
+            # # kappa = kontrast[-1]
+            #
+            # # print(f'convergecnce \n {convergence}')
+            # # fig = plt.figure()
+            # gs = fig.add_gridspec(1, 1)
+            # ax_1 = fig.add_subplot(gs[0, 0])
+            # ax_1.set_title(f'{nb_pix_multips[0]}', wrap=True)
+            #
+            # ax_1.semilogy(norm_rr[-1], label='rr PCG: Green', color='green')
+            # ax_1.semilogy(norm_rr_combi[-1], label='rr PCG: Jacobi-Green', color='b')
+            #
+            # ax_1.semilogy(norm_rz[-1], label='rz PCG: Green', color='green', linestyle='--')
+            # ax_1.semilogy(norm_rz_combi[-1], label='rz PCG: Jacobi-Green', color='b', linestyle='--')
+            #
+            # ax_1.semilogy(norm_rMr[-1], label='rMr PCG: Green', color='green', linestyle='-.', marker='x')
+            # ax_1.semilogy(norm_rMr_combi[-1], label='rMr PCG: Jacobi-Green', color='b', linestyle='-.', marker='x')
+            #
+            # # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
+            # # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
+            # ax_1.set_xlabel('CG iterations')
+            # ax_1.set_ylabel('Norm of residua')
+            # # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
+            # plt.legend()
+            # ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
+            # print(max(map(len, norm_rr)))
+            # # ax_1.set_xlim([0, max(map(len, norm_rr))])
+            #
+            # plt.show()
 
             # fig = plt.figure()
 
@@ -469,7 +464,25 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
 
             print(f'ratios = {ratios}')
             print(f'nb_pix_multips = {nb_pix_multips}')
+            if MPI.COMM_WORLD.rank == 0:
+                print('  Rank   Size          Domain       Subdomain        Location')
+                print('  ----   ----          ------       ---------        --------')
+                # Barrier so header is printed first
 
+                print(f'ratios = {ratios}')
+                print(f'nb_pix_multips = {nb_pix_multips}')
+                for i in np.arange(ratios.size):
+                    ratio = ratios[i]
+                    print(f'ratio= {ratio}')
+
+                    print('greeen')
+
+                    print(nb_it[:, :, i])
+                    # print('jacobi')
+                    # print(nb_it_Jacobi[:,:,i])
+                    print('combi')
+                    print(nb_it_combi[:, :, i])
+                    print(geometry_ID)
 if MPI.COMM_WORLD.rank == 0:
     print('  Rank   Size          Domain       Subdomain        Location')
     print('  ----   ----          ------       ---------        --------')
@@ -488,7 +501,7 @@ if MPI.COMM_WORLD.rank == 0:
         # print(nb_it_Jacobi[:,:,i])
         print('combi')
         print(nb_it_combi[:, :, i])
-
+        print(geometry_ID)
 MPI.COMM_WORLD.Barrier()
 quit()
 fig = plt.figure()

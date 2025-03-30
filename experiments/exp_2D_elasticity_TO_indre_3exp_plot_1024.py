@@ -98,7 +98,7 @@ for w_mult in [5.00]:  # np.arange(0.1, 1., 0.1):# [1]:
         phase_field = np.load(os.path.expanduser('~/exp_data/' + name + f'_it{8740}.npy'), allow_pickle=True)
         #phase_field = np.load(os.path.expanduser('~/exp_data/lbfg_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_Et_0.15_Pt_-0.5_P0_0.2_w40.0_eta0.02_p2_NuMPI4_nb_load_cases_4_ener_obj_True_it8.npy'), allow_pickle=True)
         #phase_field = np.load(os.path.expanduser('~/exp_data/exp_2D_elasticity_TO_indre_3exp_N128_Et_0.15_Pt_-0.5_P0_0.2_w4.0_eta0.01_p2_mpi10_nlc_4_e_True_it25.npy'), allow_pickle=True)
-
+        #xopt2_128 = np.load('../exp_data/' + name2_128 + f'xopt_log.npz', allow_pickle=True)
 
 # Import data
 #name = 'result_opt_negative_poisson.txt'
@@ -208,7 +208,8 @@ print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right
 
 fig.savefig(fname, bbox_inches='tight')
 plt.show()
-quit()
+
+
 plot_figs = False
 plot_movie = False
 if plot_movie:
@@ -503,7 +504,6 @@ phase_field_a=np.expand_dims(np.expand_dims(phase_field, axis=0), axis=0)
 print('Init objective function FE  = {}'.format(objective_function_multiple_load_cases(phase_field_a)[0]))
 
 
-quit()
 
 
 # Define the dimensions of the 2D array

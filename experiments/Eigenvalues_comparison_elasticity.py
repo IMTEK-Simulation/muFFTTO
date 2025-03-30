@@ -12,7 +12,7 @@ from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
 from sympy.physics.quantum.sho1d import omega
 
-from experiments.exp_jacobi_full_vs_jacobi_diag import nb_it_combi_full
+
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library

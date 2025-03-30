@@ -5,8 +5,11 @@ import scipy as sc
 import time
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-
+from mpi4py import MPI
+from NuMPI.Tools import Reduction
 import matplotlib.pyplot as plt
+
+from NuMPI.IO import save_npy, load_npy
 from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
 from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
@@ -17,7 +20,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 
-src = './figures/'
+src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -25,7 +28,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [1]  # ,2,3,3,2,
+nb_pix_multips = [2]  # ,2,3,3,2,
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -33,7 +36,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.arange(2,16)  #  65 17  33
+ratios = np.arange(2,33)  # 65 17  33
 
 nb_it = np.zeros((len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), ratios.size), )
@@ -47,12 +50,14 @@ norm_rr_Jacobi = []
 norm_rz_Jacobi = []
 norm_rr = []
 norm_rz = []
-norm_rMr_combi=[]
+norm_rMr_combi = []
+norm_rMr = []
+norm_rMr_Jacobi = []
 
-kontrast = []
-kontrast_2 = []
+# kontrast = []
+# kontrast_2 = []
 eigen_LB = []
-
+kontrast=10
 for kk in np.arange(np.size(nb_pix_multips)):
     nb_pix_multip = nb_pix_multips[kk]
     # number_of_pixels = (nb_pix_multip * 32, nb_pix_multip * 32)
@@ -70,7 +75,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
     start_time = time.time()
 
     # set macroscopic gradient
-    macro_gradient = np.array([[1.0, 0], [0, 1.0]])
+    macro_gradient = np.array([[1.0,0.5], [0.5, 1.0]])
 
     # create material data field
     K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -106,14 +111,15 @@ for kk in np.arange(np.size(nb_pix_multips)):
                                         np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                           *discretization.nb_of_pixels])))
 
-    refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', I4s,
+    refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                              *discretization.nb_of_pixels])))
 
     print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
     # material distribution
-    geometry_ID = 'laminate2'  # 'square_inclusion'#'circle_inclusion'#
+    geometry_ID = 'n_laminate'  # 'square_inclusion'#'circle_inclusion'#
+
 
     # flipped_arr = 1 - phase_field
 
@@ -124,6 +130,13 @@ for kk in np.arange(np.size(nb_pix_multips)):
     # gs = fig.add_gridspec(1, 2)
     # ax1 = fig.add_subplot(gs[0, 0])
     # ax2 = fig.add_subplot(gs[0, 1])
+    def scale_field(field, min_val, max_val):
+        """Scales a 2D random field to be within [min_val, max_val]."""
+        field_min, field_max = Reduction(MPI.COMM_WORLD).min(field), Reduction(MPI.COMM_WORLD).max(field)
+        scaled_field = (field - field_min) / (field_max - field_min)  # Normalize to [0,1]
+        return scaled_field * (max_val - min_val) + min_val  # Scale to [min_val, max_val]
+
+
     for i in np.arange(ratios.size):
         ratio = ratios[i]
 
@@ -131,7 +144,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
                                                                  microstructure_name=geometry_ID,
                                                                  coordinates=discretization.fft.coords,
                                                                  parameter=ratio,
-                                                                 contrast=1e-4
+                                                                 contrast=1e-1
                                                                  )
         print(i + 2)
         print(f'parametr = {i + 2}')
@@ -145,6 +158,9 @@ for kk in np.arange(np.size(nb_pix_multips)):
         # nb_it_combi=[]
         # nb_it_Jacobi=[]
         phase_field = np.abs(phase_field_smooth)
+        #phase_field = scale_field(phase_field, min_val=1, max_val=1e2)
+#        phase_field = scale_field(phase_field, min_val=np.power(10, 1), max_val=10 ** 2)
+        phase_field = scale_field(phase_field, min_val=10 ** 2 /kontrast, max_val=10 ** 2)
 
         # phase_field[phase_field<=0.001]= phase_field + 1e-4
 
@@ -188,11 +204,11 @@ for kk in np.arange(np.size(nb_pix_multips)):
         min_val = np.min(phase_field)
         max_val = np.max(phase_field)
 
-        kontrast.append(max_val / min_val)
+        #kontrast.append(max_val / min_val)
         eigen_LB.append(min_val)
 
         # kontrast_2.append(eig[-3] / eig[np.argmax(eig > 0)])
-        kontrast_2.append((max_val / min_val) / 10)
+        #kontrast_2.append((max_val / min_val) / 10)
 
         omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
         # ax1.loglog(sorted(eig)[1:],label=f'{i}',marker='.', linewidth=0, markersize=1)
@@ -230,30 +246,42 @@ for kk in np.arange(np.size(nb_pix_multips)):
         # #
         M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
-        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1000), toler=1e-12)
+        x0 = np.random.random(discretization.get_displacement_sized_field().shape)
+        displacement_field, norms = solvers.PCG(K_fun, rhs,
+                                                x0=x0,
+                                                P=M_fun, steps=int(1000), toler=1e-14,
+                                                norm_type='data_scaled_rr',
+                                                norm_metric=M_fun)
         nb_it[kk - 1, i] = (len(norms['residual_rz']))
         norm_rz.append(norms['residual_rz'])
         norm_rr.append(norms['residual_rr'])
+        norm_rMr.append(norms['data_scaled_rr'])
+
         print(nb_it)
         #########
-        displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_combi, steps=int(1000),
-                                                            toler=1e-12,
-                                                                norm_type='data_scaled_rr',
-                                                                norm_metric=M_fun)
+        displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_combi, steps=int(1000),
+                                                            toler=1e-14,
+                                                            norm_type='data_scaled_rr',
+                                                            norm_metric=M_fun)
         nb_it_combi[kk - 1, i] = (len(norms_combi['residual_rz']))
         norm_rz_combi.append(norms_combi['residual_rz'])
-        norm_rMr_combi.append(norms_combi['data_scaled_rr'])
         norm_rr_combi.append(norms_combi['residual_rr'])
+        norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+
         #
-        displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_Jacobi, steps=int(1000),
-                                                              toler=1e-12)
+        displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_Jacobi, steps=int(1000),
+                                                              toler=1e-14,
+                                                            norm_type='data_scaled_rr',
+                                                            norm_metric=M_fun)
         nb_it_Jacobi[kk - 1, i] = (len(norms_Jacobi['residual_rz']))
         norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
         norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
-        displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=None, P=M_fun,
+        norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
+
+        displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=x0, P=M_fun,
                                                                              omega=omega,
                                                                              steps=int(1000),
-                                                                             toler=1e-12)
+                                                                             toler=1e-14)
         # nb_it_Richardson[kk - 1, i] = (len(norms_Richardson['residual_rr']))
         # norm_rr_Richardson= norms_Richardson['residual_rr'][-1]
         #
@@ -295,15 +323,42 @@ for kk in np.arange(np.size(nb_pix_multips)):
         #         nb_ steps Richardson of =' f'{nb_it_Richardson} , residual_rr = {norm_rr_Richardson},\n\
         #         nb_ steps Richardson of =' f'{nb_it_Richardson_combi} , residual_rr = {norm_rr_Richardson_combi}'
         # )
+        _info = {}
+
+        _info['nb_of_pixels'] = discretization.nb_of_pixels_global
+        _info['nb_of_sampling_points'] = ratio
+        # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
+        _info['norm_rMr_G'] = norms['data_scaled_rr']
+        _info['norm_rMr_J'] = norms_Jacobi['data_scaled_rr']
+        _info['norm_rMr_JG'] = norms_combi['data_scaled_rr']
+        _info['nb_it_G'] = nb_it
+        _info['nb_it_J'] = nb_it_Jacobi
+        _info['nb_it_JG'] = nb_it_combi
+        script_name = 'exp_paper_JG_intro_2'
+        file_data_name = (
+            f'{script_name}_gID{geometry_ID}_T{number_of_pixels[0]}_G{ratio}_kappa{kontrast}.npy')
+        folder_name = '../exp_data/'
+        save_npy(folder_name + file_data_name + f'.npy', phase_field,
+                 tuple(discretization.fft.subdomain_locations),
+                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        print(folder_name + file_data_name + f'.npy')
+
+        if MPI.COMM_WORLD.rank == 0:
+            np.savez(folder_name + file_data_name + f'xopt_log.npz', **_info)
+            print(folder_name + file_data_name + f'.xopt_log.npz')
 ##################
 
-# print(norms)
-# box = ax2.get_position()
-# ax2.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-#
-# # Put a legend to the right of the current axis
-# ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-# plt.show()
+
+
+
+quit()
+
+
+
+
+
+
+
 
 fig = plt.figure()
 gs = fig.add_gridspec(1, 1)
@@ -357,16 +412,16 @@ for i in np.arange(ratios.size, step=1):
     ax_1.set_title(f'{i}', wrap=True)
     ax_1.semilogy(convergence, '--', label='estim', color='k')
 
-    ax_1.semilogy(norm_rr[i], label='PCG: Green', color='g')
-    ax_1.semilogy(norm_rr_Jacobi[i], label='PCG: Jacobi', color='b')
-    ax_1.semilogy(norm_rMr_combi[i], label='PCG: Jacobi Green', color='r')
+    ax_1.semilogy(norm_rr[i]/norm_rr[i][0], label='PCG: Green', color='g')
+    ax_1.semilogy(norm_rr_Jacobi[i]/norm_rr_Jacobi[i][0], label='PCG: Jacobi', color='b')
+    ax_1.semilogy(norm_rMr_combi[i]/norm_rMr_combi[i][0], label='PCG: Jacobi Green', color='r')
 
     # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
     # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
     ax_1.set_xlabel('CG iterations')
     ax_1.set_ylabel('Norm of residua')
     plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
-    ax_1.set_ylim([1e-10, norm_rr[i][0]])  # norm_rz[i][0]]/lb)
+    ax_1.set_ylim([1e-19, 1e1])  # norm_rz[i][0]]/lb)  norm_rr[i][0]
     print(max(map(len, norm_rr)))
     ax_1.set_xlim([0, max(map(len, norm_rr))])
 
@@ -379,7 +434,7 @@ ax_1 = fig.add_subplot(gs[0, 0])
 ax_1.semilogy(norm_rr[0], label='PCG: Green', color='blue', linewidth=0)
 
 # ax_1.set_ylim([1e-7, 1e0])
-ax_1.set_ylim([1e-7, norm_rr[0][0]])  # norm_rz[i][0]]/lb)
+ax_1.set_ylim([1e-7, 1e4])  # norm_rz[i][0]]/lb) norm_rr[0][0]
 
 print(max(map(len, norm_rz)))
 ax_1.set_xlim([0, max(map(len, norm_rr))])
@@ -409,7 +464,7 @@ def convergence_gif_rz(i):
     ax_1.set_xlabel('CG iterations')
     ax_1.set_ylabel('Norm of residua')
     plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'DGO + Jacobi', 'Richardson'])
-    ax_1.set_ylim([1e-7, norm_rr[i][0]])  # norm_rz[i][0]]/lb)
+    ax_1.set_ylim([1e-7, 1e5])  # norm_rr[i][0] # norm_rz[i][0]]/lb)
     print(max(map(len, norm_rr)))
     ax_1.set_xlim([0, max(map(len, norm_rr))])
     # axs[1].legend()
@@ -423,7 +478,7 @@ ani = FuncAnimation(fig, convergence_gif_rz, frames=ratios.size, blit=False)
 # axs[1].legend()middlemiddle
 # Save as a GIF
 ani.save(
-    f"./figures/convergence__es2tgif_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
+    f"../figures/convergence__es2tgif_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
     writer=PillowWriter(fps=1))
 
 plt.show()
@@ -467,7 +522,7 @@ gs = fig.add_gridspec(1, 1)
 ax_1 = fig.add_subplot(gs[0, 0])
 ax_1.semilogy(norm_rr[0], label='PCG: Green', color='blue', linewidth=0)
 
-ax_1.set_ylim([1e-7, 1e0])
+ax_1.set_ylim([1e-7, 1e5])  # 1e0
 print(max(map(len, norm_rr)))
 ax_1.set_xlim([0, max(map(len, norm_rr))])
 
@@ -493,7 +548,7 @@ def convergence_gif(i):
     ax_1.set_xlabel('CG iterations')
     ax_1.set_ylabel('Norm of residuals')
     plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
-    ax_1.set_ylim([1e-7, 1e0])
+    ax_1.set_ylim([1e-7, 1e5])  # 1e0
     print(max(map(len, norm_rr)))
     ax_1.set_xlim([0, max(map(len, norm_rr))])
     # axs[1].legend()
@@ -507,7 +562,7 @@ ani = FuncAnimation(fig, convergence_gif, frames=ratios.size, blit=False)
 # axs[1].legend()middlemiddle
 # Save as a GIF
 ani.save(
-    f"./figures/convergence_gif_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
+    f"../figures/convergence_gif_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
     writer=PillowWriter(fps=1))
 
 plt.show()
@@ -527,8 +582,8 @@ if plot_evolion:
         ax2.set_xlabel('# material phases')
 
         counter = 0
-        #for i in np.array([0, ratios.size // 4 - 1, ratios.size - 1]):
-        #ratio = ratios[i]
+        # for i in np.array([0, ratios.size // 4 - 1, ratios.size - 1]):
+        # ratio = ratios[i]
 
         # phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
         #                                                   microstructure_name=geometry_ID,
@@ -557,12 +612,13 @@ if plot_evolion:
 
         ax2.plot(ratios, nb_it[0], 'g', marker='o', label=' Green', linewidth=1, markerfacecolor='white')
         ax2.plot(ratios, nb_it_Jacobi[0], "b", marker='^', label='PCG Jacobi', linewidth=1, markerfacecolor='white')
-        ax2.plot(ratios, nb_it_combi[0], "k", marker='x', label='PCG Green + Jacobi', linewidth=1, markerfacecolor='white')
+        ax2.plot(ratios, nb_it_combi[0], "k", marker='x', label='PCG Green + Jacobi', linewidth=1,
+                 markerfacecolor='white')
 
         ax2.set_ylim(bottom=1)
-        ax2.set_xlim([2, ratios.size+1  ])
-        ax2.set_xticks(np.concatenate(([2,],np.arange(5, ratios.size+1, 5),[ratios.size+1,])))
-        ax2.set_xticklabels(np.concatenate(([2,],np.arange(5, ratios.size+1, 5),[ratios.size+1,])))
+        ax2.set_xlim([2, ratios.size + 1])
+        ax2.set_xticks(np.concatenate(([2, ], np.arange(5, ratios.size + 1, 5), [ratios.size + 1, ])))
+        ax2.set_xticklabels(np.concatenate(([2, ], np.arange(5, ratios.size + 1, 5), [ratios.size + 1, ])))
         ax2.legend(['', 'Green', 'Jacobi', 'Green + Jacobi'])
 
         counter += 1
@@ -588,7 +644,7 @@ if plot_evolion:
         ax1.step(np.arange(phase_field[:, phase_field.shape[0] // 2].size), phase_field[:, phase_field.shape[0] // 2],
                  linewidth=0)
         # ax3.plot(phase_field[:,phase_field.shape[0]//2], linewidth=0)
-        ax1.set_ylim([1e-4, 1])
+        ax1.set_ylim([1e-4, 1e5])  # 1e5 1
         # print(ratios)
 
         # print(nb_it)
@@ -708,23 +764,26 @@ for i in np.array([0, ratios.size // 4 - 1, ratios.size - 1]):
 
     # ax_1.semilogy(convergence, '--',label='estim', color='k')
 
-    ax_1.semilogy(np.arange(1,np.size(norm_rr[i])+1),norm_rr[i], label=f'Green - {ratios[i]} phases', color='green', linestyle=linestyles[counter], marker='o',markerfacecolor='white')
-    ax_1.semilogy(np.arange(1,np.size(norm_rr_Jacobi[i])+1),norm_rr_Jacobi[i], label=f'Jacobi - {ratios[i]} phases', color='blue', linestyle=linestyles[counter],
-                  marker='^',markerfacecolor='white')
-    ax_1.semilogy(np.arange(1,np.size(norm_rr_combi[i])+1), norm_rr_combi[i], label=f'Green + Jacobi - {ratios[i]} phases ', color='black', linestyle=linestyles[counter],
-                  marker='x',markerfacecolor='white')
+    ax_1.semilogy(np.arange(1, np.size(norm_rr[i]) + 1), norm_rr[i], label=f'Green - {ratios[i]} phases', color='green',
+                  linestyle=linestyles[counter], marker='o', markerfacecolor='white')
+    ax_1.semilogy(np.arange(1, np.size(norm_rr_Jacobi[i]) + 1), norm_rr_Jacobi[i], label=f'Jacobi - {ratios[i]} phases',
+                  color='blue', linestyle=linestyles[counter],
+                  marker='^', markerfacecolor='white')
+    ax_1.semilogy(np.arange(1, np.size(norm_rr_combi[i]) + 1), norm_rr_combi[i],
+                  label=f'Green + Jacobi - {ratios[i]} phases ', color='black', linestyle=linestyles[counter],
+                  marker='x', markerfacecolor='white')
     # x_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
     # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
     ax_1.set_xlabel('PCG iteration')
     ax_1.set_ylabel('Norm of residua')
-    plt.legend(ncol=3,loc='lower center')
+    plt.legend(ncol=3, loc='lower center')
     # ['Green - 2 phases', 'Jacobi - 2 phases', 'Green + Jacobi - 2 phases',
     #  f'Green - {ratios[i]} phases', f'  Jacobi - {ratios[i]} phases', f'Green + Jacobi - {ratios.size // 4 - 1} phases',
     #  f'Green - {ratios.size - 1} phases', f'Jacobi - {ratios[i]} phases', f'Green + Jacobi - {ratios.size - 1} phases']
     ax.set_yscale('symlog')
-    #ax.set_xscale('symlog')
-    ax_1.set_ylim([1e-12, 1e1])  # norm_rz[i][0]]/lb) norm_rr[i][0]
-    #ax_1.set_ylim([0, 1e1])
+    # ax.set_xscale('symlog')
+    ax_1.set_ylim([1e-12, 1e5])  # 1e1  norm_rz[i][0]]/lb) norm_rr[i][0]
+    # ax_1.set_ylim([0, 1e1])
     print(max(map(len, norm_rr)))
     ax_1.set_xlim([1, max(map(len, norm_rr))])
     counter += 1
@@ -829,7 +888,7 @@ if plot_evolion:
         # axs[1].legend()middlemiddle
         # Save as a GIF
         ani.save(
-            f"./figures/movie_exp_paper_JG_intro_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
+            f"../figures/movie_exp_paper_JG_intro_{number_of_pixels[0]}comparison{ratios[-1]}_RichardsonJacobi{geometry_ID}_circle_inc_to_smooth_semiloplots3.gif",
             writer=PillowWriter(fps=4))
 
     plt.show()
