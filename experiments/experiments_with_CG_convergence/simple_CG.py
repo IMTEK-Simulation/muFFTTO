@@ -6,7 +6,10 @@ import scipy as sc
 from muFFTTO.solvers import PCG
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 
+from  experiments.paper_Jacobi_Green.exp_paper_JG_geometry_plots import get_triangle
+src = '../figures/'
 
 def lanczos_generalized(A, k, q, B, tol=1e-10):
     """
@@ -178,7 +181,11 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
         errors[i] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
 
     for i in np.arange(0, len(ritz_values)):
-        polynomial_value = get_cg_polynomial(x_values, ritz_values[i])
+        if i == 0: # Zero order polynomial is constant
+            polynomial_value = np.ones(len(x_values))
+        else:
+            polynomial_value = get_cg_polynomial(x_values, ritz_values[i-1])
+
         fig = plt.figure(figsize=(10.0, 6))
 
         if weight is None:
@@ -197,8 +204,12 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
         ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
         ax_poly.scatter(np.real(true_eigenvalues), [0] * len(true_eigenvalues), color='blue', marker='|',
                         label="True Eigenvalues")
-        ax_poly.scatter(np.real(ritz_values[i]), [0] * len(ritz_values[i]), color='red', marker='x',
+        if i == 0:  # Zero order polynomial is constant
+            pass
+        else:# Zero order polynomial is constant
+            ax_poly.scatter(np.real(ritz_values[i-1]), [0] * len(ritz_values[i-1]), color='red', marker='x',
                         label=f"Ritz Values\n (Approx Eigenvalues)")
+
         if weight is not None:
             ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='red',
                                marker='o', label=r"\frac{w_{i}}{\lamnda_{i}}")
@@ -239,6 +250,100 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
         plt.savefig(fname, bbox_inches='tight')
         plt.show()
 
+def plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues, ylim=[-2. , 2. ], weight=None, error_evol=None,
+                       title=None):
+    # Plot the convergence of Ritz values
+    errors = np.zeros(len(ritz_values))
+    for i in np.arange(0, len(ritz_values)):
+        polynomial_at_eigens = get_cg_polynomial(np.real(true_eigenvalues), ritz_values[i])
+
+        w_div_lambda = np.real(weight) / np.real(true_eigenvalues)
+
+        errors[i] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
+
+    for i in np.arange(0, len(ritz_values)):
+        if i == 0: # Zero order polynomial is constant
+            polynomial_value = np.ones(len(x_values))
+        else:
+            polynomial_value = get_cg_polynomial(x_values, ritz_values[i-1])
+
+        fig = plt.figure(figsize=(7.0, 4))
+
+
+        gs = fig.add_gridspec(2, 1, width_ratios=[1 ], height_ratios=[2,1], wspace=0, hspace=0.01)
+        ax_poly = fig.add_subplot(gs[0, 0])
+        ax_weights = fig.add_subplot(gs[1, 0])
+        #            ax_error_true = fig.add_subplot(gs[1, 1])
+        ax_poly.scatter(np.real(true_eigenvalues), [0] * len(true_eigenvalues), color='green', marker='|',
+                        label="Eigenvalues")
+        ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
+        ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
+
+        if i == 0:  # Zero order polynomial is constant
+            pass
+        else:# Zero order polynomial is constant
+            ax_poly.scatter(np.real(ritz_values[i-1]), [0] * len(ritz_values[i-1]), color='red', marker='x',
+                        label=f"Roots of "+r'$\varphi^{CG}$' + f'$_{{{i}}}$')# +"(Approx Eigenvalues)"
+
+        if weight is not None:
+            ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='blue',
+                               marker='o', label=r"non-zero weights")
+            ax_weights.set_yscale('log')
+            ax_weights.set_ylim(1e-10, 1)
+            ax_weights.set_xlim(-0.1, x_values[-1] + 0.3)
+           # ax_weights.set_ylabel(r"$w_{i}/ \lambda_{i}$")
+           # ax_weights.set_title(f"Weights / Eigens ")
+            ax_weights.set_xlabel('eigenvalue index - $i$ (sorted)')
+            ax_weights.set_ylabel(r'Weights - $w_{i}/ \lambda_{i}$')
+            ax_weights.set_xticks([1, 34, 67, 100])
+            ax_weights.set_xticklabels([1, 34, 67, 100])
+            ax_weights.legend(ncol=1, loc='lower left')
+
+        # ax_poly.set_xlabel("Eigenvalues --- Approximation")
+        # ax_poly.set_ylabel("CG (Lanczos) Iteration")
+        #ax_poly.set_title(f"CG polynomial (Lanczos Iteration) {{{i}}}")
+        ax_poly.set_ylim(ylim[0], ylim[1])
+        ax_poly.set_xlim(-0.1, x_values[-1] + 0.3)
+        ax_poly.set_xticks([ ])
+        ax_poly.set_xticklabels([ ])
+
+        # ax_poly.annotate(f"Root of "+r'$\varphi^{CG}$' + f'$_{{{i}}}$' ,
+        #                    xy=(87.3, 0),
+        #                    xytext=(75, 1),
+        #                    arrowprops=dict(arrowstyle='->',
+        #                                    color='black',
+        #                                    lw=0.5,
+        #                                    ls='-')
+        #                    )
+        #
+        # ax_poly.annotate(r'$\varphi^{CG}$' + f'$_{{{i}}}$',
+        #                  xy=(3.0, 0.6),
+        #                  xytext=(10, 1),
+        #                  arrowprops=dict(arrowstyle='->',
+        #                                  color='black',
+        #                                  lw=0.5,
+        #                                  ls='-')
+        #                  )
+        #
+        # ax_poly.annotate(r'$\varphi^{CG}$' + f'$_{{{i}}}$',
+        #                  xy=(4.0, 0.6),
+        #                  xytext=(10, 1),
+        #                  arrowprops=dict(arrowstyle='->',
+        #                                  color='black',
+        #                                  lw=0.5,
+        #                                  ls='-')
+        #                  )
+
+        ax_poly.legend(ncol=3,loc='upper left')
+
+
+        # Automatically adjust subplot parameters to avoid overlapping
+        plt.tight_layout()
+
+        src = '../figures/'  # source folder\
+        fname = src + title + f'CG_poly_JG_it{i}' + '{}'.format('.pdf')
+        plt.savefig(fname, bbox_inches='tight')
+        plt.show()
 
 def plot_eigenvectors(eigenvectors_1, eigenvectors_2, grid_shape, dim=2, eigenvals=None):
     # Plot the convergence of Ritz values
@@ -334,7 +439,7 @@ def plot_eigendisplacement(eigenvectors_1,   grid_shape, dim=2, eigenvals=None,w
 
 
         levels = np.linspace(0.0, 1.0, 9)
-        ax_eig_vecs_1.quiver(x, y, eigenvector_x, eigenvector_y, scale=100.)
+        ax_eig_vecs_1.quiver(x, y, eigenvector_x, eigenvector_y, scale=1.)
         ax_eig_vecs_1.set_title(f"Eigenvector  {k},d={1}, eigval = {eigenvals[k]:.2f}")
 
 
@@ -381,7 +486,125 @@ def plot_eigendisplacement(eigenvectors_1,   grid_shape, dim=2, eigenvals=None,w
         # plt.xticks(np.real(true_eigenvalues))
         # plt.grid(True)
 # Example usage:
+def plot_rhs(rhs,   grid_shape, dim=2):
+    # Plot the convergence of Ritz values
+    x = np.linspace(0, 1, grid_shape[-2]+1)
+    y = np.linspace(0, 1, grid_shape[-1]+1)
+    x, y = np.meshgrid(x, y)
+    fig = plt.figure(figsize=(4.5,4.5))
+    gs = fig.add_gridspec(1,  1, width_ratios=[ 1 ])
+    ax_eig_vecs_1 = fig.add_subplot(gs[0])
 
+    eigenvector_x = rhs[0, 0].transpose()
+    eigenvector_y = rhs[1, 0].transpose()
+    #amplitude=np.sqrt(eigenvector_x**2+eigenvector_y**2)
+# Compute scaling factor
+
+
+    eigenvector_x = np.vstack((np.hstack((eigenvector_x, np.zeros((eigenvector_x.shape[0], 1)))), np.zeros((1, eigenvector_x.shape[1] + 1))))
+    eigenvector_y = np.vstack((np.hstack((eigenvector_y, np.zeros((eigenvector_y.shape[0], 1)))), np.zeros((1, eigenvector_y.shape[1] + 1))))
+
+    amplitude=np.sqrt(eigenvector_x**2+eigenvector_y**2)
+    max_magnitude = 3  # Define the maximum allowed magnitude
+    scaling_factor = np.minimum(1, max_magnitude / amplitude)
+    # Scale down the vector components
+
+    eigenvector_x *=scaling_factor
+    eigenvector_y *=scaling_factor
+
+                                                                                   #levels = np.linspace(0.0, 1.0, 9)
+    # ax_eig_vecs_1.quiver(x, y, eigenvector_x, eigenvector_y, angles='xy',
+    #       scale_units='xy', scale=50 )# scale=100.,
+    divnorm = mpl.colors.Normalize(vmin=0, vmax=2)
+    # Define facecolors: Use 'none' for empty elements (zeros) and color for others
+    facecolors = ['none' if value == 0 else 'red' for value in amplitude.flatten()]
+    # Plot circles with empty ones for zero values
+    #plt.scatter(x_coords_flat, y_coords_flat, s=A_flat * 100, facecolors=facecolors, edgecolors='blue', alpha=0.7)
+    sizes=np.copy(amplitude.flatten())
+    sizes[sizes>1e-10]=1
+
+    circles_sizes=20 * np.ones_like(amplitude)
+    circles_sizes[-1,:]=0
+    circles_sizes[:, -1] = 0
+    ax_eig_vecs_1.scatter(x, y, s=circles_sizes.flatten() , c='white', cmap='Reds', alpha=1.0, norm=divnorm, edgecolors='black',linewidths=0.1 ),
+    ax_eig_vecs_1.scatter(x, y, s=sizes*20, c=facecolors, cmap='Reds', alpha=1.0, norm=divnorm,  edgecolors='black',linewidths=0),
+
+    triangles, X, Y = get_triangle(nx=grid_shape[-2] , ny=grid_shape[-1]
+                                   , lx=1, ly=1)
+    # Create the triangulation object
+    triangulation = tri.Triangulation(x.flatten(), y.flatten(), triangles)
+    ax_eig_vecs_1.triplot(triangulation, 'k-', lw=0.2)
+
+    ax_eig_vecs_1.set_title(f"Right-hand side vector")
+    ax_eig_vecs_1.set_xlim([-0.1, 1.1])
+    # ax_eig_vecs_1.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{32}}}$',
+    #                        xy=(1, 0.5),
+    #                        xytext=(0., 0.6),
+    #                        arrowprops=dict(arrowstyle='->',
+    #                                        color='Black',
+    #                                        lw=1,
+    #                                        ls='-'),
+    #                        color='Black'
+    #                        )
+    fname = src + 'JG_exp1_rhs_{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+    plt.show()
+def plot_eigenvector_filling(vectors,   grid_shape, dim=2):
+    # Plot the convergence of Ritz values
+    x = np.linspace(0, 1, grid_shape[-2]+1)
+    y = np.linspace(0, 1, grid_shape[-1]+1)
+    x, y = np.meshgrid(x, y)
+
+    for k in np.arange(0, len(vectors)):
+        fig = plt.figure(figsize=(4.5, 4.5))
+        gs = fig.add_gridspec(1, 1, width_ratios=[1])
+        ax_eig_vecs_1 = fig.add_subplot(gs[0])
+
+        eigenvector_x = vectors[:, k].reshape(grid_shape)[0, 0].transpose()
+        eigenvector_y = vectors[:, k].reshape(grid_shape)[1, 0].transpose()
+        # fixing zero eigenvalues
+
+        eigenvector_x = np.vstack((np.hstack((eigenvector_x, np.zeros((eigenvector_x.shape[0], 1)))), np.zeros((1, eigenvector_x.shape[1] + 1))))
+        eigenvector_y = np.vstack((np.hstack((eigenvector_y, np.zeros((eigenvector_y.shape[0], 1)))), np.zeros((1, eigenvector_y.shape[1] + 1))))
+
+        amplitude=np.sqrt(eigenvector_x**2+eigenvector_y**2)
+        max_magnitude = 3  # Define the maximum allowed magnitude
+        scaling_factor = np.minimum(1, max_magnitude / amplitude)
+        # Scale down the vector components
+
+        eigenvector_x *=scaling_factor
+        eigenvector_y *=scaling_factor
+
+                                                                                       #levels = np.linspace(0.0, 1.0, 9)
+        # ax_eig_vecs_1.quiver(x, y, eigenvector_x, eigenvector_y, angles='xy',
+        #       scale_units='xy', scale=50 )# scale=100.,
+        divnorm = mpl.colors.Normalize(vmin=0, vmax=2)
+        # Define facecolors: Use 'none' for empty elements (zeros) and color for others
+        facecolors = ['none' if value == 0 else 'red' for value in amplitude.flatten()]
+        # Plot circles with empty ones for zero values
+        #plt.scatter(x_coords_flat, y_coords_flat, s=A_flat * 100, facecolors=facecolors, edgecolors='blue', alpha=0.7)
+        sizes=np.copy(amplitude.flatten())
+        sizes[sizes>1e-10]=1
+
+        circles_sizes=20 * np.ones_like(amplitude)
+        circles_sizes[-1,:]=0
+        circles_sizes[:, -1] = 0
+        ax_eig_vecs_1.scatter(x, y, s=circles_sizes.flatten() , c='white', cmap='Reds', alpha=1.0, norm=divnorm, edgecolors='black',linewidths=1.),
+        ax_eig_vecs_1.scatter(x, y, s=sizes*20, c=facecolors, cmap='Reds', alpha=1.0, norm=divnorm,  edgecolors='black',  linewidths=0),
+
+        triangles, X, Y = get_triangle(nx=grid_shape[-2] , ny=grid_shape[-1]
+                                       , lx=1, ly=1)
+        # Create the triangulation object
+        triangulation = tri.Triangulation(x.flatten(), y.flatten(), triangles)
+        ax_eig_vecs_1.triplot(triangulation, 'k-', lw=0.2)
+
+        ax_eig_vecs_1.set_title(f"Eigenvector {k}")
+        ax_eig_vecs_1.set_xlim([-0.1, 1.1])
+        fname = src + 'JG_exp1_eigenvector_{}{}'.format(k,'.pdf')
+        print(('create figure: {}'.format(fname)))
+        plt.savefig(fname, bbox_inches='tight')
+        plt.show()
 
 def run_simple_CG(initial, RHS, kappa):
     np.random.seed(seed=1)

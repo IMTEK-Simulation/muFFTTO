@@ -351,7 +351,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     fname = src +  'exp2_hexa{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
-    #plt.show()
+    plt.show()
 
 
 

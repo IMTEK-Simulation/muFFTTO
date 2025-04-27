@@ -33,7 +33,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [  2,3, 4 ,5,6,7,8,  ] #6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [  2,3, 4 ,5,6,7,8,9,10] #,8,9,10 # ,8,9,10    6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -42,7 +42,8 @@ ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
 #ratios = np.array([1, 1e4,1e8, ])  # np.arange(1,5)  # 17  33
-ratios = np.array([1,4])  # np.arange(1,5)  # 17  33
+#ratios = np.array([1,4])  # np.arange(1,5)  # 17  33
+ratios = np.array([2,4])# ,4
 
 nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
@@ -60,6 +61,7 @@ norm_energy_lb = []
 norm_energy_lb_combi = []
 norm_rMr_combi = []
 norm_rMr = []
+norm_rMr_Jacobi= []
 kontrast = []
 kontrast_2 = []
 eigen_LB = []
@@ -95,7 +97,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
         macro_gradient = np.array([[1.0, 0.5], [0.5, 1.0]])
 
         # create material data field
-        K_0, G_0 = (1000, 0.5)  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+        K_0, G_0 = (1, 0.5)  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
 
         # identity tensor                                               [single tensor]
         ii = np.eye(2)
@@ -118,14 +120,14 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                             np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                               *discretization.nb_of_pixels])))
 
-        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', I4s,
+        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                  *discretization.nb_of_pixels])))
 
         print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
         # material distribution
-        geometry_ID = 'linear'  #left_cluster_x2   symmetric_linear laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
+        geometry_ID = 'linear'  #left_cluster_x2 sine_wave_ linear symmetric_linear laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
 
 
         def scale_field(field, min_val, max_val):
@@ -146,10 +148,10 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                                             parameter=number_of_pixels[0],
                                                                             contrast= -ratio)#1 / 10 ** ratio
 
-                if ratio <= 0:
-                    phase_fied_small_grid += 1 / 10 ** ratio
-                if ratio > 0:
-                    phase_fied_small_grid *= 10 ** ratio
+                # if ratio <= 0:
+                #     phase_fied_small_grid += 1 / 10 ** ratio
+                #if ratio > 0:
+               # phase_fied_small_grid *= 10 ** ratio
                 #phase_fied_small_grid *= ratio
                 #phase_fied_small_grid += phase_fied_small_grid
                 #phase_fied_small_grid *=1e14
@@ -192,8 +194,12 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             #     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)#
             # if ratio > 0:
             #     phase_field = scale_field(phase_field, min_val=np.power(10,4-ratio), max_val=10 ** 4)#
-            phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)  #
-
+            #phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)  #
+            if ratio == 0:
+                pass
+            else:
+                #phase_field = scale_field(phase_field, min_val=1 , max_val=10**ratio)
+                phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
             # phase_field = scale_field(phase_field, min_val=1, max_val=2)
             # phase_field[phase_field<=1/10**ratio]= 0
 
@@ -239,7 +245,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
             x_init=discretization.get_displacement_sized_field()
 
-            # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
+            x_init=np.random.random(discretization.get_displacement_sized_field().shape)
             # perturb_disx = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
             #                                                    microstructure_name='linear',
             #                                                    coordinates=discretization.fft.coords)
@@ -314,7 +320,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # eig_JG, _ = sc.linalg.eig(a=DKDsym, b=M)  # , eigvals_only=True
             # eig_JG = np.real(eig_JG)
             # print(f'eig_G.min() = {eig_G[eig_G > 0].min()}')
-            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun, steps=int(5000), toler=1e-14,
+            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun, steps=int(1000), toler=1e-6, # 5000
                                                     norm_type='rz')
             nb_it[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms['residual_rr']))
             print('nb it  = {} '.format(len(norms['residual_rr'])))
@@ -325,8 +331,8 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
 
             # print(nb_it)
             #########
-            displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi, steps=int(1000),
-                                                                toler=1e-14,
+            displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi, steps=int(1000),# 1000
+                                                                toler=1e-6,
                                                                 norm_type='data_scaled_rr',
                                                                 norm_metric=M_fun
                                                                 )
@@ -343,6 +349,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             nb_it_Jacobi[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms_Jacobi['residual_rr']))
             norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
             norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
+            norm_rMr_Jacobi.append(norms_combi['data_scaled_rr'])
             # displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=None, P=M_fun,
             #                                                                      omega=omega,
             #                                                                      steps=int(100),
@@ -509,8 +516,8 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                     print('greeen')
 
                     print(nb_it[:, :, i])
-                    # print('jacobi')
-                    # print(nb_it_Jacobi[:,:,i])
+                    print('jacobi')
+                    print(nb_it_Jacobi[:,:,i])
                     print('combi')
                     print(nb_it_combi[:, :, i])
                     print(geometry_ID)
@@ -528,8 +535,8 @@ if MPI.COMM_WORLD.rank == 0:
         print('greeen')
 
         print(nb_it[:, :, i])
-        # print('jacobi')
-        # print(nb_it_Jacobi[:,:,i])
+        print('jacobi')
+        print(nb_it_Jacobi[:,:,i])
         print('combi')
         print(nb_it_combi[:, :, i])
         print(geometry_ID)

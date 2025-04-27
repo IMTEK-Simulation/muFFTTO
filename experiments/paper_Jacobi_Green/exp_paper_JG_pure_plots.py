@@ -640,85 +640,315 @@ nb_it_combi_left_cluster_x3_4_e06 = np.array(
      [11., 23., 31., 24., 16., 13., 7., 7., 0.],
      [13., 29., 48., 35., 25., 18., 14., 8., 8.]])
 
-nb_it_Green_linear_1_e14 = np.array(
-    [[4., 0., 0., 0., 0., 0., 0., 0., 0.],
-     [4., 8., 0., 0., 0., 0., 0., 0., 0.],
-     [4., 8., 16., 0., 0., 0., 0., 0., 0.],
-     [4., 8., 16., 22., 0., 0., 0., 0., 0.],
-     [4., 8., 16., 22., 24., 0., 0., 0., 0.],
-     [4., 8., 16., 22., 24., 25., 0., 0., 0.],
-     [4., 8., 16., 22., 24., 25., 25., 0., 0.],
-     [4., 8., 16., 22., 24., 25., 25., 25., 0.],
-     [4., 8., 16., 22., 24., 25., 25., 25., 25.]])
-nb_it_combi_linear_1_e14 = np.array(
-    [[4., 0., 0., 0., 0., 0., 0., 0., 0.],
-     [8., 6., 0., 0., 0., 0., 0., 0., 0.],
-     [9., 9., 6., 0., 0., 0., 0., 0., 0.],
-     [9., 11., 8., 6., 0., 0., 0., 0., 0.],
-     [9., 12., 10., 8., 6., 0., 0., 0., 0.],
-     [9., 15., 12., 10., 7., 7., 0., 0., 0.],
-     [9., 18., 16., 14., 11., 7., 7., 0., 0.],
-     [11., 21., 19., 16., 14., 12., 8., 8., 0.],
-     [13., 23., 24., 20., 17., 14., 12., 9., 9.]])
+nb_it_Green_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 28., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 28., 28.]])
+
+nb_it_combi_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [8., 6., 0., 0., 0., 0., 0., 0., 0.],
+                                     [9., 9., 6., 0., 0., 0., 0., 0., 0.],
+                                     [9., 11., 9., 7., 0., 0., 0., 0., 0.],
+                                     [9., 13., 11., 8., 7., 0., 0., 0., 0.],
+                                     [10., 16., 14., 12., 8., 7., 0., 0., 0.],
+                                     [10., 19., 16., 14., 12., 8., 8., 0., 0.],
+                                     [11., 20., 20., 17., 14., 12., 8., 8., 0.],
+                                     [11., 22., 25., 19., 17., 15., 12., 8., 8.]])
+
 nb_it_Green_linear_4_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 32., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 32., 54., 0., 0., 0., 0.],
+                                     [4., 8., 16., 32., 54., 80., 0., 0., 0.],
+                                     [4., 8., 16., 32., 54., 80., 115., 0., 0.],
+                                     [4., 8., 16., 32., 54., 80., 115., 163., 0.],
+                                     [4., 8., 16., 32., 55., 80., 115., 163., 229.]])
+
+nb_it_combi_linear_4_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [8., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                     [9., 14., 9., 0., 0., 0., 0., 0., 0.],
+                                     [10., 17., 15., 10., 0., 0., 0., 0., 0.],
+                                     [10., 19., 18., 15., 11., 0., 0., 0., 0.],
+                                     [11., 20., 23., 21., 17., 12., 0., 0., 0.],
+                                     [12., 22., 29., 26., 23., 17., 12., 0., 0.],
+                                     [16., 24., 36., 33., 29., 25., 18., 14., 0.],
+                                     [17., 29., 44., 42., 37., 31., 27., 19., 14.]])
+
+nb_it_Green_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 0., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 0., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 0., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 0., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 28., 0.],
+                                     [4., 8., 16., 24., 27., 28., 28., 28., 28.]])
+
+nb_it_combi_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [8., 6., 0., 0., 0., 0., 0., 0., 0.],
+                                     [9., 9., 6., 0., 0., 0., 0., 0., 0.],
+                                     [9., 11., 9., 7., 0., 0., 0., 0., 0.],
+                                     [9., 13., 11., 8., 7., 0., 0., 0., 0.],
+                                     [10., 16., 14., 12., 8., 7., 0., 0., 0.],
+                                     [10., 19., 16., 14., 12., 8., 8., 0., 0.],
+                                     [11., 20., 20., 17., 14., 12., 8., 8., 0.],
+                                     [11., 22., 25., 19., 17., 15., 12., 8., 8.]])
+
+
+################## ################## LINEAR  FOR 10^6 precision ################## ################## ##################
+nb_it_Green_linear_2_e06 = np.array([
+    [4., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+    [4., 8., 16., 0., 0., 0., 0., 0., 0.],
+    [4., 8., 16., 25., 0., 0., 0., 0., 0.],
+    [4., 8., 16., 25., 34., 0., 0., 0., 0.],
+    [4., 8., 16., 25., 34., 43., 0., 0., 0.],
+    [4., 8., 16., 25., 34., 43., 50., 0., 0.],
+    [4., 8., 16., 25., 34., 43., 50., 52., 0.],
+    [4., 8., 16., 25., 34., 43., 50., 52., 52.]])
+
+nb_it_Jacobi_linear_2_e06 = np.array([
+    [7., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [11., 15., 0., 0., 0., 0., 0., 0., 0.],
+    [21., 28., 31., 0., 0., 0., 0., 0., 0.],
+    [49., 65., 69., 68., 0., 0., 0., 0., 0.],
+    [105., 130., 144., 144., 143., 0., 0., 0., 0.],
+    [212., 274., 297., 301., 296., 287., 0., 0., 0.],
+    [438., 569., 615., 624., 615., 592., 589., 0., 0.],
+    [892., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 0.],
+    [1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000.]])
+
+nb_it_combi_linear_2_e06 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [8., 5., 0., 0., 0., 0., 0., 0., 0.],
+                                     [9., 8., 6., 0., 0., 0., 0., 0., 0.],
+                                     [9., 11., 9., 6., 0., 0., 0., 0., 0.],
+                                     [9., 12., 11., 9., 7., 0., 0., 0., 0.],
+                                     [9., 15., 14., 13., 8., 7., 0., 0., 0.],
+                                     [10., 19., 19., 15., 13., 9., 7., 0., 0.],
+                                     [11., 20., 22., 20., 16., 12., 9., 8., 0.],
+                                     [11., 23., 29., 24., 20., 16., 13., 8., 8.]])
+nb_it_Green_linear_4_e06 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
                                      [4., 8., 0., 0., 0., 0., 0., 0., 0.],
                                      [4., 8., 16., 0., 0., 0., 0., 0., 0.],
                                      [4., 8., 16., 30., 0., 0., 0., 0., 0.],
                                      [4., 8., 16., 30., 46., 0., 0., 0., 0.],
                                      [4., 8., 16., 30., 46., 66., 0., 0., 0.],
-                                     [4., 8., 16., 30., 46., 66., 94., 0., 0.],
-                                     [4., 8., 16., 30., 46., 66., 94., 132., 0.],
-                                     [4., 8., 16., 30., 46., 66., 94., 132., 183.]])
-nb_it_combi_linear_4_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
-                                     [8., 6., 0., 0., 0., 0., 0., 0., 0.],
-                                     [9., 10., 7., 0., 0., 0., 0., 0., 0.],
-                                     [9., 14., 11., 8., 0., 0., 0., 0., 0.],
-                                     [9., 17., 16., 13., 8., 0., 0., 0., 0.],
-                                     [9., 21., 19., 17., 14., 9., 0., 0., 0.],
-                                     [12., 22., 25., 23., 19., 14., 11., 0., 0.],
-                                     [13., 25., 32., 29., 25., 21., 16., 12., 0.],
-                                     [16., 30., 42., 39., 34., 29., 23., 17., 12.]])
+                                     [4., 8., 16., 30., 46., 66., 93., 0., 0.],
+                                     [4., 8., 16., 30., 46., 66., 93., 131., 0.],
+                                     [4., 8., 16., 30., 46., 66., 93., 131., 182.]])
+
+nb_it_Jacobi_linear_4_e06 = np.array(
+    [[7., 0., 0., 0., 0., 0., 0., 0., 0.],
+     [11., 15., 0., 0., 0., 0., 0., 0., 0.],
+     [22., 29., 33., 0., 0., 0., 0., 0., 0.],
+     [52., 67., 73., 77., 0., 0., 0., 0., 0.],
+     [107., 137., 150., 154., 156., 0., 0., 0., 0.],
+     [219., 283., 314., 323., 327., 329., 0., 0., 0.],
+     [447., 579., 643., 663., 673., 676., 681., 0., 0.],
+     [900., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 0.],
+     [1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000.]])
+
+nb_it_combi_linear_4_e06 = np.array([[ 4.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+                                     [ 8.,  6.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+                                     [ 9., 10.,  7.,  0.,  0.,  0.,  0.,  0.,  0.],
+                                     [ 9., 14., 12.,  8.,  0.,  0.,  0.,  0.,  0.],
+                                     [ 9., 16., 15., 12.,  8.,  0.,  0.,  0.,  0.],
+                                     [11., 20., 19., 16., 13., 10.,  0.,  0.,  0.],
+                                     [11., 20., 22., 21., 18., 14., 10.,  0.,  0.],
+                                     [11., 23., 29., 27., 23., 20., 14., 11.,  0.],
+                                     [12., 25., 35., 34., 31., 25., 21., 15., 11.]])
+
+
+################## ################## ##################  SINE WAVE FOR 10^6 precision   ################## ################## ##################
+nb_it_Green_sine_wave_0_e06 = np.array(
+[[ 5.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 7.,  9.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 8., 11., 14.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 19., 21.,  0.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 19., 22., 22.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 20., 22., 22., 22.,  0.,  0.,  0.],
+ [ 9., 15., 21., 22., 22., 22., 22.,  0.,  0.],
+ [ 9., 15., 21., 22., 22., 22., 22., 22.,  0.],
+ [ 9., 16., 21., 22., 22., 22., 22., 22., 22.]])
+
+nb_it_Jacobi_sine_wave_0_e06 = np.array(
+ [[   5.,    0.,    0.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [   8.,    8.,    0.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [  20.,   15.,   15.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [  42.,   31.,   29.,   28.,    0.,    0.,    0.,   0.,    0.],
+  [  85.,   64.,   59.,   57.,   55.,    0.,    0.,   0.,    0.],
+  [ 170.,  128.,  118.,  114.,  110.,  106.,    0.,   0.,    0.],
+  [ 341.,  255.,  236.,  228.,  222.,  215.,  207.,   0.,    0.],
+  [ 680.,  511.,  471.,  456.,  444.,  434.,  421., 412.,    0.],
+  [1000., 1000.,  941.,  911.,  890.,  869.,  848., 826.,  822.]])
+
+nb_it_combi_sine_wave_0_e06 = np.array(
+[[  4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  7.,   5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  9.,   7.,   5.,   4.,   0.,   0.,   0.,   0.,   0.],
+ [ 14.,  10.,   7.,   5.,   4.,   0.,   0.,   0.,   0.],
+ [ 25.,  13.,   9.,   7.,   4.,   4.,   0.,   0.,   0.],
+ [ 48.,  23.,  12.,   9.,   7.,   4.,   4.,   0.,   0.],
+ [ 94.,  42.,  20.,  11.,   9.,   7.,   4.,   4.,   0.],
+ [185.,  82.,  34.,  20.,  11.,   9.,   7.,   4.,   4.]])
+
+nb_it_Green_sine_wave_2_e06 = np.array(
+[[ 5.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 7.,  9.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 8., 11., 14.,  0.,  0.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 19., 21.,  0.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 19., 22., 22.,  0.,  0.,  0.,  0.],
+ [ 9., 14., 20., 22., 22., 22.,  0.,  0.,  0.],
+ [ 9., 15., 21., 22., 22., 22., 22.,  0.,  0.],
+ [ 9., 15., 21., 22., 22., 22., 22., 22.,  0.],
+ [ 9., 16., 21., 22., 22., 22., 22., 22., 22.]])
+
+nb_it_Jacobi_sine_wave_2_e06 = np.array(
+ [[   5.,    0.,    0.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [   8.,    8.,    0.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [  20.,   15.,   15.,    0.,    0.,    0.,    0.,   0.,    0.],
+  [  42.,   31.,   29.,   28.,    0.,    0.,    0.,   0.,    0.],
+  [  85.,   64.,   59.,   57.,   55.,    0.,    0.,   0.,    0.],
+  [ 170.,  128.,  118.,  114.,  110.,  106.,    0.,   0.,    0.],
+  [ 341.,  255.,  236.,  228.,  222.,  215.,  207.,   0.,    0.],
+  [ 680.,  511.,  471.,  456.,  444.,  434.,  421., 412.,    0.],
+  [1000., 1000.,  941.,  911.,  890.,  869.,  848., 826.,  822.]])
+
+nb_it_combi_sine_wave_2_e06 = np.array(
+[[  4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  7.,   5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  9.,   7.,   5.,   4.,   0.,   0.,   0.,   0.,   0.],
+ [ 14.,  10.,   7.,   5.,   4.,   0.,   0.,   0.,   0.],
+ [ 25.,  13.,   9.,   7.,   4.,   4.,   0.,   0.,   0.],
+ [ 48.,  23.,  12.,   9.,   7.,   4.,   4.,   0.,   0.],
+ [ 94.,  42.,  20.,  11.,   9.,   7.,   4.,   4.,   0.],
+ [185.,  82.,  34.,  20.,  11.,   9.,   7.,   4.,   4.]])
+nb_it_Green_sine_wave_4_e06 = np.array(
+   [[ 5.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+    [ 7.,  9.,  0.,  0.,  0.,  0.,  0.,  0.,  0.],
+    [ 8., 12., 17.,  0.,  0.,  0.,  0.,  0.,  0.],
+    [ 9., 15., 22., 26.,  0.,  0.,  0.,  0.,  0.],
+    [ 9., 15., 24., 39., 45.,  0.,  0.,  0.,  0.],
+    [ 9., 15., 27., 40., 61., 55.,  0.,  0.,  0.],
+    [ 9., 17., 28., 43., 62., 59., 59.,  0.,  0.],
+    [ 9., 17., 28., 45., 64., 60., 60., 60.,  0.],
+    [10., 18., 28., 45., 64., 61., 60., 60., 60.]])
+     
+nb_it_Jacobi_sine_wave_4_e06 = np.array(
+[[   5.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.],
+ [   8.,    8.,    0.,    0.,    0.,    0.,    0.,    0.,    0.],
+ [  20.,   16.,   15.,    0.,    0.,    0.,    0.,    0.,    0.],
+ [  42.,   32.,   30.,   29.,    0.,    0.,    0.,    0.,    0.],
+ [  86.,   65.,   60.,   58.,   58.,    0.,    0.,    0.,    0.],
+ [ 173.,  130.,  120.,  117.,  116.,  115.,    0.,    0.,    0.],
+ [ 345.,  260.,  241.,  235.,  232.,  230.,  229.,    0.,    0.],
+ [ 691.,  520.,  483.,  470.,  463.,  461.,  458.,  457.,    0.],
+ [1000., 1000.,  965.,  939.,  927.,  921.,  918.,  914.,  911.]])
+
+nb_it_combi_sine_wave_4_e06 = np.array(
+[[  4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [  8.,   5.,   4.,   0.,   0.,   0.,   0.,   0.,   0.],
+ [ 10.,   8.,   5.,   4.,   0.,   0.,   0.,   0.,   0.],
+ [ 18.,  11.,   8.,   5.,   4.,   0.,   0.,   0.,   0.],
+ [ 35.,  22.,  13.,   8.,   5.,   5.,   0.,   0.,   0.],
+ [ 69.,  38.,  21.,  14.,   8.,   5.,   5.,   0.,   0.],
+ [132.,  78.,  40.,  22.,  14.,   8.,   5.,   5.,   0.],
+ [266., 150.,  82.,  43.,  22.,  13.,   8.,   5.,   5.]])
 #################################################### sine wave
 
-nb_it_Green_sine_wave_0_e14 = np.array(
-    [[5., 0., 0., 0., 0., 0., 0., 0., 0.],
-     [9., 13., 0., 0., 0., 0., 0., 0., 0.],
-     [15., 23., 27., 0., 0., 0., 0., 0., 0.],
-     [15., 30., 46., 53., 0., 0., 0., 0., 0.],
-     [17., 32., 57., 91., 102., 0., 0., 0., 0.],
-     [18., 34., 62., 107., 172., 196., 0., 0., 0.],
-     [19., 37., 68., 119., 204., 333., 368., 0., 0.],
-     [19., 38., 70., 126., 213., 361., 604., 680., 0.],
-     [20., 39., 73., 133., 236., 400., 676., 1110., 1298.]])
-nb_it_combi_sine_wave_0_e14 = np.array(
-    [[5., 0., 0., 0., 0., 0., 0., 0., 0.],
-     [9., 7., 0., 0., 0., 0., 0., 0., 0.],
-     [11., 11., 8., 0., 0., 0., 0., 0., 0.],
-     [14., 14., 12., 8., 0., 0., 0., 0., 0.],
-     [16., 20., 17., 13., 8., 0., 0., 0., 0.],
-     [26., 28., 24., 18., 14., 9., 0., 0., 0.],
-     [37., 39., 35., 28., 20., 11., 10., 0., 0.],
-     [60., 63., 56., 42., 31., 21., 14., 10., 0.],
-     [100., 114., 101., 70., 48., 34., 23., 13., 11.]])
-nb_it_Green_sine_wave_4_e14 = np.array(
-    [[5., 0., 0., 0., 0., 0., 0., 0., 0.],
-     [9., 13., 0., 0., 0., 0., 0., 0., 0.],
-     [15., 23., 27., 0., 0., 0., 0., 0., 0.],
-     [15., 30., 46., 53., 0., 0., 0., 0., 0.],
-     [17., 32., 57., 90., 101., 0., 0., 0., 0.],
-     [18., 34., 62., 106., 170., 187., 0., 0., 0.],
-     [19., 37., 68., 118., 196., 292., 324., 0., 0.],
-     [19., 38., 70., 123., 204., 327., 399., 432., 0.],
-     [20., 39., 73., 132., 224., 332., 443., 488., 489.]])
+nb_it_Green_sine_wave_0_e14 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                        [9., 14., 0., 0., 0., 0., 0., 0., 0.],
+                                        [14., 23., 28., 0., 0., 0., 0., 0., 0.],
+                                        [15., 30., 46., 54., 0., 0., 0., 0., 0.],
+                                        [17., 33., 58., 91., 104., 0., 0., 0., 0.],
+                                        [19., 36., 64., 112., 172., 198., 0., 0., 0.],
+                                        [20., 37., 68., 118., 201., 334., 370., 0., 0.],
+                                        [20., 39., 71., 127., 220., 369., 608., 703., 0.],
+                                        [21., 40., 73., 134., 237., 401., 679., 1095., 1305.]])
+
+nb_it_Jacobi_sine_wave_0_e14 = np.array([
+    [5., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [15., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [36., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [79., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [165., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [337., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [5000., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [5000., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [0., 0., 0., 0., 0., 0., 0., 0., 0.]])
+
+nb_it_combi_sine_wave_0_e14 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                        [9., 7., 0., 0., 0., 0., 0., 0., 0.],
+                                        [11., 10., 8., 0., 0., 0., 0., 0., 0.],
+                                        [14., 14., 12., 8., 0., 0., 0., 0., 0.],
+                                        [17., 20., 17., 12., 9., 0., 0., 0., 0.],
+                                        [29., 29., 25., 18., 13., 9., 0., 0., 0.],
+                                        [43., 42., 38., 29., 19., 11., 10., 0., 0.],
+                                        [68., 67., 62., 45., 33., 22., 14., 10., 0.],
+                                        [115., 117., 102., 73., 53., 35., 22., 12., 11.], ])
+
+nb_it_Green_sine_wave_4_e14 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                        [9., 14., 0., 0., 0., 0., 0., 0., 0.],
+                                        [14., 23., 28., 0., 0., 0., 0., 0., 0.],
+                                        [15., 30., 46., 54., 0., 0., 0., 0., 0.],
+                                        [17., 33., 58., 90., 103., 0., 0., 0., 0.],
+                                        [19., 36., 64., 111., 170., 191., 0., 0., 0.],
+                                        [20., 37., 68., 115., 195., 291., 326., 0., 0.],
+                                        [20., 39., 71., 125., 206., 327., 399., 433., 0.],
+                                        [21., 40., 73., 133., 224., 332., 443., 488., 489.]])
+nb_it_Jacobi_sine_wave_4_e14 = np.array([
+    [5., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [15., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [37., 0, 0., 0., 0., 0., 0., 0., 0.],
+    [79., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [165., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [336., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [0., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [0., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [0., 0., 0., 0., 0., 0., 0., 0., 0.]])
+
 nb_it_combi_sine_wave_4_e14 = np.array([[5., 0., 0., 0., 0., 0., 0., 0., 0.],
                                         [9., 7., 0., 0., 0., 0., 0., 0., 0.],
-                                        [13., 10., 8., 0., 0., 0., 0., 0., 0.],
-                                        [22., 18., 10., 8., 0., 0., 0., 0., 0.],
-                                        [40., 27., 20., 10., 8., 0., 0., 0., 0.],
-                                        [71., 47., 31., 20., 10., 8., 0., 0., 0.],
-                                        [131., 81., 52., 33., 20., 10., 9., 0., 0.],
-                                        [249., 148., 93., 55., 31., 20., 10., 9., 0.],
-                                        [481., 285., 166., 94., 51., 32., 19., 10., 9.]])
+                                        [15., 10., 8., 0., 0., 0., 0., 0., 0.],
+                                        [25., 18., 10., 8., 0., 0., 0., 0., 0.],
+                                        [41., 29., 20., 10., 9., 0., 0., 0., 0.],
+                                        [72., 48., 31., 20., 10., 9., 0., 0., 0.],
+                                        [136., 83., 52., 34., 20., 11., 9., 0., 0.],
+                                        [264., 160., 96., 57., 32., 19., 10., 10., 0.],
+                                        [530., 317., 180., 106., 60., 32., 19., 10., 10.]])
+
+#################################################### Linear function
+
+
+nb_it_Jacobi_linear_1_e14 = np.array([[7., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                      [11., 15., 0., 0., 0., 0., 0., 0., 0.],
+                                      [22., 30., 0., 0., 0., 0., 0., 0., 0.],
+                                      [52., 68., 0., 0., 0., 0., 0., 0., 0.],
+                                      [108., 135., 0., 0., 0., 0., 0., 0., 0.],
+                                      [219., 283., 0., 0., 0., 0., 0., 0., 0.],
+                                      [448., 579., 0., 0., 0., 0., 0., 0., 0.],
+                                      [904., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                      [1816., 0., 0., 0., 0., 0., 0., 0., 0.]])
+
+nb_it_Jacobi_linear_4_e14 = np.array([
+    [7., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [12., 15., 0., 0., 0., 0., 0., 0., 0.],
+    [25., 33., 0., 0., 0., 0., 0., 0., 0.],
+    [54., 69., 0., 0., 0., 0., 0., 0., 0.],
+    [111., 143., 0., 0., 0., 0., 0., 0., 0.],
+    [227., 293., 0., 0., 0., 0., 0., 0., 0.],
+    [458., 592., 0., 0., 0., 0., 0., 0., 0.],
+    [918., 0., 0., 0., 0., 0., 0., 0., 0.],
+    [1832., 0., 0., 0., 0., 0., 0., 0., 0.]])
 
 nb_it_Green_n_laminate_sinrhs_1_e14 = np.array(
     [[13., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -769,8 +999,483 @@ X, Y = np.meshgrid(Nx, Nx, indexing='ij')
 
 nb_pix_multips = [2, 4, 10]
 # material distribution
-geometry_ID = 'n_laminate'  # laminate2  sine_wave_rapid     # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
-rhs = 'sin_wave'
+geometry_ID = 'linear'  # laminate2  sine_wave_rapid     # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+# rhs = 'sin_wave'
+rhs = False
+linestyles = ['-', '--', ':']
+colors = ['red', 'blue', 'green', 'orange', 'purple']
+precc = 14
+for phase_contrast in [2, 4]:
+    ratio = phase_contrast
+    fig = plt.figure(figsize=(4.5, 3.5))
+    gs = fig.add_gridspec(1, 1, hspace=0.2, wspace=0.1, width_ratios=[3, ],
+                          height_ratios=[1])
+    # plot nb its
+    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.1, width_ratios=[0.1, 5])
+    ax = fig.add_subplot(gs1[0, 1])
+    if phase_contrast == 1:
+        nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
+    elif phase_contrast == 2:
+        nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
+
+    elif phase_contrast == 4:
+        #nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
+        nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0:
+                pass
+            elif nb_iterations[i, j] < 50:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                        ha='center', va='center', color='white')
+    # divnorm = mpl.colors.LogNorm(vmin=1, vmax=100)
+    divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    if geometry_ID == 'sine_wave_' and phase_contrast == 1:
+        ax.text(0.05, 0.92, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+
+    ax.set_title('Total number of iteration \n Jacobi   ')
+    # ax.set_zlim(1 ,100)
+    ax.set_ylabel('# of material phases')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    # ax.set_aspect('equal')
+
+    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+
+    fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rhoJacobi{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+
+#
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 5, 6, 7, 8]
+# material distribution
+geometry_ID = 'sine_wave_'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+# rhs = 'sin_wave'
+rhs = False
+linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
+colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
+precc = 6
+fig = plt.figure(figsize=(11, 7.0))
+gs = fig.add_gridspec(2, 4, hspace=0.2, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
+                      height_ratios=[1, 1])
+row = 0
+for phase_contrast in [2, 4]:  # 1, 4
+    ratio = phase_contrast
+    if geometry_ID == 'linear':
+        divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+        white_lim = 50
+    elif geometry_ID == 'sine_wave_':
+        divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+        white_lim = 50
+    # Green graph
+    gs0 = gs[row, 0].subgridspec(1, 1, wspace=0.1, width_ratios=[1])
+    ax = fig.add_subplot(gs0[0, 0])
+    # ax.set_aspect('equal')
+    if phase_contrast == 1:
+        if geometry_ID == 'sine_wave_rapid':
+            nb_iterations = (nb_it_combi_laminate2_1[:, :])
+        if geometry_ID == 'laminate2':
+            nb_iterations = (nb_it_Green_laminate2_1[:, :])
+        elif geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_linear_1_e14[:, :])
+
+        elif geometry_ID == 'right_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_right_cluster_x3_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_right_cluster_x3_1_e06[:, :])
+        elif geometry_ID == 'left_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_left_cluster_x3_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_left_cluster_x3_1_e06[:, :])
+        elif geometry_ID == 'n_laminate':
+            if precc == 14:
+                if rhs == 'sin_wave':
+                    nb_iterations = (nb_it_Green_n_laminate_sinrhs_1_e14[:, :])
+                else:
+                    nb_iterations = (nb_it_Green_n_laminate_1_e14[:, :])
+            if precc == 6:
+                nb_iterations = (nb_it_Green_n_laminate_1_e06[:, :])
+
+
+        elif geometry_ID == 'laminate_log':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_laminate_log_1_e14[:, :])
+            if precc == 6:
+                nb_iterations = (nb_it_Green_laminate_log_1_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            nb_iterations = (nb_it_Green_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
+    elif phase_contrast == 2:
+        if geometry_ID == 'linear':
+            if precc == 6:
+                nb_iterations = (nb_it_Green_linear_2_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            nb_iterations = nb_it_Green_sine_wave_0_e06[:, :]
+
+
+    elif phase_contrast == 4:
+        if geometry_ID == 'sine_wave_rapid':
+            nb_iterations = (nb_it_combi_laminate2_1[:, :])
+        if geometry_ID == 'laminate2':
+            nb_iterations = (nb_it_Green_laminate2_4[:, :])
+        elif geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_linear_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_linear_4_e06[:, :])
+        elif geometry_ID == 'right_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_right_cluster_x3_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_right_cluster_x3_4_e06[:, :])
+        elif geometry_ID == 'left_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_left_cluster_x3_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_left_cluster_x3_4_e06[:, :])
+        elif geometry_ID == 'n_laminate':
+            if precc == 14:
+                if rhs == 'sin_wave':
+                    nb_iterations = (nb_it_Green_n_laminate_sinrhs_4_e14[:, :])
+
+                else:
+                    nb_iterations = (nb_it_Green_n_laminate_4_e14[:, :])
+            if precc == 6:
+                nb_iterations = (nb_it_Green_n_laminate_4_e06[:, :])
+
+        elif geometry_ID == 'laminate_log':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_laminate_log_4_e14[:, :])
+            if precc == 6:
+                nb_iterations = (nb_it_Green_laminate_log_4_e06[:, :])
+
+        elif geometry_ID == 'sine_wave_':
+            if precc == 14:
+                nb_iterations = (nb_it_Green_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
+            elif precc == 6:
+                nb_iterations = (nb_it_Green_sine_wave_4_e06[:, :])  # nb_it_combi_laminate2_1
+
+
+
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0:
+                pass
+            elif nb_iterations[i, j] < white_lim:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='white')
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+    elif geometry_ID == 'sine_wave_':
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+
+    if row == 0:
+        ax.set_title('Total number of iteration \n Green ')
+    # ax.set_zlim(1 ,100)
+    # ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    ax.set_ylabel('# of material phases')
+    if row == 1:
+        ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    #    ax.set_aspect('equal')
+    if row == 0:
+        ax.text(-0.25, 1.15, f'(a.{row + 1})', transform=ax.transAxes)
+    elif row == 1:
+        ax.text(-0.25, 1.05, f'(a.{row + 1})', transform=ax.transAxes)
+
+    # jacobi  graph
+    gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
+    ax = fig.add_subplot(gs1[0, 0])
+    #    ax.set_aspect('equal')
+    if phase_contrast == 1:
+        if geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
+            # elif precc == 6:
+            #     nb_iterations = (nb_it_Jacobi_linear_1_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            if precc == 14:
+                nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
+    if phase_contrast == 2:
+        if geometry_ID == 'linear':
+            if precc == 14:
+                quit()
+                #nb_iterations = (nb_it_Jacobi_linear_2_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            if precc == 14:
+                nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
+
+    elif phase_contrast == 4:
+        if geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            if precc == 14:
+                nb_iterations = (nb_it_Jacobi_sine_wave_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_Jacobi_sine_wave_4_e06[:, :])
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0:
+                pass
+            elif nb_iterations[i, j] < white_lim:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='white')
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+    elif geometry_ID == 'sine_wave_':
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+
+    if row == 0:
+        ax.set_title('Total number of iteration \n Jacobi ')
+    # ax.set_zlim(1 ,100)
+    # ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    if row == 1:
+        ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    #    ax.set_aspect('equal')
+
+    # ax.set_zlabel('# CG iterations')
+    if row == 0:
+        ax.text(-0.15, 1.15, f'(b.{row + 1})', transform=ax.transAxes)
+    elif row == 1:
+        ax.text(-0.15, 1.05, f'(b.{row + 1})', transform=ax.transAxes)
+    # plot Jacobi green
+    gs2 = gs[row, 2].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
+    ax = fig.add_subplot(gs2[0, 0])
+    if phase_contrast == 1:
+
+        if geometry_ID == 'sine_wave_rapid':
+            nb_iterations = (nb_it_combi_laminate2_1[:, :])
+        if geometry_ID == 'laminate2':
+            nb_iterations = (nb_it_combi_laminate2_1[:, :])
+        elif geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_linear_1_e14[:, :])
+        elif geometry_ID == 'right_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_right_cluster_x3_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_right_cluster_x3_1_e06[:, :])
+        elif geometry_ID == 'left_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_left_cluster_x3_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_left_cluster_x3_1_e06[:, :])
+        elif geometry_ID == 'n_laminate':
+
+            if precc == 14:
+                if rhs == 'sin_wave':
+                    nb_iterations = (nb_it_combi_n_laminate_sinrhs_1_e14[:, :])
+                else:
+                    nb_iterations = (nb_it_combi_n_laminate_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_n_laminate_1_e06[:, :])
+
+
+        elif geometry_ID == 'laminate_log':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_laminate_log_1_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_laminate_log_1_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            nb_iterations = (nb_it_combi_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
+    elif phase_contrast == 2:
+        if geometry_ID == 'linear':
+            if precc == 6:
+                nb_iterations = (nb_it_combi_linear_2_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            nb_iterations = nb_it_combi_sine_wave_0_e06[:, :]
+
+    elif phase_contrast == 4:
+        if geometry_ID == 'sine_wave_rapid':
+            nb_iterations = (nb_it_combi_laminate2_1[:, :])
+        if geometry_ID == 'laminate2':
+            nb_iterations = (nb_it_combi_laminate2_4[:, :])
+        elif geometry_ID == 'linear':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_linear_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_linear_4_e06[:, :])
+
+        elif geometry_ID == 'right_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_right_cluster_x3_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_right_cluster_x3_4_e06[:, :])
+        elif geometry_ID == 'left_cluster_x3':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_left_cluster_x3_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_left_cluster_x3_4_e06[:, :])
+        elif geometry_ID == 'n_laminate':
+            if precc == 14:
+                if rhs == 'sin_wave':
+                    nb_iterations = (nb_it_combi_n_laminate_sinrhs_4_e14[:, :])
+                else:
+                    nb_iterations = (nb_it_combi_n_laminate_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_n_laminate_4_e06[:, :])
+
+        elif geometry_ID == 'laminate_log':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_laminate_log_4_e14[:, :])
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_laminate_log_4_e06[:, :])
+        elif geometry_ID == 'sine_wave_':
+            if precc == 14:
+                nb_iterations = (nb_it_combi_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
+            elif precc == 6:
+                nb_iterations = (nb_it_combi_sine_wave_4_e06[:, :])
+
+    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+    for i in range(nb_iterations.shape[0]):
+        for j in range(nb_iterations.shape[1]):
+            if nb_iterations[i, j] == 0:
+                pass
+            elif nb_iterations[i, j] < white_lim:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='black')
+            else:
+                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                        ha='center', va='center', color='white')
+    # Replace NaN values with zero
+
+    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+    elif geometry_ID == 'sine_wave_':
+        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.82, f'Total phase contrast \n  $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+
+    if row == 0:
+        ax.set_title('Total number of iteration \n Jacobi-Green  ')
+    # ax.set_zlim(1 ,100)
+    # ax.set_ylabel('# of material phases')
+
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
+    if row == 1:
+        ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xticks(Nx)
+    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+    # ax2 = ax.twinx()
+    ax.set_yticks(Nx)
+    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+    #   ax.set_aspect('equal')
+
+    if row == 0:
+        ax.text(-0.15, 1.15, f'(c.{row + 1})', transform=ax.transAxes)
+    elif row == 1:
+        ax.text(-0.15, 1.05, f'(c.{row + 1})', transform=ax.transAxes)
+    # Adding a color bar with custom ticks and labels
+    cbar_ax = fig.add_subplot(gs[row, 3])
+    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
+    # cbar.ax.invert_yaxis()
+    # # cbar.set_ticks(ticks=[  0, 1,10])
+    # cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+    # cbar.ax.set_yticklabels(
+    #     ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+    #      'Jacobi-Green \n needs more'])
+
+    #
+
+    row += 1
+
+fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rho_v2_{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+
+plt.show()
+quit()
+
+#
+nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+Nx = (np.asarray(nb_pix_multips))
+X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+
+nb_pix_multips = [2, 4, 10]
+# material distribution
+geometry_ID = 'sine_wave_'  # laminate2  sine_wave_rapid     # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+# rhs = 'sin_wave'
+rhs = False
 linestyles = ['-', '--', ':']
 colors = ['red', 'blue', 'green', 'orange', 'purple']
 precc = 14
@@ -894,7 +1599,7 @@ for phase_contrast in [1, 4]:
     ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
     ax.set_aspect('equal')
 
-    cbar_ax = fig.add_subplot(gs1[0, 0])
+    # cbar_ax = fig.add_subplot(gs1[0, 0])
 
     # cbar = plt.colorbar(pcm, location='left', cax=cbar_ax)  # Specify the ticks
     # cbar.ax.invert_yaxis()

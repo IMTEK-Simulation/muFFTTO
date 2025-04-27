@@ -36,7 +36,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-geom_n = [2,3,4,5 ]  # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+geom_n = [3,4,5 ] #2, # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -44,7 +44,7 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-ratios = np.array([1, 4])  # np.arange(1,5)  # 17  33
+ratios = np.array([2])#, 4  # np.arange(1,5)  # 17  33
 
 nb_it = np.zeros((len(geom_n), len(geom_n), ratios.size), )
 nb_it_combi = np.zeros((len(geom_n), len(geom_n), ratios.size), )
@@ -135,8 +135,6 @@ for geometry_ID in ['linear']:  # ,'sine_wave_','linear', 'right_cluster_x3', 'l
                                                              mu=G_0,
                                                              kind='linear')
             C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
-            # C_1_5= domain.compute_Voigt_notation_4order(5*elastic_C_1)
-            C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
             material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                                 np.ones(np.array([discretization.nb_quad_points_per_pixel,
@@ -190,16 +188,10 @@ for geometry_ID in ['linear']:  # ,'sine_wave_','linear', 'right_cluster_x3', 'l
                 # phase_field_smooth = np.copy(phase_fied_small_grid)
 
                 phase_field = np.abs(phase_field_smooth)
-                if ratio == 0:
-                    phase_field = scale_field(phase_field, min_val=0, max_val=1.0)
-                else:
-                    phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
-                # phase_field[phase_field>0.3]=1
-                # phase_field[phase_field < 0.51] = 1 / 10 ** ratio
-                # phase_field = scale_field(phase_field, min_val=1 , max_val=10**ratio)
-                # phase_field_log = scale_field_log(phase_field_smooth, min_val=1 / 10 ** ratio, max_val=1.0)
 
-                # phase_field[phase_field<=1/10**ratio]= 0
+                #phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+                phase_field = scale_field(phase_field, min_val=1, max_val=10 ** ratio)
+
 
                 phase_fem = np.zeros([2, *number_of_pixels])
                 phase_fnxyz = discretization.get_scalar_sized_field()

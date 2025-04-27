@@ -132,7 +132,6 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                                                              kind='linear')
             C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
             # C_1_5= domain.compute_Voigt_notation_4order(5*elastic_C_1)
-            C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
             material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                                 np.ones(np.array([discretization.nb_quad_points_per_pixel,
@@ -182,6 +181,7 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
                     phase_field = scale_field(phase_field, min_val=0, max_val=1.0)
                 else:
                     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+
                 phase_field = scale_field(phase_field, min_val=1, max_val=1e4)
 
                 #phase_field[phase_field>0.3]=1
@@ -549,49 +549,3 @@ for geometry_ID in ['linear']:#,'sine_wave_','linear', 'right_cluster_x3', 'left
             print('combi')
             print(nb_it_combi[:, :, i])
 
-# MPI.COMM_WORLD.Barrier()
-# quit()
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
-#
-# # Plot each line with a different z offset
-# Nx = (2 ** np.asarray(geom_n)) ** 2
-# for i in np.arange(len(geom_n)):
-#     ax.plot(Nx, Nx[i], zs=nb_it[:, i, 0], label='PCG: Green', color='blue')
-#     ax.plot(Nx, Nx[i], zs=nb_it_Jacobi[:, i, 0], label='PCG: Jacobi', color='black')
-#     ax.plot(Nx, Nx[i], zs=nb_it_combi[:, i, 0], label='PCG: Green + Jacobi', color='red')
-# # ax.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
-# # ax.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
-# ax.set_zlim(10, 100)
-# ax.set_ylabel('nb of phases')
-# ax.set_xlabel('Nb pixels')
-# ax.set_zlabel('# CG iterations')
-# # ax.set_xscale('log')
-# # ax.set_yscale('log')
-#
-# plt.legend(['DGO', 'Jacobi', 'DGO + Jacobi'])
-# fname = src + 'introduction_exp4_GRID_aaa_{}{}'.format(number_of_pixels[0], '.pdf')
-# print(('create figure: {}'.format(fname)))
-# plt.savefig(fname, bbox_inches='tight')
-#
-# plt.show()
-#
-# X, Y = np.meshgrid(Nx, Nx)
-#
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
-# # Setting the view angle
-# ax.view_init(elev=30, azim=-100)  # Adjust these values as needed
-# # Plotting the surface
-# ax.plot_wireframe(X, Y, nb_it[:, :, 0], label='PCG: Green', color='green')
-# ax.plot_wireframe(X, Y, nb_it_Jacobi[:, :, 0], label='PCG: Jacobi', color='black')
-# ax.plot_wireframe(X, Y, nb_it_combi[:, :, 0], label='PCG: Green + Jacobi', color='red')
-#
-# ax.set_ylabel('nb of phases')
-# ax.set_xlabel('Nb pixels')
-# ax.set_zlabel('# CG iterations')
-# plt.legend(['DGO', 'Jacobi', 'DGO + Jacobi'])
-# plt.show()
-#
-# #
-# # fig = plt.figure()

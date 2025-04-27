@@ -381,6 +381,9 @@ def adam(f, df, x0,
     return [x, phi, t]
 
 
+
+
+
 ############################################
 if __name__ == "__main__":
     ###############
@@ -399,11 +402,11 @@ if __name__ == "__main__":
         return (np.power((a - x[0]), 2) + b * np.power((x[1] - x[0] * x[0]), 2))
 
 
-    p = [1, 100]
+    p = np.array([1, 100])
     x0 = np.array([3.0, 4.0])
 
     print('Fire version 1')
-    [xmin, fmin, Niter] = optimize_fire(x0, f, gradf, p, 1e-6)
+    [xmin, fmin, Niter] = optimize_fire(x0, f, gradf, params=p, atol=1e-6)
 
     print("xmin = ", xmin)
     print("fmin = ", fmin)

@@ -38,7 +38,7 @@ if plot_this:
     geometry_ID = 'linear'#'linear'# 'sine_wave_'
     geometry_n = [2, ]
     discretization_n = [3, 4,5  ]
-    ratio = 4
+    ratio = 2
 
     # create a figure
     fig = plt.figure( figsize=(11, 4.5))
@@ -70,27 +70,27 @@ if plot_this:
             #
             #ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-            ax_1.semilogy(np.arange(1, len(xopt.f.norm_rMr_G) + 1), xopt.f.norm_rMr_G,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G) ), xopt.f.norm_rMr_G,
                           label=r'  Green ' + r'$\mathcal{T}$'+f'$_{{{2**T}}}$', color='green',
                           linestyle='--', marker=markers[counter])
-            ax_1.semilogy(np.arange(1, len(xopt.f.norm_rMr_JG) + 1), xopt.f.norm_rMr_JG,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG) ), xopt.f.norm_rMr_JG,
                           label=r' Jacobi-Green  '+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$',
                           color='Black', linestyle='-.', marker=markers[counter])
             ax_1.set_xlabel('PCG iteration - k')
             ax_1.set_ylabel('Norm of residua - '
                             r'$||r_{k}||_{G^{-1}} $')
             ax_1.set_title(f'Convergence \n '+ r'Geometry - $\mathcal{G}$'+f'$_{{{2**G}}}$')
-            ax_1.set_ylim([1e-14, 1e1])
-            ax_1.set_xlim([1, 10])
+            ax_1.set_ylim([1e-6, 1e4])
+            ax_1.set_xlim([0, 9])
 
             if geometry_ID == 'sine_wave_':
                 ax_1.set_xlim([1, 25])
                 ax_1.set_xticks([1,  9,13,15, 22 ])
                 ax_1.set_xticklabels([1,  9,13,15, 22 ])
             elif geometry_ID == 'linear':
-                ax_1.set_xlim([1, 10])
-                ax_1.set_xticks([1, 4,  8, 9])
-                ax_1.set_xticklabels([1, 4,  8, 9])
+                ax_1.set_xlim([0, 9])
+                ax_1.set_xticks([0, 3,  7, 9])
+                ax_1.set_xticklabels([0, 3,  7, 9])
     #-------------------------------------# plot eigenvals #-------------------------------------#
             ax_2 = fig.add_subplot(gs[counter, 1])
             ax_2.text(-0.2, 1.15, f'(b.{counter+1})', transform=ax_2.transAxes)
@@ -110,8 +110,8 @@ if plot_this:
             # Create the histogram
             ax_2.hist(sorted(eig_G)[2:], bins=bins, color='Green', label=f'Green', edgecolor='Green',
                       alpha=0.99)  # , marker='.', linewidth=0, markersize=5)
-            ax_2.hist(sorted(np.real(eig_JG))[2:], bins=bins, color='Black', label=f'Jacobi-Green', edgecolor='black',
-                      alpha=0.2)  # , marker='.', linewidth=0, markersize=5)
+            #ax_2.hist(sorted(np.real(eig_JG))[2:], bins=bins, color='Black', label=f'Jacobi-Green', edgecolor='black',
+            #          alpha=0.2)  # , marker='.', linewidth=0, markersize=5)
             # ax_3.plot(sorted(eig_G)[2:],np.zeros_like(eig_G[2:]), color='red', label=f'Green',
             #           alpha=0.5, marker='.', linewidth=0, markersize=5)
             # ax_3.plot(sorted(eig_JG)[2:],np.ones_like(eig_JG[2:]), color='b', label=f'Jacobi-Green',
@@ -123,9 +123,9 @@ if plot_this:
                 ax_2.set_xticks([0, 0.5, 1])
                 ax_2.set_xticklabels([0, 0.5, 1])
             else:
-                ax_2.set_xlim([1 / np.power(10, ratio), 1e0])
-                ax_2.set_xticks([1 / np.power(10, ratio), 0.5, 1])
-                ax_2.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                ax_2.set_xlim([0 , 101])
+                ax_2.set_xticks([1, 34,67, 100])
+                ax_2.set_xticklabels([1, 34,67, 100])#f'$10^{{{2}}}$'f'$10^{{{2}}}$'
             # ax_3.set_xticklabels([1e-4, 0.5, 1])
             if counter ==0:
                 ax_2.set_title( 'Histograms of eigenvalues \n'+r'Mesh -'+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')
@@ -145,8 +145,8 @@ if plot_this:
             ax_3 = fig.add_subplot(gs[counter, 2])
             ax_3.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
                       alpha=0.5, marker='.', linewidth=0, markersize=5)
-            ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
-                      alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
 
             ax_3.text(-0.2, 1.15, f'(c.{counter+1})', transform=ax_3.transAxes)
             if ratio == 0:
@@ -156,16 +156,19 @@ if plot_this:
                 ax_3.set_yticklabels([0, 0.5, 1])
             else:
                 # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
-                ax_3.set_ylim([1e-4, 1e0])
-                ax_3.set_yticks([1e-4, 0.5, 1])
-                ax_3.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                ax_3.set_ylim([0, 101])
+                ax_3.set_yticks([1, 34,67, 100])
+                ax_3.set_yticklabels([1,34,67,100])#f'$10^{{{2}}}$'
+                ax_3.set_xlim([0, len(eig_G)])
+                ax_3.set_xticks([1, len(eig_G)//2, len(eig_G)])
+                ax_3.set_xticklabels([1, len(eig_G)//2, len(eig_G)])
             #ax_3.set_title(r'Sorted eigenvalues')
             if counter ==0:
                 ax_3.set_title( 'Sorted eigenvalues \n'+r'Mesh -'+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')
             elif counter==1:
                 ax_3.set_title(  r'Mesh -'+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')
             elif counter==2:
-                ax_3.set_title(  r'Mesh '+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$'+f' (${{{2**T}}}$ nodes in x direction)')
+                ax_3.set_title(  r'Mesh '+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')#+f' (${{{2**T}}}$ nodes in x direction)'
                 ax_3.set_xlabel('eigenvalue index - $i$')
             ax_3.set_ylabel('eigenvalue $\lambda_i$')
             print(xopt.f.nb_of_pixels)
@@ -189,7 +192,7 @@ if plot_size_dep:
     geometry_ID ='linear'#'linear'# 'sine_wave_' #'linear'
     geometry_n = [2,3,5 ]
     discretization_n = [5  ]
-    ratio = 4
+    ratio = 2
 
     # create a figure
     fig = plt.figure( figsize=(11, 4.5))
@@ -231,15 +234,15 @@ if plot_size_dep:
             ax_1.set_title(f'Convergence \n '+ r'Mesh - $\mathcal{T}$'+f'$_{{{2**T}}}$')
 
 
-            ax_1.set_ylim([1e-14, 1e1])
             if geometry_ID == 'sine_wave_':
                 ax_1.set_xlim([1, 60])
                 ax_1.set_xticks([1,  8,15, 18, 22,30, 53,60])
                 ax_1.set_xticklabels([1,  8,15, 18, 22,30, 53,60])
             elif geometry_ID == 'linear':
                 ax_1.set_xlim([1, 30])
-                ax_1.set_xticks([1, 4, 8, 9,14, 30])
+                ax_1.set_xticks([1, 4, 8, 9, 14, 30])
                 ax_1.set_xticklabels([1, 4, 8, 9,14,  30])
+            ax_1.set_ylim([1e-6, 1e4])
 
     #-------------------------------------# plot eigenvals #-------------------------------------#
             ax_2 = fig.add_subplot(gs[counter, 1])
@@ -260,8 +263,8 @@ if plot_size_dep:
             # Create the histogram
             ax_2.hist(sorted(eig_G)[2:], bins=bins, color='Green', label=f'Green', edgecolor='Green',
                       alpha=0.99)  # , marker='.', linewidth=0, markersize=5)
-            ax_2.hist(sorted(np.real(eig_JG))[2:], bins=bins, color='Black', label=f'Jacobi-Green', edgecolor='black',
-                      alpha=0.2)  # , marker='.', linewidth=0, markersize=5)
+            # ax_2.hist(sorted(np.real(eig_JG))[2:], bins=bins, color='Black', label=f'Jacobi-Green', edgecolor='black',
+            #           alpha=0.2)  # , marker='.', linewidth=0, markersize=5)
             # ax_3.plot(sorted(eig_G)[2:],np.zeros_like(eig_G[2:]), color='red', label=f'Green',
             #           alpha=0.5, marker='.', linewidth=0, markersize=5)
             # ax_3.plot(sorted(eig_JG)[2:],np.ones_like(eig_JG[2:]), color='b', label=f'Jacobi-Green',
@@ -272,9 +275,9 @@ if plot_size_dep:
                 ax_2.set_xticks([0, 0.5, 1])
                 ax_2.set_xticklabels([0, 0.5, 1])
             else:
-                ax_2.set_xlim([1 / np.power(10, ratio), 1e0])
-                ax_2.set_xticks([1 / np.power(10, ratio), 0.5, 1])
-                ax_2.set_xticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+                ax_2.set_xlim([0, 101])
+                ax_2.set_xticks([1, 34, 67, 100])
+                ax_2.set_xticklabels([1, 34, 67, 100])
             # ax_3.set_xticklabels([1e-4, 0.5, 1])
             if counter ==0:
                 ax_2.set_title( 'Histograms of eigenvalues \n'+r'Geometry '+ r'$\mathcal{G}$'+f'$_{{{2**G}}}$')
@@ -295,8 +298,8 @@ if plot_size_dep:
 
             ax_3.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
                       alpha=0.5, marker='.', linewidth=0, markersize=5)
-            ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
-                      alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
 
             if ratio == 0:
                 # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
@@ -304,11 +307,12 @@ if plot_size_dep:
                 ax_3.set_yticks([0, 0.5, 1])
                 ax_3.set_yticklabels([0, 0.5, 1])
             else:
-                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
-                ax_3.set_ylim([1e-4, 1e0])
-                ax_3.set_yticks([1e-4, 0.5, 1])
-                ax_3.set_yticklabels([f'$10^{{{-4}}}$', 0.5, 1])
-
+                ax_3.set_ylim([0, 101])
+                ax_3.set_yticks([1, 34,67, 100])
+                ax_3.set_yticklabels([1,34,67,100])#f'$10^{{{2}}}$'
+                ax_3.set_xlim([0, len(eig_G)])
+                ax_3.set_xticks([1, len(eig_G)//2, len(eig_G)])
+                ax_3.set_xticklabels([1, len(eig_G)//2, len(eig_G)])
             if counter ==0:
                 ax_3.set_title( 'Sorted eigenvalues \n'+r'Geometry- '+ r'$\mathcal{G}$'+f'$_{{{2**G}}}$')
             elif counter==1:
@@ -328,7 +332,7 @@ if plot_size_dep:
     plt.savefig(fname, bbox_inches='tight')
     plt.show()
 
-
+quit()
 #### plot phase contrast dependanc
 plot_phase_contrast=True
 if plot_phase_contrast:
