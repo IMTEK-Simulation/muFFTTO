@@ -172,15 +172,20 @@ def get_cg_polynomial(lambda_val, ritz_values):
 def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5], weight=None, error_evol=None,
                        title=None):
     # Plot the convergence of Ritz values
-    errors = np.zeros(len(ritz_values))
-    for i in np.arange(0, len(ritz_values)):
+    k = np.arange(1e3)
+    kappa=max(true_eigenvalues)/min(true_eigenvalues)
+    convergence = ((np.sqrt(kappa) - 1) / (np.sqrt(kappa) + 1)) ** k
+    errors = np.zeros(len(ritz_values)+1)
+    errors[0]=1
+    nb_iterations = min(len(ritz_values),2)
+    for i in np.arange(0, nb_iterations):# len(ritz_values)
         polynomial_at_eigens = get_cg_polynomial(np.real(true_eigenvalues), ritz_values[i])
 
         w_div_lambda = np.real(weight) / np.real(true_eigenvalues)
 
-        errors[i] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
+        errors[i+1] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
 
-    for i in np.arange(0, len(ritz_values)):
+    for i in np.arange(0,nb_iterations+1):# len(ritz_values)
         if i == 0: # Zero order polynomial is constant
             polynomial_value = np.ones(len(x_values))
         else:
@@ -200,45 +205,71 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
             ax_weights = fig.add_subplot(gs[1, 0])
         #            ax_error_true = fig.add_subplot(gs[1, 1])
 
+        # ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
+        # ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
+        # ax_poly.scatter(np.real(true_eigenvalues), [0] * len(true_eigenvalues), color='blue', marker='|',
+        #                 label="True Eigenvalues")
+        ax_poly.scatter(np.real(true_eigenvalues), [0] * len(true_eigenvalues), color='green', marker='|',
+                        label="Eigenvalues")
         ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
         ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
-        ax_poly.scatter(np.real(true_eigenvalues), [0] * len(true_eigenvalues), color='blue', marker='|',
-                        label="True Eigenvalues")
+
         if i == 0:  # Zero order polynomial is constant
-            pass
+
+            ax_poly.scatter(-1,-1, color='red', marker='x',
+                            label=f"Roots of " + r'$\varphi^{CG}$' + f'$_{{{i}}}$')
         else:# Zero order polynomial is constant
-            ax_poly.scatter(np.real(ritz_values[i-1]), [0] * len(ritz_values[i-1]), color='red', marker='x',
-                        label=f"Ritz Values\n (Approx Eigenvalues)")
+            # ax_poly.scatter(np.real(ritz_values[i-1]), [0] * len(ritz_values[i-1]), color='red', marker='x',
+            #             label=f"Ritz Values\n (Approx Eigenvalues)")
+            ax_poly.scatter(np.real(ritz_values[i - 1]), [0] * len(ritz_values[i - 1]), color='red', marker='x',
+                        label=f"Roots of " + r'$\varphi^{CG}$' + f'$_{{{i}}}$')  # +"(Approx Eigenvalues)"
+        ax_poly.set_xticks([1, 34, 67, 100])
+        ax_poly.set_xticklabels([1, 34, 67, 100])
 
         if weight is not None:
-            ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='red',
-                               marker='o', label=r"\frac{w_{i}}{\lamnda_{i}}")
+            # ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='red',
+            #                    marker='o', label=r"\frac{w_{i}}{\lamnda_{i}}")
+            # ax_weights.set_yscale('log')
+            # ax_weights.set_ylim(1e-10, 1)
+            # ax_weights.set_xlim(-0.1, x_values[-1] + 0.3)
+            # ax_weights.set_ylabel(r"$w_{i}/ \lambda_{i}$")
+            # ax_weights.set_title(f"Weights / Eigens ")
+            ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='blue',
+                               marker='o', label=r"non-zero weights - $w_{i}/ \lambda_{i}$")
             ax_weights.set_yscale('log')
             ax_weights.set_ylim(1e-10, 1)
             ax_weights.set_xlim(-0.1, x_values[-1] + 0.3)
-            ax_weights.set_ylabel(r"$w_{i}/ \lambda_{i}$")
-            ax_weights.set_title(f"Weights / Eigens ")
+            # ax_weights.set_ylabel(r"$w_{i}/ \lambda_{i}$")
+            # ax_weights.set_title(f"Weights / Eigens ")
+            ax_weights.set_xlabel('eigenvalue index - $i$ (sorted)')
+            #ax_weights.set_ylabel(r'Weights - $w_{i}/ \lambda_{i}$')
+            ax_weights.set_xticks([1, 34, 67, 100])
+            ax_weights.set_xticklabels([1, 34, 67, 100])
+            ax_weights.legend(ncol=1, loc='lower left')
 
         # ax_poly.set_xlabel("Eigenvalues --- Approximation")
         # ax_poly.set_ylabel("CG (Lanczos) Iteration")
-        ax_poly.set_title(f"CG polynomial (Lanczos Iteration) {{{i}}}")
+        ax_poly.set_title(f"CG polynomial")# at Iteration {i}
         ax_poly.set_ylim(ylim[0], ylim[1])
         ax_poly.set_xlim(-0.1, x_values[-1] + 0.3)
-        ax_poly.legend()
-
-        ax_error.scatter(np.arange(1, len(ritz_values[i]) + 1), errors[:i + 1], color='red', marker='x',
+        #ax_poly.legend(loc='upper right')
+        ax_poly.legend(ncol=3, loc='upper left')
+        ax_error.plot(k, convergence, "Grey", linestyle='-', label=r'$\kappa$ bound',
+                      linewidth=1)
+        ax_error.plot(np.arange(0, len(errors[:i+1 ]) ), errors[:i+1 ], color='k', marker='x',linewidth=2,
                          label=r'$ \sum_{l=1}^{N}\frac{\omega_{l}}{\lambda_{l}}   \left(\varphi_{' + f'{{{i}}}' + r'}^{CG}(\lambda_{l}) \right)^{2}$')
         ax_error.set_yscale('log')
-        ax_error.set_ylim(1e-16, 1)
+        ax_error.set_ylim(1e-6, 1)
         #ax_error.set_xlim(0,50 )#len(ritz_values[-1]) + 1
 
-        ax_error.semilogy(np.arange(0, error_evol.__len__())[:],
-                          error_evol, "g",
-                          linestyle='-', marker='x', label='Enorm/r0', linewidth=1)
-        ax_error.set_yscale('log')
-        ax_error.set_ylim(1e-16, 1)
+        # ax_error.semilogy(np.arange(0, error_evol.__len__())[:],
+        #                   error_evol, "g",
+        #                   linestyle='-', marker='x', label='Enorm/r0', linewidth=1)
+
         ax_error.set_xlim(0, 50) #len(error_evol) + 1
         # ax_error.set_xlabel(r" energy norm /$|| r_{0}||^{2} $ ")
+        ax_error.set_title(f"Relative error ")
+
         ax_error.legend()
 
         # ax_error.set_title(title)
@@ -253,15 +284,17 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
 def plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues, ylim=[-2. , 2. ], weight=None, error_evol=None,
                        title=None):
     # Plot the convergence of Ritz values
-    errors = np.zeros(len(ritz_values))
-    for i in np.arange(0, len(ritz_values)):
+    errors = np.zeros(len(ritz_values)+1)
+    errors[0]=1
+    nb_iterations = min(len(ritz_values),10)
+    for i in np.arange(0, nb_iterations):
         polynomial_at_eigens = get_cg_polynomial(np.real(true_eigenvalues), ritz_values[i])
 
         w_div_lambda = np.real(weight) / np.real(true_eigenvalues)
 
-        errors[i] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
+        errors[i+1] = np.dot(np.real(polynomial_at_eigens) ** 2, w_div_lambda)
 
-    for i in np.arange(0, len(ritz_values)):
+    for i in np.arange(0,nb_iterations+1):
         if i == 0: # Zero order polynomial is constant
             polynomial_value = np.ones(len(x_values))
         else:
@@ -279,22 +312,26 @@ def plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues, ylim=[-
         ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
         ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
 
+
+
         if i == 0:  # Zero order polynomial is constant
-            pass
+            ax_poly.scatter(-1, -1, color='red', marker='x',
+                            label=f"Ritz Values\n (Approx Eigenvalues)")
         else:# Zero order polynomial is constant
             ax_poly.scatter(np.real(ritz_values[i-1]), [0] * len(ritz_values[i-1]), color='red', marker='x',
                         label=f"Roots of "+r'$\varphi^{CG}$' + f'$_{{{i}}}$')# +"(Approx Eigenvalues)"
-
+        ax_poly.set_xticks([1, 34, 67, 100])
+        ax_poly.set_xticklabels([1, 34, 67, 100])
         if weight is not None:
             ax_weights.scatter(np.real(true_eigenvalues), np.real(weight) / np.real(true_eigenvalues), color='blue',
-                               marker='o', label=r"non-zero weights")
+                               marker='o', label=r"non-zero weights- $w_{i}/ \lambda_{i}$")
             ax_weights.set_yscale('log')
             ax_weights.set_ylim(1e-10, 1)
             ax_weights.set_xlim(-0.1, x_values[-1] + 0.3)
            # ax_weights.set_ylabel(r"$w_{i}/ \lambda_{i}$")
            # ax_weights.set_title(f"Weights / Eigens ")
             ax_weights.set_xlabel('eigenvalue index - $i$ (sorted)')
-            ax_weights.set_ylabel(r'Weights - $w_{i}/ \lambda_{i}$')
+            #ax_weights.set_ylabel(r'Weights - $w_{i}/ \lambda_{i}$')
             ax_weights.set_xticks([1, 34, 67, 100])
             ax_weights.set_xticklabels([1, 34, 67, 100])
             ax_weights.legend(ncol=1, loc='lower left')
@@ -608,43 +645,51 @@ def plot_eigenvector_filling(vectors,   grid_shape, dim=2):
 
 def run_simple_CG(initial, RHS, kappa):
     np.random.seed(seed=1)
-    x_lim_max = 50  # 1e3 #
+    x_lim_max = 100  # 1e3 #
     x_lim_min =0
-    k = np.arange(1e3)
+    k = np.arange(1e6)
     convergence = ((np.sqrt(kappa) - 1) / (np.sqrt(kappa) + 1)) ** k
     convergence_G = convergence  # * norms_linearN['residual_rr'][0]
-    convergence_1 = 2 * ((np.sqrt(2) - 1) / (np.sqrt(2) + 1)) ** k
-    convergence_100 = 2 * ((np.sqrt(100) - 1) / (np.sqrt(100) + 1)) ** k
-    convergence_10000 = 2 * ((np.sqrt(1e4) - 1) / (np.sqrt(1e4) + 1)) ** k
+    convergence_1 = 2 * ((np.sqrt(10) - 1) / (np.sqrt(10) + 1)) ** k
+    convergence_2 = 2 * ((np.sqrt(1e2) - 1) / (np.sqrt(100) + 1)) ** k
+    convergence_4 = 2 * ((np.sqrt(1e4) - 1) / (np.sqrt(1e4) + 1)) ** k
+    convergence_6= 2 * ((np.sqrt(1e6) - 1) / (np.sqrt(1e6) + 1)) ** k
+    convergence_8= 2 * ((np.sqrt(1e8) - 1) / (np.sqrt(1e8) + 1)) ** k
     # bound1 = 2 * (np.sqrt(kappa) - 1) / (np.sqrt(kappa) + 1) ** k
     # bound = 2 * np.exp(-2 * k / np.sqrt(kappa))
 
-    iterations = np.arange(0, 1e3)
+    iterations = k#np.arange(0, 1e6)
 
-    #  fig = plt.figure(figsize=(4.5, 4.5))
-    #  gs = fig.add_gridspec(1, 1, width_ratios=[1])
-    #  ax_iterations = fig.add_subplot(gs[0, 0])
-    #  ax_iterations.semilogy(iterations,convergence_1/2, "Grey",  linestyle='-', label=r'Estimate: $\kappa$=2', linewidth=1)
-    #  ax_iterations.semilogy(iterations,convergence_100/2, "red",  linestyle=':', label=r'Estimate: $\kappa$=100', linewidth=1)
-    #  ax_iterations.semilogy(iterations,convergence_10000/2, "blue",  linestyle=':', label=r'Estimate: $\kappa$=10000', linewidth=1)
-    #
-    #  ax_iterations.set_xlim(1, x_lim_max)
-    #  #ax_iterations.set_xticks([1,5,10,15,20])
-    # # ax_iterations.set_ylim([1e-14, 1])
-    #  ax_iterations.set_yscale('linear')
-    #  #ax_iterations.set_yscale('log')
-    #  #ax_iterations.set_xscale('log')
-    #  ax_iterations.set_title('x-linear, y-linear ')
-    #  ax_iterations.set_ylim([1e-16, 1e0])
-    #  ax_iterations.set_xlabel("PCG iterations")
-    #  ax_iterations.set_ylabel(r"relative Norm of residua")
-    #  ax_iterations.legend(loc='upper right' )
-    #
-    #  src = '../figures/'  # source folder\
-    #  fname = src + f'CG_conver_{kappa}' + '{}'.format('.pdf')
-    #  plt.savefig(fname, bbox_inches='tight')
-    #  plt.show()
-    #  quit()
+    fig = plt.figure(figsize=(4.5, 4.5))
+    gs = fig.add_gridspec(1, 1, width_ratios=[1])
+    ax_iterations = fig.add_subplot(gs[0, 0])
+    #ax_iterations.semilogy(iterations,convergence_1/2 , "Grey",  linestyle='-', label=r'  $\kappa$=10', linewidth=1)
+    ax_iterations.semilogy(iterations,convergence_2/2 , "red",  linestyle='-', label=r'  $\kappa=10^2$', linewidth=1)
+    ax_iterations.semilogy(iterations,convergence_4/2 , "green",  linestyle='-.', label=r'  $\kappa=10^4$', linewidth=1)
+    ax_iterations.semilogy(iterations,convergence_6/2 , "c",  linestyle='--', label=r'  $\kappa=10^6$', linewidth=1)
+    ax_iterations.semilogy(iterations,convergence_8/2 , "blue",  linestyle=':', label=r'  $\kappa=10^8$', linewidth=1)
+
+    ax_iterations.set_xlim(1, x_lim_max)
+    #ax_iterations.set_xticks([1,5,10,15,20])
+    # ax_iterations.set_ylim([1e-14, 1])
+    #ax_iterations.set_yscale('linear')
+    #ax_iterations.set_yscale('log')
+   # ax_iterations.set_xscale('log')
+    #ax_iterations.set_title('x-linear, y-linear ')
+    ax_iterations.set_ylim([1e-10, 1e0])
+    ax_iterations.set_xlim([1, 1000 ])
+
+    ax_iterations.set_xlabel(" CG iteration")
+    ax_iterations.set_title(r"$\kappa-$error bounds")
+
+    ax_iterations.set_ylabel(r"Relative error")
+    ax_iterations.legend(loc='best' )
+
+    src = '../figures/'  # source folder\
+    fname = src + f'CG_conver_{kappa}' + '{}'.format('.pdf')
+    plt.savefig(fname, bbox_inches='tight')
+    plt.show()
+    quit()
     ########################################   Uniform distribution   ###############################################
 
     markers = [
@@ -689,15 +734,16 @@ def run_simple_CG(initial, RHS, kappa):
     print('Uniform distributio  ')
     name_ = f'CG_conver_exampl1_x0={initial}_rhs={RHS}_kappa{kappa}_1'
 
-    N = 5
+    N = 4
     r = 1
 
     A = np.zeros([r * N, r * N])
     M = np.zeros([r * N, r * N])
 
     # Create the diagonal matrix
-    A = np.diag(np.arange(1, r * N + 1))
-    A[-1, -1] = kappa
+    #A = np.diag(np.arange(1, r * N + 1))
+    A = np.diag(np.linspace(1, kappa, N))
+    #A[-1, -1] = kappa
 
     M = np.diag(np.random.random(r * N))
     M = np.diag(np.ones(r * N))
@@ -739,6 +785,8 @@ def run_simple_CG(initial, RHS, kappa):
                      lambda_min=np.real(eig_A[0]))
     if plot_CGpoly == True:
         plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_A, weight=w_i,
+                           error_evol=norms_N['energy_lb'] / norms_N['residual_rr'][0], title=name_)
+        plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_A, weight=w_i,
                            error_evol=norms_N['energy_lb'] / norms_N['residual_rr'][0], title=name_)
     # print(x)
     # print(norms_N)
@@ -810,8 +858,8 @@ def run_simple_CG(initial, RHS, kappa):
     r = 3  # repetition factor
 
     # Create the original diagonal matrix
-    original_diag = np.arange(1, N + 1)
-    original_diag[-1] = kappa
+    original_diag =np.linspace(1, kappa, N)
+    #original_diag[-1] = kappa
     # Repeat the diagonal elements 'r' times
     repeated_diag = np.tile(original_diag, r)
     A = np.diag(repeated_diag)
@@ -967,6 +1015,8 @@ def run_simple_CG(initial, RHS, kappa):
     name_ = f'CG_conver_exampl1_x0={initial}_rhs={RHS}_kappa{kappa}_4'
 
     N_large = 100
+
+
     # kappa=5
     A = np.zeros([N_large, N_large])
     M = np.zeros([N_large, N_large])
@@ -1068,7 +1118,14 @@ def run_simple_CG(initial, RHS, kappa):
     elif initial == 'zeros':
         x0 = np.zeros(N_large)
 
-    rhs[4:N_large - 4] = 0
+    #rhs[2:N_large - 2] = 0
+    rhs[:] = 0
+
+    indices = np.array([1, 34, 67, 100]) - 1  # Convert to zero-based indexing
+
+    # Set the specified indices to their corresponding values
+    rhs[indices] = indices + 1  # Restore original values
+
 
     eig_A, Q_A = sc.linalg.eig(a=A, b=M)  # , eigvals_only=True
     r0 = rhs - A_fun(x0)
@@ -1077,8 +1134,8 @@ def run_simple_CG(initial, RHS, kappa):
     print(w_i)
     x_values = np.linspace(0, kappa, 100)
     #  Ritz values during iterations
-    if plot_ritz == True:
-        ritz_values = get_ritz_values(A=A, k_max=N_large, v0=r0)
+    #if plot_ritz == True:
+    ritz_values = get_ritz_values(A=A, k_max=N_large, v0=r0)
 
     # plot_cg_polynomial(x_values, ritz_values ,true_eigenvalues=eig_A,weight=w_i)
 
@@ -1087,7 +1144,7 @@ def run_simple_CG(initial, RHS, kappa):
     x, norms_linear_sparse_rhs = PCG(Afun=A_fun, B=rhs, x0=x0, P=M_fun, steps=int(5000), toler=1e-14,
                                      norm_energy_upper_bound=True, lambda_min=np.real(eig_A[0]))
     if plot_CGpoly == True:
-        plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_A, weight=w_i,
+        plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=np.real(eig_A), weight=w_i,
                            error_evol=norms_linear_sparse_rhs['energy_lb'] / norms_linear_sparse_rhs['residual_rr'][0]
                            , title=name_)
     print(norms_linear_sparse_rhs)
@@ -1230,9 +1287,10 @@ def run_simple_CG(initial, RHS, kappa):
 
 if __name__ == '__main__':
 
-    for initial in ['zeros']:  # , 'random'  'zeros'
+
+    for initial in ['random']:  # , 'random'  'zeros'
         for RHS in ['random']:  # , 'random'
-            kappa = 5
+            kappa = 100
             plot_ritz = False
             plot_CGpoly = True
 

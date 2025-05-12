@@ -400,7 +400,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
     # pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
     #divnorm = mpl.colors.LogNorm(vmin=1e-4, vmax=1 )
-    divnorm = mpl.colors.Normalize(vmin=1e-4, vmax=1)
+    divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
     cmap_ = mpl.cm.seismic# mpl.cm.seismic #mpl.cm.Greys
     ax_init = fig.add_subplot(gs[0, 0])
     # ax_init= fig.add_axes([0.15, 0.6, 0.1, 0.2])
@@ -475,8 +475,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     cbar.ax.yaxis.tick_right()
     # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
     # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
-    cbar.set_ticks(ticks=[1e-4, 0.5, 1])
-    cbar.set_ticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+    cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+    cbar.set_ticklabels([f'$10^{{{-8}}}$', 0.5, 1])
     #
     # ax1 = fig.add_axes([0.79, 0.20, 0.1, 0.15])
     # # ax1.set_aspect('equal')
@@ -645,19 +645,19 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
     ax_iterations.plot(np.linspace(1, 1000, dgo.shape[0]), dgo, "g", label='Green N=64', linewidth=1)
    # ax_iterations.plot(np.linspace(1, 1000, jacoby.shape[0]), jacoby, "b", label='Jacobi N=64', linewidth=1)
-    ax_iterations.plot(np.linspace(1, 1000, combi.shape[0]), combi, "k", label='Jacobi - Green N=64', linewidth=2)
+#    ax_iterations.plot(np.linspace(1, 1000, combi.shape[0]), combi, "k", label='Jacobi - Green N=64', linewidth=2)
     ax_iterations.plot(np.linspace(1, 1000, dgo_32.shape[0]), dgo_32, "g", label='Green N=32', linewidth=1,
                        linestyle=':')
     ax_iterations.plot(np.linspace(1, 1000, dgo_128.shape[0]),  dgo_128, "g",
                        label='Green N=128', linewidth=1, linestyle='-.')
  #   ax_iterations.plot(np.linspace(1, 1000, jacoby_32.shape[0]), jacoby_32, "b", label='Jacobi N=32', linewidth=1,
  #                      linestyle=':')
-    ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), combi_32, "k", label='Jacobi - Green N=32', linewidth=2,
-                       linestyle=':')
-    ax_iterations.plot(np.linspace(1, 1000, combi_128.shape[0]), combi_128, "k", label='Jacobi - Green N=128',
-                       linewidth=2, linestyle='-.')
-    ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), np.ones(combi_32.shape[0]) * 1228, "k",
-                       label='Jacobi - Green N=1024', linewidth=2, linestyle='--')
+ #    ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), combi_32, "k", label='Jacobi - Green N=32', linewidth=2,
+ #                       linestyle=':')
+ #    ax_iterations.plot(np.linspace(1, 1000, combi_128.shape[0]), combi_128, "k", label='Jacobi - Green N=128',
+ #                       linewidth=2, linestyle='-.')
+ #    ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), np.ones(combi_32.shape[0]) * 1228, "k",
+ #                       label='Jacobi - Green N=1024', linewidth=2, linestyle='--')
 
     ax_iterations.set_xlim(1, 1000)
     ax_iterations.set_xticks([1, 1000])
@@ -674,42 +674,42 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     ax_iterations.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=True,
                               bottom=True, top=False, left=True, right=True)
 
-    ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{32}}}$',
-                           xy=(300, 62.0),
-                           xytext=(350., 30.6),
-                           arrowprops=dict(arrowstyle='->',
-                                           color='Black',
-                                           lw=1,
-                                           ls='-'),
-                           color='Black'
-                           )
-    ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{64}}}$',
-                           xy=(380, 88.0),
-                           xytext=(400., 120.6),
-                           arrowprops=dict(arrowstyle='->',
-                                           color='Black',
-                                           lw=1,
-                                           ls='-'),
-                           color='Black'
-                           )
-    ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{128}}}$',
-                           xy=(700, 160.0),
-                           xytext=(750., 100.6),
-                           arrowprops=dict(arrowstyle='->',
-                                           color='Black',
-                                           lw=1,
-                                           ls='-'),
-                           color='Black'
-                           )
-    ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{1024}}}$',
-                           xy=(900, 1160.0),
-                           xytext=(830., 550.6),
-                           arrowprops=dict(arrowstyle='->',
-                                           color='Black',
-                                           lw=1,
-                                           ls='-'),
-                           color='Black'
-                           )
+    # ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{32}}}$',
+    #                        xy=(300, 62.0),
+    #                        xytext=(350., 30.6),
+    #                        arrowprops=dict(arrowstyle='->',
+    #                                        color='Black',
+    #                                        lw=1,
+    #                                        ls='-'),
+    #                        color='Black'
+    #                        )
+    # ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{64}}}$',
+    #                        xy=(380, 88.0),
+    #                        xytext=(400., 120.6),
+    #                        arrowprops=dict(arrowstyle='->',
+    #                                        color='Black',
+    #                                        lw=1,
+    #                                        ls='-'),
+    #                        color='Black'
+    #                        )
+    # ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{128}}}$',
+    #                        xy=(700, 160.0),
+    #                        xytext=(750., 100.6),
+    #                        arrowprops=dict(arrowstyle='->',
+    #                                        color='Black',
+    #                                        lw=1,
+    #                                        ls='-'),
+    #                        color='Black'
+    #                        )
+    # ax_iterations.annotate(text=r'Jacobi-Green - $\mathcal{T}$' + f'$_{{{1024}}}$',
+    #                        xy=(900, 1160.0),
+    #                        xytext=(830., 550.6),
+    #                        arrowprops=dict(arrowstyle='->',
+    #                                        color='Black',
+    #                                        lw=1,
+    #                                        ls='-'),
+    #                        color='Black'
+    #                        )
     # ax_iterations.annotate(text=r'Jacobi - $\mathcal{T}$' + f'$_{{{32}}}$',
     #                        xy=(500, 210.0),
     #                        xytext=(550., 290.0),
@@ -765,7 +765,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
     # pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
     #divnorm = mpl.colors.LogNorm(vmin=1e-4, vmax=1 )
-    divnorm = mpl.colors.Normalize(vmin=1e-4, vmax=1)
+    divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
     cmap_ = mpl.cm.seismic# mpl.cm.seismic #mpl.cm.Greys
     ax_init = fig.add_subplot(gs[0, 0])
     # ax_init= fig.add_axes([0.15, 0.6, 0.1, 0.2])
@@ -840,8 +840,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     cbar.ax.yaxis.tick_right()
     # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
     # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
-    cbar.set_ticks(ticks=[1e-4, 0.5, 1])
-    cbar.set_ticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+    cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+    cbar.set_ticklabels([f'$10^{{{-8}}}$', 0.5, 1])
 
     fname = src + 'exp_paper_JG_2D_elasticity_TO_iterations_green_only' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))

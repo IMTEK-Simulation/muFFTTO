@@ -198,8 +198,11 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             if ratio == 0:
                 pass
             else:
-                #phase_field = scale_field(phase_field, min_val=1 , max_val=10**ratio)
-                phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+                if geometry_ID == 'sine_wave_':
+                    phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
+                elif geometry_ID == 'linear':
+                    phase_field = scale_field(phase_field, min_val=1, max_val=10 ** ratio)
+
             # phase_field = scale_field(phase_field, min_val=1, max_val=2)
             # phase_field[phase_field<=1/10**ratio]= 0
 

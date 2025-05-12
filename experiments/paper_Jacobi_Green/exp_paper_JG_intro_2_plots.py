@@ -62,7 +62,7 @@ counter = 0
 kontrast = 100
 
 T = number_of_pixels[0]
-for G in [2, 8, 32]:
+for G in [4, 8, 32]:
     file_data_name = (
         f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
     folder_name = '../exp_data/'
@@ -144,6 +144,116 @@ for G in [2, 8, 32]:
 
     counter += 1
 fname = src + script_name + 'phases' + f'{kontrast}_{geometry_ID}' + '{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
+
+
+
+# create a figure
+fig = plt.figure(figsize=(5.5, 5.5))
+gs = fig.add_gridspec(3, 3, hspace=0.5, wspace=0.2, width_ratios=[1, 1, 1],
+                      height_ratios=[1, 0.05, 1])
+cbar_ax = fig.add_subplot(gs[1, :])
+ax_cross = fig.add_subplot(gs[2, :])
+# plot phases
+
+############################################# plot material phases
+x = np.arange(0, number_of_pixels[0])
+y = np.arange(0, number_of_pixels[1])
+X, Y = np.meshgrid(x, y)
+counter = 0
+kontrast = 100
+
+T = number_of_pixels[0]
+for G in [4]:
+    file_data_name = (
+        f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
+    folder_name = '../exp_data/'
+
+    xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+    phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+    if counter < 3:
+        ax_geom = fig.add_subplot(gs[0, counter+1])
+    elif counter < 4:
+        ax_geom = fig.add_subplot(gs[0, counter - 2])
+    pcm = ax_geom.pcolormesh(X, Y, np.transpose(phase_field), cmap=mpl.cm.Greys, vmin=1, vmax=1e2, linewidth=0,
+                             rasterized=True)
+    # ax_geom.set_xticks(np.arange(-.5, number_of_pixels[0], int(number_of_pixels[0] / 4)))
+    # ax_geom.set_yticks(np.arange(-.5, number_of_pixels[1], int(number_of_pixels[1] / 4)))
+    # ax_geom.set_xticklabels(np.arange(0, number_of_pixels[0] + 1, int(number_of_pixels[0] / 4)))
+    # ax_geom.set_yticklabels(np.arange(0, number_of_pixels[1] + 1, int(number_of_pixels[1] / 4)))
+    ax_geom.set_xticks([])
+    ax_geom.set_yticks([])
+    ax_geom.set_xticklabels([])
+    ax_geom.set_yticklabels([])
+    ax_geom.set_title(f'{G} phases')
+    ax_geom.hlines(y=10, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+    ax_geom.yaxis.set_label_position('right')
+    ax_geom.yaxis.tick_right()
+    ax_geom.tick_params(labelbottom=True, labeltop=False, labelleft=False, labelright=False,
+                        bottom=True, top=False, left=False, right=False)
+    if counter == 0:
+        # Set ylabel to the right
+        ax_geom.yaxis.set_label_position('left')
+        ax_geom.yaxis.tick_left()
+        #ax_geom.set_ylabel(r'pixel index')
+        #ax_geom.set_xlabel(r'pixel index')
+        ax_geom.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=False,
+                            bottom=True, top=False, left=True, right=False)
+    ax_geom.set_aspect('equal')
+
+    divnorm = mpl.colors.Normalize(vmin=1, vmax=100)
+
+    cbar = plt.colorbar(pcm, location='bottom', cax=cbar_ax, ticklocation='bottom',
+                        orientation='horizontal', ticks=[1, 25, 50, 75, 100])  # Specify the ticks
+
+    cbar_ax.set_title(f'Bulk modulus (Pa)')  # , y=-0.7,pad=-22
+
+    extended_x = np.arange(phase_field[:, phase_field.shape[0] // 2].size + 1)
+    extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                           phase_field[:, phase_field.shape[0] // 2][-1])
+    ax_cross.step(extended_x, extended_y
+                  , where='post',
+                  linewidth=1, color=colors[counter], linestyle=linestyles[counter], marker='|',
+                  label=f'{G} phases')
+    # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    ax_cross.set_ylim([0, 101])
+    ax_cross.set_xlim([0, phase_field.shape[0] - 1])
+    ax_cross.set_yticks([1, 34,67, 100])
+    ax_cross.set_yticklabels([1, 34,67, 100])
+    # ax_cross.set_xticks(np.arange(-.5, number_of_pixels[0], int(number_of_pixels[0] / 4)))
+    # ax_cross.set_xticklabels(np.arange(0, number_of_pixels[0] + 1, int(number_of_pixels[0] / 4)))
+    ax_cross.set_xticks([])
+    ax_cross.set_xticklabels([])
+
+    # ax1.yaxis.set_ticks_position([0.001,0.25,0.5,0.75, 1])
+    # ax2.legend(['2 phases', f'{ratio} phases', 'Jacobi', 'Green + Jacobi'])
+    ax_cross.legend(loc="upper left")
+
+    ax_cross.set_title(f'Cross sections')
+    ax_cross.set_ylabel('Bulk modulus (Pa)')
+    #ax_cross.set_xlabel('pixel index')
+    # ax_cross.step(extended_x, extended_y
+    #          , where='post',
+    #          linewidth=1, color=colors[counter], linestyle=linestyles[counter], marker='|',
+    #          label=f'{G} phases')
+    # # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    # ax_cross.set_ylim([0, 101])
+    # ax_cross.set_xlim([0, phase_field.shape[0]])
+    # ax_cross.set_yticks([1,50,100])
+    # ax_cross.set_yticklabels([1,50,100])
+    # # ax1.yaxis.set_ticks_position([0.001,0.25,0.5,0.75, 1])
+    # # ax2.legend(['2 phases', f'{ratio} phases', 'Jacobi', 'Green + Jacobi'])
+    # ax_cross.legend(loc="upper left")
+    #
+    # ax_cross.set_title(f'Cross sections')
+    # ax_cross.set_ylabel('Young modulus (Pa)')
+    # ax_cross.set_xlabel('x coordinate')
+
+    counter += 1
+fname = src + script_name + 'phase' + f'{kontrast}_{geometry_ID}' + '{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()

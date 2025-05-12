@@ -107,7 +107,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
     src = '../figures/'  # source folder\
 
     domain_size = [1, 1]
-    geom_n = [3,4, 5]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+    geom_n = [ 4, 5]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 
     ratios = np.array([2])  # np.arange(1,5)  # 17  33
 
@@ -199,14 +199,14 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                 for i in np.arange(ratios.size):
                     ratio = ratios[i]
-
+                    nb_laminates=4
                     if nb_discretization_index == 0:
                         phase_fied_small_grid = microstructure_library.get_geometry(
                             nb_voxels=discretization.nb_of_pixels,
                             microstructure_name=geometry_ID,
                             coordinates=discretization.fft.coords,
                             seed=1,
-                            parameter=4)  # ,
+                            parameter=nb_laminates)  # ,
                         #                                                                           contrast=-ratio) # $1 / 10 ** ratio
                         if ratio != 0:
                             phase_fied_small_grid += 1 / 10 ** ratio
@@ -335,7 +335,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     rhs.flatten()[np.prod(number_of_pixels)] = 0
 
                     ######### INITIAL SOLUTION
-                    # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
+                    #x0 = np.random.random(discretization.get_displacement_sized_field().shape)
                     x0 = np.zeros(discretization.get_displacement_sized_field().shape)
 
                     ########################### Greeen  PRE CONDITIONED VERSION ########################################################
@@ -392,7 +392,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     # PLOTS
                     #vector_to_plot=np.abs(MiK)#.transpose()
                     vector_to_plot =eig_vect_G[:, idx_G]
-                    rhs_to_plot=rhs
+                    rhs_to_plot=rhs#+1
                     weights_to_plot= w_i[idx_G]
                     eigens_to_plots= eig_G[idx_G]
 
@@ -433,7 +433,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     ax_global.set_yticklabels([1, 34, 67, 100])
                     #
                     ax_global.set_title(
-                        r'Geometry - $\mathcal{G}_4$ ' + r' Mesh - $\mathcal{T}_{16}$' + f'\n Sparsity patterns in eigenvectors')
+                        r'Geometry - $\mathcal{G}_'+f'{nb_laminates}$' + r' Mesh - $\mathcal{T}_{16}$' + f'\n Sparsity patterns in eigenvectors')
                     ax_global.set_xlabel('eigenvalue index - $i$ (sorted)')
                     ax_global.set_ylabel(r'Eigenvalue - $\lambda_{i}$')
 
@@ -449,165 +449,166 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     plt.legend(handles=custom_symbol, loc='upper left')
                     #ax_global.legend([f'Eigenvalues ', f'Non-zero weights', f'Non-zero element of eigenvector/ first residual '], loc='upper left')
 
-                    x_offset = -0.23
-                    y_offset = 1.1
-                    for upper_ax in np.arange(6):
-                        # weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
-                        if upper_ax == 0:
-                            # ax1 = fig.add_subplot(gs[0, upper_ax])
-                            ax1 = fig.add_axes([0.15, 0.15, 0.1, 0.20])
-                            ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=1) $ ')
-                            roll_x = 5
-                            roll_y = -20
-                            # ax_global.annotate('',
-                            #              xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
-                            #              xytext=(0.23, 0.1),
-                            #              arrowprops=dict(arrowstyle='->',
-                            #                              color='black',
-                            #                              lw=1,
-                            #                              ls='-')
-                            #              )
-                            ax_global.text(x_offset, y_offset, '(a.1)', transform=ax1.transAxes)  #
-                            i = 20
-                        if upper_ax == 1:
-                            ax1 = fig.add_axes([0.34, 0.40, 0.1, 0.20])
-                            ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=34) $ ')
+                    if nb_laminates ==3:
+                        x_offset = -0.23
+                        y_offset = 1.1
+                        for upper_ax in np.arange(6):
+                            # weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
+                            if upper_ax == 0:
+                                # ax1 = fig.add_subplot(gs[0, upper_ax])
+                                ax1 = fig.add_axes([0.15, 0.15, 0.1, 0.20])
+                                ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=1) $ ')
+                                roll_x = 5
+                                roll_y = -20
+                                # ax_global.annotate('',
+                                #              xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                                #              xytext=(0.23, 0.1),
+                                #              arrowprops=dict(arrowstyle='->',
+                                #                              color='black',
+                                #                              lw=1,
+                                #                              ls='-')
+                                #              )
+                                ax_global.text(x_offset, y_offset, '(a.1)', transform=ax1.transAxes)  #
+                                i = 20
+                            if upper_ax == 1:
+                                ax1 = fig.add_axes([0.34, 0.40, 0.1, 0.20])
+                                ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=34) $ ')
 
-                            ax_global.text(x_offset, y_offset, '(a.2)', transform=ax1.transAxes)
-                            i = 150
+                                ax_global.text(x_offset, y_offset, '(a.2)', transform=ax1.transAxes)
+                                i = 150
 
-                        if upper_ax == 2:
-                            ax1 = fig.add_axes([0.58, 0.63, 0.1, 0.20])
-                            ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=67) $ ')
-                            ax_global.text(x_offset, y_offset, '(a.3)', transform=ax1.transAxes)
+                            if upper_ax == 2:
+                                ax1 = fig.add_axes([0.58, 0.63, 0.1, 0.20])
+                                ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=67) $ ')
+                                ax_global.text(x_offset, y_offset, '(a.3)', transform=ax1.transAxes)
 
-                            i = 350
-                        if upper_ax == 3:
-                            ax1 = fig.add_axes([0.775, 0.60, 0.1, 0.20])
-                            ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
+                                i = 350
+                            if upper_ax == 3:
+                                ax1 = fig.add_axes([0.775, 0.60, 0.1, 0.20])
+                                ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
 
-                            ax_global.text(x_offset - 0.15, y_offset - 0., '(a.4)', transform=ax1.transAxes)
-                            i = 500
-                        if upper_ax == 4:
-                            i = 115
-                            # ax1 = fig.add_axes([0.17, 0.6, 0.1, 0.20])
+                                ax_global.text(x_offset - 0.15, y_offset - 0., '(a.4)', transform=ax1.transAxes)
+                                i = 500
+                            if upper_ax == 4:
+                                i = 115
+                                # ax1 = fig.add_axes([0.17, 0.6, 0.1, 0.20])
 
-                            ax1 = fig.add_axes([0.65, 0.15, 0.1, 0.20])
-                            ax_global.text(x_offset, y_offset, '(b.1)', transform=ax1.transAxes)
+                                ax1 = fig.add_axes([0.65, 0.15, 0.1, 0.20])
+                                ax_global.text(x_offset, y_offset, '(b.1)', transform=ax1.transAxes)
 
-                            ax_global.annotate('',
-                                               xy=(i + 23, sorted(eig_G)[i]),
-                                               xytext=(350, 20),
-                                               arrowprops=dict(arrowstyle='<-',
-                                                               color='black',
-                                                               lw=0.5,
-                                                               ls='-')
-                                               )
-                            # Add an ellipse
-                            ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=50.0, height=15.0, angle=0,
-                                              edgecolor='black',
-                                              facecolor='none', linewidth=0.5)
-                            ax_global.add_patch(ellipse)
+                                ax_global.annotate('',
+                                                   xy=(i + 23, sorted(eig_G)[i]),
+                                                   xytext=(350, 20),
+                                                   arrowprops=dict(arrowstyle='<-',
+                                                                   color='black',
+                                                                   lw=0.5,
+                                                                   ls='-')
+                                                   )
+                                # Add an ellipse
+                                ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=50.0, height=15.0, angle=0,
+                                                  edgecolor='black',
+                                                  facecolor='none', linewidth=0.5)
+                                ax_global.add_patch(ellipse)
 
-                            i = 256
-                            ax_global.annotate('',
-                                               xy=(i + 25, sorted(eig_G)[i] - 7),
-                                               xytext=(350, 25),
-                                               arrowprops=dict(arrowstyle='<-',
-                                                               color='black',
-                                                               lw=0.5,
-                                                               ls='-')
-                                               )
-                            # Add an ellipse
-                            ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=71.0, height=31.0, angle=10,
-                                              edgecolor='black',
-                                              facecolor='none', linewidth=0.5)
-                            ax_global.add_patch(ellipse)
-                            i = 400
+                                i = 256
+                                ax_global.annotate('',
+                                                   xy=(i + 25, sorted(eig_G)[i] - 7),
+                                                   xytext=(350, 25),
+                                                   arrowprops=dict(arrowstyle='<-',
+                                                                   color='black',
+                                                                   lw=0.5,
+                                                                   ls='-')
+                                                   )
+                                # Add an ellipse
+                                ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=71.0, height=31.0, angle=10,
+                                                  edgecolor='black',
+                                                  facecolor='none', linewidth=0.5)
+                                ax_global.add_patch(ellipse)
+                                i = 400
 
-                            ax_global.annotate('',
-                                               xy=(i, sorted(eig_G)[i] - 7),
-                                               xytext=(370, 31),
-                                               arrowprops=dict(arrowstyle='<-',
-                                                               color='black',
-                                                               lw=0.5,
-                                                               ls='-')
-                                               )
-                            # Add an ellipse
-                            ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=50.0, height=15.0, angle=0,
-                                              edgecolor='black',
-                                              facecolor='none', linewidth=0.5)
-                            ax_global.add_patch(ellipse)
+                                ax_global.annotate('',
+                                                   xy=(i, sorted(eig_G)[i] - 7),
+                                                   xytext=(370, 31),
+                                                   arrowprops=dict(arrowstyle='<-',
+                                                                   color='black',
+                                                                   lw=0.5,
+                                                                   ls='-')
+                                                   )
+                                # Add an ellipse
+                                ellipse = Ellipse(xy=(i, sorted(eig_G)[i]), width=50.0, height=15.0, angle=0,
+                                                  edgecolor='black',
+                                                  facecolor='none', linewidth=0.5)
+                                ax_global.add_patch(ellipse)
 
-                        if upper_ax == 5:
-                            i = -1
-                            ax1 = fig.add_axes([0.78, 0.24, 0.1, 0.20])
-                            ax1.set_title(r'Initial residual - $r_0$')
-                            ax_global.text(x_offset, y_offset+0.2, '(c.1)', transform=ax1.transAxes)
-                        if upper_ax == 6:
-                            i = -2
-                            ax1 = fig.add_axes([0.15, 0.5, 0.1, 0.20])
-                            ax1.set_title(r'Weights')
-                            ax_global.text(x_offset, y_offset+0.2, '(d.1)', transform=ax1.transAxes)
+                            if upper_ax == 5:
+                                i = -1
+                                ax1 = fig.add_axes([0.78, 0.24, 0.1, 0.20])
+                                ax1.set_title(r'Initial residual - $r_0$')
+                                ax_global.text(x_offset, y_offset+0.2, '(c.1)', transform=ax1.transAxes)
+                            if upper_ax == 6:
+                                i = -2
+                                ax1 = fig.add_axes([0.15, 0.5, 0.1, 0.20])
+                                ax1.set_title(r'Weights')
+                                ax_global.text(x_offset, y_offset+0.2, '(d.1)', transform=ax1.transAxes)
 
-                        if i > 0 :
-                            eigenvector_x = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
-                                0, 0].transpose()
-                            eigenvector_y = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
-                                1, 0].transpose()
-                        elif i == -1:
-                            eigenvector_x = np.real(rhs_to_plot).reshape(grid_shape)[
-                                0, 0].transpose()
-                            eigenvector_y = np.real(rhs_to_plot).reshape(grid_shape)[
-                                1, 0].transpose()
-                        elif i == -2:
-                            eigenvector_x = np.real(w_i).reshape(grid_shape)[
-                                0, 0].transpose()
-                            eigenvector_y = np.real(w_i).reshape(grid_shape)[
-                                1, 0].transpose()
-                        amplitude = np.sqrt(eigenvector_x ** 2 + eigenvector_y ** 2)
+                            if i > 0 :
+                                eigenvector_x = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
+                                    0, 0].transpose()
+                                eigenvector_y = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
+                                    1, 0].transpose()
+                            elif i == -1:
+                                eigenvector_x = np.real(rhs_to_plot).reshape(grid_shape)[
+                                    0, 0].transpose()
+                                eigenvector_y = np.real(rhs_to_plot).reshape(grid_shape)[
+                                    1, 0].transpose()
+                            elif i == -2:
+                                eigenvector_x = np.real(w_i).reshape(grid_shape)[
+                                    0, 0].transpose()
+                                eigenvector_y = np.real(w_i).reshape(grid_shape)[
+                                    1, 0].transpose()
+                            amplitude = np.sqrt(eigenvector_x ** 2 + eigenvector_y ** 2)
 
-                        divnorm = mpl.colors.Normalize(vmin=0, vmax=2)
-                        # Define facecolors: Use 'none' for empty elements (zeros) and color for others
-                        facecolors = ['none' if value == 0 else 'red' for value in amplitude.flatten()]
-                        # Plot circles with empty ones for zero values
-                        # plt.scatter(x_coords_flat, y_coords_flat, s=A_flat * 100, facecolors=facecolors, edgecolors='blue', alpha=0.7)
-                        sizes = np.copy(amplitude)  # .flatten()
-                        sizes[sizes > 1e-10] = 1
+                            divnorm = mpl.colors.Normalize(vmin=0, vmax=2)
+                            # Define facecolors: Use 'none' for empty elements (zeros) and color for others
+                            facecolors = ['none' if value == 0 else 'red' for value in amplitude.flatten()]
+                            # Plot circles with empty ones for zero values
+                            # plt.scatter(x_coords_flat, y_coords_flat, s=A_flat * 100, facecolors=facecolors, edgecolors='blue', alpha=0.7)
+                            sizes = np.copy(amplitude)  # .flatten()
+                            sizes[sizes > 1e-10] = 1
 
-                        circles_sizes = 20 * np.ones_like(amplitude)
-                        circles_sizes[-1, :] = 0
-                        circles_sizes[:, -1] = 0
-                        # ax1.scatter(x, y, s=circles_sizes.flatten(), c='white', cmap='Reds', alpha=1.0,
-                        #                       norm=divnorm, edgecolors='black', linewidths=0.1),
+                            circles_sizes = 20 * np.ones_like(amplitude)
+                            circles_sizes[-1, :] = 0
+                            circles_sizes[:, -1] = 0
+                            # ax1.scatter(x, y, s=circles_sizes.flatten(), c='white', cmap='Reds', alpha=1.0,
+                            #                       norm=divnorm, edgecolors='black', linewidths=0.1),
 
-                        triangles, X, Y = get_triangle(nx=number_of_pixels[0], ny=number_of_pixels[1]
-                                                       , lx=number_of_pixels[0], ly=number_of_pixels[1])
-                        # Create the triangulation object
-                        triangulation = tri.Triangulation(X, Y, triangles)
-                        ax1.triplot(triangulation, 'k-', lw=0.1)
-                        ax1.axis('equal')
+                            triangles, X, Y = get_triangle(nx=number_of_pixels[0], ny=number_of_pixels[1]
+                                                           , lx=number_of_pixels[0], ly=number_of_pixels[1])
+                            # Create the triangulation object
+                            triangulation = tri.Triangulation(X, Y, triangles)
+                            ax1.triplot(triangulation, 'k-', lw=0.1)
+                            ax1.axis('equal')
 
-                        x_ = np.arange(0 + 0.5, 1 * number_of_pixels[0] + 0.5)
-                        y_ = np.arange(0 + 0.5, 1 * number_of_pixels[1] + 0.5)
-                        X_, Y_ = np.meshgrid(x_, y_)
-                        ax1.pcolormesh(X_, Y_, np.transpose(phase_field),
-                                       cmap=mpl.cm.Greys, vmin=1, vmax=100, linewidth=0,
-                                       rasterized=True, alpha=0.6)
-                        # Remove the frame (axes spines)
-                        # for spine in ax1.spines.values():
-                        #     spine.set_visible(False)
+                            x_ = np.arange(0 + 0.5, 1 * number_of_pixels[0] + 0.5)
+                            y_ = np.arange(0 + 0.5, 1 * number_of_pixels[1] + 0.5)
+                            X_, Y_ = np.meshgrid(x_, y_)
+                            ax1.pcolormesh(X_, Y_, np.transpose(phase_field),
+                                           cmap=mpl.cm.Greys, vmin=1, vmax=100, linewidth=0,
+                                           rasterized=True, alpha=0.6)
+                            # Remove the frame (axes spines)
+                            # for spine in ax1.spines.values():
+                            #     spine.set_visible(False)
 
-                        # Optionally, hide the axes ticks and labels
-                        ax1.set_xticks([])
-                        ax1.set_yticks([])
+                            # Optionally, hide the axes ticks and labels
+                            ax1.set_xticks([])
+                            ax1.set_yticks([])
 
-                        ax1.scatter(x, y, s=sizes * 10, c=facecolors, cmap='Reds', alpha=1.0, norm=divnorm,
-                                    edgecolors='Red', linewidths=0),
-                        # ax1.set_xlim(0,   1)
-                        # ax1.set_ylim(0,  1)
+                            ax1.scatter(x, y, s=sizes * 10, c=facecolors, cmap='Reds', alpha=1.0, norm=divnorm,
+                                        edgecolors='Red', linewidths=0),
+                            # ax1.set_xlim(0,   1)
+                            # ax1.set_ylim(0,  1)
 
-                    fname = src + 'exp1_sparsity_of_eigenvectors{}'.format('.pdf')
+                    fname = src + 'exp1_sparsity_of_eigenvectors{}{}'.format(nb_laminates,'.pdf')
                     print(('create figure: {}'.format(fname)))
                     plt.savefig(fname, bbox_inches='tight')
                     plt.show()
