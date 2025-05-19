@@ -14,3 +14,9 @@ dist
 experiments/figures/
 
 experiments/exp_data/
+
+*.npy
+
+*.png
+
+*.npz

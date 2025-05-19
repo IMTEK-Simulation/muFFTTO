@@ -1,6 +1,6 @@
 import numpy as np
 import time
-#from netCDF4 import Dataset
+# from netCDF4 import Dataset
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -13,7 +13,6 @@ element_type = 'trilinear_hexahedron'
 domain_size = [1, 1, 1]
 number_of_pixels = 3 * (32,)
 
-
 geometry_ID = 'circle_inclusion'
 
 # set up the system
@@ -25,8 +24,6 @@ discretization = domain.Discretization(cell=my_cell,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
 start_time = time.time()
-
-
 
 # create material data field
 conductivity_C_1 = 100 * np.array([[1, 0, 0],
@@ -45,9 +42,8 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
 microstructure_library.visualize_voxels(phase_field_xyz=phase_field)
 
 # apply material distribution
-material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field,1)
-material_data_field_C_0_rho += 5*material_data_field_C_0[..., :, :, :] * np.power(1-phase_field, 1)
-
+material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field, 1)
+material_data_field_C_0_rho += 5 * material_data_field_C_0[..., :, :, :] * np.power(1 - phase_field, 1)
 
 # linear system
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
@@ -56,8 +52,8 @@ preconditioner = discretization.get_preconditioner_NEW(reference_material_data_f
 
 # preconditioner
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                      nodal_field_fnxyz=x)
-#M_fun = lambda x: 1 * x
+                                                          nodal_field_fnxyz=x)
+# M_fun = lambda x: 1 * x
 
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
@@ -67,7 +63,7 @@ for i in range(dim):
     macro_gradient = np.zeros([dim])
     macro_gradient[i] = 1
     # Set up right hand side
-    macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient=macro_gradient)
+    macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient)
 
     # Solve equilibrium constrain
     rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
@@ -78,22 +74,18 @@ for i in range(dim):
 
     # ----------------------------------------------------------------------
     # compute homogenized stress field corresponding to displacement
-    homogenized_A_ij[i, :]  = discretization.get_homogenized_stress(
+    homogenized_A_ij[i, :] = discretization.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=temperature_field,
+        displacement_field_inxyz=temperature_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
 
 print('homogenized elastic tangent = \n {}'.format(homogenized_A_ij))
 end_time = time.time()
 
-microstructure_library.visualize_voxels(phase_field_xyz=temperature_field[0,0] )
+microstructure_library.visualize_voxels(phase_field_xyz=temperature_field[0, 0])
 
-grad_field=discretization.apply_gradient_operator(temperature_field)
+grad_field = discretization.apply_gradient_operator(temperature_field)
 
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0,0])
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0,1])
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0,2])
-
-
-
-
+microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0, 0])
+microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0, 1])
+microstructure_library.visualize_voxels(phase_field_xyz=grad_field.mean(axis=2)[0, 2])

@@ -375,9 +375,13 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     #                                         norm_energy_upper_bound=True,
                     #                                         lambda_min=np.real(sorted(eig_G)[0])
                     #                                         )
-                    plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G], weight=w_i[idx_G],
-                                       error_evol=norms['energy_lb'] / norms['residual_rr'][
-                                           0], title='Green')  # energy_lb
+                    # plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G], weight=w_i[idx_G],
+                    #                    error_evol=norms['energy_lb'] / norms['residual_rr'][
+                    #                        0], title='Green')  # energy_lb
+                    plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
+                                                weight=w_i[idx_G],
+                                                error_evol=norms['energy_lb'] / norms['residual_rr'][
+                                                    0], title='Green')  # energy_lb
 
 
 

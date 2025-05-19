@@ -26,7 +26,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (64, 64)
+number_of_pixels = (16, 16)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -153,7 +153,7 @@ for w in [100, ]:  # np.arange(0.01, 1.5, 0.05):#
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
 
             material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -204,7 +204,7 @@ for w in [100, ]:  # np.arange(0.01, 1.5, 0.05):#
                 # compute homogenized stress field corresponding t
             homogenized_stress = discretization.get_homogenized_stress(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                displacement_field_fnxyz=displacement_field,
+                displacement_field_inxyz=displacement_field,
                 macro_gradient_field_ijqxyz=macro_gradient_field,
                 formulation='small_strain')
             # print('homogenized stress = \n'          ' {} '.format(homogenized_stress)) # good in MPI
@@ -261,15 +261,16 @@ for w in [100, ]:  # np.arange(0.01, 1.5, 0.05):#
             # np.random.seed(1)
             np.random.seed(MPI.COMM_WORLD.rank)
 
-
             def apply_filter(phase):
                 f_field = discretization.fft.fft(phase)
-                f_field[np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
-                                       np.abs(discretization.fft.fftfreq[1]) > 0.25)] = 0
+                f_field[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
+                                             np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
+                # f_field[0, 0, 12:, 24:] = 0
                 phase = discretization.fft.ifft(f_field) * discretization.fft.normalisation
-
-                phase = np.expand_dims(phase, axis=(0, 1))
+                phase[phase > 1] = 1
+                phase[phase < 0] = 0
                 return phase
+
 
 
             phase = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 1
@@ -383,29 +384,19 @@ for w in [100, ]:  # np.arange(0.01, 1.5, 0.05):#
 
             #
 
-            # plt.figure()
-            # plt.contourf(phase_field_sol_FE_MPI[0, 0], cmap=mpl.cm.Greys)
-            # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-            # plt.clim(0, 1)
-            # plt.colorbar()
-            #
-            # plt.show()
+            plt.figure()
+            plt.contourf(phase_field_sol_FE_MPI[0, 0], cmap=mpl.cm.Greys)
+            # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+            plt.clim(0, 1)
+            plt.colorbar()
 
-            # I/O example
-            #  file = FileIONetCDF('example.nc', open_mode=OpenMode.Overwrite,
-            #                      communicator=Communicator(MPI.COMM_WORLD))
-            #  #v = file.createVariable('phase_field_sol_FE_MPI', np.int32, 'dim')
-            #  #f_glob = discretization.fft.register_real_field('phase_field', 1, 'pixel')
-            #  #rfield =  discretization.fft.real_space_field('phase_field')
-            # # rfield.p = phase_field_sol_FE_MPI[0,0]
-            # # discretization.fft.real_field=phase_field_sol_FE_MPI
-            #  file.register_field_collection(discretization.fft.real_field_collection)
-            #  file.append_frame().write()
-            #  file.close()
+            plt.show()
+
+
 
             file_data_name = f'1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-            folder_name = 'experiments/exp_data/'
+            folder_name = '../experiments/exp_data/'
             save_npy(folder_name + file_data_name, phase_field_sol_FE_MPI[0, 0],
                      tuple(discretization.fft.subdomain_locations),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
@@ -420,24 +411,24 @@ for w in [100, ]:  # np.arange(0.01, 1.5, 0.05):#
             if MPI.COMM_WORLD.rank == 0:
                 print('phase_field_sol_FE_MPI  = {}'.format(of))
 
-            #  # plotting the solution
-            #  nodal_coordinates = discretization.get_nodal_points_coordinates()
-            #
-            #  plt.figure()
-            #  plt.contourf(phase_field_00[0, 0])
-            #
-            #  # plt.clim(0, 1)
-            #  plt.colorbar()
-            #
-            #  #plt.show()
-            #
+            # plotting the solution
+            nodal_coordinates = discretization.get_nodal_points_coordinates()
+
+            plt.figure()
+            plt.contourf(phase_field_00[0, 0])
+
+            # plt.clim(0, 1)
+            plt.colorbar()
+
+            plt.show()
+
             ######## Postprocess for FE linear solver with NuMPI ########
             # material_data_field_C_0_rho_pixel = material_data_field_C_0[..., :, :] * np.power(phase_field_sol,
             #                                                                             p)
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_sol_FE_MPI,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
             material_data_field_C_0_rho_quad = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 

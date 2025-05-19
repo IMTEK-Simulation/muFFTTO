@@ -3,6 +3,8 @@
   <component name="PySciProjectComponent">
     <option name="PY_SCI_VIEW" value="true" />
     <option name="PY_SCI_VIEW_SUGGESTED" value="true" />
-    <option name="PY_INTERACTIVE_PLOTS_SUGGESTED" value="true" />
+    <option name="KALEIDO_INSTALL_SUGGESTED" value="false" />
+    <option name="PY_INTERACTIVE_PLOTS" value="false" />
+    <option name="PY_MAX_PLOTS_COUNT" value="1000" />
   </component>
 </project>

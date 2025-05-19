@@ -171,7 +171,7 @@ for w_mult in [1.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
 
             material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -323,17 +323,12 @@ for w_mult in [1.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
 
             def apply_filter(phase):
                 f_field = discretization.fft.fft(phase)
-                # f_field[0, 0, np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
-                #                              np.abs(discretization.fft.fftfreq[1]) > 0.25)] = 0
                 f_field[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
                                              np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
                 # f_field[0, 0, 12:, 24:] = 0
                 phase = discretization.fft.ifft(f_field) * discretization.fft.normalisation
                 phase[phase > 1] = 1
                 phase[phase < 0] = 0
-                # min_ = discretization.mpi_reduction.min(phase)
-                # max_ = discretization.mpi_reduction.max(phase)
-                # phase = (phase + np.abs(min_)) / (max_ + np.abs(min_))
                 return phase
 
 
@@ -563,7 +558,7 @@ for w_mult in [1.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_sol_FE_MPI,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
             material_data_field_C_0_rho_quad = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
             homogenized_stresses = np.zeros([nb_load_cases, dim, dim])

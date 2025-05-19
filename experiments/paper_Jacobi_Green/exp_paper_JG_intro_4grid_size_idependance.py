@@ -185,7 +185,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
 
             phase_field_at_quad_poits_1qnxyz[0, :, 0, ...] = phase_fnxyz
             # apply material distribution

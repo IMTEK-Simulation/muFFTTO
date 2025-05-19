@@ -24,7 +24,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  # np.sqrt(3)/2
-number_of_pixels = (64, 64)
+number_of_pixels = (16, 16)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -199,7 +199,7 @@ for ration in [0.0]:
                 phase_field_at_quad_poits_1qnxyz = \
                     discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                                  quad_field_fqnxyz=None,
-                                                                 quad_points_coords_dq=None)[0]
+                                                                 quad_points_coords_iq=None)[0]
 
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -373,7 +373,7 @@ for ration in [0.0]:
                 # phase = np.random.random(discretization.get_scalar_sized_field().shape)
                 phase_field_0 = apply_filter(phase_field_0)
 
-                folder_name = 'experiments/exp_data/'  # s'exp_data/'
+                folder_name = '../experiments/exp_data/'  # s'exp_data/'
                 # file_data_name = (
                 #     f'1muFFTTO_elasticity_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{1}_p{p}_bounds=False_FE_NuMPI{6}.npy')
                 file_data_name = (
@@ -539,7 +539,7 @@ for ration in [0.0]:
                         # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
                         plt.clim(0, 1)
                         plt.colorbar()
-                        plt.title('>%d = %.5f' % (t, score))
+                       # plt.title('>%d = %.5f' % (t, score))
                         plt.show()
                     _info = {}
 
@@ -566,7 +566,7 @@ for ration in [0.0]:
                 phase_field_at_quad_poits_1qnxyz = \
                     discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=solution_phase,
                                                                  quad_field_fqnxyz=None,
-                                                                 quad_points_coords_dq=None)[0]
+                                                                 quad_points_coords_iq=None)[0]
                 material_data_field_C_0_rho_quad = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
                 homogenized_stresses = np.zeros([nb_load_cases, dim, dim])

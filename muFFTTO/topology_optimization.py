@@ -1058,7 +1058,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)  # TODO[Martin] missing exact integration
+        quad_points_coords_iq=None)  # TODO[Martin] missing exact integration
     # apply material distribution
     # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], p)
 
@@ -1356,7 +1356,7 @@ def partial_derivative_of_objective_function_wrt_phase_field_FE(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
             p * np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p - 1)))
@@ -1591,7 +1591,7 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
             p * np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p - 1)))
@@ -1934,7 +1934,7 @@ def sensitivity_with_adjoint_problem_FE(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
     # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
     #         p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
 
@@ -2212,7 +2212,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
@@ -2284,7 +2284,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
 
     stress_field = discretization.get_stress_field(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
-        displacement_field_fnxyz=displacement_field_fnxyz,
+        displacement_field_inxyz=displacement_field_fnxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         formulation='small_strain')
 
@@ -2346,7 +2346,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
@@ -2406,7 +2406,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
 
     stress_field = discretization.get_stress_field(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
-        displacement_field_fnxyz=displacement_field_fnxyz,
+        displacement_field_inxyz=displacement_field_fnxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         formulation='small_strain')
 
@@ -2454,7 +2454,7 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
@@ -2564,7 +2564,7 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
 
     stress_field = discretization.get_stress_field(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
-        displacement_field_fnxyz=displacement_field_fnxyz,
+        displacement_field_inxyz=displacement_field_fnxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         formulation='small_strain')
 
@@ -2609,7 +2609,7 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
@@ -2668,7 +2668,7 @@ def sensitivity_with_adjoint_problem_FE_weights(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
     # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
     #         p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
 
@@ -2845,7 +2845,7 @@ def sensitivity_with_adjoint_problem_FE_testing(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
     # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :] * (
     #         p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
 

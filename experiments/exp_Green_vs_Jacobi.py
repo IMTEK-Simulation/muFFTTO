@@ -174,7 +174,7 @@ for nb_pix_multip in nb_pix_multips:
         phase_field_at_quad_poits_1qnxyz = \
                             discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
                                                                          quad_field_fqnxyz=None,
-                                                                         quad_points_coords_dq=None)[0]
+                                                                         quad_points_coords_iq=None)[0]
 
         # apply material distribution
         #material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)

@@ -163,7 +163,7 @@ for w in [10, ]:  # np.arange(0.01, 1.5, 0.05):#
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
 
             material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -335,7 +335,7 @@ for w in [10, ]:  # np.arange(0.01, 1.5, 0.05):#
             #     plt.clim(0, 1)
             #     plt.colorbar()
 
-                plt.show()
+            plt.show()
             phase_field_00 = np.copy(phase_field_0)
             # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
             phase_field_0 = phase_field_0.reshape(-1)  # b
@@ -404,7 +404,7 @@ for w in [10, ]:  # np.arange(0.01, 1.5, 0.05):#
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_sol_FE_MPI,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
             material_data_field_C_0_rho_quad = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
             homogenized_stresses = np.zeros([nb_load_cases, dim, dim])

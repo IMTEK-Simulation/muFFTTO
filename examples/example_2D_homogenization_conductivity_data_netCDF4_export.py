@@ -80,7 +80,7 @@ print(' nb_ steps CG =' f'{nb_it}')
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=temperatute_field,
+    displacement_field_inxyz=temperatute_field,
     macro_gradient_field_ijqxyz=macro_gradient_field)
 
 print(homogenized_flux)
@@ -91,6 +91,7 @@ print("Elapsed time: ", elapsed_time)
 
 J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
 print("J_eff : ", J_eff)
+
 J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
 print("J_eff : ", J_eff)
 # nc = Dataset('temperatures.nc', 'w', format='NETCDF3_64BIT_OFFSET')

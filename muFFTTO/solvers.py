@@ -2,10 +2,28 @@ import numpy as np
 
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
+from reportlab.lib.pagesizes import elevenSeventeen
+
+
+def donothing(*args, **kwargs):
+    pass
+
+
+def findS(curve, Delta, l):
+    curve = np.array(curve)
+    ind = np.where((curve[l] / curve) <= 1e-4)[0]  # , 1, 'last')
+    last_index = ind[-1] if ind.size > 0 else None
+    if last_index == None:
+        last_index = 0
+    if Delta[last_index: -1].__len__() == 0:
+        S = 1
+    else:
+        S = max(curve[last_index:-1] / Delta[last_index: -1])
+    return S
 
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',
-        **kwargs):
+        callback=None, **kwargs):
     # print('I am in PCG')
     """
     Conjugate gradients solver.
@@ -22,18 +40,24 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
     """
     if x0 is None:
         x0 = np.zeros(B.shape)
-
+    if callback is None:
+        callback = donothing
     norms = dict()
     norms['residual_rr'] = []
     norms['residual_rz'] = []
     norms['data_scaled_rz'] = []
     norms['data_scaled_rr'] = []
 
-    norms['energy_lb'] = []
+    norms['energy_upper_bound'] = []
+    if "exact_solution" in kwargs:
+        norms['energy_iter_error'] = []
+        error = x0 - kwargs['exact_solution']
+        norms['energy_iter_error'].append(scalar_product_mpi(error, Afun(error)))
 
     ##
     k = 0
     x_k = np.copy(x0)
+    callback(x_k)
     ##
     Ax = Afun(x0)
 
@@ -48,7 +72,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
     norms['residual_rz'].append(r_0z_0)
     if norm_energy_upper_bound:
         gamma_mu = 1 / lambda_min
-        norms['energy_lb'].append(gamma_mu * r_0z_0)
+        norms['energy_upper_bound'].append(gamma_mu * r_0z_0)
     if norm_type == 'data_scaled_rz':
         r_1_C_z_1 = scalar_product_mpi(r_0, P(kwargs['norm_metric'](r_0)))
         norms['data_scaled_rz'].append(r_1_C_z_1)
@@ -56,16 +80,25 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         r_1_C_r_1 = scalar_product_mpi(r_0, kwargs['norm_metric'](r_0))
         norms['data_scaled_rr'].append(r_1_C_r_1)
 
-
-
     p_0 = np.copy(z_0)
+    #  % in the paper this is denoted as k
+    l = 0
+    d = 0
+    Delta = []
+    curve = []
+    estim = []
+    delay = []
+    if "tau" in kwargs:
+        tau = kwargs['tau']
+    else:
+        tau = 0.25
 
     for k in np.arange(1, steps):
         Ap_0 = Afun(p_0)
 
         alpha = float(r_0z_0 / scalar_product_mpi(p_0, Ap_0))
         x_k = x_k + alpha * p_0
-
+        callback(x_k)
         # if xCG.val.mean() > 1e-10:
         #     print('iteration left zero-mean space {} \n {}'.format(xCG.name, xCG.val.mean()))
 
@@ -74,9 +107,12 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         z_0 = P(r_0)
 
         r_1z_1 = scalar_product_mpi(r_0, z_0)
+        if "exact_solution" in kwargs:
+            error = x_k - kwargs['exact_solution']
+            norms['energy_iter_error'].append(scalar_product_mpi(error, Afun(error)))
 
         if norm_energy_upper_bound:
-            norms['energy_lb'].append(gamma_mu * r_1z_1)
+            norms['energy_upper_bound'].append(gamma_mu * r_1z_1)
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
@@ -90,7 +126,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
             if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
         if norm_type == 'energy':
-            if norms['energy_lb'][-1] < toler:  # TODO[Solver] check out stopping criteria
+            if norms['energy_upper_bound'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
         if norm_type == 'data_scaled_rz':
             r_1_C_z_1 = scalar_product_mpi(r_0, P(kwargs['norm_metric'](r_0)))
@@ -102,15 +138,38 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
             norms['data_scaled_rr'].append(r_1_C_r_1)
             if norms['data_scaled_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
+
         beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0
 
         r_0z_0 = r_1z_1
 
+        # Energy - error estimator
+        Delta.append(alpha * r_1z_1)
+        # Delta.append(alpha * r_1z_1)
+        curve.append(0)
+        curve = (curve + Delta[k - 1]).tolist()
+
+        if k > 0:
+            S = findS(curve, Delta, l)
+
+            num = S * Delta[k - 1]
+            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:k - 2])
+            while (d >= 0) and (num / den <= tau):
+                delay.append(d)
+                estim.append(den)
+                l = l + 1
+                d = d - 1
+                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:k - 2])
+
+            d = d + 1
+
         if norm_energy_upper_bound:
             # updade upper bound on energy error estim parameter
             gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
 
+        if "energy_lower_estim" in kwargs:
+            norms['energy_lower_estim'] = estim
     return x_k, norms
 
 
@@ -152,7 +211,7 @@ def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
         if norms['residual_rr'][-1] < toler:
             break
 
-    return x_k, norms
+            return x_k, norms
 
 
 def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
@@ -379,9 +438,6 @@ def adam(f, df, x0,
             return [x, phi, t]
 
     return [x, phi, t]
-
-
-
 
 
 ############################################

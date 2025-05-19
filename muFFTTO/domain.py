@@ -18,21 +18,21 @@ from muFFT import FFT
 class PeriodicUnitCell:
     def __init__(self, name='my_unit_cell', domain_size=None, problem_type='conductivity'):
 
-        self.name = name
-        self.domain_dimension = len(domain_size)  # dimension of problem
-        self.domain_size = np.asarray(domain_size, dtype=float)  # physical dimension of domain 1,2, or 3 Dim
+        self.name = name  # Name of the cell
+        self.domain_dimension = len(domain_size)  # dimension of the problem 1,2,3 D
+        self.domain_size = np.asarray(domain_size, dtype=float)  # physical size of domain, left-bottom at [0,0]
+        # TODO[Martin] left bottom corner of domain is in [0,0,0] should we change it?
         self.domain_volume = np.prod(self.domain_size)
 
         self.problem_type = problem_type
-        # TODO[Martin] left bottom corner of domain is in [0,0,0] should we change it?
-
         if not problem_type in ['conductivity', 'elasticity']:
             raise ValueError(
                 'Unrecognised physical problem type {}. Choose from ' \
                 ': conductivity, or elasticity'.format(problem_type))
 
         if problem_type == 'conductivity':
-            self.unknown_shape = np.array([1], dtype=int)  # temperature is a single scalar
+            # temperature is a single scalar
+            self.unknown_shape = np.array([1], dtype=int)
             self.gradient_shape = np.array([1, self.domain_dimension],
                                            dtype=int)  # temp. gradient is a vector of d components
             self.material_data_shape = np.array([self.domain_dimension, self.domain_dimension],
@@ -62,17 +62,18 @@ class Discretization:
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size
-        # number of pixels/voxels, without periodic nodes
+        # total number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = nb_of_pixels_global
-        print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
+        # print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=communicator)
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
+        # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         self.sub_domain_size = np.prod(self.fft.nb_subdomain_grid_pts)
-
+        # size of the MPI subdomain
         if not discretization_type in ['finite_element']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
@@ -121,28 +122,71 @@ class Discretization:
             #  rhs=-Dt*A*E
 
     def get_nodal_points_coordinates(self):
+        """
+        Function to calculate nodal points coordinates
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+         nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
+         nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
+        """
         # TODO[more then one nodal point] add coords for more than one nodal point
-        nodal_points_coordinates = self.domain_size[:, np.newaxis, np.newaxis] * self.fft.coords
+        nodal_points_coordinates_ixyz = self.domain_size[:, np.newaxis, np.newaxis] * self.fft.coords
         #
-        return nodal_points_coordinates
+        return nodal_points_coordinates_ixyz
 
     # @property
     def get_quad_points_coordinates(self):
-        # creates a field with [x,y,z] coordinates of all quadrature points
-        quad_points_coordinates = np.zeros([self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
+        """
+        Function to calculate quadrature points coordinates
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+         quad_points_coordinates_iqxyz = spatial coordinates of quadrature nodes [i,q,x,y,z]
+        """
+        # creates a field with coordinates of all quadrature points
+        quad_points_coordinates_iqxyz = np.zeros(
+            [self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
 
         for q in range(0, self.nb_quad_points_per_pixel):
-            quad_points_coordinates[:, q] = np.meshgrid(
+            quad_points_coordinates_iqxyz[:, q] = np.meshgrid(
                 *[np.arange(0 + self.quad_points_coord[d, q], self.domain_size[d] + 0.9 * self.quad_points_coord[d, q],
                             self.pixel_size[d])
                   for d in
                   range(0, self.domain_dimension)],
                 indexing='ij')
-            #  np.linspace(0 + self.quad_points_coord[d, q], self.domain_size[d],
-            #                                 self.nb_of_pixels[d], endpoint=True)
-        return quad_points_coordinates
+        return quad_points_coordinates_iqxyz
 
-    def roll(self, fft, u, shift, axis):
+    def roll(self, fft, u_inxyz, shift, axis):
+        """
+         Function equivalent of numpy  roll function. Not the roll function uses mugrid fft for roll.
+
+
+         Parameters
+         ----------
+         fft: object
+             Discretization FFT engine
+         u_inxyz: numpy ndarray to be rolled
+
+         shift:  numpy ndarray with shape(d,)
+             Indices of roll. How manny and which direction is u_inxyz shifted
+                [1,2,3] means that array u_inxyz[i,n,x,y,z] we be shifted into u_inxyz[i,n,x+1,y+2,z+3]
+         #TODO{Lars} ask why is the indexing of axis from the end
+         axis: tuple to indicates which axis should be rolled
+            axis=(0, 1) means last two axis (use for 2d arrays-- 0 is y, 1 i x)
+            axis=(0, 1, 2 ) means last three axis (use for 3d arrays -- 0 is z, 1 i y, 2 i x)
+         Returns
+         -------
+         u_inxyz :  numpy ndarray that is rolled (shifted)
+
+         """
+        # self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1))
         # if self.sub_domain_size == 0:
         #    #return u
 
@@ -161,18 +205,32 @@ class Discretization:
         #
         # print('np.exp(1j * phase) = {} \n   core {}'.format(np.exp(1j * phase), MPI.COMM_WORLD.rank))
 
-        return (fft.ifft(np.exp(1j * phase) * fft.fft(u)) * fft.normalisation).reshape(u.shape)
+        return (fft.ifft(np.exp(1j * phase) * fft.fft(u_inxyz)) * fft.normalisation).reshape(u_inxyz.shape)
 
         # MPI.COMM_WORLD.Barrier()
 
-    def apply_gradient_operator(self, u, gradient_of_u=None):
-        if gradient_of_u is None:  # if gradient_of_u is not specified, determine the size
-            #   u_field size :      [f,n,x,y,z]
-            #   u_gradient_field    [f,d,q,x,y,z]
-            gradient_of_u_shape = list(u.shape)  # [f,n,x,y,z]
+    def apply_gradient_operator(self, u_inxyz, grad_u_ijqxyz=None):
+        """
+        Function that computes gradient of function u. Depending on the discretization stencil.
+
+        Parameters
+        ----------
+        u_inxyz: numpy ndarray of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+
+        Returns
+        -------
+        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
+                - q is quadrature point index
+        """
+
+        if grad_u_ijqxyz is None:  # if gradient_of_u is not specified, determine the size
+            gradient_of_u_shape = list(u_inxyz.shape)  # [f,n,x,y,z]
             gradient_of_u_shape.insert(1, self.domain_dimension)  # [f,d,n,x,y,z]
             gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
-            gradient_of_u = np.zeros(gradient_of_u_shape)  # create gradient field
+            grad_u_ijqxyz = np.zeros(gradient_of_u_shape)  # create gradient field
 
         # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:gradient_of_u_shape ' f'{gradient_of_u_shape}')
@@ -181,7 +239,7 @@ class Discretization:
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
-        gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
+        grad_u_ijqxyz.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
 
         # !/usr/bin/env python3
@@ -212,13 +270,13 @@ class Discretization:
                 # print('roll= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
                 # print('u= {} \n   core {}'.format( np.shape(u), MPI.COMM_WORLD.rank))
 
-                rolled_disp_field = self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1))
+                rolled_disp_field = self.roll(self.fft, u_inxyz, -1 * pixel_node, axis=(0, 1))
                 # print('rolled_disp_field= {} \n   core {}'.format( np.shape(rolled_disp_field), MPI.COMM_WORLD.rank))
                 # MPI.COMM_WORLD.Barrier()
                 # print('self.sub_domain_size != 0 = {} \n   core {}'.format(self.sub_domain_size != 0,
                 #                                                                  MPI.COMM_WORLD.rank))
 
-                gradient_of_u += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                grad_u_ijqxyz += np.einsum('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                            rolled_disp_field)
                 # print('gradient_of_u= {} \n   core {}'.format( 0, MPI.COMM_WORLD.rank))
 
@@ -226,29 +284,66 @@ class Discretization:
                 # gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                 #                            np.roll(u, -1 * pixel_node, axis=(2, 3, 4)))
 
-                gradient_of_u += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
-                                           self.roll(self.fft, u, -1 * pixel_node, axis=(0, 1, 2)))
-        # TODO roll[u]= ifft (e^iq dx fft (u))
+                grad_u_ijqxyz += np.einsum('dqn,fnxyz->fdqxyz', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
+                                           self.roll(self.fft, u_inxyz, -1 * pixel_node, axis=(0, 1, 2)))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: finish =' f'{gradient_of_u.shape}')
         # MPI.COMM_WORLD.Barrier()
         # print('gradient_of_u= {} \n   core {}'.format(1, MPI.COMM_WORLD.rank))
 
-        return gradient_of_u
+        return grad_u_ijqxyz
 
-    def apply_gradient_operator_symmetrized(self, u, gradient_of_u=None):
-        # computes symmetrized gradient (small-strain)  \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
-        #   u_field size :      [f,n,x,y,z]
-        #   u_gradient_field    [f,d,q,x,y,z]
+    def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
+        """
+        Function that computes symmetrized gradient of function u.
+        Depending on the discretization stencil.
+
+        Parameters
+        ----------
+        u_inxyz: numpy ndarray of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+
+        Returns
+        -------
+        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
+                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
+                - q is quadrature point index
+        """
+        # computes symmetrized gradient (small-strain)
+
         # 1. compute gradient
-        gradient_of_u_ijqxyz = self.apply_gradient_operator(u)
+        if grad_u_ijqxyz is not None:
+            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz,
+                                                         grad_u_ijqxyz=grad_u_ijqxyz)
+        else:
+            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz)
+
         # 2. symmetrize it
-        gradient_of_u_ijqxyz = (gradient_of_u_ijqxyz + np.swapaxes(gradient_of_u_ijqxyz, 0, 1)) / 2
-        return gradient_of_u_ijqxyz
+        # \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
+        grad_u_ijqxyz = (grad_u_ijqxyz + np.swapaxes(grad_u_ijqxyz, 0, 1)) / 2
+        return grad_u_ijqxyz
 
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
+        """
+           Function that computes "Divergence"  of stress/flux field : gradient_of_u_fdqxyz.
+           Depending on the discretization stencil B.
+           Notation comes from the fact that system matrix  K= B^t:C:B
+
+           Parameters
+           ----------
+           gradient_of_u_fdqxyz: numpy ndarray of discretized  stress/flux field [i,j,q,x,y,z]
+                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
+                - q is quadrature point index
+           Returns
+           -------
+           div_u_fnxyz: numpy ndarray of divergence of function u
+                -div_u_fnxyz shape [i,n,x,y,z]
+                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+           """
+
         if div_u_fnxyz is None:  # if div_u_fnxyz is not specified, determine the size
-            #   gradient_of_u_fdqxyz :   [f,d,q,x,y,z]
-            #   div_u_fnxyz size :      [f,n,x,y,z]
             div_u_fnxyz_shape = list(gradient_of_u_fdqxyz.shape)  # [f,d,q,x,y,z]
             div_u_fnxyz_shape.pop(1)  # [f,q,x,y,z]
             div_u_fnxyz_shape[1] = self.nb_nodes_per_pixel  # [f,n,x,y,z]
@@ -262,8 +357,8 @@ class Discretization:
             for pixel_node in np.ndindex(
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 pixel_node = np.asarray(pixel_node)
-                if self.domain_dimension == 2:  # TODO find the way how to make it dimensionless.. working for 3 as well
-
+                if self.domain_dimension == 2:
+                    # TODO: think about notation of Of B,.... Indexed of offset IJK interfere with ij index
                     div_fnxyz_pixel_node = np.einsum('dqn,fdqxy->fnxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                      gradient_of_u_fdqxyz)
 
@@ -284,7 +379,7 @@ class Discretization:
         return div_u_fnxyz
 
     # def get_einsum_path(self):
-    # TODO make a einsum optimization for repetitive run of Gradeint operator
+    # TODO{} make a einsum optimization for repetitive run of Gradeint operator
     #  self.einsum_path = np.einsum_path('dqn,fnxy->fdqxy', self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
     #                                       np.roll(u, -1 * pixel_node, axis=(2, 3)), optimize='optimal')[0]
     # for iteration in range(500):
@@ -294,17 +389,40 @@ class Discretization:
     def evaluate_field_at_quad_points(self,
                                       nodal_field_fnxyz,
                                       quad_field_fqnxyz=None,
-                                      quad_points_coords_dq=None):
-        # TODO: Implement evaluation of at quad points
-        if quad_points_coords_dq is None:  # if quad_points_coords are not specified, use basic ones from B matrix
+                                      quad_points_coords_iq=None):
+        """
+        Function that evaluates nodal field at quad points.
+
+        Parameters
+        ----------
+        nodal_field_inxyz: numpy ndarray of discretized  nodal field [i,n,x,y,z]
+            - shape [i,n,x,y,z]
+            - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+            - n is a nodal point index
+        quad_field_iqnxyz: numpy ndarray of discretized  nodal field [i,q, n,x,y,z] # TODO{the n index is unnecessary}
+            - shape [i,q, n,x,y,z]
+            - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+            - n is a nodal point index
+            - q is quadrature point index
+
+        quad_points_coords_iq:  spacial coordinates of quadrature nodes at voxel [i,q]
+
+
+        Returns
+        -------
+        quad_field_fqnxyz: quadrature point field [i,q,n,x,y,z] with interpolated field nodal_field_inxyz
+
+        N_at_quad_points_qnijk: basis functions N interpolated at quadrature points
+            - N_nijk(x) basis at quadrature point q
+
+        """
+
+        if quad_points_coords_iq is None:  # if quad_points_coords are not specified, use basic ones from B matrix
             nb_quad_points_per_pixel = self.nb_quad_points_per_pixel
-            quad_points_coords_dq = self.quad_points_coord_parametric  # quad_points_coord[:,q]=[x_q,y_q,z_q]
+            quad_points_coords_iq = self.quad_points_coord_parametric  # quad_points_coord[:,q]=[x_q,y_q,z_q]
 
-        nb_quad_points_per_pixel = quad_points_coords_dq.shape[-1]
+        nb_quad_points_per_pixel = quad_points_coords_iq.shape[-1]
         if quad_field_fqnxyz is None:  # if quad_field_fqxyz is not specified, determine the size
-            #   nodal_field_fnxyz : [f,n,x,y,z]
-            #   quad_field_fqxyz : [f,q,x,y,z]
-
             quad_field_shape = list(nodal_field_fnxyz.shape)  # [f,n,x,y,z]
             quad_field_shape = np.insert(quad_field_shape, 1, nb_quad_points_per_pixel)
             quad_field_fqnxyz = np.zeros(quad_field_shape)  # create quad_field field
@@ -318,7 +436,7 @@ class Discretization:
         N_at_quad_points_qnijk = np.zeros(
             [nb_quad_points_per_pixel, n_size, *self.domain_dimension * (self.domain_dimension,)])
         for quad_point_idx in range(nb_quad_points_per_pixel):
-            quad_point_coords = quad_points_coords_dq[:, quad_point_idx]
+            quad_point_coords = quad_points_coords_iq[:, quad_point_idx]
             # iteration over all voxel corners
             for pixel_node in np.ndindex(*np.ones([self.domain_dimension], dtype=int) * 2):
                 N_at_quad_points_qnijk[(quad_point_idx, 0, *pixel_node)] = self.N_basis_interpolator_array[pixel_node](
@@ -334,17 +452,39 @@ class Discretization:
                     quad_field_fqnxyz += np.einsum('qn,fnxy->fqnxy', N_at_quad_points_qnijk[(..., *pixel_node)],
                                                    self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node, axis=(0, 1)))
 
-                elif self.domain_dimension == 3:  # TODO 3D interpolation is not tested
+                elif self.domain_dimension == 3:
                     # quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
                     #                                np.roll(nodal_field_fnxyz, -1 * pixel_node, axis=(2, 3, 4)))
 
                     quad_field_fqnxyz += np.einsum('qn,fnxyz->fqnxyz', N_at_quad_points_qnijk[(..., *pixel_node)],
                                                    self.roll(self.fft, nodal_field_fnxyz, -1 * pixel_node,
                                                              axis=(0, 1, 2)))
-
+                    warnings.warn('Interpolation is not tested for 3D.')
+                    # TODO 3D interpolation is not tested
         return quad_field_fqnxyz, N_at_quad_points_qnijk
 
     def get_rhs(self, material_data_field_ijklqxyz, macro_gradient_field_ijqxyz):
+        """
+        Function that computes right hand side vector of linear elastic homogenization problem
+        rhs= - B^t: C: E
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - q is a quadrature point index
+
+        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
+            - shape [i,j,q,x,y,z]
+            - q is quadrature point index
+
+        Returns
+        -------
+        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+
+        """
+
         # macro_gradient_field    [f,d,q,x,y,z]
         # material_data_field [d,d,d,d,q,x,y,z] - elasticity
         # material_data_field     [d,d,q,x,y,z] - conductivity
@@ -356,78 +496,175 @@ class Discretization:
 
         return -rhs_fnxyz
 
-    def get_macro_gradient_field(self, macro_gradient):
-        # return macro gradient field from single macro gradient vector ---
-        # macro_gradient_field [f,d,q,x,y,z]
-        # macro_gradient       [f,d]
+    def get_macro_gradient_field(self, macro_gradient_ij):
+        """
+        Function that returns macro gradient field E from single macro gradient vector
 
-        macro_gradient_field = self.get_gradient_size_field()
-        macro_gradient_field[..., :] = macro_gradient[(...,) + (np.newaxis,) * (macro_gradient_field.ndim - 2)]
+        Parameters
+        ----------
+        macro_gradient_ij: numpy ndarray of macro gradient [i,j ]
 
-        return macro_gradient_field
+        Returns
+        -------
+        macro_gradient_field_ijqxyz:  quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+        """
 
-    def apply_quadrature_weights_elasticity(self, material_data):
+        macro_gradient_field_ijqxyz = self.get_gradient_size_field()
+        macro_gradient_field_ijqxyz[..., :] = macro_gradient_ij[
+            (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.ndim - 2)]
 
-        weighted_material_data = np.einsum('ijklq...,q->ijklq...', material_data, self.quadrature_weights)
-
-        return weighted_material_data
+        return macro_gradient_field_ijqxyz
 
     def get_homogenized_stress(self, material_data_field_ijklqxyz,
-                               displacement_field_fnxyz,
+                               displacement_field_inxyz,
                                macro_gradient_field_ijqxyz,
                                formulation=None):
-        # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
-        # A_h * macro_grad = int(A * (macro_grad + micro_grad))  dx / | domain |
+        """
+         Function that computes homogenized  (averaged) stress field (or flux)
+
+         Parameters
+         ----------
+         material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - quadrature point field - q is a quadrature point index
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+
+         displacement_field_inxyz:
+            - nodal point field - displacement or temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         homogenized_stress_ij: nd array of homogenized stress of flux field
+                    - int (C * (macro_grad + micro_grad))  dx / | domain |
+         """
+
         if formulation == 'small_strain':
-            strain = self.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+            strain_ijqxyz = self.apply_gradient_operator_symmetrized(displacement_field_inxyz)
         else:
-            strain = self.apply_gradient_operator(displacement_field_fnxyz)
+            strain_ijqxyz = self.apply_gradient_operator(displacement_field_inxyz)
 
-        strain = strain + macro_gradient_field_ijqxyz
+        strain_ijqxyz = strain_ijqxyz + macro_gradient_field_ijqxyz  # compute total strain
         material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)
-        stress = self.apply_material_data(material_data_field_ijklqxyz, strain)
-
-        # homogenized_stress = np.sum(stress, axis=tuple(range(2, stress.shape.__len__()))) / self.cell.domain_volume
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
-        # total_sum = comm.reduce(local_data, op=MPI.SUM, root=0)
+        stress_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, strain_ijqxyz)
 
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
-        homogenized_stress = Reductor_numpi.sum(stress, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        homogenized_stress_ij = Reductor_numpi.sum(stress_ijqxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
-        return homogenized_stress / self.cell.domain_volume
+        return homogenized_stress_ij / self.cell.domain_volume
 
     def get_stress_field(self,
                          material_data_field_ijklqxyz,
-                         displacement_field_fnxyz,
+                         displacement_field_inxyz,
                          macro_gradient_field_ijqxyz,
                          formulation=None):
-        # work for macro_grad= column of identity matrix:  eye(mesh_info.dim)[:, i]
-        #  stress = A * (macro_grad + micro_grad)
+        """
+         Function that computes stress field (or flux)
+            sigma  = C:(E+grad(u_fluctiation))
+         Parameters
+         ----------
+         material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - quadrature point field - q is a quadrature point index
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+
+         displacement_field_inxyz:
+            - nodal point field - displacement or temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         stress_ij: nd array of stress of flux field
+                    - stress= C * (macro_grad + micro_grad))
+         """
+
         if formulation == 'small_strain':
-            strain = self.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+            strain_ijqxyz = self.apply_gradient_operator_symmetrized(displacement_field_inxyz)
         else:
-            strain = self.apply_gradient_operator(displacement_field_fnxyz)
-        strain = strain + macro_gradient_field_ijqxyz
-        stress = self.apply_material_data(material_data_field_ijklqxyz, strain)
-        return stress
-
-    def apply_quadrature_weights_conductivity(self, material_data):
-
-        weighted_material_data = np.einsum('ijq...,q->ijq...', material_data, self.quadrature_weights)
-
-        return weighted_material_data
+            strain_ijqxyz = self.apply_gradient_operator(displacement_field_inxyz)
+        strain_ijqxyz = strain_ijqxyz + macro_gradient_field_ijqxyz
+        stress_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, strain_ijqxyz)
+        return stress_ijqxyz
 
     def apply_quadrature_weights(self, material_data):
+        """
+        Wrapper for apply_quadrature_weights_conductivity and apply_quadrature_weights_elasticity
+
+        Parameters
+        ----------
+        material_data : numpy ndarray of discretized  material data tangent field
+            - conductivity shape  [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+        Returns
+        -------
+        weighted_material_data : the same shape as input material_data
+        """
         if self.cell.problem_type == 'conductivity':
-            return self.apply_quadrature_weights_conductivity(material_data)
+            return self.apply_quadrature_weights_conductivity(material_data_ijqxyz=material_data)
         elif self.cell.problem_type == 'elasticity':
-            return self.apply_quadrature_weights_elasticity(material_data)
+            return self.apply_quadrature_weights_elasticity(material_data_ijklqxyz=material_data)
+        else:
+            raise ValueError(
+                'Unrecognised problem_type type {}. Choose from ' \
+                ' : conductivity, elasticity '.format(self.cell.problem_type))
+
+    def apply_quadrature_weights_conductivity(self, material_data_ijqxyz):
+        """
+        Function that applies quadrature weights to material tangent
+
+        Parameters
+        ----------
+        material_data_ijqxyz: numpy ndarray of discretized  material data tangent field
+            - conductivity shape  [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - q is a quadrature point index
+        Returns
+        -------
+        weighted_material_data_ijqxyz:
+        """
+        weighted_material_data_ijqxyz = np.einsum('ijq...,q->ijq...', material_data_ijqxyz, self.quadrature_weights)
+        return weighted_material_data_ijqxyz
+
+    def apply_quadrature_weights_elasticity(self, material_data_ijklqxyz):
+        """
+        Function that applies quadrature weights to material tangent
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - q is a quadrature point index
+        Returns
+        -------
+        weighted_material_data_ijklqxyz:
+        """
+        weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz,
+                                                    self.quadrature_weights)
+
+        return weighted_material_data_ijklqxyz
 
     def apply_quadrature_weights_on_gradient_field(self, grad_field):
         # apply quadrature weights without material data
         grad_field = np.einsum('ijq...,q->ijq...', grad_field, self.quadrature_weights)
 
         return grad_field
+
+    def apply_material_data(self, material_data, gradient_field):
+        if self.cell.problem_type == 'conductivity':
+            return self.apply_material_data_conductivity(material_data, gradient_field)
+        elif self.cell.problem_type == 'elasticity':
+            return self.apply_material_data_elasticity(material_data, gradient_field)
+        else:
+            raise ValueError(
+                'Unrecognised problem_type type {}. Choose from ' \
+                ' : conductivity, elasticity '.format(self.cell.problem_type))
 
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
@@ -442,15 +679,29 @@ class Discretization:
 
         return flux
 
-    def apply_material_data(self, material_data, gradient_field):
-        if self.cell.problem_type == 'conductivity':
-            return self.apply_material_data_conductivity(material_data, gradient_field)
-        elif self.cell.problem_type == 'elasticity':
-            return self.apply_material_data_elasticity(material_data, gradient_field)
-
     def get_system_matrix(self, material_data_field):
-        # memory hungry process that returns
-        # loop over all possible unit impulses, to get all columns of system matrix
+        """
+        Function that assembly global system matrix K
+        - memory hungry process that returns
+        - loop over all possible unit impulses, to get all columns of system matrix
+        Parameters
+        ----------
+        material_data_field : numpy ndarray of discretized  material data tangent field
+                - conductivity shape  [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+                - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+        Returns
+        -------
+        K_system_matrix : system matrix with shape [nb_dof,nb_dofs]# TODO look for orderign
+            - ordering of dofs as follows:
+                - first are all degrees of freedom for displacement in x direction
+                - second are all degrees of freedom for displacement in y direction
+                - third are all degrees of freedom for displacement in z direction
+                K = [ K_00   K_01   K_02,
+                      K_10   K_11   K_12,
+                      K_20   K_21   K_22]
+
+        """
+
         unit_impulse = self.get_unknown_size_field()
         K_impulse = self.get_unknown_size_field()
         K_system_matrix = np.zeros([np.prod(unit_impulse.shape), np.prod(unit_impulse.shape)])
@@ -945,7 +1196,7 @@ class Discretization:
         quad_field_fqnxyz = self.evaluate_field_at_quad_points(
             nodal_field_fnxyz=field_fnxyz,
             quad_field_fqnxyz=None,
-            quad_points_coords_dq=quad_points_coord)[0]
+            quad_points_coords_iq=quad_points_coord)[0]
         # Multiply with quadrature weights
         quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 

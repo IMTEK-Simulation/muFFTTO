@@ -136,7 +136,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
             nodal_field_fnxyz=phase_field_1nxyz,
             quad_field_fqnxyz=None,
-            quad_points_coords_dq=None)
+            quad_points_coords_iq=None)
 
         material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
             phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
@@ -157,7 +157,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-            displacement_field_fnxyz=displacement_field,
+            displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
         # print('homogenized stress = \n'          ' {} '.format(homogenized_stress))
@@ -372,7 +372,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
         phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
             nodal_field_fnxyz=phase_field_1nxyz,
             quad_field_fqnxyz=None,
-            quad_points_coords_dq=None)
+            quad_points_coords_iq=None)
 
         material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
             phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
@@ -393,7 +393,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-            displacement_field_fnxyz=displacement_field,
+            displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
         # print('homogenized stress = \n'          ' {} '.format(homogenized_stress))
@@ -1124,7 +1124,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     # just to set up the system
     E_0 = 1
@@ -1178,7 +1178,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
     # compute homogenized stress field corresponding to displacement
     actual_stress_ij = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-        displacement_field_fnxyz=displacement_field_u_inxyz,
+        displacement_field_inxyz=displacement_field_u_inxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         formulation='small_strain')
 
@@ -1236,7 +1236,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
                 phase_field_at_quad_poits_1qnxyz, _ = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)
+                    quad_points_coords_iq=None)
 
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0_ijklqxyz[..., :, :, :] * (
                                                                                                             np.power(
@@ -1246,7 +1246,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
 
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                    displacement_field_fnxyz=displacement_field_u_inxyz,
+                    displacement_field_inxyz=displacement_field_u_inxyz,
                     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                     formulation='small_strain')
                 adjoint_energy_plus = topology_optimization.adjoint_potential(
@@ -1260,7 +1260,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
                 phase_field_at_quad_poits_1qnxyz, _ = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)
+                    quad_points_coords_iq=None)
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0_ijklqxyz[..., :, :, :] * (
                                                                                                             np.power(
                                                                                                                 phase_field_at_quad_poits_1qnxyz,
@@ -1269,7 +1269,7 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
 
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                    displacement_field_fnxyz=displacement_field_u_inxyz,
+                    displacement_field_inxyz=displacement_field_u_inxyz,
                     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                     formulation='small_strain')
                 adjoint_energy_minus = topology_optimization.adjoint_potential(
@@ -1332,7 +1332,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
     # apply material distribution
     # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], p)
 
@@ -1357,7 +1357,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
 
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -1388,14 +1388,14 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
                 phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)
+                    quad_points_coords_iq=None)
 
                 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
 
                 homogenized_stress_plus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -1411,14 +1411,14 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
                 phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)
+                    quad_points_coords_iq=None)
                 # apply material distribution
                 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
                     phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
 
                 homogenized_stress_minus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -1506,7 +1506,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_displacement_FE(discretiza
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
     # apply material distribution
 
     material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
@@ -1530,7 +1530,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_displacement_FE(discretiza
 
     actual_stress_ij = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -1568,7 +1568,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_displacement_FE(discretiza
 
                         actual_stress_ij = discretization_fixture.get_homogenized_stress(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                            displacement_field_fnxyz=displacement_field_fnxyz,
+                            displacement_field_inxyz=displacement_field_fnxyz,
                             macro_gradient_field_ijqxyz=macro_gradient_field,
                             formulation='small_strain')
 
@@ -1579,7 +1579,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_displacement_FE(discretiza
                         displacement_field_fnxyz[f, n, x, y] = displacement_field_fnxyz[f, n, x, y] - epsilon
                         actual_stress_ij = discretization_fixture.get_homogenized_stress(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                            displacement_field_fnxyz=displacement_field_fnxyz,
+                            displacement_field_inxyz=displacement_field_fnxyz,
                             macro_gradient_field_ijqxyz=macro_gradient_field,
                             formulation='small_strain')
 
@@ -1634,7 +1634,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)
+        quad_points_coords_iq=None)
 
     # just to set up the system
     E_0 = 1
@@ -1688,7 +1688,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
     # compute homogenized stress field corresponding to displacement
     actual_stress_ij = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-        displacement_field_fnxyz=displacement_field_u_inxyz,
+        displacement_field_inxyz=displacement_field_u_inxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         formulation='small_strain')
 
@@ -1744,7 +1744,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
                         # compute homogenized stress field for perturbed displacement
                         stress_field = discretization_fixture.get_stress_field(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                            displacement_field_fnxyz=displacement_field_fnxyz_perturbed,
+                            displacement_field_inxyz=displacement_field_fnxyz_perturbed,
                             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                             formulation='small_strain')
                         adjoint_energy_plus = topology_optimization.adjoint_potential(
@@ -1758,7 +1758,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
                         # compute homogenized stress field for perturbed displacement
                         stress_field = discretization_fixture.get_stress_field(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                            displacement_field_fnxyz=displacement_field_fnxyz_perturbed,
+                            displacement_field_inxyz=displacement_field_fnxyz_perturbed,
                             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                             formulation='small_strain')
                         adjoint_energy_minus = topology_optimization.adjoint_potential(
@@ -1850,7 +1850,7 @@ def test_finite_difference_check_of_stress_equivalence_potential_pixel(discretiz
 
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -1895,7 +1895,7 @@ def test_finite_difference_check_of_stress_equivalence_potential_pixel(discretiz
 
                 homogenized_stress_plus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -1919,7 +1919,7 @@ def test_finite_difference_check_of_stress_equivalence_potential_pixel(discretiz
                 # displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-10)
                 homogenized_stress_minus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2135,7 +2135,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
     # test homogenized stress
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_i,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -2181,7 +2181,7 @@ def test_finite_difference_check_of_pd_objective_function_wrt_displacement_small
                         # homogenized stress
                         homogenized_stress = discretization_fixture.get_homogenized_stress(
                             material_data_field_ijklqxyz=material_data_field_i,
-                            displacement_field_fnxyz=displacement_field_fnxyz,
+                            displacement_field_inxyz=displacement_field_fnxyz,
                             macro_gradient_field_ijqxyz=macro_gradient_field,
                             formulation='small_strain')
 
@@ -2295,7 +2295,7 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_pixel(disc
                 #
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_per,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2351,7 +2351,7 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_FE(discret
     phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)[0]
+        quad_points_coords_iq=None)[0]
 
     material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
@@ -2409,7 +2409,7 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_FE(discret
                 phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)[0]
+                    quad_points_coords_iq=None)[0]
 
                 material_data_field_C_0_per = material_data_field_C_0[..., :, :, :] * (
                     np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
@@ -2417,7 +2417,7 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_FE(discret
                 #
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_per,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2433,14 +2433,14 @@ def test_finite_difference_check_of_adjoint_potential_wrt_phase_field_FE(discret
                 phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)[0]
+                    quad_points_coords_iq=None)[0]
 
                 material_data_field_C_0_per = material_data_field_C_0[..., :, :, :] * (
                     np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
 
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_per,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2516,7 +2516,7 @@ def test_finite_difference_check_of_stress_equivalence_potential222(discretizati
     # compute stress field corresponding to displacement
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -2563,7 +2563,7 @@ def test_finite_difference_check_of_stress_equivalence_potential222(discretizati
 
                 homogenized_stress = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2640,7 +2640,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
     phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)[0]
+        quad_points_coords_iq=None)[0]
 
     material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * (
         np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
@@ -2655,7 +2655,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
     # compute stress field corresponding to displacement
     homogenized_stress = discretization_fixture.get_homogenized_stress(
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
-        displacement_field_fnxyz=displacement_field,
+        displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
         formulation='small_strain')
 
@@ -2699,14 +2699,14 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
                 phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)[0]
+                    quad_points_coords_iq=None)[0]
 
                 material_data_field_drho_ijklqxyz = material_data_field_C_0[..., :, :, :] * (
                     np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
                 # plus epsilon
                 homogenized_stress_plus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_drho_ijklqxyz,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 
@@ -2722,7 +2722,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
                 phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
                     nodal_field_fnxyz=phase_field_perturbed,
                     quad_field_fqnxyz=None,
-                    quad_points_coords_dq=None)[0]
+                    quad_points_coords_iq=None)[0]
 
                 material_data_field_drho_ijklqxyz = material_data_field_C_0[..., :, :, :] * (
                     np.power(phase_field_at_quad_poits_1qnxyz[0, :, 0, ...], (p)))
@@ -2731,7 +2731,7 @@ def test_finite_difference_check_of_objective_function_wrt_phase_field(discretiz
                 #                                                                 p)  # ** p
                 homogenized_stress_minus = discretization_fixture.get_homogenized_stress(
                     material_data_field_ijklqxyz=material_data_field_drho_ijklqxyz,
-                    displacement_field_fnxyz=displacement_field,
+                    displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     formulation='small_strain')
 

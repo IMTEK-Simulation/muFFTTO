@@ -20,14 +20,13 @@ from muFFTTO import topology_optimization
 from muFFTTO import microstructure_library
 from muFFTTO import method_of_moving_asymptotes_
 
-
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
 formulation = 'small_strain'
 
 domain_size = [1, 1]  # np.sqrt(3)/2
-number_of_pixels = (16, 16)
+number_of_pixels = (32, 32)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -72,8 +71,8 @@ M_fun = lambda x: discretization.apply_preconditioner_NEW(
 # set up load cases
 nb_load_cases = 3
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_gradients[0] = np.array([[1.0, 0.5],
-                               [0.5, 1.0]])
+macro_gradients[0] = np.array([[1.0, 0.0],
+                               [0.0, 0.0]])
 macro_gradients[1] = np.array([[.0, .0],
                                [.0, 1.0]])
 macro_gradients[2] = np.array([[.0, 0.5],
@@ -142,24 +141,17 @@ norms_sigma = []
 norms_pf = []
 num_iteration_ = []
 
-weights = [1]
-w_mult = 1 # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
-eta_mult = 0.01   # np.concatenate([np.arange(0.005, 0.05, 0.005)])
 
-pixel_diameter = np.sqrt(np.sum(discretization.pixel_size ** 2))
-# w = w_mult / nb_load_cases  # / discretization.pixel_size[0]
-w = w_mult / nb_load_cases  # / discretization.pixel_size[0]
-eta = eta_mult  # * discretization.pixel_size[0]  # pixel_diameter#
-# *eta_mult#pixel_diameter / eta_mult  # * discretization.pixel_size[0]
+# print('p =   {}'.format(p))
+# print('w  =  {}'.format(w))
+# print('eta =  {}'.format(eta))
+#
 
-print('p =   {}'.format(p))
-print('w  =  {}'.format(w))
-print('eta =  {}'.format(eta))
-
-
-def objective_function_multiple_load_cases(phase_field_1nxyz):
+def objective_function_multiple_load_cases(phase_field_1nxyz, *parameters):
     # print('Objective function:')
     # reshape the field
+    w = parameters[0]['w']
+    eta = parameters[0]['eta']
     phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
 
     # objective function phase field terms
@@ -302,26 +294,29 @@ def objective_function_multiple_load_cases(phase_field_1nxyz):
 
             objective_function += f_sigmas[load_case]
 
-        # if MPI.COMM_WORLD.rank == 0:
-        #     print(
-        #         'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
-        #     print(
-        #         'load case ' f'{load_case},  objective_function =' f'{objective_function}')
-
     norms_sigma.append(objective_function)
     return objective_function[0], s_phase_field.reshape(-1)
 
 
+def objective(phase_field_1nxyz):
+    f = objective_function_multiple_load_cases(phase_field_1nxyz)[0]
+    return f
 
+
+def dobjective(phase_field_1nxyz):
+    df = objective_function_multiple_load_cases(phase_field_1nxyz)[1]
+
+    return np.expand_dims(df, axis=1)
 
 
 if __name__ == '__main__':
-    script_name = 'example_2D_elasticity_TO'
-    file_folder_path = os.path.dirname(os.path.realpath(__file__)) # script directory
+    script_name = '2D_elasticity_TO_mma'
+    file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/data/' + script_name + '/'
 
     run_lbfg = True
-    random_initial_geometry = True
+    run_mma = False
+    random_initial_geometry = False
     bounds = False
 
     # # material distribution
@@ -333,25 +328,27 @@ if __name__ == '__main__':
 
     if not random_initial_geometry:
         phase_field_0[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                                  microstructure_name='square_inclusion',
+                                                                  microstructure_name='circles',  # 'square_inclusion'
                                                                   coordinates=discretization.fft.coords)
 
+    # phase_field_0 *= np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
 
-    # TODO CREATE random field from the same frequenciess all the same time
+    # TODO CREATE random field from the same frequencies all the same time
+    min_phase = 1e-4
+
+
     def apply_filter(phase):
         f_field = discretization.fft.fft(phase)
         f_field[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
                                      np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
         phase = discretization.fft.ifft(f_field) * discretization.fft.normalisation
         phase[phase > 1] = 1
-        phase[phase < 0] = 0
+        phase[phase <= 0] = min_phase
         return phase
 
 
     # phase = np.random.random(discretization.get_scalar_sized_field().shape)
     phase_field_0 = apply_filter(phase_field_0)
-
-
 
     if MPI.COMM_WORLD.size == 1:
         print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f'')
@@ -367,14 +364,34 @@ if __name__ == '__main__':
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
     phase_field_0 = phase_field_0.reshape(-1)  # b
 
-    print('Init objective function FE  = {}'.format(
-        objective_function_multiple_load_cases(phase_field_00)[0]))
+    # print('Init objective function FE  = {}'.format(
+    #     objective_function_multiple_load_cases(phase_field_00)[0]))
     # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
 
+    if run_mma:
+        nb_constr = 1
+        parameters_mma = {'nb_unknown': np.size(phase_field_0),
+                          'nb_constrains': nb_constr,
+                          'xmin': min_phase,
+                          'xmax': 1.0,
+                          'move': 0.5,
+                          'maxoutit': 10,
+                          'a0': 1,
+                          'ai': np.zeros((nb_constr, 1)),
+                          'ci': 1000 * np.ones((nb_constr, 1)),
+                          'di': np.ones((nb_constr, 1)),
+                          }
+        for nb_of_outer_loops in range(1):
+            [x_computed_mma, fmin_mma, Niter_mma] = method_of_moving_asymptotes_.mma_loop(x0=phase_field_0,
+                                                                                          f=objective,
+                                                                                          gradf=dobjective,
+                                                                                          atol=1e-6,
+                                                                                          **parameters_mma)
+            phase_field_0 = np.copy(x_computed_mma)
 
-
-
-
+            print(x_computed_mma[:, 0])
+            print(fmin_mma)
+            print(Niter_mma)
 
     if run_lbfg:
 
@@ -400,25 +417,57 @@ if __name__ == '__main__':
                      result_norms[6].reshape([*discretization.nb_of_pixels]),
                      tuple(discretization.fft.subdomain_locations),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            if iteration % 10 == 1:
+                plt.figure()
+                field = result_norms[6].reshape([*discretization.nb_of_pixels])
+                plt.contourf(field, cmap=mpl.cm.Greys)
+                # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+                plt.clim(0, 1)
+                plt.colorbar()
+                plt.title('Iteration = %.0f' % (iteration))
+                plt.show()
+
             if MPI.COMM_WORLD.size == 1:
                 print(data_folder_path + file_data_name_it + f'.npy')
 
 
-        xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
-                                          x=phase_field_0,
-                                          jac=True,
-                                          maxcor=20,
-                                          gtol=1e-5,
-                                          ftol=1e-12,
-                                          maxiter=1500,
-                                          comm=discretization.fft.communicator,
-                                          disp=True,
-                                          callback=my_callback
-                                          )
+        for nb_of_outer_loops in range(100):
+
+#            if nb_of_outer_loops % 2 == 0:
+            if nb_of_outer_loops == 1 :
+                weights = 0
+                max_it = 5
+            else:
+                weights = 20
+                max_it = 100
 
 
+            eta_mult = 0.01  # np.concatenate([np.arange(0.005, 0.05, 0.005)])
 
+            w = weights / nb_load_cases  # / discretization.pixel_size[0]
+            eta = eta_mult  #
+            parameters_lbfg = {'w': weights,
+                               'eta': eta}
 
+            print('p =   {}'.format(p))
+            print('w  =  {}'.format(w))
+            print('eta =  {}'.format(eta))
+
+            xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
+                                              x=phase_field_0,
+                                              jac=True,
+                                              args=(parameters_lbfg,),
+                                              maxcor=20,
+                                              gtol=1e-5,
+                                              ftol=1e-10,
+                                              maxiter=max_it,
+                                              comm=discretization.fft.communicator,
+                                              disp=True,
+                                              callback=my_callback
+                                              )
+
+            phase_field_0 = np.copy(xopt_FE_MPI.x)
 
         solution_phase = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
         sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
@@ -477,7 +526,7 @@ if __name__ == '__main__':
         # compute homogenized stress field corresponding t
         homogenized_stresses[load_case] = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-            displacement_field_fnxyz=displacement_field,
+            displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
         _info['target_stress' + f'{load_case}'] = target_stresses[load_case]
@@ -505,7 +554,7 @@ if __name__ == '__main__':
             # compute homogenized stress field corresponding
             homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-                displacement_field_fnxyz=displacement_field_ij,
+                displacement_field_inxyz=displacement_field_ij,
                 macro_gradient_field_ijqxyz=macro_gradient_field,
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:

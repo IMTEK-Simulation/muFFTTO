@@ -171,7 +171,7 @@ for w_mult in [4.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_1nxyz,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
 
             material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
@@ -562,7 +562,7 @@ for w_mult in [4.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
             phase_field_at_quad_poits_1qnxyz = \
                 discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field_sol_FE_MPI,
                                                              quad_field_fqnxyz=None,
-                                                             quad_points_coords_dq=None)[0]
+                                                             quad_points_coords_iq=None)[0]
             material_data_field_C_0_rho_quad = material_data_field_C_0[..., :, :, :] * np.power(
                 phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
             homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
