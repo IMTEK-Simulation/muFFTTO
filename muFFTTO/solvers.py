@@ -10,15 +10,14 @@ def donothing(*args, **kwargs):
 
 
 def findS(curve, Delta, l):
+    # function to compute safety factor S
     curve = np.array(curve)
     ind = np.where((curve[l] / curve) <= 1e-4)[0]  # , 1, 'last')
     last_index = ind[-1] if ind.size > 0 else None
-    if last_index == None:
+    if last_index is None:
         last_index = 0
-    if Delta[last_index: -1].__len__() == 0:
-        S = 1
-    else:
-        S = max(curve[last_index:-1] / Delta[last_index: -1])
+    S = Reduction(MPI.COMM_WORLD).max(curve[last_index:-1] / Delta[last_index: -1])
+
     return S
 
 
@@ -142,34 +141,34 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0
 
-        r_0z_0 = r_1z_1
-
         # Energy - error estimator
-        Delta.append(alpha * r_1z_1)
-        # Delta.append(alpha * r_1z_1)
+        Delta.append(alpha * r_0z_0)
         curve.append(0)
-        curve = (curve + Delta[k - 1]).tolist()
+        curve = (curve + Delta[-1]).tolist()
 
-        if k > 0:
+        if k > 1:
+            # safety factor
             S = findS(curve, Delta, l)
 
-            num = S * Delta[k - 1]
-            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:k - 2])
+            num = S * Delta[-1]
+            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
             while (d >= 0) and (num / den <= tau):
                 delay.append(d)
-                estim.append(den)
+                estim.append(den + Delta[-1])
                 l = l + 1
                 d = d - 1
-                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:k - 2])
+                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
 
             d = d + 1
 
+        r_0z_0 = r_1z_1
         if norm_energy_upper_bound:
             # updade upper bound on energy error estim parameter
             gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
 
         if "energy_lower_estim" in kwargs:
             norms['energy_lower_estim'] = estim
+
     return x_k, norms
 
 

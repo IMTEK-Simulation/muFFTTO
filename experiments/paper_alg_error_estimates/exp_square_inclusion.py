@@ -112,7 +112,7 @@ def my_callback(x_k):
         material_data_field_ijklqxyz=material_data_field_C_0_rho,
         displacement_field_inxyz=x_k,
         macro_gradient_field_ijqxyz=macro_gradient_field)
-    error_in_Aeff_00.append(homogenized_flux[0, 0] - J_eff )  # J_eff_computed if J_eff is not available
+    error_in_Aeff_00.append(homogenized_flux[0, 0] - J_eff)  # J_eff_computed if J_eff is not available
 
 
 temperatute_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10,
@@ -123,7 +123,7 @@ temperatute_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(5
 
 nb_it = len(norms['residual_rz'])
 print(' nb_ steps CG =' f'{nb_it}')
-fig = plt.figure(figsize=(7, 7.5))
+fig = plt.figure(figsize=(7, 4.5))
 gs = fig.add_gridspec(1, 1, hspace=0.1, wspace=0.1, width_ratios=1 * (1,),
                       height_ratios=[1, ])
 ax_norms = fig.add_subplot(gs[0])
@@ -144,7 +144,6 @@ ax_norms.semilogy(norms['residual_rz'] / eigen_UB,
                   label=r'Trivial lower  bound  - $\frac{1}{\lambda_{max}}|| \mathbf{ r}_{k} ||_{\mathbf{G}}^2$',
                   color='Blue',
                   alpha=0.5, marker='^', linewidth=1, markersize=5, markevery=5)
-
 
 ax_norms.semilogy(norms['residual_rr'], label='residual_rr', color='Black',
                   alpha=0.5, marker='.', linewidth=1, markersize=5, markevery=5)
@@ -172,6 +171,45 @@ fig_data_name = f'muFFTTO_{phase_field.shape}_line'  # print('rank' f'{MPI.COMM_
 
 plt.show()
 
+true_e_error = np.asarray(norms['energy_iter_error'])
+lower_estim = np.asarray(norms['energy_lower_estim'])
+upper_estim  = lower_estim/(1-parameters_CG['tau'])
+upper_bound = np.asarray(norms['energy_upper_bound'])
+trivial_lower_bound = np.asarray(norms['residual_rz'] / eigen_UB)
+trivial_upper_bound = np.asarray(norms['residual_rz'] / eigen_LB)
+
+fig = plt.figure(figsize=(7, 4.5))
+gs = fig.add_gridspec(1, 1, hspace=0.1, wspace=0.1, width_ratios=1 * (1,),
+                      height_ratios=[1, ])
+ax_norms = fig.add_subplot(gs[0])
+
+tmp = min(len(lower_estim), len(upper_bound))
+ax_norms.semilogy(lower_estim[0:tmp - 1] / true_e_error[0:tmp - 1],
+                  label='Lower estim PT')
+ax_norms.semilogy(upper_estim[0:tmp - 1] / true_e_error[0:tmp - 1],
+                  label='Upper estim PT')
+
+ax_norms.semilogy(upper_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
+                  label='Upper bound PT')
+
+ax_norms.semilogy(trivial_lower_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
+                  label=r'Trivial lower  bound  - $\frac{1}{\lambda_{max}}|| \mathbf{ r}_{k} ||_{\mathbf{G}}^2$',
+                  )
+ax_norms.semilogy(trivial_upper_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
+                  label=r'Trivial   upper  bound  - $\frac{1}{\lambda_{min}}|| \mathbf{ r}_{k} ||_{\mathbf{G}}^2$',
+                  )
+
+# ax_norms.semilogy((1:tmp,upper_estim_M(1:tmp)./norm_ener_error_M(1:tmp))
+# ax_norms.semilogy((1:tmp,estim_M_UB(1:tmp)./norm_ener_error_M(1:tmp))
+ax_norms.semilogy(np.ones(tmp), 'k-')
+
+ax_norms.set_title('effectivity indices')
+ax_norms.set_xlabel('# CG iterations')
+
+# hezci rozsah os, abychom videli efektivitu u jednicky
+ax_norms.set_ylim(1e-4, 1e4)
+ax_norms.legend(loc='best')
+plt.show()
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress(
