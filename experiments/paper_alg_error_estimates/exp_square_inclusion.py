@@ -17,7 +17,7 @@ element_type = 'linear_triangles'  # #'linear_triangles'# linear_triangles_tille
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (128, 128)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -29,18 +29,19 @@ discretization = domain.Discretization(cell=my_cell,
 start_time = time.time()
 
 # set macroscopic gradient
-macro_gradient = np.array([1.0, 0])
+macro_gradient = np.array([1.0, .0])
 
 # create material data field
-mat_contrast = 1.  # matrix
-mat_contrast_2 = 1e3  # inclusion
-conductivity_C_1 = mat_contrast * np.array([[1., 0], [0, 1.0]])
+mat_contrast = 1e3  # matrix
+mat_contrast_2 = 1  # inclusion
+conductivity_C_1 = mat_contrast * np.array([[10., 0], [0, 1.0]])
 conductivity_C_2 = mat_contrast_2 * np.array([[1., 0], [0, 1.0]])
-conductivity_C_ref = np.array([[1., 0], [0, 1.0]])
+conductivity_C_ref = np.array([[10., 0], [0, 1.0]])
 
 eigen_C1 = sp.linalg.eigh(a=conductivity_C_1, b=conductivity_C_ref, eigvals_only=True)
 eigen_C2 = sp.linalg.eigh(a=conductivity_C_2, b=conductivity_C_ref, eigvals_only=True)
 eigen_LB = np.min([eigen_C1, eigen_C2])
+#seigen_LB *=0.9
 eigen_UB = np.max([eigen_C1, eigen_C2])
 print(f'eigen_LB = {eigen_LB}')
 print(f'eigen_UB = {eigen_UB}')
@@ -49,9 +50,14 @@ print(f'eigen_UB = {eigen_UB}')
 J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
 print("J_eff : ", J_eff)
 
-material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
+material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                       *discretization.nb_of_pixels])))
+
+material_data_field_C_2 = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
+                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                      *discretization.nb_of_pixels])))
+
 material_data_field_C_ref = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
@@ -61,9 +67,9 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
                                                   coordinates=discretization.fft.coords)
 
 # apply material distribution
-material_data_field_C_0_rho = mat_contrast * material_data_field_C_0[..., :, :] * np.power(phase_field,
-                                                                                           1)
-material_data_field_C_0_rho += mat_contrast_2 * material_data_field_C_0[..., :, :] * np.power(1 - phase_field, 2)
+material_data_field_C_0_rho = material_data_field_C_1[..., :, :] * np.power(phase_field,
+                                                                            1)
+material_data_field_C_0_rho += material_data_field_C_2[..., :, :] * np.power(1 - phase_field, 2)
 
 # Set up the equilibrium system
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
@@ -74,14 +80,27 @@ rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
 # M_fun = lambda x: 1 * x
 
-
 preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_ref)
 # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
 # M_fun_old= lambda x: discretization.apply_preconditioner(preconditioner_old, x)
 
-
+# K = discretization.get_system_matrix(material_data_field_C_0_rho)
+# M = discretization.get_system_matrix(material_data_field_C_ref)
+#
+# # fixing zero eigenvalues
+# # reduced_K = np.copy(K)
+# K[:, 0] = 0
+# K[0, :] = 0
+# K[0, 0] = 1
+#
+# M[:, 0] = 0
+# M[0, :] = 0
+# M[0, 0] = 1
+#
+# eig_G, eig_vect_G = sp.linalg.eig(a=K, b=M)  # , eigvals_only=True
+# eig_G = np.real(eig_G)
 # M_fun_NONE = lambda x: 1 * x
 # x_0=np.random.rand(*discretization.get_unknown_size_field().shape)
 # x_00=np.copy(x_0)
@@ -91,9 +110,15 @@ M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
 # x_2=M_fun(x_0)
 # x_22=M_fun(x_2)
 
-temperatute_field_precise, norms_precise = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-14,
+temperatute_field_precise, norms_precise = solvers.PCG(Afun=K_fun,
+                                                       B=rhs,
+                                                       x0=None,
+                                                       P=M_fun,
+                                                       steps=int(500),
+                                                       toler=1e-14,
                                                        norm_energy_upper_bound=True,
                                                        lambda_min=eigen_LB)
+
 parameters_CG = {'exact_solution': temperatute_field_precise,
                  'energy_lower_estim': True,
                  'tau': 0.25}
@@ -115,9 +140,13 @@ def my_callback(x_k):
     error_in_Aeff_00.append(homogenized_flux[0, 0] - J_eff)  # J_eff_computed if J_eff is not available
 
 
-temperatute_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10,
+temperatute_field, norms = solvers.PCG(Afun=K_fun,
+                                       B=rhs,
+                                       x0=None,
+                                       P=M_fun,
+                                       steps=int(500), toler=1e-10,
                                        norm_energy_upper_bound=True,
-                                       lambda_min=eigen_LB,
+                                       lambda_min=eigen_LB ,
                                        callback=my_callback,
                                        **parameters_CG)
 
@@ -173,7 +202,7 @@ plt.show()
 
 true_e_error = np.asarray(norms['energy_iter_error'])
 lower_estim = np.asarray(norms['energy_lower_estim'])
-upper_estim  = lower_estim/(1-parameters_CG['tau'])
+upper_estim = lower_estim / (1 - parameters_CG['tau'])
 upper_bound = np.asarray(norms['energy_upper_bound'])
 trivial_lower_bound = np.asarray(norms['residual_rz'] / eigen_UB)
 trivial_upper_bound = np.asarray(norms['residual_rz'] / eigen_LB)
