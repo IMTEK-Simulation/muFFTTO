@@ -3,7 +3,7 @@ import matplotlib as mpl
 
 import numpy as np
 import scipy as sc
-
+import os
 from mpi4py import MPI
 from NuMPI.Tools import Reduction
 from NuMPI.IO import save_npy, load_npy
@@ -25,6 +25,17 @@ import matplotlib.tri as tri
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+
+script_name = 'exp_paper_JG_eivals_with_eigenvectors'
+file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+if not os.path.exists(file_folder_path):
+    os.makedirs(file_folder_path)
+data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+if not os.path.exists(data_folder_path):
+    os.makedirs(data_folder_path)
+figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+if not os.path.exists(figure_folder_path):
+    os.makedirs(figure_folder_path)
 
 
 def get_participation_ration(displacemets_flat, grid_shape):
@@ -114,7 +125,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
     plt.rcParams["font.family"] = "Arial"
 
     domain_size = [1, 1]
-    geom_n = [4]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+    geom_n = [2]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 
     ratios = np.array([2])  # np.arange(1,5)  # 17  33
 
@@ -370,18 +381,45 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                             norm_energy_upper_bound=True,
                                                             lambda_min=np.real(sorted(eig_G)[-2])
                                                             )
+
+                    _info = {}
+
+                    _info['nb_of_pixels'] = discretization.nb_of_pixels_global
+                    _info['nb_of_sampling_points'] = np.shape(phase_fied_small_grid)
+                    # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
+                    _info['norm_rMr_G'] = norms['data_scaled_rr']
+                    _info['norm_UB_G'] = norms['energy_upper_bound']
+                    _info['eigens_G'] = eig_G[idx_G]
+
+                    _info['eig_vect_G'] = eig_vect_G[:, idx_G].flatten()
+                    _info['rhs'] = rhs.flatten()
+                    _info['weights'] = w_i[idx_G]
+
+                    _info['x_values'] = x_values
+                    _info['ritz_values'] = ritz_values
+                    _info['eig_G_no_zero'] = eig_G_no_zero[idx_G]
+
+                    results_name = f'T{discretization.nb_of_pixels_global[0]}_G{nb_laminates}'
+
+                    #np.savez(data_folder_path + results_name + f'_info.npz', **_info)
+                    np.savez(data_folder_path + results_name + f'_info.npz',
+                             **{key: np.array(value, dtype=object) for key, value in _info.items()})
+
+                    print(data_folder_path + results_name + f'_log.npz')
+                    quit()
                     # displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun,
                     #                                         steps=int(1000), toler=1e-14,
                     #                                         norm_energy_upper_bound=True,
                     #                                         lambda_min=np.real(sorted(eig_G)[0])
                     #                                         )
-                    # plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G], weight=w_i[idx_G],
-                    #                    error_evol=norms['energy_lb'] / norms['residual_rr'][
-                    #                        0], title='Green')  # energy_lb
-                    # plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
-                    #                             weight=w_i[idx_G],
-                    #                             error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
-                    #                                 0], title='Green')  # energy_lb
+                    plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
+                                                weight=w_i[idx_G],
+                                                error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
+                                                    0], title='Green')  # energy_lb
+                    plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
+                                       weight=w_i[idx_G],
+                                       error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
+                                           0], title='Green')  # energy_lb
 
                     # PLOTS
                     # vector_to_plot=np.abs(MiK)#.transpose()
@@ -443,8 +481,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     # Add legend with the custom symbol
                     plt.legend(handles=custom_symbol, loc='upper left')
                     # ax_global.legend([f'Eigenvalues ', f'Non-zero weights', f'Non-zero element of eigenvector/ first residual '], loc='upper left')
-
-                    if nb_laminates == 4:
+                    plot_eigenvectors = False
+                    if plot_eigenvectors:
                         x_offset = -0.5
                         y_offset = 1.1
                         for upper_ax in np.arange(6):
@@ -480,7 +518,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                 i = 350
                             if upper_ax == 3:
                                 ax1 = fig.add_axes([0.776, 0.64, 0.1, 0.20])
-                                #ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
+                                # ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
 
                                 ax_global.text(x_offset + 0.01, y_offset - 1.4,
                                                r'(a.4) $\phi_{i}\, (\lambda_{i}=100) $',
