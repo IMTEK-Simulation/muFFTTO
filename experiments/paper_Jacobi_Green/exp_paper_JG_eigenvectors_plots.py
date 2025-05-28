@@ -15,7 +15,7 @@ from muFFTTO import microstructure_library
 
 from experiments.experiments_with_CG_convergence.simple_CG import get_ritz_values, plot_ritz_values, get_cg_polynomial, \
     plot_cg_polynomial, plot_eigenvectors, \
-    plot_eigendisplacement, plot_rhs, plot_eigenvector_filling , plot_cg_polynomial_JG_paper
+    plot_eigendisplacement, plot_rhs, plot_eigenvector_filling, plot_cg_polynomial_JG_paper
 
 from experiments.paper_Jacobi_Green.exp_paper_JG_geometry_plots import get_triangle
 
@@ -77,7 +77,7 @@ def plot_matrix(matrix):
     plt.show()
 
 
-def matrix_sqrt_eig(A,nb_zero_eigens=2):
+def matrix_sqrt_eig(A, nb_zero_eigens=2):
     """
     Compute the square root of a symmetric positive definite matrix using eigendecomposition.
 
@@ -91,7 +91,7 @@ def matrix_sqrt_eig(A,nb_zero_eigens=2):
     eigvals, eigvecs = np.linalg.eigh(A)
 
     # Compute square root of eigenvalues
-    sqrt_eigvals=np.copy(eigvals)
+    sqrt_eigvals = np.copy(eigvals)
     sqrt_eigvals[nb_zero_eigens:] = np.sqrt(eigvals[nb_zero_eigens:])
 
     # Reconstruct A^(1/2)
@@ -104,10 +104,17 @@ def run_simple_CG_Green(initial, RHS, kappa):
     discretization_type = 'finite_element'
     element_type = 'linear_triangles'
     formulation = 'small_strain'
-    src = '../figures/'  # source folder\
+    src = './figures/'  # source folder\
+    # Enable LaTeX rendering
+    plt.rcParams.update({
+        "text.usetex": True,  # Use LaTeX
+        # "font.family": "helvetica",  # Use a serif font
+    })
+    plt.rcParams.update({'font.size': 11})
+    plt.rcParams["font.family"] = "Arial"
 
     domain_size = [1, 1]
-    geom_n = [ 4, 5]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+    geom_n = [4]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 
     ratios = np.array([2])  # np.arange(1,5)  # 17  33
 
@@ -127,13 +134,6 @@ def run_simple_CG_Green(initial, RHS, kappa):
     norm_rMr = []
     norm_rMr_Jacobi = []
     norm_rMr_combi = []
-
-    norm_energy_lb = []
-    norm_energy_lb_combi = []
-
-    kontrast = []
-    kontrast_2 = []
-    eigen_LB = []
 
     for geometry_ID in [
         'n_laminate']:  # n_laminate ,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3' square_inclusion
@@ -199,7 +199,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                 for i in np.arange(ratios.size):
                     ratio = ratios[i]
-                    nb_laminates=4
+                    nb_laminates = 4
                     if nb_discretization_index == 0:
                         phase_fied_small_grid = microstructure_library.get_geometry(
                             nb_voxels=discretization.nb_of_pixels,
@@ -254,7 +254,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
                     get_igens = True
                     if get_igens:
-                        adjust_system=True
+                        adjust_system = True
 
                         K = discretization.get_system_matrix(material_data_field_C_0_rho)
                         # fixing zero eigenvalues
@@ -282,7 +282,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         # M_inv_fromfft=np.zeros_like(M)
                         # np.fill_diagonal(M_inv_fromfft[:256,:256], RM2[0,0].flatten())
                         M_non_reduced = np.copy(M)
-                         #fixing zero eigenvalues
+                        # fixing zero eigenvalues
                         M[:, 0] = 0
                         M[0, :] = 0
                         M[:, np.prod(number_of_pixels)] = 0
@@ -299,8 +299,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         eig_G[eig_G == 50.5] = 0
 
                         ### symmetrized precondioner
-                        M_sym = matrix_sqrt_eig(A=M,nb_zero_eigens=0)
-                        Green_sqrt = matrix_sqrt_eig(A=np.linalg.pinv(M),nb_zero_eigens=0)
+                        M_sym = matrix_sqrt_eig(A=M, nb_zero_eigens=0)
+                        Green_sqrt = matrix_sqrt_eig(A=np.linalg.pinv(M), nb_zero_eigens=0)
                         GKGsym = Green_sqrt @ K @ Green_sqrt
                         eig_G_sym, eig_vect_G_sym = sc.linalg.eig(a=GKGsym)  # , eigvals_only=True
                         #
@@ -335,7 +335,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     rhs.flatten()[np.prod(number_of_pixels)] = 0
 
                     ######### INITIAL SOLUTION
-                    #x0 = np.random.random(discretization.get_displacement_sized_field().shape)
+                    # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
                     x0 = np.zeros(discretization.get_displacement_sized_field().shape)
 
                     ########################### Greeen  PRE CONDITIONED VERSION ########################################################
@@ -378,30 +378,17 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     # plot_cg_polynomial_JG_paper(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G], weight=w_i[idx_G],
                     #                    error_evol=norms['energy_lb'] / norms['residual_rr'][
                     #                        0], title='Green')  # energy_lb
-                    plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
-                                                weight=w_i[idx_G],
-                                                error_evol=norms['energy_lb'] / norms['residual_rr'][
-                                                    0], title='Green')  # energy_lb
-
-
-
-
-
-
-
-
-
-
+                    # plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
+                    #                             weight=w_i[idx_G],
+                    #                             error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
+                    #                                 0], title='Green')  # energy_lb
 
                     # PLOTS
-                    #vector_to_plot=np.abs(MiK)#.transpose()
-                    vector_to_plot =eig_vect_G[:, idx_G]
-                    rhs_to_plot=rhs#+1
-                    weights_to_plot= w_i[idx_G]
-                    eigens_to_plots= eig_G[idx_G]
-
-
-
+                    # vector_to_plot=np.abs(MiK)#.transpose()
+                    vector_to_plot = eig_vect_G[:, idx_G]
+                    rhs_to_plot = rhs  # +1
+                    weights_to_plot = w_i[idx_G]
+                    eigens_to_plots = eig_G[idx_G]
 
                     # Plot the convergence of Ritz values
                     grid_shape = rhs.shape
@@ -409,25 +396,25 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     y = np.arange(0, number_of_pixels[1])
                     x, y = np.meshgrid(x, y)
 
-                    fig = plt.figure(figsize=(11, 5.5))
+                    # fig = plt.figure(figsize=(11, 5.5))
+                    fig = plt.figure(figsize=(8.3, 4.5))
 
                     gs = fig.add_gridspec(1, 1)
                     ax_global = fig.add_subplot(gs[:, :])
 
-                    ax_global.plot(np.arange(1,513),eigens_to_plots[::-1], color='Green', label=f'Green',
+                    ax_global.plot(np.arange(1, 513), eigens_to_plots[::-1], color='Green', label=f'Green',
                                    alpha=0.5, marker='.', linewidth=0, markersize=5)
 
-                    opacities=np.abs(np.real(weights_to_plot[::-1]))
-                    opacities[0:2]=0
-                    opacities[opacities>1e-14]=1
-                    opacities[opacities <1] = 0
-                    ax_global.scatter(np.arange(1,513),eigens_to_plots[::-1], color='Blue', label=f'Green',
-                                   alpha=opacities)
-                    #plt.gca().invert_xaxis()  # Invert X-axis
+                    opacities = np.abs(np.real(weights_to_plot[::-1]))
+                    opacities[0:2] = 0
+                    opacities[opacities > 1e-14] = 1
+                    opacities[opacities < 1] = 0
+                    ax_global.scatter(np.arange(1, 513), eigens_to_plots[::-1], color='Blue', label=f'Green',
+                                      alpha=opacities)
+                    # plt.gca().invert_xaxis()  # Invert X-axis
                     ax_global.plot(1, color='Red',
                                    alpha=1.0, marker='.', linewidth=0, markersize=4)
-                   # weights_to_plot
-
+                    # weights_to_plot
 
                     ax_global.set_xlim([1, 512])
                     ax_global.set_xticks([1, 256, 512])
@@ -436,31 +423,35 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     ax_global.set_yticks([1, 34, 67, 100])
                     ax_global.set_yticklabels([1, 34, 67, 100])
                     #
-                    ax_global.set_title(
-                        r'Geometry - $\mathcal{G}_'+f'{nb_laminates}$' + r' Mesh - $\mathcal{T}_{16}$' + f'\n Sparsity patterns in eigenvectors')
+                    ax_global.set_title(f'\n Sparsity patterns in eigenvectors')
                     ax_global.set_xlabel('eigenvalue index - $i$ (sorted)')
                     ax_global.set_ylabel(r'Eigenvalue - $\lambda_{i}$')
+                    ax_global.text(0.02, 0.65,
+                                   r'Geometry - $\mathcal{G}_' + f'{nb_laminates}$\n' + r'Mesh - $\mathcal{T}_{16}$',
+                                   transform=ax_global.transAxes, fontsize=13)
 
                     # Create a custom legend symbol
-                    custom_symbol =   [mpl.lines.Line2D([], [], color='Green', marker='.', linestyle='None', markersize=10,                                                 label='Eigenvalues'),
-                                       mpl.lines.Line2D([], [], color='Blue', marker='.', linestyle='None',
-                                                        markersize=10,
-                                                        label='Non-zero weights'),
-                                       mpl.lines.Line2D([], [], color='Red', marker='.', linestyle='None',
-                                                        markersize=10,
-                                                        label='Non-zero element of eigenvector/ first residual')]
+                    custom_symbol = [
+                        mpl.lines.Line2D([], [], color='Green', marker='.', linestyle='None', markersize=10,
+                                         label='Eigenvalues'),
+                        mpl.lines.Line2D([], [], color='Blue', marker='.', linestyle='None',
+                                         markersize=10,
+                                         label='Non-zero weights'),
+                        mpl.lines.Line2D([], [], color='Red', marker='.', linestyle='None',
+                                         markersize=10,
+                                         label='Non-zero element of vector')]
                     # Add legend with the custom symbol
                     plt.legend(handles=custom_symbol, loc='upper left')
-                    #ax_global.legend([f'Eigenvalues ', f'Non-zero weights', f'Non-zero element of eigenvector/ first residual '], loc='upper left')
+                    # ax_global.legend([f'Eigenvalues ', f'Non-zero weights', f'Non-zero element of eigenvector/ first residual '], loc='upper left')
 
-                    if nb_laminates ==3:
-                        x_offset = -0.23
+                    if nb_laminates == 4:
+                        x_offset = -0.5
                         y_offset = 1.1
                         for upper_ax in np.arange(6):
                             # weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
                             if upper_ax == 0:
                                 # ax1 = fig.add_subplot(gs[0, upper_ax])
-                                ax1 = fig.add_axes([0.15, 0.15, 0.1, 0.20])
+                                ax1 = fig.add_axes([0.15, 0.14, 0.1, 0.20])
                                 ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=1) $ ')
                                 roll_x = 5
                                 roll_y = -20
@@ -472,33 +463,35 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                 #                              lw=1,
                                 #                              ls='-')
                                 #              )
-                                ax_global.text(x_offset, y_offset, '(a.1)', transform=ax1.transAxes)  #
+                                ax_global.text(x_offset + 0.4, y_offset + 0.3, '(a.1)', transform=ax1.transAxes)  #
                                 i = 20
                             if upper_ax == 1:
-                                ax1 = fig.add_axes([0.34, 0.40, 0.1, 0.20])
+                                ax1 = fig.add_axes([0.34, 0.38, 0.1, 0.20])
                                 ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=34) $ ')
 
                                 ax_global.text(x_offset, y_offset, '(a.2)', transform=ax1.transAxes)
                                 i = 150
 
                             if upper_ax == 2:
-                                ax1 = fig.add_axes([0.58, 0.63, 0.1, 0.20])
+                                ax1 = fig.add_axes([0.58, 0.62, 0.1, 0.20])
                                 ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=67) $ ')
                                 ax_global.text(x_offset, y_offset, '(a.3)', transform=ax1.transAxes)
 
                                 i = 350
                             if upper_ax == 3:
-                                ax1 = fig.add_axes([0.775, 0.60, 0.1, 0.20])
-                                ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
+                                ax1 = fig.add_axes([0.776, 0.64, 0.1, 0.20])
+                                #ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
 
-                                ax_global.text(x_offset - 0.15, y_offset - 0., '(a.4)', transform=ax1.transAxes)
+                                ax_global.text(x_offset + 0.01, y_offset - 1.4,
+                                               r'(a.4) $\phi_{i}\, (\lambda_{i}=100) $',
+                                               transform=ax1.transAxes, fontsize=13)
                                 i = 500
                             if upper_ax == 4:
                                 i = 115
                                 # ax1 = fig.add_axes([0.17, 0.6, 0.1, 0.20])
 
-                                ax1 = fig.add_axes([0.65, 0.15, 0.1, 0.20])
-                                ax_global.text(x_offset, y_offset, '(b.1)', transform=ax1.transAxes)
+                                ax1 = fig.add_axes([0.60, 0.23, 0.1, 0.20])
+                                ax_global.text(x_offset + 0.25, y_offset + 0., '(b.1)', transform=ax1.transAxes)
 
                                 ax_global.annotate('',
                                                    xy=(i + 23, sorted(eig_G)[i]),
@@ -546,16 +539,16 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                             if upper_ax == 5:
                                 i = -1
-                                ax1 = fig.add_axes([0.78, 0.24, 0.1, 0.20])
-                                ax1.set_title(r'Initial residual - $r_0$')
-                                ax_global.text(x_offset, y_offset+0.2, '(c.1)', transform=ax1.transAxes)
+                                ax1 = fig.add_axes([0.76, 0.12, 0.1, 0.20])
+                                ax1.set_title(f'Initial residual')
+                                ax_global.text(x_offset + 0.1, y_offset + 0.3, '(c.1)', transform=ax1.transAxes)
                             if upper_ax == 6:
                                 i = -2
                                 ax1 = fig.add_axes([0.15, 0.5, 0.1, 0.20])
                                 ax1.set_title(r'Weights')
-                                ax_global.text(x_offset, y_offset+0.2, '(d.1)', transform=ax1.transAxes)
+                                ax_global.text(x_offset, y_offset + 0.2, '(d.1)', transform=ax1.transAxes)
 
-                            if i > 0 :
+                            if i > 0:
                                 eigenvector_x = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
                                     0, 0].transpose()
                                 eigenvector_y = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
@@ -591,7 +584,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                             # Create the triangulation object
                             triangulation = tri.Triangulation(X, Y, triangles)
                             ax1.triplot(triangulation, 'k-', lw=0.1)
-                            ax1.axis('equal')
+                            # ax1.axis('equal')   \
 
                             x_ = np.arange(0 + 0.5, 1 * number_of_pixels[0] + 0.5)
                             y_ = np.arange(0 + 0.5, 1 * number_of_pixels[1] + 0.5)
@@ -608,15 +601,17 @@ def run_simple_CG_Green(initial, RHS, kappa):
                             ax1.set_yticks([])
 
                             ax1.scatter(x, y, s=sizes * 10, c=facecolors, cmap='Reds', alpha=1.0, norm=divnorm,
-                                        edgecolors='Red', linewidths=0),
+                                        edgecolors='Red', linewidths=0)
+                            ax1.set_aspect('equal', 'box')
+
                             # ax1.set_xlim(0,   1)
                             # ax1.set_ylim(0,  1)
 
-                    fname = src + 'exp1_sparsity_of_eigenvectors{}{}'.format(nb_laminates,'.pdf')
+                    fname = src + 'exp1_sparsity_of_eigenvectors{}{}'.format(nb_laminates, '.pdf')
                     print(('create figure: {}'.format(fname)))
                     plt.savefig(fname, bbox_inches='tight')
                     plt.show()
-
+                    quit()
                     # Plot the convergence of Ritz values
                     fig = plt.figure(figsize=(4.0, 4))
                     gs = fig.add_gridspec(2, 1, width_ratios=[1])
@@ -624,8 +619,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     ax_weights = fig.add_subplot(gs[1, 0])
                     #            ax_error_true = fig.add_subplot(gs[1, 1])
 
-                    #ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
-                    #ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
+                    # ax_poly.plot(x_values, polynomial_value, color='red', label=r'$\varphi^{CG}$' + f'$_{{{i}}}$')
+                    # ax_poly.hlines(xmin=0, xmax=x_values[-1], y=0, linestyles='--', color='gray')
                     ax_poly.scatter(np.real(eigens_to_plots), [0] * len(eigens_to_plots), color='blue',
                                     marker='|',
                                     label="True Eigenvalues")
@@ -643,7 +638,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     # ax_poly.set_xlabel("Eigenvalues --- Approximation")
                     # ax_poly.set_ylabel("CG (Lanczos) Iteration")
                     ax_poly.set_title(f"CG polynomial (Lanczos Iteration) {{{i}}}")
-                    #ax_poly.set_ylim(ylim[0], ylim[1])
+                    # ax_poly.set_ylim(ylim[0], ylim[1])
                     ax_poly.set_xlim(-0.1, x_values[-1] + 0.3)
                     ax_poly.legend()
 
@@ -651,19 +646,18 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     plt.tight_layout()
 
                     src = '../figures/'  # source folder\
-                    fname = src +  f'weights_sparsity' + '{}'.format('.pdf')
+                    fname = src + f'weights_sparsity' + '{}'.format('.pdf')
                     plt.savefig(fname, bbox_inches='tight')
                     plt.show()
                     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eigens_to_plots, weight=weights_to_plot,
-                                       error_evol=norms['energy_lb'] / norms['residual_rr'][
+                                       error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
                                            0], title='Green')  # energy_lb
-
 
                     quit()
 
                     print(norms)
                     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G[idx_G], weight=w_i[idx_G],
-                                       error_evol=norms['energy_lb'] / norms['residual_rr'][
+                                       error_evol=norms['energy_upper_bound'] / norms['residual_rr'][
                                            0], title='Green')  # energy_lb
                     #      quit()
                     plot_rhs(rhs=np.real(rhs),

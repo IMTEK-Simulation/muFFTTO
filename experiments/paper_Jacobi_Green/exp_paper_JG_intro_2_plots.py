@@ -20,12 +20,14 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 
-src = '../figures/'
+src = './figures/'
 # Enable LaTeX rendering
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
-    "font.family": "helvetica",  # Use a serif font
+    #"font.family": "helvetica",  # Use a serif font
 })
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
 
 colors = ['red', 'blue', 'green', 'orange', 'purple','olive','brown','purple']
 linestyles = [':', '-.', '--', (0, (3, 1, 1, 1))]
@@ -46,8 +48,246 @@ nb_pix_multip = 2
 geometry_ID = 'n_laminate'
 number_of_pixels = (nb_pix_multip * 16, nb_pix_multip * 16)
 
+
+
 # create a figure
-fig = plt.figure(figsize=(5.5, 5.5))
+#fig = plt.figure(figsize=(5.5, 5.5)
+fig = plt.figure(figsize=(8.3, 5.15))
+
+gs_global = fig.add_gridspec(1, 2, hspace=0.5, wspace=0.1, width_ratios=[2, 1],
+                      height_ratios=[1])
+#gs_global[1].subgridspec()
+
+
+gs_left = gs_global[0].subgridspec(3, 3, hspace=0.5, wspace=0.2, width_ratios=[1, 1, 1],
+                      height_ratios=[1, 0.05, 1])
+#fig = plt.figure(figsize=(3.15, 5.15))
+gs_right = gs_global[1].subgridspec(1, 1, hspace=0.3, wspace=0.1, width_ratios=[1],
+                      height_ratios=[1])
+
+
+cbar_ax = fig.add_subplot(gs_left[1, :])
+ax_cross = fig.add_subplot(gs_left[2, :])
+# plot phases
+
+############################################# plot material phases
+x = np.arange(0, number_of_pixels[0])
+y = np.arange(0, number_of_pixels[1])
+X, Y = np.meshgrid(x, y)
+counter = 0
+kontrast = 100
+
+T = number_of_pixels[0]
+for G in [4, 8, 32]:
+    file_data_name = (
+        f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
+    folder_name = '../exp_data/'
+
+    xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+    phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+    if counter < 3:
+        ax_geom = fig.add_subplot(gs_left[0, counter])
+    elif counter < 4:
+        ax_geom = fig.add_subplot(gs_left[0, counter - 2])
+    pcm = ax_geom.pcolormesh(X, Y, np.transpose(phase_field), cmap=mpl.cm.Greys, vmin=1, vmax=1e2, linewidth=0,
+                             rasterized=True)
+    ax_geom.set_xticks(np.arange(-.5, number_of_pixels[0], int(number_of_pixels[0] / 4)))
+    ax_geom.set_yticks(np.arange(-.5, number_of_pixels[1], int(number_of_pixels[1] / 4)))
+    ax_geom.set_xticklabels(np.arange(0, number_of_pixels[0] + 1, int(number_of_pixels[0] / 4)))
+    ax_geom.set_yticklabels(np.arange(0, number_of_pixels[1] + 1, int(number_of_pixels[1] / 4)))
+    ax_geom.set_title(f'{G} phases')
+    ax_geom.hlines(y=10, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
+                   linestyle=linestyles[counter], linewidth=1.)
+    ax_geom.yaxis.set_label_position('right')
+    ax_geom.yaxis.tick_right()
+    ax_geom.tick_params(labelbottom=True, labeltop=False, labelleft=False, labelright=False,
+                        bottom=True, top=False, left=False, right=False)
+    if counter == 0:
+        # Set ylabel to the right
+        ax_geom.yaxis.set_label_position('left')
+        ax_geom.yaxis.tick_left()
+        ax_geom.set_ylabel(r'pixel index')
+        ax_geom.set_xlabel(r'pixel index')
+        ax_geom.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=False,
+                            bottom=True, top=False, left=True, right=False)
+    ax_geom.set_aspect('equal')
+
+    divnorm = mpl.colors.Normalize(vmin=1, vmax=100)
+
+    cbar = plt.colorbar(pcm, location='bottom', cax=cbar_ax, ticklocation='bottom',
+                        orientation='horizontal', ticks=[1, 25, 50, 75, 100])  # Specify the ticks
+
+    cbar_ax.set_title(f'Bulk modulus (Pa)')  # , y=-0.7,pad=-22
+
+    extended_x = np.arange(phase_field[:, phase_field.shape[0] // 2].size + 1)
+    extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                           phase_field[:, phase_field.shape[0] // 2][-1])
+    ax_cross.step(extended_x, extended_y
+                  , where='post',
+                  linewidth=1, color=colors[counter], linestyle=linestyles[counter], marker='|',
+                  label=f'{G} phases')
+    # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    ax_cross.set_ylim([0, 101])
+    ax_cross.set_xlim([0, phase_field.shape[0] - 1])
+    ax_cross.set_yticks([1, 50, 100])
+    ax_cross.set_yticklabels([1, 50, 100])
+    ax_cross.set_xticks(np.arange(-.5, number_of_pixels[0], int(number_of_pixels[0] / 4)))
+    ax_cross.set_xticklabels(np.arange(0, number_of_pixels[0] + 1, int(number_of_pixels[0] / 4)))
+
+    # ax1.yaxis.set_ticks_position([0.001,0.25,0.5,0.75, 1])
+    # ax2.legend(['2 phases', f'{ratio} phases', 'Jacobi', 'Green + Jacobi'])
+    ax_cross.legend(loc="upper left")
+
+    ax_cross.set_title(f'Cross sections')
+    ax_cross.set_ylabel('Bulk modulus (Pa)')
+    ax_cross.set_xlabel('pixel index')
+    # ax_cross.step(extended_x, extended_y
+    #          , where='post',
+    #          linewidth=1, color=colors[counter], linestyle=linestyles[counter], marker='|',
+    #          label=f'{G} phases')
+    # # ax3.plot(phase_field[:, phase_field.shape[0] // 2], linewidth=1)
+    # ax_cross.set_ylim([0, 101])
+    # ax_cross.set_xlim([0, phase_field.shape[0]])
+    # ax_cross.set_yticks([1,50,100])
+    # ax_cross.set_yticklabels([1,50,100])
+    # # ax1.yaxis.set_ticks_position([0.001,0.25,0.5,0.75, 1])
+    # # ax2.legend(['2 phases', f'{ratio} phases', 'Jacobi', 'Green + Jacobi'])
+    # ax_cross.legend(loc="upper left")
+    #
+    # ax_cross.set_title(f'Cross sections')
+    # ax_cross.set_ylabel('Young modulus (Pa)')
+    # ax_cross.set_xlabel('x coordinate')
+
+    counter += 1
+
+
+# create a figure
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
+
+
+ax_nb_it = fig.add_subplot(gs_right[0, 0])
+
+T = number_of_pixels[0]
+G = 32
+print(f'G={G}')
+print(f'T={T}')
+counter = 0
+linewidths = [3]
+for kontrast in [  100]:
+    file_data_name = (
+        f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
+    folder_name = '../exp_data/'
+
+    xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+    ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_G[0]) + 2), xopt.f.nb_it_G[0], 'g', linestyle=linestyles[counter+2],
+                  label='Green', linewidth=linewidths[counter], markerfacecolor='white')
+    # ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_J[0]) + 2), xopt.f.nb_it_J[0], "b", linestyle=linestyles[counter+2],
+    #               label='Jacobi', linewidth=linewidths[counter], markerfacecolor='white')
+    ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_JG[0]) + 2), xopt.f.nb_it_JG[0], "k", linestyle=linestyles[counter+2],
+                  label='Jacobi-Green ', linewidth=linewidths[counter],
+                  markerfacecolor='white')
+    ax_nb_it.set_ylabel('\# PCG iterations')
+    ax_nb_it.set_xlabel('\# material phases')#
+    ax_nb_it.yaxis.set_label_position("right")
+
+    ax_nb_it.set_ylim([2,25])
+    ax_nb_it.set_yticks([2, 10, 20,  25])
+    ax_nb_it.set_yticklabels([2,  10, 20,  25])
+
+    ax_nb_it.set_xlim([2, 32])
+    ax_nb_it.set_xticks([2, 8, 16, 24, 32])
+    ax_nb_it.set_xticklabels([2, 8, 16, 24, 32])
+    ax_nb_it.tick_params(labelbottom=True, labeltop=False, labelleft=False, labelright=True,
+                         bottom=True, top=False, left=False, right=True)
+
+    #ax_nb_it.set_aspect('equal')
+
+    counter += 1
+# ax_nb_it.annotate(text=f'Green \n contrast = 2',
+#                   xy=(24, 12.0),
+#                   xytext=(18., 15.),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Green',
+#                                   lw=1,
+#                                   ls=linestyles[0]),
+#                   color='Green'
+#                   )
+# ax_nb_it.annotate(text=f'Green \n contrast = 10',
+#                   xy=(24, 23.0),
+#                   xytext=(22., 18.),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Green',
+#                                   lw=1,
+#                                   ls=linestyles[1]),
+#                   color='Green'
+#                   )
+ax_nb_it.annotate(text=f'Green',#\n contrast = 100
+                  xy=(16, 16),
+                  xytext=(5., 18.),
+                  arrowprops=dict(arrowstyle='->',
+                                  color='Green',
+                                  lw=1,
+                                  ls=linestyles[2]),
+                 fontsize=12,
+                  color='Green'
+                  )
+
+ax_nb_it.annotate(text=f'Green-Jacobi',# \n contrast = 100
+                  xy=(16, 9),
+                  xytext=(17., 12.),
+                  arrowprops=dict(arrowstyle='->',
+                                  color='Black',
+                                  lw=1,
+                                  ls=linestyles[2]),
+                  fontsize=12,
+                  color='Black'
+                  )
+# ax_nb_it.annotate(text=f'Jacobi',# \n [100] contrast
+#                   xy=(10, 32.0),
+#                   xytext=(10., 25.0),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Blue',
+#                                   lw=1,
+#                                   ls='-'),
+#                   color='Blue'
+#                   )
+
+
+
+
+
+
+
+
+
+fname = src + script_name + 'phases_combined' + f'{kontrast}_{geometry_ID}' + '{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
+
+
+
+
+quit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# create a figure
+#fig = plt.figure(figsize=(5.5, 5.5)
+fig = plt.figure(figsize=(5.15, 5.15))
+
 gs = fig.add_gridspec(3, 3, hspace=0.5, wspace=0.2, width_ratios=[1, 1, 1],
                       height_ratios=[1, 0.05, 1])
 cbar_ax = fig.add_subplot(gs[1, :])
@@ -371,7 +611,9 @@ plt.show()
 
 
 # create a figure
-fig = plt.figure(figsize=(5.5, 5.5))
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
+fig = plt.figure(figsize=(3.15, 5.15))
 gs = fig.add_gridspec(1, 1, hspace=0.3, wspace=0.1, width_ratios=[1],
                       height_ratios=[1])
 
@@ -391,15 +633,15 @@ for kontrast in [  100]:
     xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
     ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_G[0]) + 2), xopt.f.nb_it_G[0], 'g', linestyle=linestyles[counter+2],
                   label='Green', linewidth=linewidths[counter], markerfacecolor='white')
-    ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_J[0]) + 2), xopt.f.nb_it_J[0], "b", linestyle=linestyles[counter+2],
-                  label='Jacobi', linewidth=linewidths[counter], markerfacecolor='white')
+    # ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_J[0]) + 2), xopt.f.nb_it_J[0], "b", linestyle=linestyles[counter+2],
+    #               label='Jacobi', linewidth=linewidths[counter], markerfacecolor='white')
     ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_JG[0]) + 2), xopt.f.nb_it_JG[0], "k", linestyle=linestyles[counter+2],
                   label='Jacobi-Green ', linewidth=linewidths[counter],
                   markerfacecolor='white')
     ax_nb_it.set_ylabel('\# PCG iterations')
-    ax_nb_it.set_xlabel('\# material phases (interphases)')
+    ax_nb_it.set_xlabel('\# material phases')#
 
-    ax_nb_it.set_ylim([2,70])
+    ax_nb_it.set_ylim([2,32])
     ax_nb_it.set_yticks([2, 8, 16, 24, 32])
     ax_nb_it.set_yticklabels([2, 8, 16, 24, 32])
 
@@ -412,58 +654,60 @@ for kontrast in [  100]:
     ax_nb_it.set_aspect('equal')
 
     counter += 1
-ax_nb_it.annotate(text=f'Green \n contrast = 2',
-                  xy=(24, 12.0),
-                  xytext=(18., 15.),
-                  arrowprops=dict(arrowstyle='->',
-                                  color='Green',
-                                  lw=1,
-                                  ls=linestyles[0]),
-                  color='Green'
-                  )
-ax_nb_it.annotate(text=f'Green \n contrast = 10',
-                  xy=(24, 23.0),
-                  xytext=(22., 18.),
-                  arrowprops=dict(arrowstyle='->',
-                                  color='Green',
-                                  lw=1,
-                                  ls=linestyles[1]),
-                  color='Green'
-                  )
-ax_nb_it.annotate(text=f'Green \n contrast = 100',
-                  xy=(26, 26),
+# ax_nb_it.annotate(text=f'Green \n contrast = 2',
+#                   xy=(24, 12.0),
+#                   xytext=(18., 15.),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Green',
+#                                   lw=1,
+#                                   ls=linestyles[0]),
+#                   color='Green'
+#                   )
+# ax_nb_it.annotate(text=f'Green \n contrast = 10',
+#                   xy=(24, 23.0),
+#                   xytext=(22., 18.),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Green',
+#                                   lw=1,
+#                                   ls=linestyles[1]),
+#                   color='Green'
+#                   )
+ax_nb_it.annotate(text=f'Green',#\n contrast = 100
+                  xy=(24, 24),
                   xytext=(18., 28.),
                   arrowprops=dict(arrowstyle='->',
                                   color='Green',
                                   lw=1,
                                   ls=linestyles[2]),
+                 fontsize=11,
                   color='Green'
                   )
 
-ax_nb_it.annotate(text=f'Jacobi-Green \n contrast = 100',
-                  xy=(8, 15),
+ax_nb_it.annotate(text=f'Green-Jacobi',# \n contrast = 100
+                  xy=(7, 13),
                   xytext=(5., 17.),
                   arrowprops=dict(arrowstyle='->',
                                   color='Black',
                                   lw=1,
                                   ls=linestyles[2]),
+                  fontsize=11,
                   color='Black'
                   )
-ax_nb_it.annotate(text=f'Jacobi contrast \n [100]',
-                  xy=(10, 32.0),
-                  xytext=(10., 25.0),
-                  arrowprops=dict(arrowstyle='->',
-                                  color='Blue',
-                                  lw=1,
-                                  ls='-'),
-                  color='Blue'
-                  )
+# ax_nb_it.annotate(text=f'Jacobi',# \n [100] contrast
+#                   xy=(10, 32.0),
+#                   xytext=(10., 25.0),
+#                   arrowprops=dict(arrowstyle='->',
+#                                   color='Blue',
+#                                   lw=1,
+#                                   ls='-'),
+#                   color='Blue'
+#                   )
 
 fname = src + script_name + 'intro' + f'{kontrast}_{geometry_ID}_simple' + '{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
-
+quit()
 # create a figure
 fig = plt.figure(figsize=(5.5, 5.5))
 gs = fig.add_gridspec(1, 1, hspace=0.3, wspace=0.1, width_ratios=[1],

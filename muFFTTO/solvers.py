@@ -166,8 +166,8 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
             # updade upper bound on energy error estim parameter
             gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
 
-        if "energy_lower_estim" in kwargs:
-            norms['energy_lower_estim'] = estim
+        if "energy_lower_bound" in kwargs:
+            norms['energy_lower_bound'] = estim
 
     return x_k, norms
 
@@ -210,7 +210,7 @@ def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
         if norms['residual_rr'][-1] < toler:
             break
 
-            return x_k, norms
+    return x_k, norms
 
 
 def gradient_descent(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):

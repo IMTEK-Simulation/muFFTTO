@@ -20,3 +20,5 @@ experiments/exp_data/
 *.png
 
 *.npz
+
+*.pdf

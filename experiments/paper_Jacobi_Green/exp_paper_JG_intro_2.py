@@ -57,7 +57,7 @@ norm_rMr_Jacobi = []
 # kontrast = []
 # kontrast_2 = []
 eigen_LB = []
-kontrast=10
+kontrast=100
 for kk in np.arange(np.size(nb_pix_multips)):
     nb_pix_multip = nb_pix_multips[kk]
     # number_of_pixels = (nb_pix_multip * 32, nb_pix_multip * 32)
@@ -254,7 +254,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
         displacement_field, norms = solvers.PCG(K_fun, rhs,
                                                 x0=x0,
-                                                P=M_fun, steps=int(1000), toler=1e-14,
+                                                P=M_fun, steps=int(1000), toler=1e-6,
                                                 norm_type='data_scaled_rr',
                                                 norm_metric=M_fun)
         nb_it[kk - 1, i] = (len(norms['residual_rz']))
@@ -265,7 +265,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
         print(nb_it)
         #########
         displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_combi, steps=int(1000),
-                                                            toler=1e-14,
+                                                            toler=1e-6,
                                                             norm_type='data_scaled_rr',
                                                             norm_metric=M_fun)
         nb_it_combi[kk - 1, i] = (len(norms_combi['residual_rz']))
@@ -275,7 +275,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
         #
         displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_Jacobi, steps=int(1000),
-                                                              toler=1e-14,
+                                                              toler=1e-6,
                                                             norm_type='data_scaled_rr',
                                                             norm_metric=M_fun)
         nb_it_Jacobi[kk - 1, i] = (len(norms_Jacobi['residual_rz']))
@@ -286,7 +286,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
         displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=x0, P=M_fun,
                                                                              omega=omega,
                                                                              steps=int(1000),
-                                                                             toler=1e-14)
+                                                                             toler=1e-6)
         # nb_it_Richardson[kk - 1, i] = (len(norms_Richardson['residual_rr']))
         # norm_rr_Richardson= norms_Richardson['residual_rr'][-1]
         #

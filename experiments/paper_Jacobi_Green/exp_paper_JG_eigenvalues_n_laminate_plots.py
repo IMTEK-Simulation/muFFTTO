@@ -14,8 +14,11 @@ src = '../figures/'
 # Enable LaTeX rendering
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
-    "font.family": "helvetica",  # Use a serif font
+    #"font.family": "helvetica",  # Use a serif font
 })
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
+
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
@@ -35,6 +38,347 @@ markers = ["x","o",  "v","<", ">", "^",".", ",",  "1", "2", "3", "4", "8", "s", 
     #### plot mesh size independance
 plot_this=True
 if plot_this:
+    geometry_ID = 'linear'  # 'linear'# 'sine_wave_'
+    geometry_n = [2, ]
+    discretization_n = [3, 4, 5]
+
+    ratio = 2
+
+    # create a figure
+    fig = plt.figure(figsize=(8.3, 5.0))
+
+    gs = fig.add_gridspec(3, 3, hspace=0.4, wspace=0.5, width_ratios=[1, 1.2, 1.2],
+                          height_ratios=[1, 1, 1])
+    ax_1 = fig.add_subplot(gs[:2, 0])
+    ax_legend = fig.add_subplot(gs[2, 0])
+    ax_legend.set_axis_off()
+    ax_1.text(-0.5, 1.1, '(a.1)', transform=ax_1.transAxes)
+
+    for ii in np.arange(np.size(geometry_n)):
+        G = geometry_n[ii]
+        j2 = [x for x in discretization_n if x >= G]
+        counter = 0
+        for T in j2:
+
+            print(f'G={G}')
+            print(f'T={T}')
+            file_data_name = (
+                f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
+            folder_name = '../exp_data/'
+
+            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+
+            #
+            # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
+
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+                          label=r'  Green - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$', color='green',
+                          linestyle='--', marker=markers[counter])
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+                          label=r' Green-Jacobi - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$',
+                          color='Black', linestyle='-.', marker=markers[counter])
+            ax_1.set_xlabel(r'PCG iteration - $k$')
+            ax_1.set_ylabel('Norm of residua - '
+                            r'$||r_{k}||_{G^{-1}} $')
+            ax_1.set_title(f'Convergence \n ' + r'Geometry - $\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+            ax_1.set_ylim([1e-6, 1e4])
+            ax_1.set_xlim([0, 9])
+
+            if geometry_ID == 'sine_wave_':
+                ax_1.set_xlim([1, 25])
+                ax_1.set_xticks([1, 9, 13, 15, 22])
+                ax_1.set_xticklabels([1, 9, 13, 15, 22])
+            elif geometry_ID == 'linear':
+                ax_1.set_xlim([0, 8])
+                ax_1.set_xticks([0, 3, 6, 8])
+                ax_1.set_xticklabels([0, 3, 6, 8])
+            # -------------------------------------# plot eigenvals #-------------------------------------#
+
+            eig_JG = np.real(xopt.f.eigens_JG)
+            # Number of bins (fine-grained)
+            num_bins = eig_JG.size
+            # Define the bin width
+            bin_width = 0.05
+
+            # Calculate the bin edges
+            min_edge = np.min(sorted(eig_JG)[2:])
+            max_edge = np.max(sorted(eig_JG)[2:])
+            bins = np.arange(min_edge, max_edge + bin_width, bin_width)
+            bins = 100
+            # -------------------------------------# plot eigenvals #-------------------------------------#
+            ax_2 = fig.add_subplot(gs[counter, 2])
+            ax_2.semilogy(sorted(eig_JG)[2:], color='Black', label=f'Green-Jacobi',
+                      alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+
+            ax_2.text(-0.25, 1.05, f'(c.{counter + 1})', transform=ax_2.transAxes)
+            if ratio == 0:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_2.set_ylim([min_edge, max_edge])
+                ax_2.set_yticks([0, 0.5, 1])
+                ax_2.set_yticklabels([0, 0.5, 1])
+            else:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_2.set_ylim([min_edge, max_edge])
+                ax_2.set_ylim([1e-2, 1e2])
+
+                #ax_2.set_yticks([min_edge,  max_edge])
+                #ax_2.set_yticklabels([1, 34, 67, 100])  # f'$10^{{{2}}}$'
+                ax_2.set_xlim([0, len(eig_JG)])
+                ax_2.set_xticks([1, len(eig_JG) // 2, len(eig_JG)])
+                ax_2.set_xticklabels([1, len(eig_JG) // 2, len(eig_JG)])
+                ax_2.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+
+            if counter == 0:
+                ax_2.set_title('Sorted eigenvalues \n Green-Jacobi ')# \n' + r'Mesh -' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$'
+            elif counter == 2:
+
+                ax_2.set_xlabel('eigenvalue index - $i$')
+            ax_2.set_ylabel('eigenvalue $\lambda_i$')
+            ax_2.text(0.05, 0.8,
+                      r'Mesh - ' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$',
+                      transform=ax_2.transAxes, fontsize=13)
+
+            # Create the histogram
+
+            # -------------------------------------# plot eigenvals #-------------------------------------#
+            ax_3 = fig.add_subplot(gs[counter, 1])
+            eig_G = xopt.f.eigens_G
+            eig_JG = xopt.f.eigens_JG
+            # Number of bins (fine-grained)
+            num_bins = eig_G.size
+            # Define the bin width
+            bin_width = 0.05
+
+            # Calculate the bin edges
+            min_edge = np.min(sorted(eig_JG)[2:])
+            max_edge = np.max(sorted(eig_JG)[2:])
+            bins = np.arange(min_edge, max_edge + bin_width, bin_width)
+            bins = 100
+            ax_3.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
+                      alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+
+            ax_3.text(-0.25, 1.05,  f'(b.{counter + 1})', transform=ax_3.transAxes)
+            if ratio == 0:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_3.set_ylim([0, 1e0])
+                ax_3.set_yticks([0, 0.5, 1])
+                ax_3.set_yticklabels([0, 0.5, 1])
+            else:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_3.set_ylim([0, 101])
+                ax_3.set_yticks([1, 34, 67, 100])
+                ax_3.set_yticklabels([1, 34, 67, 100])  # f'$10^{{{2}}}$'
+                ax_3.set_xlim([0, len(eig_G)])
+                ax_3.set_xticks([1, len(eig_G) // 2, len(eig_G)])
+                ax_3.set_xticklabels([1, len(eig_G) // 2, len(eig_G)])
+                ax_3.yaxis.set_ticks_position('right')
+                # ax_3.set_title(r'Sorted eigenvalues')
+            if counter == 0:
+                ax_3.set_title('Sorted eigenvalues \n Green' )#+ r'Mesh -' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$
+            # elif counter == 1:
+            #     ax_3.set_title(r'Mesh -' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$')
+            elif counter == 2:
+                # ax_3.set_title(
+                #     r'Mesh ' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$')  # +f' (${{{2**T}}}$ nodes in x direction)'
+                ax_3.set_xlabel('eigenvalue index - $i$')
+            ax_3.set_ylabel('eigenvalue $\lambda_i$')
+            ax_3.text(0.05, 0.8,
+                      r'Mesh - ' + r'$\mathcal{T}$' + f'$_{{{2 ** T}}}$',
+                      transform=ax_3.transAxes, fontsize=13)
+            print(xopt.f.nb_of_pixels)
+            print(xopt.f.nb_of_sampling_points)
+            # print(xopt.f.norm_rMr_JG)
+            counter += 1
+        # legend = ax_1.legend()
+        # legend.get_frame().set_alpha(1.)
+        handles, labels = ax_1.get_legend_handles_labels()
+        order=[0,2,4,1,3,5]
+        ax_legend.legend([handles[idx] for idx in order],[labels[idx] for idx in order], ncol=1)
+
+    fname = src + script_name + 'ndep_G_JG' + f'{ratio}_{geometry_ID}' + '{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+    plt.show()
+    # -------------------------------------# Second plot#-------------------------------------#
+
+#### plot mesh size independance
+plot_size_dep = True
+if plot_size_dep:
+    geometry_ID = 'linear'  # 'linear'# 'sine_wave_' #'linear'
+    geometry_n = [2, 3, 5]
+    discretization_n = [5]
+    ratio = 2
+    plt.rcParams.update({'font.size': 11})
+    plt.rcParams["font.family"] = "Arial"
+
+    # create a figure
+    fig = plt.figure(figsize=(8.3, 5.0))
+    # gs = fig.add_gridspec(3, 3, hspace=0.5, wspace=0.4, width_ratios=3 * (1,),
+    #                       height_ratios=[1, 1, 1])
+    gs = fig.add_gridspec(3, 3, hspace=0.4, wspace=0.5, width_ratios=[1, 1.2, 1.2],
+                          height_ratios=[1, 1, 1])
+    ax_1 = fig.add_subplot(gs[:2, 0])
+    ax_legend = fig.add_subplot(gs[2, 0])
+    ax_legend.set_axis_off()
+
+    ax_1.text(-0.5, 1.1, '(a.1)', transform=ax_1.transAxes)
+    counter = 0
+    for ii in np.arange(np.size(geometry_n)):
+        G = geometry_n[ii]
+        j2 = [x for x in discretization_n if x >= G]
+
+        for T in j2:
+
+            print(f'G={G}')
+            print(f'T={T}')
+            file_data_name = (
+                f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
+            folder_name = '../exp_data/'
+
+            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+
+            #
+            # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
+
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+                          label=r'  Green - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$', color='green',
+                          linestyle='--', marker=markers[counter], markevery=3)
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+                          label=r'  Green-Jacobi - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$',
+                          color='Black', linestyle='-.', marker=markers[counter])
+            ax_1.set_xlabel(r'PCG iteration - $k$')
+            ax_1.set_ylabel('Norm of residua - '
+                            r'$||r_{k}||_{G^{-1}} $')
+            ax_1.set_title(f'Convergence \n ' + r'Mesh - $\mathcal{T}$' + f'$_{{{2 ** T}}}$')
+
+            if geometry_ID == 'sine_wave_':
+                ax_1.set_xlim([1, 60])
+                ax_1.set_xticks([1, 8, 15, 18, 22, 30, 53, 60])
+                ax_1.set_xticklabels([1, 8, 15, 18, 22, 30, 53, 60])
+            elif geometry_ID == 'linear':
+                ax_1.set_xlim([0, 24])
+                ax_1.set_xticks([0, 3, 7, 24])
+                ax_1.set_xticklabels([0, 3, 7, 24])
+            ax_1.set_ylim([1e-6, 1e4])
+
+            # -------------------------------------# plot eigenvals #-------------------------------------#
+            ax_2 = fig.add_subplot(gs[counter, 1])
+            ax_2.text(-0.25, 1.05, f'(b.{counter + 1})', transform=ax_2.transAxes)
+
+            eig_G = xopt.f.eigens_G
+            eig_JG = np.real(xopt.f.eigens_JG)
+            # Number of bins (fine-grained)
+            num_bins = eig_G.size
+            # Define the bin width
+            bin_width = 0.05
+
+            # Calculate the bin edges
+            min_edge = np.min(sorted(eig_JG)[2:])
+            max_edge = np.max(sorted(eig_JG)[2:])
+            bins = np.arange(min_edge, max_edge + bin_width, bin_width)
+            bins = 100
+            # Create plots
+
+            ax_2.plot(sorted(eig_G)[2:], color='Green', label=f'Green',
+                      alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+            if ratio == 0:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_2.set_ylim([0, 1e0])
+                ax_2.set_yticks([0, 0.5, 1])
+                ax_2.set_yticklabels([0, 0.5, 1])
+            else:
+                ax_2.set_ylim([0, 101])
+                ax_2.set_yticks([1, 34, 67, 100])
+                ax_2.set_yticklabels([1, 34, 67, 100])  # f'$10^{{{2}}}$'
+                ax_2.set_xlim([0, len(eig_G)])
+                ax_2.set_xticks([1, len(eig_G) // 2, len(eig_G)])
+                ax_2.set_xticklabels([1, len(eig_G) // 2, len(eig_G)])
+                ax_2.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+
+            if counter == 0:
+                ax_2.set_title(
+                    'Sorted eigenvalues \n Green ')  # + r'Geometry- ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+            # elif counter == 1:
+            # ax_2.set_title(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+            elif counter == 2:
+                # ax_2.set_title(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+                ax_2.set_xlabel('eigenvalue index - $i$')
+            ax_2.set_ylabel('eigenvalue $\lambda_i$')
+            ax_2.text(0.05, 0.8,
+                      r'Geometry - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$',
+                      transform=ax_2.transAxes, fontsize=11)
+            print(xopt.f.nb_of_pixels)
+            print(xopt.f.nb_of_sampling_points)
+
+            # -------------------------------------# plot eigenvals #-------------------------------------#
+            ax_3 = fig.add_subplot(gs[counter, 2])
+            ax_3.text(-0.25, 1.05, f'(c.{counter + 1})', transform=ax_3.transAxes)
+
+            ax_3.semilogy(sorted(eig_JG)[2:], color='Black', label=f'Green-Jacobi',
+                          alpha=0.5, marker='.', linewidth=0, markersize=5)
+            # ax_3.plot(sorted(np.real(eig_JG))[2:], color='Black', label=f'Jacobi-Green',
+            #           alpha=0.5, marker='.', linewidth=0, markersize=5)
+
+            if ratio == 0:
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_3.set_ylim([0, 1e0])
+                ax_3.set_yticks([0, 0.5, 1])
+                ax_3.set_yticklabels([0, 0.5, 1])
+            else:
+                ax_3.set_ylim([min_edge, max_edge])
+                ax_3.set_ylim([1e-2, 1e2])
+                # ax_2.set_yticks([min_edge,  max_edge])
+                # ax_2.set_yticklabels([1, 34, 67, 100])  # f'$10^{{{2}}}$'
+                ax_3.set_xlim([-5, len(eig_JG) + 5])
+                ax_3.set_xticks([1, len(eig_JG) // 2, len(eig_JG)])
+                ax_3.set_xticklabels([1, len(eig_JG) // 2, len(eig_JG)])
+
+                # ax_3.set_ylim([0, 101])
+                # ax_3.set_yticks([1, 34, 67, 100])
+                # ax_3.set_yticklabels([1, 34, 67, 100])  # f'$10^{{{2}}}$'
+                # ax_3.set_xlim([0, len(eig_JG)])
+                # ax_3.set_xticks([1, len(eig_JG) // 2, len(eig_JG)])
+                # ax_3.set_xticklabels([1, len(eig_JG) // 2, len(eig_JG)])
+                ax_3.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+
+            if counter == 0:
+                ax_3.set_title(
+                    'Sorted eigenvalues \n Green-Jacobi')  # + r'Geometry- ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$
+            #   elif counter == 1:
+            # ax_3.set_title(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+            elif counter == 2:
+                # ax_3.set_title(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$')
+                ax_3.set_xlabel('eigenvalue index - $i$')
+            ax_3.set_ylabel('eigenvalue $\lambda_i$')
+            ax_3.text(0.05, 0.8,
+                      r'Geometry - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$',
+                      transform=ax_3.transAxes, fontsize=13)
+
+            print(xopt.f.nb_of_pixels)
+            print(xopt.f.nb_of_sampling_points)
+            # print(xopt.f.norm_rMr_JG)
+            counter += 1
+
+    # ax_1.legend(loc='upper right')
+    handles, labels = ax_1.get_legend_handles_labels()
+    order = [0, 2, 4, 1, 3, 5]
+    ax_legend.legend([handles[idx] for idx in order], [labels[idx] for idx in order], ncol=1)
+
+    fname = src + script_name + 'phasedep_G_JG' + f'{ratio}_{geometry_ID}' + '{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+    plt.show()
+    quit()
+
+    ##### 3 column plot
     geometry_ID = 'linear'#'linear'# 'sine_wave_'
     geometry_n = [2, ]
     discretization_n = [3, 4,5  ]
@@ -119,14 +463,18 @@ if plot_this:
 
             # ax_3.set_ylim([1e-4, 1e2])  #
             if ratio == 0:
-                ax_2.set_xlim([0, 1e0])
-                ax_2.set_xticks([0, 0.5, 1])
-                ax_2.set_xticklabels([0, 0.5, 1])
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_2.set_ylim([0, 1e0])
+                ax_2.set_yticks([0, 0.5, 1])
+                ax_2.set_yticklabels([0, 0.5, 1])
             else:
-                ax_2.set_xlim([0 , 101])
-                ax_2.set_xticks([1, 34,67, 100])
-                ax_2.set_xticklabels([1, 34,67, 100])#f'$10^{{{2}}}$'f'$10^{{{2}}}$'
-            # ax_3.set_xticklabels([1e-4, 0.5, 1])
+                # ax_2.set_ylim([1e-4, max(sorted(eig_G)[2:])])
+                ax_2.set_ylim([0, 101])
+                ax_2.set_yticks([1, 34,67, 100])
+                ax_2.set_yticklabels([1,34,67,100])#f'$10^{{{2}}}$'
+                ax_2.set_xlim([0, len(eig_G)])
+                ax_2.set_xticks([1, len(eig_G)//2, len(eig_G)])
+                ax_2.set_xticklabels([1, len(eig_G)//2, len(eig_G)])
             if counter ==0:
                 ax_2.set_title( 'Histograms of eigenvalues \n'+r'Mesh -'+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')
             elif counter==1:
@@ -162,6 +510,8 @@ if plot_this:
                 ax_3.set_xlim([0, len(eig_G)])
                 ax_3.set_xticks([1, len(eig_G)//2, len(eig_G)])
                 ax_3.set_xticklabels([1, len(eig_G)//2, len(eig_G)])
+
+
             #ax_3.set_title(r'Sorted eigenvalues')
             if counter ==0:
                 ax_3.set_title( 'Sorted eigenvalues \n'+r'Mesh -'+ r'$\mathcal{T}$'+f'$_{{{2**T}}}$')
@@ -183,12 +533,7 @@ if plot_this:
 
 # -------------------------------------# Second plot#-------------------------------------#
 # -------------------------------------# Second plot#-------------------------------------#
-# -------------------------------------# Second plot#-------------------------------------#
-
-
-#### plot mesh size independance
-plot_size_dep=True
-if plot_size_dep:
+    # old one
     geometry_ID ='linear'#'linear'# 'sine_wave_' #'linear'
     geometry_n = [2,3,5 ]
     discretization_n = [5  ]

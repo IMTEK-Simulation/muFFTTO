@@ -23,7 +23,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 
-src = '../figures/'
+src = './figures/'
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -75,11 +75,16 @@ if __name__ == '__main__':
 
     #
     nb_pix_multips = [4,3,2 ]
-    geometry_ID = 'n_laminate'  # 'sine_wave_' n_laminate  linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    geometry_ID = 'sine_wave_'  # 'sine_wave_' n_laminate  linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
 
     counter = 0
     ratio=1
-    fig = plt.figure(figsize=(5, 5))
+    #fig = plt.figure(figsize=(5, 5))
+    fig = plt.figure(figsize=(4.15, 4.15))
+
+    plt.rcParams.update({'font.size': 11})
+    plt.rcParams["font.family"] = "Arial"
+
     gs = fig.add_gridspec(3, 3, hspace=0.1, wspace=0.1, width_ratios=[1 , 1, 1 ],
                           height_ratios=[1, 1,1])
     for G_a in np.arange(np.size(nb_pix_multips)):
@@ -169,9 +174,9 @@ if __name__ == '__main__':
             # plt.gca().set_aspect('equal')  # Keep aspect ratio
             # plt.show()
             if G_a == 2:
-                ax0.set_xlabel( r'Mesh -' + r'$\mathcal{T}$' + f'$_{{{2 ** nb_disc}}}$')
+                ax0.set_xlabel( r'Mesh - ' + r'$\mathcal{T}$' + f'$_{{{2 ** nb_disc}}}$')
             if T_a == 0:
-                ax0.set_ylabel(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** nb_pix_multip}}}$')
+                ax0.set_ylabel(r'Geometry - ' + r'$\mathcal{G}$' + f'$_{{{2 ** nb_pix_multip}}}$')
                 ax0.yaxis.set_label_position('right')
             counter += 1
     fname = src + 'JG_exp4_geometry_{}{}'.format(geometry_ID , '.pdf')

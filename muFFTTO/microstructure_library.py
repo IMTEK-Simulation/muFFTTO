@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+from reportlab.lib.pagesizes import elevenSeventeen
 
 from muFFTTO import geometries_indre_joedicke
 
@@ -17,7 +18,7 @@ def get_geometry(nb_voxels,
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
                                    'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles',
-                                   'symmetric_linear',
+                                   'symmetric_linear', 'hashin_inclusion_2D',
                                    'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
                                    'laminate', 'laminate2', 'laminate_log',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
@@ -51,6 +52,15 @@ def get_geometry(nb_voxels,
             phase_field = np.ones(nb_voxels)
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
                                        np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+
+        case 'hashin_inclusion_2D':
+            r1 = kwargs['rad_1']
+            r2 = kwargs['rad_2']
+
+            phase_field = np.ones(nb_voxels)
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
+                                       np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+
         case 'n_squares':
 
             phase_field = np.ones(nb_voxels)
@@ -71,7 +81,6 @@ def get_geometry(nb_voxels,
             for cx, cy, r in circles:
                 mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
                 phase_field[mask] = 0  # Set pixels inside the circle to 1
-
 
         case 'laminate':
 
@@ -157,22 +166,60 @@ def get_geometry(nb_voxels,
                     np.power(coordinates[0], 2) +
                     np.power(coordinates[1], 2) +
                     np.power(coordinates[2], 2) < 0.3] = 1
+
         case 'circle_inclusions':
-            # Image resolution
-            size = np.size(coordinates, -1)
-            number_of_holes = 3  # 3x3 grid of holes
-            spacing = size // (number_of_holes + 1)
-            radius = spacing // 3  # Radius of each hole
+            nb_circles = kwargs['nb_circles']
+            r_0 = kwargs['r_0']
+            vol_frac = kwargs['vol_frac']
+            r_n = r_0 / nb_circles
+            random_density = kwargs['random_density']
+            random_centers = kwargs['random_centers']
 
-            # Initialize the image array
-            if nb_voxels.size == 2:
-                phase_field = 0.5 + 0.5 * np.sin(2 * 2 * np.pi * coordinates[0]) * np.sin(
-                    2 * 2 * np.pi * coordinates[1])
+            inclusion_box_size = 1 / nb_circles
+            perturb_of_centers=inclusion_box_size/2-r_n
 
-            if nb_voxels.size == 3:
-                phase_field = 0.5 + 0.5 * np.sin(2 * 2 * np.pi * coordinates[0]) * np.sin(
-                    2 * 2 * np.pi * coordinates[1]) * np.sin(
-                    2 * 2 * np.pi * coordinates[3])
+            phase_field = np.zeros(nb_voxels)
+            dim = np.size(nb_voxels)
+            # number of circles in one direction
+            if dim == 2:
+                nb_circles_i = np.asarray(nb_circles, dtype=int)
+
+                center = np.linspace(0, 1, nb_circles_i, endpoint=False)
+                if nb_circles == 1:
+                    center += 1 / 2
+                else:
+                    center += (center[1] - center[0]) / 2
+                centers_x, centers_y = np.meshgrid(center, center)
+
+                # Iterate over the results
+                densities = np.random.permutation(np.arange(1, 1 + nb_circles ** dim))
+                counter = 0
+                for i in range(centers_x.shape[0]):
+                    for j in range(centers_y.shape[1]):
+
+                        center = np.array([centers_x[i, j], centers_y[i, j]])
+                        if random_centers:
+                            center += (perturb_of_centers*0.99) * np.random.uniform(-1, 1)
+                        r_center = np.zeros_like(coordinates)
+                        for d in np.arange(dim):
+                            r_center[d] = coordinates[d, ...] - center[d]
+
+                        squares = 0
+                        squares += sum(r_center[d] ** 2 for d in range(dim))
+                        distances = np.sqrt(squares)
+                        if random_density:
+                            # Create an array from 1 to 10
+
+                            # Shuffle the array randomly
+
+                            # phase_field[distances < r_n] = np.random.random()
+                            phase_field[distances < r_n] = densities[counter]
+                        else:
+                            phase_field[distances < r_n] = 1
+                        counter += 1
+            elif dim == 3:
+                raise (NotImplementedError)
+
         case 'abs_val':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:
