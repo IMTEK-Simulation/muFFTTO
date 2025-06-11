@@ -8,6 +8,8 @@ from muFFTTO import discretization_library
 from NuMPI.Tools import Reduction
 
 from mpi4py import MPI
+import muGrid
+from muGrid import ConvolutionOperator
 from muGrid import Communicator
 from muGrid import FileIONetCDF, OpenMode
 from muFFT import FFT
@@ -69,6 +71,7 @@ class Discretization:
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=communicator)
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
+
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
@@ -114,6 +117,11 @@ class Discretization:
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
                                        *self.nb_of_pixels]
+
+            self.field_collection = muGrid.GlobalFieldCollection(nb_domain_grid_pts=nb_of_pixels_global,
+                                                                 sub_pts={'quad_points': self.nb_quad_points_per_pixel,
+                                                                          'nodal_points': self.nb_nodes_per_pixel})
+
             # displacement              [f,n,x,y,z]
             # rhs                       [f,n,x,y,z]
             # macro_gradient_field    [f,d,q,x,y,z]
@@ -290,6 +298,70 @@ class Discretization:
         # MPI.COMM_WORLD.Barrier()
         # print('gradient_of_u= {} \n   core {}'.format(1, MPI.COMM_WORLD.rank))
 
+        return grad_u_ijqxyz
+
+    def apply_gradient_operator_mugrid_convolution(self, u_inxyz, grad_u_ijqxyz=None):
+        """
+        Function that computes gradient of function u, using mugrid:ConvolutionOperator.
+        Depending on the discretization stencil.
+
+        Parameters
+        ----------
+        u_inxyz: numpy ndarray of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+
+        Returns
+        -------
+        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
+                - q is quadrature point index
+        """
+        # fc = muGrid.GlobalFieldCollection(tuple(self.nb_of_pixels), sub_pts={"quad": 2})
+
+        if grad_u_ijqxyz is None:  # if gradient_of_u is not specified, determine the size
+            gradient_of_u_shape = list(u_inxyz.shape)  # [f,n,x,y,z]
+            gradient_of_u_shape.insert(1, self.domain_dimension)  # [f,d,n,x,y,z]
+            gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
+            grad_u_ijqxyz = np.zeros(gradient_of_u_shape)  # create gradient field
+
+        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:gradient_of_u_shape ' f'{gradient_of_u_shape}')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:displacement_field_shape=' f'{u.shape}')
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
+
+        grad_u_ijqxyz.p.fill(0)  # To ensure that gradient field is empty/zero
+        # gradient_of_u_selfroll = np.copy(gradient_of_u)
+        # Derivative stencil of shape (2, quad, 2, 2)
+        gradient = np.array(
+            [
+                [  # Derivative in x-direction
+                    [[[-1, 0], [1, 0]]],  # Bottom-left triangle (first quadrature point)
+                    [[[0, -1], [0, 1]]],  # Top-right triangle (second quadrature point)
+                ],
+                [  # Derivative in y-direction
+                    [[[-1, 1], [0, 0]]],  # Bottom-left triangle (first quadrature point)
+                    [[[0, 0], [-1, 1]]],  # Top-right triangle (second quadrature point)
+                ],
+            ],
+        )
+
+        # Get nodal field
+        # nodal_field = fc.real_field("nodal-field")
+        # nodal_field.s = u_inxyz[0]
+        #
+        # # Get quadrature field of shape (2, quad, nx, ny)
+        # quad_field = fc.real_field("quad-field", (2,), "quad")
+        B_dqnijk=self.B_grad_at_pixel_dqnijk
+
+        op = ConvolutionOperator([0, 0], B_dqnijk)
+
+        # Apply the gradient operator to the nodal field and write result to the quad field
+        # for d in np.arange(self.domain_dimension):
+        op.apply(u_inxyz, grad_u_ijqxyz)
+        # grad_u_ijqxyz[0] = quad_field
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
@@ -1111,6 +1183,23 @@ class Discretization:
         # return zero field for  the  (discretized)  gradient of temperature/displacement
         return np.zeros(self.gradient_size)
 
+    def get_temperature_sized_field_muGRID(self, name):
+        # return zero field with the shape of discretized temperature field
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature sized field  is returned !!!'.format(self.cell.problem_type))
+
+        u_inxyz = self.field_collection.real_field(
+            unique_name=name,  # name of the field
+            components_shape=(*self.cell.unknown_shape,),  # shape of components
+            sub_division='nodal_points'  # sub-point type
+        )
+
+        # u_inxyz = self.field_collection.real_field(
+        #     unique_name=name
+        # )
+        return u_inxyz
+
     def get_temperature_sized_field(self):
         # return zero field with the shape of discretized temperature field
         if not self.cell.problem_type == 'conductivity':
@@ -1121,8 +1210,24 @@ class Discretization:
 
     def get_scalar_sized_field(self):
         # return zero field with the shape of one scalar per nodal point
-
         return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+    def get_temperature_gradient_size_field_muGRID(self, name):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature gradient  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        # u_inxyz = self.fft.real_space_field(unique_name='aaa2',
+        #                                     shape=(self.domain_dimension, self.nb_quad_points_per_pixel, 0))
+        # Get a tensor-field (for example to represent the strain)
+        grad_u_ijqxyz = self.field_collection.real_field(
+            unique_name=name,  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            components_shape=(*self.cell.gradient_shape,),  # shape of components
+            sub_division='quad_points'  # sub-point type
+        )
+        return grad_u_ijqxyz
 
     def get_temperature_gradient_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature
