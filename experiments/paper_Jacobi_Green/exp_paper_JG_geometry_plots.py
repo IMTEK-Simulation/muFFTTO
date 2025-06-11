@@ -24,7 +24,13 @@ formulation = 'small_strain'
 domain_size = [1, 1]
 
 src = './figures/'
-
+# Enable LaTeX rendering
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
@@ -138,7 +144,7 @@ if __name__ == '__main__':
 
 
             ax0 = fig.add_subplot(gs[G_a,2- T_a])
-            ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+            pcm=ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
                            cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0, alpha=0.5,
                            rasterized=True)
             # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
@@ -179,6 +185,18 @@ if __name__ == '__main__':
                 ax0.set_ylabel(r'Geometry - ' + r'$\mathcal{G}$' + f'$_{{{2 ** nb_pix_multip}}}$')
                 ax0.yaxis.set_label_position('right')
             counter += 1
+    ax_cbar = fig.add_axes([0.14, 0.5, 0.02, 0.3])
+    # 0.16, 0.22,
+    cbar = plt.colorbar(pcm, location='right', cax=ax_cbar)
+    cbar.ax.yaxis.tick_right()
+    # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
+    # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
+    cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+    cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
+    ax_cbar.set_ylabel(r'Density $\rho_{\rm{cos} } $')
+
+    ax_cbar.text(-0.25, 1.15, f'(b)', transform=ax_cbar.transAxes)
+
     fname = src + 'JG_exp4_geometry_{}{}'.format(geometry_ID , '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
@@ -205,7 +223,7 @@ if __name__ == '__main__':
 
     counter = 0
     ratio = 1
-    fig = plt.figure(figsize=(5, 5))
+    fig = plt.figure(figsize=(4.25,4.25))
     gs = fig.add_gridspec(3, 3, hspace=0.1, wspace=0.1, width_ratios=[1, 1, 1],
                           height_ratios=[1, 1, 1])
     for G_a in np.arange(np.size(nb_pix_multips)):
@@ -258,7 +276,7 @@ if __name__ == '__main__':
             X_, Y_ = np.meshgrid(x, y)
 
             ax0 = fig.add_subplot(gs[G_a, 2 - T_a])
-            ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
+            pcm=ax0.pcolormesh(X_, Y_, np.transpose(phase_field),
                            cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0, alpha=0.5,
                            rasterized=True)
             # ax0.hlines(y=number_of_pixels[1] // 2, xmin=-0.5, xmax=number_of_pixels[0] - 0.5, color=colors[counter],
@@ -292,11 +310,23 @@ if __name__ == '__main__':
             # plt.gca().set_aspect('equal')  # Keep aspect ratio
             # plt.show()
             if G_a == 2:
-                ax0.set_xlabel(r'Mesh -' + r'$\mathcal{T}$' + f'$_{{{2 ** nb_disc}}}$')
+                ax0.set_xlabel(r'Mesh - ' + r'$\mathcal{T}$' + f'$_{{{2 ** nb_disc}}}$')
             if T_a == 0:
-                ax0.set_ylabel(r'Geometry -' + r'$\mathcal{G}$' + f'$_{{{2 ** nb_pix_multip}}}$')
+                ax0.set_ylabel(r'Geometry - ' + r'$\mathcal{G}$' + f'$_{{{2 ** nb_pix_multip}}}$')
                 ax0.yaxis.set_label_position('right')
             counter += 1
+
+    ax_cbar = fig.add_axes([0.14, 0.50, 0.02, 0.3])
+    # 0.16, 0.22,
+    cbar = plt.colorbar(pcm, location='right', cax=ax_cbar)
+    cbar.ax.yaxis.tick_right()
+    # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
+    # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
+    cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+    cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
+    ax_cbar.set_ylabel(r'Density $\rho_{n\rm{-laminate} } $')
+
+    ax_cbar.text(-0.25, 1.15, f'(a)', transform=ax_cbar.transAxes)
     fname = src + 'JG_exp4_single_geometry_{}{}'.format(geometry_ID, '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')

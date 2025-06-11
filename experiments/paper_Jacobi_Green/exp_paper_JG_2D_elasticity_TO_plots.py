@@ -406,7 +406,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
     # pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
     #divnorm = mpl.colors.LogNorm(vmin=1e-4, vmax=1 )
-    divnorm = mpl.colors.Normalize(vmin=1e-4, vmax=1)
+    divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
     cmap_ = mpl.cm.seismic# mpl.cm.seismic #mpl.cm.Greys
     ax_init = fig.add_subplot(gs[0, 0])
     # ax_init= fig.add_axes([0.15, 0.6, 0.1, 0.2])
@@ -499,8 +499,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     cbar.ax.yaxis.tick_right()
     # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
     # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
-    cbar.set_ticks(ticks=[1e-4, 0.5, 1])
-    cbar.set_ticklabels([f'$10^{{{-4}}}$', 0.5, 1])
+    cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+    cbar.set_ticklabels([f'$10^{{{-8}}}$', 0.5, 1])
     #
     # ax1 = fig.add_axes([0.79, 0.20, 0.1, 0.15])
     # # ax1.set_aspect('equal')

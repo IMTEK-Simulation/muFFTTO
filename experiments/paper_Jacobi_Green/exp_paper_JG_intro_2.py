@@ -29,13 +29,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 nb_pix_multips = [2]  # ,2,3,3,2,
-small = np.arange(0., .1, 0.005)
-middle = np.arange(0.1, 0.9, 0.03)
 
-large = np.arange(0.9, 1.0 + 0.005, 0.005)
-ratios = np.concatenate((small, middle, large))
-ratios = np.arange(0., 1.1, 0.2)
-ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(2,33)  # 65 17  33
 
 nb_it = np.zeros((len(nb_pix_multips), ratios.size), )
@@ -84,13 +78,6 @@ for kk in np.arange(np.size(nb_pix_multips)):
     ii = np.eye(2)
 
     shape = tuple((number_of_pixels[0] for _ in range(2)))
-
-
-    def expand(arr):
-        new_shape = (np.prod(arr.shape), np.prod(shape))
-        ret_arr = np.zeros(new_shape)
-        ret_arr[:] = arr.reshape(-1)[:, np.newaxis]
-        return ret_arr.reshape((*arr.shape, *shape))
 
 
     # identity tensors                                            [grid of tensors]

@@ -452,7 +452,7 @@ if plot:
             #                         [1.25, 3e-8],
             #                         [1.5, 1e-9]])
 
-            ax_error.annotate(text=f'Green-Jacobi\n'+ fr'  $\chi =10^{{{-ratios[i]}}}$',
+            ax_error.annotate(text=f'Green-Jacobi\n'+ fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
                               xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
                               xytext=(text_GJ[i, 0], text_GJ[i, 1]),
                               arrowprops=dict(arrowstyle='->',
@@ -462,7 +462,7 @@ if plot:
                               fontsize=9,
                               color='black'
                               )
-            ax_error.annotate(text=f'Green\n'+ fr'$\chi = 10^{{{-ratios[i]}}}$',
+            ax_error.annotate(text=f'Green\n'+ fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
                               xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
                               xytext=(text_G[i, 0], text_G[i, 1]),
                               arrowprops=dict(arrowstyle='->',
@@ -479,7 +479,7 @@ if plot:
         # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
         # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
         cbar.set_ticks(ticks=[1e-8, 0.5, 1])
-        cbar.set_ticklabels([r'$\chi$', 0.5, 1])
+        cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
         row += 1
 
     fig.tight_layout()

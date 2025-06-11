@@ -23,40 +23,48 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 
-src = '../figures/'
+src = './figures/'
+# Enable LaTeX rendering
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 11})
+plt.rcParams["font.family"] = "Arial"
 
-nb_it_semi_continuous_16 = np.array([20., 32., 31., 30., 29., 28.])
-nb_it_Jacobi_semi_continuous_16 = np.array([16., 47., 86., 167., 310., 588.])
-nb_it_combi_semi_continuous_16 = np.array([5., 8., 12., 20., 35., 64.])
-
-nb_it_continuous = np.array([20., 53., 87., 84., 52., 20.])
-nb_it_Jacobi_continuous = np.array([16., 46., 88., 166., 310., 585.])
-nb_it_combi_continuous = np.array([5., 3., 3., 3., 3., 2.])
-
-Nx = np.array([1, 4, 8, 16, 32, 64]) * 16
-
-fig = plt.figure()
-gs = fig.add_gridspec(1, 1)
-ax = fig.add_subplot(gs[0, 0])
-# Plot each line with a different z offset
-# for i in np.arange(len(nb_pix_multips)):
-ax.plot(Nx, nb_it_semi_continuous_16, label='PCG: Green', color='blue')
-ax.plot(Nx, nb_it_Jacobi_semi_continuous_16, label='PCG: Jacobi', color='black')
-ax.plot(Nx, nb_it_combi_semi_continuous_16, label='PCG: Green + Jacobi', color='red')
-ax.plot(Nx, nb_it_continuous, label='continuous PCG: Green', color='blue', linestyle='--')
-ax.plot(Nx, nb_it_Jacobi_continuous, label='continuous PCG: Jacobi', color='black', linestyle='--')
-ax.plot(Nx, nb_it_combi_continuous, label='continuous PCG: Green + Jacobi', color='red', linestyle='--')
-
-ax.set_xlabel('Grid size')
-ax.set_ylabel('# PCG iterations')
-# plt.legend(['PCG: Green', 'PCG: Jacobi', 'PCG: Green + Jacobi', 'Richardson Green', 'Richardson Green+Jacobi'])
-plt.legend()
-
-fname = src + 'JG_exp4_GRID_DEP_comparison_{}{}'.format(0, '.pdf')
-print(('create figure: {}'.format(fname)))
-plt.savefig(fname, bbox_inches='tight')
-
-plt.show()
+#
+# nb_it_semi_continuous_16 = np.array([20., 32., 31., 30., 29., 28.])
+# nb_it_Jacobi_semi_continuous_16 = np.array([16., 47., 86., 167., 310., 588.])
+# nb_it_combi_semi_continuous_16 = np.array([5., 8., 12., 20., 35., 64.])
+#
+# nb_it_continuous = np.array([20., 53., 87., 84., 52., 20.])
+# nb_it_Jacobi_continuous = np.array([16., 46., 88., 166., 310., 585.])
+# nb_it_combi_continuous = np.array([5., 3., 3., 3., 3., 2.])
+#
+# Nx = np.array([1, 4, 8, 16, 32, 64]) * 16
+#
+# fig = plt.figure()
+# gs = fig.add_gridspec(1, 1)
+# ax = fig.add_subplot(gs[0, 0])
+# # Plot each line with a different z offset
+# # for i in np.arange(len(nb_pix_multips)):
+# ax.plot(Nx, nb_it_semi_continuous_16, label='PCG: Green', color='blue')
+# ax.plot(Nx, nb_it_Jacobi_semi_continuous_16, label='PCG: Jacobi', color='black')
+# ax.plot(Nx, nb_it_combi_semi_continuous_16, label='PCG: Green + Jacobi', color='red')
+# ax.plot(Nx, nb_it_continuous, label='continuous PCG: Green', color='blue', linestyle='--')
+# ax.plot(Nx, nb_it_Jacobi_continuous, label='continuous PCG: Jacobi', color='black', linestyle='--')
+# ax.plot(Nx, nb_it_combi_continuous, label='continuous PCG: Green + Jacobi', color='red', linestyle='--')
+#
+# ax.set_xlabel('Grid size')
+# ax.set_ylabel(r'\# PCG iterations')
+# # plt.legend(['PCG: Green', 'PCG: Jacobi', 'PCG: Green + Jacobi', 'Richardson Green', 'Richardson Green+Jacobi'])
+# plt.legend()
+#
+# fname = src + 'JG_exp4_GRID_DEP_comparison_{}{}'.format(0, '.pdf')
+# print(('create figure: {}'.format(fname)))
+# plt.savefig(fname, bbox_inches='tight')
+#
+# plt.show()
 
 #### numbers of iterations
 #### sine_wave_ geometry
@@ -991,475 +999,487 @@ nb_it_combi_n_laminate_sinrhs_4_e14 = np.array([[12., 0., 0., 0., 0., 0., 0., 0.
 
 # nb_pix_multips = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 #
-nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
-Nx = (np.asarray(nb_pix_multips))
-X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+plot_jacobi_single=False
+if plot_jacobi_single:
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    Nx = (np.asarray(nb_pix_multips))
+    X, Y = np.meshgrid(Nx, Nx, indexing='ij')
 
-nb_pix_multips = [2, 4, 10]
-# material distribution
-geometry_ID = 'linear'  # laminate2  sine_wave_rapid     # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
-# rhs = 'sin_wave'
-rhs = False
-linestyles = ['-', '--', ':']
-colors = ['red', 'blue', 'green', 'orange', 'purple']
-precc = 14
-for phase_contrast in [2, 4]:
-    ratio = phase_contrast
-    fig = plt.figure(figsize=(4.5, 3.5))
-    gs = fig.add_gridspec(1, 1, hspace=0.2, wspace=0.1, width_ratios=[3, ],
-                          height_ratios=[1])
-    # plot nb its
-    gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.1, width_ratios=[0.1, 5])
-    ax = fig.add_subplot(gs1[0, 1])
-    if phase_contrast == 1:
-        nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
-    elif phase_contrast == 2:
-        nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
+    nb_pix_multips = [2, 4, 10]
+    # material distribution
+    geometry_ID = 'linear'  # laminate2  sine_wave_rapid     # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    # rhs = 'sin_wave'
+    rhs = False
+    linestyles = ['-', '--', ':']
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    precc = 14
+    for phase_contrast in [2, 4]:
+        ratio = phase_contrast
+        fig = plt.figure(figsize=(4.5, 3.5))
+        gs = fig.add_gridspec(1, 1, hspace=0.2, wspace=0.1, width_ratios=[3, ],
+                              height_ratios=[1])
+        # plot nb its
+        gs1 = gs[0, 0].subgridspec(1, 2, wspace=0.1, width_ratios=[0.1, 5])
+        ax = fig.add_subplot(gs1[0, 1])
+        if phase_contrast == 1:
+            nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
+        elif phase_contrast == 2:
+            nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
 
-    elif phase_contrast == 4:
-        # nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
-        nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
+        elif phase_contrast == 4:
+            # nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
+            nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
 
-    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
-    for i in range(nb_iterations.shape[0]):
-        for j in range(nb_iterations.shape[1]):
-            if nb_iterations[i, j] == 0:
-                pass
-            elif nb_iterations[i, j] < 50:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
-                        ha='center', va='center', color='black')
-            else:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
-                        ha='center', va='center', color='white')
-    # divnorm = mpl.colors.LogNorm(vmin=1, vmax=100)
-    divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+        nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+        for i in range(nb_iterations.shape[0]):
+            for j in range(nb_iterations.shape[1]):
+                if nb_iterations[i, j] == 0:
+                    pass
+                elif nb_iterations[i, j] < 50:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                            ha='center', va='center', color='black')
+                else:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}',
+                            ha='center', va='center', color='white')
+        # divnorm = mpl.colors.LogNorm(vmin=1, vmax=100)
+        divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
 
-    # Replace NaN values with zero
+        # Replace NaN values with zero
 
-    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+        pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-    if geometry_ID == 'sine_wave_' and phase_contrast == 1:
-        ax.text(0.05, 0.92, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
-    else:
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        if geometry_ID == 'sine_wave_' and phase_contrast == 1:
+            ax.text(0.05, 0.92, f'Total phase contrast \n' + r'$\kappa^^{\rm tot}=\infty$', transform=ax.transAxes)
+        else:
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
 
-    ax.set_title('Total number of iteration \n Jacobi   ')
-    # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# of material phases')
+        ax.set_title('Number of iteration \n Jacobi   ')
+        # ax.set_zlim(1 ,100)
+        ax.set_ylabel(r'\# of material phases')
 
-    # ax.yaxis.set_label_position('right')
-    # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
-    ax.set_xticks(Nx)
-    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
-    # ax2 = ax.twinx()
-    ax.set_yticks(Nx)
-    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
-    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
-    # ax.set_aspect('equal')
+        # ax.yaxis.set_label_position('right')
+        # ax.yaxis.tick_right()
+        ax.set_xlabel(r'\# of nodal points (x direction)')
+        ax.set_xticks(Nx)
+        ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+        # ax2 = ax.twinx()
+        ax.set_yticks(Nx)
+        ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+        ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+        # ax.set_aspect('equal')
 
-    ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
+        ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
 
-    fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rhoJacobi{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
+        fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rhoJacobi{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
+        print(('create figure: {}'.format(fname)))
+        plt.savefig(fname, bbox_inches='tight')
+
+    plt.show()
+
+#
+plot_this=True
+if plot_this:
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    Nx = (np.asarray(nb_pix_multips))
+    X, Y = np.meshgrid(Nx, Nx, indexing='ij')
+#
+ #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
+    # material distribution
+    geometry_ID = 'linear'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    # rhs = 'sin_wave'
+    rhs = False
+    linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
+    colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
+    precc = 6
+    fig = plt.figure(figsize=(8.5, 5.5))#11, 7.0
+    gs = fig.add_gridspec(2, 4, hspace=0.22, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
+                          height_ratios=[1, 1])
+    row = 0
+    for phase_contrast in [2, 4]:  # 1, 4
+        ratio = phase_contrast
+        if geometry_ID == 'linear':
+            divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+            white_lim = 50
+        elif geometry_ID == 'sine_wave_':
+            divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
+            white_lim = 50
+        # Green graph
+        gs0 = gs[row, 0].subgridspec(1, 1, wspace=0.1, width_ratios=[1])
+        ax = fig.add_subplot(gs0[0, 0])
+        # ax.set_aspect('equal')
+        if phase_contrast == 1:
+            if geometry_ID == 'sine_wave_rapid':
+                nb_iterations = (nb_it_combi_laminate2_1[:, :])
+            if geometry_ID == 'laminate2':
+                nb_iterations = (nb_it_Green_laminate2_1[:, :])
+            elif geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_linear_1_e14[:, :])
+
+            elif geometry_ID == 'right_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_right_cluster_x3_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_right_cluster_x3_1_e06[:, :])
+            elif geometry_ID == 'left_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_left_cluster_x3_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_left_cluster_x3_1_e06[:, :])
+            elif geometry_ID == 'n_laminate':
+                if precc == 14:
+                    if rhs == 'sin_wave':
+                        nb_iterations = (nb_it_Green_n_laminate_sinrhs_1_e14[:, :])
+                    else:
+                        nb_iterations = (nb_it_Green_n_laminate_1_e14[:, :])
+                if precc == 6:
+                    nb_iterations = (nb_it_Green_n_laminate_1_e06[:, :])
+
+
+            elif geometry_ID == 'laminate_log':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_laminate_log_1_e14[:, :])
+                if precc == 6:
+                    nb_iterations = (nb_it_Green_laminate_log_1_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                nb_iterations = (nb_it_Green_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
+        elif phase_contrast == 2:
+            if geometry_ID == 'linear':
+                if precc == 6:
+                    nb_iterations = (nb_it_Green_linear_2_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                nb_iterations = nb_it_Green_sine_wave_0_e06[:, :]
+
+
+        elif phase_contrast == 4:
+            if geometry_ID == 'sine_wave_rapid':
+                nb_iterations = (nb_it_combi_laminate2_1[:, :])
+            if geometry_ID == 'laminate2':
+                nb_iterations = (nb_it_Green_laminate2_4[:, :])
+            elif geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_linear_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_linear_4_e06[:, :])
+            elif geometry_ID == 'right_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_right_cluster_x3_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_right_cluster_x3_4_e06[:, :])
+            elif geometry_ID == 'left_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_left_cluster_x3_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_left_cluster_x3_4_e06[:, :])
+            elif geometry_ID == 'n_laminate':
+                if precc == 14:
+                    if rhs == 'sin_wave':
+                        nb_iterations = (nb_it_Green_n_laminate_sinrhs_4_e14[:, :])
+
+                    else:
+                        nb_iterations = (nb_it_Green_n_laminate_4_e14[:, :])
+                if precc == 6:
+                    nb_iterations = (nb_it_Green_n_laminate_4_e06[:, :])
+
+            elif geometry_ID == 'laminate_log':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_laminate_log_4_e14[:, :])
+                if precc == 6:
+                    nb_iterations = (nb_it_Green_laminate_log_4_e06[:, :])
+
+            elif geometry_ID == 'sine_wave_':
+                if precc == 14:
+                    nb_iterations = (nb_it_Green_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_sine_wave_4_e06[:, :])  # nb_it_combi_laminate2_1
+
+        nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+        for i in range(nb_iterations.shape[0]):
+            for j in range(nb_iterations.shape[1]):
+                if nb_iterations[i, j] == 0:
+                    pass
+                elif nb_iterations[i, j] < white_lim:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='black')
+                elif nb_iterations[i, j] > 999:
+                    ax.text(i + Nx[0], j + Nx[0], f'{999:.0f}', size=8,
+                            ha='center', va='center', color='black')
+                else:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='white')
+
+        pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+        elif geometry_ID == 'sine_wave_':
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+        else:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+
+        if row == 0:
+            ax.set_title('Number of iterations \n Green ')
+        # ax.set_zlim(1 ,100)
+        # ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+        # ax.yaxis.set_label_position('right')
+        # ax.yaxis.tick_right()
+        ax.set_ylabel(r'\#  material pixels - $p$~of~$\mathcal{G}_p$')
+        if row == 1:
+            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+        ax.set_xticks(Nx)
+        ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+        # ax2 = ax.twinx()
+        ax.set_yticks(Nx)
+        ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+        ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+        #    ax.set_aspect('equal')
+        if row == 0:
+            ax.text(-0.25, 1.15, f'(a.{row + 1})', transform=ax.transAxes)
+        elif row == 1:
+            ax.text(-0.25, 1.05, f'(a.{row + 1})', transform=ax.transAxes)
+
+        # jacobi  graph
+        gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
+        ax = fig.add_subplot(gs1[0, 0])
+        #    ax.set_aspect('equal')
+        if phase_contrast == 1:
+            if geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
+                # elif precc == 6:
+                #     nb_iterations = (nb_it_Jacobi_linear_1_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                if precc == 14:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
+        if phase_contrast == 2:
+            if geometry_ID == 'linear':
+                if precc == 14:
+                    quit()
+                    # nb_iterations = (nb_it_Jacobi_linear_2_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                if precc == 14:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
+
+        elif phase_contrast == 4:
+            if geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                if precc == 14:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_sine_wave_4_e06[:, :])
+
+        nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+        for i in range(nb_iterations.shape[0]):
+            for j in range(nb_iterations.shape[1]):
+                if nb_iterations[i, j] == 0:
+                    pass
+                elif nb_iterations[i, j] < white_lim:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='black')
+                elif nb_iterations[i, j] > 999:
+                    ax.text(i + Nx[0], j + Nx[0], f'{999:.0f}', size=8,
+                            ha='center', va='center', color='white')
+                else:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='white')
+
+        pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+        elif geometry_ID == 'sine_wave_':
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+        else:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+
+        if row == 0:
+            ax.set_title('Number of iterations \n Jacobi ')
+        # ax.set_zlim(1 ,100)
+        # ax.set_ylabel('# data/geometry sampling points (x direction)')
+
+        # ax.yaxis.set_label_position('right')
+        # ax.yaxis.tick_right()
+        if row == 1:
+            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+
+        ax.set_xticks(Nx)
+        ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+        # ax2 = ax.twinx()
+        ax.set_yticks(Nx)
+        ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+        ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+        #    ax.set_aspect('equal')
+
+        # ax.set_zlabel('# CG iterations')
+        if row == 0:
+            ax.text(-0.17, 1.15, f'(b.{row + 1})', transform=ax.transAxes)
+        elif row == 1:
+            ax.text(-0.17, 1.05, f'(b.{row + 1})', transform=ax.transAxes)
+        # plot Jacobi green
+        gs2 = gs[row, 2].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
+        ax = fig.add_subplot(gs2[0, 0])
+        if phase_contrast == 1:
+
+            if geometry_ID == 'sine_wave_rapid':
+                nb_iterations = (nb_it_combi_laminate2_1[:, :])
+            if geometry_ID == 'laminate2':
+                nb_iterations = (nb_it_combi_laminate2_1[:, :])
+            elif geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_linear_1_e14[:, :])
+            elif geometry_ID == 'right_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_right_cluster_x3_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_right_cluster_x3_1_e06[:, :])
+            elif geometry_ID == 'left_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_left_cluster_x3_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_left_cluster_x3_1_e06[:, :])
+            elif geometry_ID == 'n_laminate':
+
+                if precc == 14:
+                    if rhs == 'sin_wave':
+                        nb_iterations = (nb_it_combi_n_laminate_sinrhs_1_e14[:, :])
+                    else:
+                        nb_iterations = (nb_it_combi_n_laminate_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_n_laminate_1_e06[:, :])
+
+
+            elif geometry_ID == 'laminate_log':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_laminate_log_1_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_laminate_log_1_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                nb_iterations = (nb_it_combi_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
+        elif phase_contrast == 2:
+            if geometry_ID == 'linear':
+                if precc == 6:
+                    nb_iterations = (nb_it_combi_linear_2_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                nb_iterations = nb_it_combi_sine_wave_0_e06[:, :]
+
+        elif phase_contrast == 4:
+            if geometry_ID == 'sine_wave_rapid':
+                nb_iterations = (nb_it_combi_laminate2_1[:, :])
+            if geometry_ID == 'laminate2':
+                nb_iterations = (nb_it_combi_laminate2_4[:, :])
+            elif geometry_ID == 'linear':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_linear_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_linear_4_e06[:, :])
+
+            elif geometry_ID == 'right_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_right_cluster_x3_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_right_cluster_x3_4_e06[:, :])
+            elif geometry_ID == 'left_cluster_x3':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_left_cluster_x3_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_left_cluster_x3_4_e06[:, :])
+            elif geometry_ID == 'n_laminate':
+                if precc == 14:
+                    if rhs == 'sin_wave':
+                        nb_iterations = (nb_it_combi_n_laminate_sinrhs_4_e14[:, :])
+                    else:
+                        nb_iterations = (nb_it_combi_n_laminate_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_n_laminate_4_e06[:, :])
+
+            elif geometry_ID == 'laminate_log':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_laminate_log_4_e14[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_laminate_log_4_e06[:, :])
+            elif geometry_ID == 'sine_wave_':
+                if precc == 14:
+                    nb_iterations = (nb_it_combi_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
+                elif precc == 6:
+                    nb_iterations = (nb_it_combi_sine_wave_4_e06[:, :])
+
+        nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
+        for i in range(nb_iterations.shape[0]):
+            for j in range(nb_iterations.shape[1]):
+                if nb_iterations[i, j] == 0:
+                    pass
+                elif nb_iterations[i, j] < white_lim:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='black')
+                else:
+                    ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
+                            ha='center', va='center', color='white')
+        # Replace NaN values with zero
+
+        pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
+
+        if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+        elif geometry_ID == 'sine_wave_':
+            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+        else:
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+
+        if row == 0:
+            ax.set_title('Number of iterations \n Green-Jacobi')
+        # ax.set_zlim(1 ,100)
+        # ax.set_ylabel('# of material phases')
+
+        # ax.yaxis.set_label_position('right')
+        # ax.yaxis.tick_right()
+        if row == 1:
+            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+
+        ax.set_xticks(Nx)
+        ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
+        # ax2 = ax.twinx()
+        ax.set_yticks(Nx)
+        ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
+        ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+        #   ax.set_aspect('equal')
+
+        if row == 0:
+            ax.text(-0.17, 1.15, f'(c.{row + 1})', transform=ax.transAxes)
+        elif row == 1:
+            ax.text(-0.17, 1.05, f'(c.{row + 1})', transform=ax.transAxes)
+        # Adding a color bar with custom ticks and labels
+        cbar_ax = fig.add_subplot(gs[row, 3])
+        cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
+        # cbar.ax.invert_yaxis()
+        # # cbar.set_ticks(ticks=[  0, 1,10])
+        # cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
+        # cbar.ax.set_yticklabels(
+        #     ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
+        #      'Jacobi-Green \n needs more'])
+
+        #
+
+        row += 1
+
+    fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rho_v2_{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
 
 plt.show()
-
-#
-nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
-Nx = (np.asarray(nb_pix_multips))
-X, Y = np.meshgrid(Nx, Nx, indexing='ij')
-
-nb_pix_multips = [2, 4, 5, 6, 7, 8]
-# material distribution
-geometry_ID = 'sine_wave_'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
-# rhs = 'sin_wave'
-rhs = False
-linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
-colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
-precc = 6
-fig = plt.figure(figsize=(11, 7.0))
-gs = fig.add_gridspec(2, 4, hspace=0.2, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
-                      height_ratios=[1, 1])
-row = 0
-for phase_contrast in [2, 4]:  # 1, 4
-    ratio = phase_contrast
-    if geometry_ID == 'linear':
-        divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
-        white_lim = 50
-    elif geometry_ID == 'sine_wave_':
-        divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
-        white_lim = 50
-    # Green graph
-    gs0 = gs[row, 0].subgridspec(1, 1, wspace=0.1, width_ratios=[1])
-    ax = fig.add_subplot(gs0[0, 0])
-    # ax.set_aspect('equal')
-    if phase_contrast == 1:
-        if geometry_ID == 'sine_wave_rapid':
-            nb_iterations = (nb_it_combi_laminate2_1[:, :])
-        if geometry_ID == 'laminate2':
-            nb_iterations = (nb_it_Green_laminate2_1[:, :])
-        elif geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_linear_1_e14[:, :])
-
-        elif geometry_ID == 'right_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_right_cluster_x3_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_right_cluster_x3_1_e06[:, :])
-        elif geometry_ID == 'left_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_left_cluster_x3_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_left_cluster_x3_1_e06[:, :])
-        elif geometry_ID == 'n_laminate':
-            if precc == 14:
-                if rhs == 'sin_wave':
-                    nb_iterations = (nb_it_Green_n_laminate_sinrhs_1_e14[:, :])
-                else:
-                    nb_iterations = (nb_it_Green_n_laminate_1_e14[:, :])
-            if precc == 6:
-                nb_iterations = (nb_it_Green_n_laminate_1_e06[:, :])
-
-
-        elif geometry_ID == 'laminate_log':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_laminate_log_1_e14[:, :])
-            if precc == 6:
-                nb_iterations = (nb_it_Green_laminate_log_1_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            nb_iterations = (nb_it_Green_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
-    elif phase_contrast == 2:
-        if geometry_ID == 'linear':
-            if precc == 6:
-                nb_iterations = (nb_it_Green_linear_2_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            nb_iterations = nb_it_Green_sine_wave_0_e06[:, :]
-
-
-    elif phase_contrast == 4:
-        if geometry_ID == 'sine_wave_rapid':
-            nb_iterations = (nb_it_combi_laminate2_1[:, :])
-        if geometry_ID == 'laminate2':
-            nb_iterations = (nb_it_Green_laminate2_4[:, :])
-        elif geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_linear_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_linear_4_e06[:, :])
-        elif geometry_ID == 'right_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_right_cluster_x3_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_right_cluster_x3_4_e06[:, :])
-        elif geometry_ID == 'left_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_left_cluster_x3_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_left_cluster_x3_4_e06[:, :])
-        elif geometry_ID == 'n_laminate':
-            if precc == 14:
-                if rhs == 'sin_wave':
-                    nb_iterations = (nb_it_Green_n_laminate_sinrhs_4_e14[:, :])
-
-                else:
-                    nb_iterations = (nb_it_Green_n_laminate_4_e14[:, :])
-            if precc == 6:
-                nb_iterations = (nb_it_Green_n_laminate_4_e06[:, :])
-
-        elif geometry_ID == 'laminate_log':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_laminate_log_4_e14[:, :])
-            if precc == 6:
-                nb_iterations = (nb_it_Green_laminate_log_4_e06[:, :])
-
-        elif geometry_ID == 'sine_wave_':
-            if precc == 14:
-                nb_iterations = (nb_it_Green_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
-            elif precc == 6:
-                nb_iterations = (nb_it_Green_sine_wave_4_e06[:, :])  # nb_it_combi_laminate2_1
-
-    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
-    for i in range(nb_iterations.shape[0]):
-        for j in range(nb_iterations.shape[1]):
-            if nb_iterations[i, j] == 0:
-                pass
-            elif nb_iterations[i, j] < white_lim:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='black')
-            else:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='white')
-
-    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
-
-    # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
-    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
-    elif geometry_ID == 'sine_wave_':
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
-    else:
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
-
-    if row == 0:
-        ax.set_title('Total number of iteration \n Green ')
-    # ax.set_zlim(1 ,100)
-    # ax.set_ylabel('# data/geometry sampling points (x direction)')
-
-    # ax.yaxis.set_label_position('right')
-    # ax.yaxis.tick_right()
-    ax.set_ylabel('# of material phases')
-    if row == 1:
-        ax.set_xlabel('# of nodal points (x direction)')
-    ax.set_xticks(Nx)
-    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
-    # ax2 = ax.twinx()
-    ax.set_yticks(Nx)
-    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
-    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
-    #    ax.set_aspect('equal')
-    if row == 0:
-        ax.text(-0.25, 1.15, f'(a.{row + 1})', transform=ax.transAxes)
-    elif row == 1:
-        ax.text(-0.25, 1.05, f'(a.{row + 1})', transform=ax.transAxes)
-
-    # jacobi  graph
-    gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
-    ax = fig.add_subplot(gs1[0, 0])
-    #    ax.set_aspect('equal')
-    if phase_contrast == 1:
-        if geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
-            # elif precc == 6:
-            #     nb_iterations = (nb_it_Jacobi_linear_1_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            if precc == 14:
-                nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
-    if phase_contrast == 2:
-        if geometry_ID == 'linear':
-            if precc == 14:
-                quit()
-                # nb_iterations = (nb_it_Jacobi_linear_2_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Jacobi_linear_2_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            if precc == 14:
-                nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Jacobi_sine_wave_0_e06[:, :])
-
-    elif phase_contrast == 4:
-        if geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_Jacobi_linear_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Jacobi_linear_4_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            if precc == 14:
-                nb_iterations = (nb_it_Jacobi_sine_wave_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_Jacobi_sine_wave_4_e06[:, :])
-
-    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
-    for i in range(nb_iterations.shape[0]):
-        for j in range(nb_iterations.shape[1]):
-            if nb_iterations[i, j] == 0:
-                pass
-            elif nb_iterations[i, j] < white_lim:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='black')
-            else:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='white')
-
-    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
-
-    # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
-    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
-    elif geometry_ID == 'sine_wave_':
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
-    else:
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
-
-    if row == 0:
-        ax.set_title('Total number of iteration \n Jacobi ')
-    # ax.set_zlim(1 ,100)
-    # ax.set_ylabel('# data/geometry sampling points (x direction)')
-
-    # ax.yaxis.set_label_position('right')
-    # ax.yaxis.tick_right()
-    if row == 1:
-        ax.set_xlabel('# of nodal points (x direction)')
-    ax.set_xticks(Nx)
-    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
-    # ax2 = ax.twinx()
-    ax.set_yticks(Nx)
-    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
-    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
-    #    ax.set_aspect('equal')
-
-    # ax.set_zlabel('# CG iterations')
-    if row == 0:
-        ax.text(-0.15, 1.15, f'(b.{row + 1})', transform=ax.transAxes)
-    elif row == 1:
-        ax.text(-0.15, 1.05, f'(b.{row + 1})', transform=ax.transAxes)
-    # plot Jacobi green
-    gs2 = gs[row, 2].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
-    ax = fig.add_subplot(gs2[0, 0])
-    if phase_contrast == 1:
-
-        if geometry_ID == 'sine_wave_rapid':
-            nb_iterations = (nb_it_combi_laminate2_1[:, :])
-        if geometry_ID == 'laminate2':
-            nb_iterations = (nb_it_combi_laminate2_1[:, :])
-        elif geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_linear_1_e14[:, :])
-        elif geometry_ID == 'right_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_right_cluster_x3_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_right_cluster_x3_1_e06[:, :])
-        elif geometry_ID == 'left_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_left_cluster_x3_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_left_cluster_x3_1_e06[:, :])
-        elif geometry_ID == 'n_laminate':
-
-            if precc == 14:
-                if rhs == 'sin_wave':
-                    nb_iterations = (nb_it_combi_n_laminate_sinrhs_1_e14[:, :])
-                else:
-                    nb_iterations = (nb_it_combi_n_laminate_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_n_laminate_1_e06[:, :])
-
-
-        elif geometry_ID == 'laminate_log':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_laminate_log_1_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_laminate_log_1_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            nb_iterations = (nb_it_combi_sine_wave_0_e14[:, :])  # nb_it_combi_laminate2_1
-    elif phase_contrast == 2:
-        if geometry_ID == 'linear':
-            if precc == 6:
-                nb_iterations = (nb_it_combi_linear_2_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            nb_iterations = nb_it_combi_sine_wave_0_e06[:, :]
-
-    elif phase_contrast == 4:
-        if geometry_ID == 'sine_wave_rapid':
-            nb_iterations = (nb_it_combi_laminate2_1[:, :])
-        if geometry_ID == 'laminate2':
-            nb_iterations = (nb_it_combi_laminate2_4[:, :])
-        elif geometry_ID == 'linear':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_linear_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_linear_4_e06[:, :])
-
-        elif geometry_ID == 'right_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_right_cluster_x3_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_right_cluster_x3_4_e06[:, :])
-        elif geometry_ID == 'left_cluster_x3':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_left_cluster_x3_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_left_cluster_x3_4_e06[:, :])
-        elif geometry_ID == 'n_laminate':
-            if precc == 14:
-                if rhs == 'sin_wave':
-                    nb_iterations = (nb_it_combi_n_laminate_sinrhs_4_e14[:, :])
-                else:
-                    nb_iterations = (nb_it_combi_n_laminate_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_n_laminate_4_e06[:, :])
-
-        elif geometry_ID == 'laminate_log':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_laminate_log_4_e14[:, :])
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_laminate_log_4_e06[:, :])
-        elif geometry_ID == 'sine_wave_':
-            if precc == 14:
-                nb_iterations = (nb_it_combi_sine_wave_4_e14[:, :])  # nb_it_combi_laminate2_1
-            elif precc == 6:
-                nb_iterations = (nb_it_combi_sine_wave_4_e06[:, :])
-
-    nb_iterations = np.nan_to_num(nb_iterations, nan=1.0)
-    for i in range(nb_iterations.shape[0]):
-        for j in range(nb_iterations.shape[1]):
-            if nb_iterations[i, j] == 0:
-                pass
-            elif nb_iterations[i, j] < white_lim:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='black')
-            else:
-                ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
-                        ha='center', va='center', color='white')
-    # Replace NaN values with zero
-
-    pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
-
-    if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-        ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
-    elif geometry_ID == 'sine_wave_':
-        ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
-    else:
-        ax.text(0.05, 0.82, f'Total phase contrast \n  $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
-
-    if row == 0:
-        ax.set_title('Total number of iteration \n Jacobi-Green  ')
-    # ax.set_zlim(1 ,100)
-    # ax.set_ylabel('# of material phases')
-
-    # ax.yaxis.set_label_position('right')
-    # ax.yaxis.tick_right()
-    if row == 1:
-        ax.set_xlabel('# of nodal points (x direction)')
-    ax.set_xticks(Nx)
-    ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
-    # ax2 = ax.twinx()
-    ax.set_yticks(Nx)
-    ax.set_yticklabels([f'$2^{{{i}}}$' for i in Nx])
-    ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
-    #   ax.set_aspect('equal')
-
-    if row == 0:
-        ax.text(-0.15, 1.15, f'(c.{row + 1})', transform=ax.transAxes)
-    elif row == 1:
-        ax.text(-0.15, 1.05, f'(c.{row + 1})', transform=ax.transAxes)
-    # Adding a color bar with custom ticks and labels
-    cbar_ax = fig.add_subplot(gs[row, 3])
-    cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
-    # cbar.ax.invert_yaxis()
-    # # cbar.set_ticks(ticks=[  0, 1,10])
-    # cbar.set_ticks([10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10])
-    # cbar.ax.set_yticklabels(
-    #     ['Jacobi-Green \n needs less', '5 times', '2 times', 'Equal', '2 times', '5 times',
-    #      'Jacobi-Green \n needs more'])
-
-    #
-
-    row += 1
-
-fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rho_v2_{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
-print(('create figure: {}'.format(fname)))
-plt.savefig(fname, bbox_inches='tight')
-
-plt.show()
-
+quit()
 nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
 Nx = (np.asarray(nb_pix_multips))
 X, Y = np.meshgrid(Nx, Nx, indexing='ij')
@@ -1533,8 +1553,8 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
 
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
-        ax.set_ylabel('# of material phases')
-        ax.set_xlabel('# of nodal points (x direction)')
+        ax.set_ylabel(r'\#  material pixels')
+        ax.set_xlabel(r'\#  nodal points (x direction)')
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
         # ax2 = ax.twinx()
@@ -1588,7 +1608,7 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
 
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
-        ax.set_xlabel('# of nodal points (x direction)')
+        ax.set_xlabel(r'\# of nodal points (x direction)')
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
         # ax2 = ax.twinx()
@@ -1688,8 +1708,8 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
 
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
-        ax.set_ylabel('# of material phases')
-        ax.set_xlabel('# of nodal points (x direction)')
+        ax.set_ylabel(r'\# of material phases')
+        ax.set_xlabel(r'\# of nodal points (x direction)')
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
         # ax2 = ax.twinx()
@@ -1756,7 +1776,7 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
 
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
-        ax.set_xlabel('# of nodal points (x direction)')
+        ax.set_xlabel(r'\# of nodal points (x direction)')
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
         # ax2 = ax.twinx()
@@ -1905,11 +1925,11 @@ for phase_contrast in [1, 4]:
 
     ax.set_title('Total number of iteration \n Jacobi-Green  ')
     # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# of material phases')
+    ax.set_ylabel(r'\# of material phases')
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2058,7 +2078,7 @@ for phase_contrast in [1, 4]:
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2243,11 +2263,11 @@ for phase_contrast in [1, 4]:
     ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# data/geometry sampling points (x direction)')
+    ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2437,11 +2457,11 @@ for phase_contrast in [1, 4]:
     ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# data/geometry sampling points (x direction)')
+    ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2629,11 +2649,11 @@ for phase_contrast in [1, 4]:
     ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# data/geometry sampling points (x direction)')
+    ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2815,11 +2835,11 @@ for phase_contrast in [4]:
     ax.text(0.1, 0.8, r'Total phase contrast $\kappa=\infty$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
-    ax.set_ylabel('# data/geometry sampling points (x direction)')
+    ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
 
     # ax.yaxis.set_label_position('right')
     # ax.yaxis.tick_right()
-    ax.set_xlabel('# of nodal points (x direction)')
+    ax.set_xlabel(r'\# of nodal points (x direction)')
     ax.set_xticks(Nx)
     ax.set_xticklabels([f'$2^{i}$' for i in Nx])
     # ax2 = ax.twinx()
@@ -2993,8 +3013,8 @@ ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n' + r' nb_{JG}/nb_{G}'
                                                  '\n cosine function')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3035,8 +3055,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3077,8 +3097,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3119,8 +3139,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3159,8 +3179,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros inverse')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3198,8 +3218,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n abs function ')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i:}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3234,8 +3254,8 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n abs function ')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)
@@ -3304,11 +3324,11 @@ pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi',
 ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
 # ax.set_zlim(1 ,100)
-ax.set_ylabel('# data/geometry sampling points (x direction)')
+ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
 
 ax.yaxis.set_label_position('right')
 ax.yaxis.tick_right()
-ax.set_xlabel('# of nodal points (x direction)')
+ax.set_xlabel(r'\# of nodal points (x direction)')
 ax.set_xticks(Nx)
 ax.set_xticklabels([f'$2^{i}$' for i in Nx])
 ax.set_yticks(Nx)

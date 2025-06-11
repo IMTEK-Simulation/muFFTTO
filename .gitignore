@@ -22,3 +22,5 @@ experiments/exp_data/
 *.npz
 
 *.pdf
+
+*.gif

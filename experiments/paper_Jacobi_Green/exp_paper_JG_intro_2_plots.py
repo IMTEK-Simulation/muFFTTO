@@ -192,8 +192,8 @@ for kontrast in [  100]:
     ax_nb_it.yaxis.set_label_position("right")
 
     ax_nb_it.set_ylim([2,25])
-    ax_nb_it.set_yticks([2, 10, 20,  25])
-    ax_nb_it.set_yticklabels([2,  10, 20,  25])
+    ax_nb_it.set_yticks([2,5, 10,15, 20,  25])
+    ax_nb_it.set_yticklabels([2,5, 10,15, 20,  25])
 
     ax_nb_it.set_xlim([2, 32])
     ax_nb_it.set_xticks([2, 8, 16, 24, 32])

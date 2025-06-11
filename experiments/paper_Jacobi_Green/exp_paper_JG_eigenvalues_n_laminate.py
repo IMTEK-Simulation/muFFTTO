@@ -1,5 +1,5 @@
 from cProfile import label
-
+import os
 import numpy as np
 import scipy as sc
 import time
@@ -30,13 +30,26 @@ MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
 src = '../figures/'
 
+script_name = 'exp_paper_JG_eigenvalues_n_laminate'
+
+file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+if not os.path.exists(file_folder_path):
+    os.makedirs(file_folder_path)
+data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+if not os.path.exists(data_folder_path):
+    os.makedirs(data_folder_path)
+figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+if not os.path.exists(figure_folder_path):
+    os.makedirs(figure_folder_path)
+    
+
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-geom_n = [3,4,5 ] #2, # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+geom_n = [2,3,4,5 ] #2, # ,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -365,7 +378,6 @@ for geometry_ID in ['linear']:  # ,'sine_wave_','linear', 'right_cluster_x3', 'l
                     _info['eigens_G'] = eig_G
                     _info['eigens_JG'] = eig_JG
 
-                script_name = 'exp_paper_JG_linear_conv_2_no_eigens'
                 file_data_name = (
                     f'{script_name}_gID{geometry_ID}_T{nb_pix_multip}_G{geom_n[nb_starting_phases]}_kappa{ratio}.npy')
                 folder_name = '../exp_data/'
