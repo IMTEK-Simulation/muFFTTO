@@ -1,6 +1,7 @@
 import numpy as np
 import time
 
+from muGrid  import ConvolutionOperator
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
@@ -39,7 +40,7 @@ material_data_field_C_0 = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
 
 # material distribution
 phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                  microstructure_name='circle_inclusion',
+                                                  microstructure_name='sine_wave',
                                                   coordinates=discretization.fft.coords)
 # apply material distribution
 # material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(phase_field+1, 1)
@@ -66,7 +67,7 @@ print('Number of CG steps = {}'.format(np.size(norms['residual_rz'])))
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=displacement_field,
+    displacement_field_inxyz=displacement_field,
     macro_gradient_field_ijqxyz=macro_gradient_field,
     formulation='small_strain')
 print('homogenized_stress= ')
@@ -99,7 +100,7 @@ for i in range(dim):
         # compute homogenized stress field corresponding
         homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-            displacement_field_fnxyz=displacement_field_ij,
+            displacement_field_inxyz=displacement_field_ij,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
 
