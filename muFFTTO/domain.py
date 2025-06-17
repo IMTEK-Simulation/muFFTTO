@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import scipy as sc
+from reportlab.lib.pagesizes import elevenSeventeen
 
 from muFFTTO import discretization_library
 
@@ -70,8 +71,16 @@ class Discretization:
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global, engine='fftwmpi', communicator=communicator)
+        ### TODO[MARTIN] I have to add multiple subpoints to nb_grid_pts
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
+        # comm = muGrid.Communicator(MPI.COMM_WORLD)
+        # s = suggest_subdivisions(len(nb_grid_pts), comm.size)
+        #
+        # decomposition = muGrid.CartesianDecomposition(comm, nb_grid_pts, s, (1, 1), (1, 1))
+        # fc = decomposition.collection
 
+
+        #self.fft.register_real_space_field()
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
@@ -121,7 +130,6 @@ class Discretization:
             self.field_collection = muGrid.GlobalFieldCollection(nb_domain_grid_pts=nb_of_pixels_global,
                                                                  sub_pts={'quad_points': self.nb_quad_points_per_pixel,
                                                                           'nodal_points': self.nb_nodes_per_pixel})
-
             # displacement              [f,n,x,y,z]
             # rhs                       [f,n,x,y,z]
             # macro_gradient_field    [f,d,q,x,y,z]
@@ -335,18 +343,18 @@ class Discretization:
         grad_u_ijqxyz.p.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # Derivative stencil of shape (2, quad, 2, 2)
-        gradient = np.array(
-            [
-                [  # Derivative in x-direction
-                    [[[-1, 0], [1, 0]]],  # Bottom-left triangle (first quadrature point)
-                    [[[0, -1], [0, 1]]],  # Top-right triangle (second quadrature point)
-                ],
-                [  # Derivative in y-direction
-                    [[[-1, 1], [0, 0]]],  # Bottom-left triangle (first quadrature point)
-                    [[[0, 0], [-1, 1]]],  # Top-right triangle (second quadrature point)
-                ],
-            ],
-        )
+        # gradient = np.array(
+        #     [
+        #         [  # Derivative in x-direction
+        #             [[[-1, 0], [1, 0]]],  # Bottom-left triangle (first quadrature point)
+        #             [[[0, -1], [0, 1]]],  # Top-right triangle (second quadrature point)
+        #         ],
+        #         [  # Derivative in y-direction
+        #             [[[-1, 1], [0, 0]]],  # Bottom-left triangle (first quadrature point)
+        #             [[[0, 0], [-1, 1]]],  # Top-right triangle (second quadrature point)
+        #         ],
+        #     ],
+        # )
 
         # Get nodal field
         # nodal_field = fc.real_field("nodal-field")
@@ -354,14 +362,18 @@ class Discretization:
         #
         # # Get quadrature field of shape (2, quad, nx, ny)
         # quad_field = fc.real_field("quad-field", (2,), "quad")
-        B_dqnijk=self.B_grad_at_pixel_dqnijk
+        B_dqnijk = self.B_grad_at_pixel_dqnijk
 
         op = ConvolutionOperator([0, 0], B_dqnijk)
 
         # Apply the gradient operator to the nodal field and write result to the quad field
-        # for d in np.arange(self.domain_dimension):
-        op.apply(u_inxyz, grad_u_ijqxyz)
-        # grad_u_ijqxyz[0] = quad_field
+
+        op.apply(nodal_field=u_inxyz, quadrature_point_field=grad_u_ijqxyz)
+        # swap first two axis becouse
+        # muGrid consider first index of derivative and second of displacement component
+        if self.cell.unknown_shape > 1:
+            grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
+            grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
@@ -394,6 +406,64 @@ class Discretization:
         # \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
         grad_u_ijqxyz = (grad_u_ijqxyz + np.swapaxes(grad_u_ijqxyz, 0, 1)) / 2
         return grad_u_ijqxyz
+
+    def apply_gradient_transposed_operator_mugrid_convolution(self, gradient_field_ijqxyz, div_u_fnxyz=None,
+                                                              apply_weights=True):
+        """
+           Function that computes "Divergence"  of stress/flux field : gradient_of_u_fdqxyz.
+           Depending on the discretization stencil B.
+           Notation comes from the fact that system matrix  K= B^t:C:B
+
+           Parameters
+           ----------
+           gradient_of_u_fdqxyz: numpy ndarray of discretized  stress/flux field [i,j,q,x,y,z]
+                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
+                - q is quadrature point index
+           Returns
+           -------
+           div_u_fnxyz: numpy ndarray of divergence of function u
+                -div_u_fnxyz shape [i,n,x,y,z]
+                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+           """
+
+        if div_u_fnxyz is None:  # if div_u_fnxyz is not specified, determine the size
+            div_u_fnxyz_shape = list(gradient_field_ijqxyz.shape)  # [f,d,q,x,y,z]
+            div_u_fnxyz_shape.pop(1)  # [f,q,x,y,z]
+            div_u_fnxyz_shape[1] = self.nb_nodes_per_pixel  # [f,n,x,y,z]
+            div_u_fnxyz = np.zeros(div_u_fnxyz_shape)  # create div field
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
+        # clear div array
+        div_u_fnxyz.p.fill(0)
+        # bring shape_function gradients
+        B_dqnijk = self.B_grad_at_pixel_dqnijk
+        # get quadrature weights
+        if apply_weights:
+            weights = self.quadrature_weights
+        else:
+            weights = np.ones(self.quadrature_weights.shape)
+        # prepare convolution operator
+        op = ConvolutionOperator([0, 0], B_dqnijk)
+
+        ###### TODO delete when mugrid ordering is fixed
+        gradient_field_jiqxyz = np.swapaxes(gradient_field_ijqxyz.s, 0, 1).copy()
+
+        # Get a tensor-field (for example to represent the strain)
+        grad_u_jiqxyz = self.field_collection.real_field(
+            unique_name='temp_field',  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            components_shape=(*self.cell.gradient_shape[::-1],),  # shape of components
+            sub_division='quad_points'  # sub-point type
+        )
+        grad_u_jiqxyz.s = np.copy(gradient_field_jiqxyz)
+        ###### TODO
+        # apply B^transposed via the convolution operator
+        op.transpose(quadrature_point_field=grad_u_jiqxyz, nodal_field=div_u_fnxyz, weights=weights)
+        # transpose(self, quadrature_point_field, nodal_field, weights, p_float=None, *args, **kwargs):
+        return div_u_fnxyz
 
     def apply_gradient_transposed_operator(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
         """
@@ -1195,6 +1265,8 @@ class Discretization:
             sub_division='nodal_points'  # sub-point type
         )
 
+        # u_inxyz_fft =self.fft.real_space_field('name', (*self.cell.unknown_shape,))
+
         # u_inxyz = self.field_collection.real_field(
         #     unique_name=name
         # )
@@ -1227,6 +1299,10 @@ class Discretization:
             components_shape=(*self.cell.gradient_shape,),  # shape of components
             sub_division='quad_points'  # sub-point type
         )
+
+        # grad_u_ijqxyz_fft = self.fft.real_space_field(unique_name='grad_name',
+        #                                               shape=(*self.cell.gradient_shape,))
+
         return grad_u_ijqxyz
 
     def get_temperature_gradient_size_field(self):
@@ -1254,6 +1330,39 @@ class Discretization:
             warnings.warn(
                 'Cell problem type is {}. But displacement sized field  is returned !!!'.format(self.cell.problem_type))
         return np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+    def get_displacement_sized_field_muGRID(self, name):
+        # return zero field with the shape of discretized displacement field
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement sized field  is returned !!!'.format(self.cell.problem_type))
+
+        u_inxyz = self.field_collection.real_field(
+            unique_name=name,  # name of the field
+            components_shape=(*self.cell.unknown_shape,),  # shape of components
+            sub_division='nodal_points'  # sub-point type
+        )
+
+        # a=np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+
+        return u_inxyz
+
+    def get_displacement_gradient_sized_field_muGRID(self, name):
+        # return zero field for  the  (discretized)  gradient of  displacement field / strain
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement gradient  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+
+        # Get a tensor-field (for example to represent the strain)
+        grad_u_ijqxyz = self.field_collection.real_field(
+            unique_name=name,  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            components_shape=(*self.cell.gradient_shape,),  # shape of components
+            sub_division='quad_points'  # sub-point type
+        )
+
+        return grad_u_ijqxyz
 
     def get_displacement_gradient_size_field(self):
         # return zero field for  the  (discretized)  gradient of  displacement field / strain

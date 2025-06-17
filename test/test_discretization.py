@@ -122,11 +122,11 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
                                                  nodal_coordinates[1, :, :])
-            u_inxyz.s[0,0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
-                                            nodal_coordinates[1, :, :])
+            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                               nodal_coordinates[1, :, :])
 
-            temperature_gradient_anal.s[0,0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-            temperature_gradient_anal.s[0,1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
             temperature_gradient_mugrid = discretization.apply_gradient_operator_mugrid_convolution(u_inxyz,
@@ -161,7 +161,7 @@ class DiscretizationTestCase(unittest.TestCase):
         discretization_type = 'finite_element'
         for element_type in ['trilinear_hexahedron']:
             discretization = domain.Discretization(cell=my_cell,
-                                                   number_of_pixels=number_of_pixels,
+                                                   nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
 
@@ -223,7 +223,7 @@ class DiscretizationTestCase(unittest.TestCase):
         discretization_type = 'finite_element'
         for element_type in ['bilinear_rectangle']:
             discretization = domain.Discretization(cell=my_cell,
-                                                   number_of_pixels=number_of_pixels,
+                                                   nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
 
@@ -297,7 +297,7 @@ class DiscretizationTestCase(unittest.TestCase):
         for direction in range(domain_size.__len__()):
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -357,6 +357,83 @@ class DiscretizationTestCase(unittest.TestCase):
                                     'Rolled gradient do not coincide with looped gradient {} in {} problem. Difference is {}'.format(
                                         element_type, problem_type, diff))
 
+    def test_2D_gradients_linear_elasticity_mugrid_convolution(self):
+        domain_size = [3, 4]
+        problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+
+        number_of_pixels = (4, 5)
+
+        discretization_type = 'finite_element'
+
+        for direction in range(domain_size.__len__()):
+            for element_type in ['linear_triangles', 'bilinear_rectangle']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       nb_of_pixels_global=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+
+                nodal_coordinates = discretization.get_nodal_points_coordinates()
+                quad_coordinates = discretization.get_quad_points_coordinates()
+
+                u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
+                du_fun_4 = lambda y: 4  # np.cos(x)
+                du_fun_3 = lambda x: 3
+
+                # displacement = discretization.get_unknown_size_field()
+                displacement = discretization.get_displacement_sized_field()
+                displacement_gradient = discretization.get_displacement_gradient_size_field()
+
+                u_inxyz = discretization.get_displacement_sized_field_muGRID(name='displacement')
+                grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field_muGRID(
+                    name='gradient_of_displacement')
+
+                displacement_gradient_anal = discretization.get_displacement_gradient_sized_field_muGRID(
+                    name='anal_gradient_of_disp')
+
+                displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                              nodal_coordinates[1, :, :])
+
+                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                           nodal_coordinates[1, :, :])
+
+                displacement_gradient = discretization.apply_gradient_operator(displacement, displacement_gradient)
+                displacement_gradient_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, 0])
+                displacement_gradient_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates[0, 0])
+
+                grad_u_ijqxyz = discretization.apply_gradient_operator_mugrid_convolution(u_inxyz,
+                                                                                          grad_u_ijqxyz)
+                # grad_u_ijqxyz.s[0, 0, 0]
+
+                for dir in range(domain_size.__len__()):
+                    # test 1
+                    average = np.ndarray.sum(displacement_gradient)
+                    message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(
+                        element_type,
+                        problem_type)
+                    self.assertLessEqual(average, 1e-14, message)
+
+                    # Check that the quadrature field has the correct derivative
+                    np.testing.assert_allclose(
+                        grad_u_ijqxyz.s, displacement_gradient, atol=1e-5
+                    )
+
+                    # test 2
+                    # compare values of gradient element wise --- without last-- periodic pixel that differs
+                    value_1 = np.all(
+                        grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal.s[direction,
+                                                                          dir, :, 0:-1, 0:-1])
+                    diff = np.ndarray.sum(
+                        grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal.s[direction,
+                                                                         dir, :, 0:-1, 0:-1])
+                    value = np.allclose(grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1],
+                                        displacement_gradient_anal.s[direction, dir, :, 0:-1, 0:-1],
+                                        rtol=1e-16, atol=1e-14)
+                    self.assertTrue(value,
+                                    'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                                        element_type, problem_type, diff))
+
     def test_2D_gradients_transposed_linear_conductivity(self):
         domain_size = [3, 4]
         problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
@@ -382,32 +459,45 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature = discretization.get_temperature_sized_field()
             temperature_gradient = discretization.get_temperature_gradient_size_field()
-            temperature_gradient_rolled = discretization.get_temperature_gradient_size_field()
+            u_inxyz = discretization.get_displacement_sized_field_muGRID(name='temperature')
+            grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field_muGRID(
+                name='gradient_of_temp')
 
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
+            # temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
+            temperature_gradient_anal = discretization.get_displacement_gradient_sized_field_muGRID(
+                name='anal_gradient_of_temp')
 
-            temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                                 nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-            temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+            temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                 nodal_coordinates[1, :, :])
+            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                               nodal_coordinates[1, :, :])
+            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-            temperature_gradient_rolled = discretization.apply_gradient_operator(temperature,
-                                                                                 temperature_gradient_rolled)
-
+            temperature_gradient_mugrid = discretization.apply_gradient_operator_mugrid_convolution(u_inxyz,
+                                                                                                    grad_u_ijqxyz)
             div_flux = discretization.get_unknown_size_field()
-            div_flux_rolled = discretization.get_unknown_size_field()
+            div_flux_inxyz_mugrid = discretization.get_displacement_sized_field_muGRID(name='div_flux')
 
             div_flux = discretization.apply_gradient_transposed_operator(temperature_gradient, div_flux)
-            div_flux_rolled = discretization.apply_gradient_transposed_operator(
-                temperature_gradient_rolled,
-                div_flux_rolled)
+            div_flux_inxyz_mugrid = discretization.apply_gradient_transposed_operator_mugrid_convolution(
+                gradient_field_ijqxyz=temperature_gradient_mugrid,
+                div_u_fnxyz=div_flux_inxyz_mugrid,
+                apply_weights=False)
 
             # test 1
+
             average = np.ndarray.sum(temperature_gradient)
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                      problem_type)
             self.assertLessEqual(average, 1e-14, message)
+
+            average = np.ndarray.sum(div_flux_inxyz_mugrid.s)
+            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                     problem_type)
+            self.assertLessEqual(average, 1e-14, message)
+
             if element_type in ['linear_triangles']:
                 solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
                                      [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
@@ -422,17 +512,22 @@ class DiscretizationTestCase(unittest.TestCase):
                                          [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
             # test 2
             # compare values of gradient element wise --- without last-- periodic pixel that differs
-            value_1 = np.alltrue(div_flux == solution)
+            value_1 = np.all(div_flux == solution)
             diff = np.ndarray.sum(div_flux - solution)
             value = np.allclose(div_flux, solution,
                                 rtol=1e-16, atol=1e-13)
+            value_1 = np.all(div_flux_inxyz_mugrid.s == solution)
+            diff = np.ndarray.sum(div_flux_inxyz_mugrid.s - solution)
+            value = np.allclose(div_flux_inxyz_mugrid.s, solution,
+                                rtol=1e-16, atol=1e-13)
+
             self.assertTrue(value,
                             'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
-            value_roll = np.allclose(solution, div_flux_rolled,
+            value_grid = np.allclose(div_flux_inxyz_mugrid.s, solution,
                                      rtol=1e-16, atol=1e-13)
-            self.assertTrue(value_roll,
+            self.assertTrue(value_grid,
                             'Rolled gradient transposed do not coincide with looped gradient transposed : 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
@@ -448,7 +543,7 @@ class DiscretizationTestCase(unittest.TestCase):
         for direction in range(domain_size.__len__()):
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -461,17 +556,35 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 displacement = discretization.get_displacement_sized_field()
                 strain = discretization.get_displacement_gradient_size_field()
-                strain_anal = discretization.get_displacement_gradient_size_field()
 
-                displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                                              nodal_coordinates[1, 0, :, :])
-                strain_anal[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-                strain_anal[direction, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+                u_inxyz = discretization.get_displacement_sized_field_muGRID(name='displacement')
+                grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field_muGRID(
+                    name='gradient_of_displacement')
+
+                grad_u_ijqxyz_anal = discretization.get_displacement_gradient_sized_field_muGRID(
+                    name='anal_gradient_of_disp')
+
+                # assign displacement field
+                displacement[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                              nodal_coordinates[1, :, :])
+                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
+                                                           nodal_coordinates[1, :, :])
+                # assign anal gradient of displacement field
+                grad_u_ijqxyz_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+                grad_u_ijqxyz_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
                 strain = discretization.apply_gradient_operator(displacement)
-
+                grad_u_ijqxyz = discretization.apply_gradient_operator_mugrid_convolution(u_inxyz,
+                                                                                          grad_u_ijqxyz)
+                # copute grad transpose
                 div_flux = discretization.get_displacement_sized_field()
+                force_inxyz_mugrid = discretization.get_displacement_sized_field_muGRID(name='force')
+
                 div_flux = discretization.apply_gradient_transposed_operator(strain, div_flux)
+                force_inxyz_mugrid = discretization.apply_gradient_transposed_operator_mugrid_convolution(
+                    gradient_field_ijqxyz=grad_u_ijqxyz,
+                    div_u_fnxyz=force_inxyz_mugrid,
+                    apply_weights=False)
                 # test 1
                 average = np.ndarray.sum(strain)
                 message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
@@ -492,9 +605,17 @@ class DiscretizationTestCase(unittest.TestCase):
                                              [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
                 # test 2
                 # compare values of gradient element wise --- without last-- periodic pixel that differs
-                value_1 = np.alltrue(div_flux[direction, 0] == solution)
+                value_1 = np.all(div_flux[direction, 0] == solution)
                 diff = np.ndarray.sum(div_flux[direction, 0] - solution)
                 value = np.allclose(div_flux[direction, 0], solution,
+                                    rtol=1e-16, atol=1e-13)
+                self.assertTrue(value,
+                                'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
+                                    element_type, problem_type, diff))
+                # compare values of gradient element wise --- without last-- periodic pixel that differs
+                value_1 = np.all(force_inxyz_mugrid.s[direction, 0] == solution)
+                diff = np.ndarray.sum(force_inxyz_mugrid.s[direction, 0] - solution)
+                value = np.allclose(force_inxyz_mugrid.s[direction, 0], solution,
                                     rtol=1e-16, atol=1e-13)
                 self.assertTrue(value,
                                 'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
