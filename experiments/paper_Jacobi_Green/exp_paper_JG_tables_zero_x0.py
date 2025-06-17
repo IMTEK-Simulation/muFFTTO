@@ -1243,11 +1243,9 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Green ')
@@ -1333,11 +1331,9 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Jacobi ')
@@ -1470,11 +1466,9 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
-                    transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Green-Jacobi')
