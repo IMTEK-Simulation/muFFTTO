@@ -79,8 +79,7 @@ class Discretization:
         # decomposition = muGrid.CartesianDecomposition(comm, nb_grid_pts, s, (1, 1), (1, 1))
         # fc = decomposition.collection
 
-
-        #self.fft.register_real_space_field()
+        # self.fft.register_real_space_field()
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
@@ -171,9 +170,11 @@ class Discretization:
          nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
         # TODO[more then one nodal point] add coords for more than one nodal point
-        nodal_points_coordinates_ixyz = self.domain_size[:, np.newaxis, np.newaxis] * self.fft.coords
-        #
-        return nodal_points_coordinates_ixyz
+        dim = self.domain_dimension
+        nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
+        nodal_points_coordinates_inxyz = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+        ##  tuple([slice(None)] + [np.newaxis] * d)
+        return nodal_points_coordinates_inxyz
 
     # @property
     def get_quad_points_coordinates(self):
@@ -246,7 +247,7 @@ class Discretization:
 
         # MPI.COMM_WORLD.Barrier()
 
-    def apply_gradient_operator(self, u_inxyz, grad_u_ijqxyz=None):
+    def apply_gradient_operator_old(self, u_inxyz, grad_u_ijqxyz=None):
         """
         Function that computes gradient of function u. Depending on the discretization stencil.
 
@@ -329,6 +330,10 @@ class Discretization:
 
         return grad_u_ijqxyz
 
+    def apply_gradient_operator(self, u_inxyz, grad_u_ijqxyz=None):
+        grad_u_ijqxyz = apply_gradient_operator_mugrid_convolution(u_inxyz=u_inxyz, grad_u_ijqxyz=grad_u_ijqxyz)
+        return grad_u_ijqxyz
+
     def apply_gradient_operator_mugrid_convolution(self, u_inxyz, grad_u_ijqxyz=None):
         """
         Function that computes gradient of function u, using mugrid:ConvolutionOperator.
@@ -361,7 +366,10 @@ class Discretization:
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
-        grad_u_ijqxyz.p.fill(0)  # To ensure that gradient field is empty/zero
+        if isinstance(grad_u_ijqxyz, np.ndarray):
+            grad_u_ijqxyz.fill(0)  # To ensure that gradient field is empty/zero
+        else:
+            grad_u_ijqxyz.p.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # Derivative stencil of shape (2, quad, 2, 2)
         # gradient = np.array(
@@ -384,8 +392,8 @@ class Discretization:
         # # Get quadrature field of shape (2, quad, nx, ny)
         # quad_field = fc.real_field("quad-field", (2,), "quad")
         B_dqnijk = self.B_grad_at_pixel_dqnijk
-
-        op = ConvolutionOperator([0, 0], B_dqnijk)
+        point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
+        op = ConvolutionOperator(point_of_origin, B_dqnijk)
 
         # Apply the gradient operator to the nodal field and write result to the quad field
 
@@ -1229,7 +1237,7 @@ class Discretization:
     def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
 
-        if formulation == 'small_strain':
+        if np.all(formulation == 'small_strain'):
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
             # print('3.02 = \n   core {}'.format(MPI.COMM_WORLD.rank))
             strain = self.apply_gradient_operator_symmetrized(displacement_field)

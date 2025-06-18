@@ -331,7 +331,7 @@ def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz):
     quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=quad_points_coord)
+        quad_points_coords_iq=quad_points_coord)
 
     quad_field_fqnxyz = (quad_field_fqnxyz ** 2) * (1 - quad_field_fqnxyz) ** 2
     # Multiply with quadrature weights
@@ -566,7 +566,7 @@ def partial_der_of_double_well_potential_wrt_density_NEW(discretization, phase_f
     quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=quad_points_coord)
+        quad_points_coords_iq=quad_points_coord)
     # quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 
     quad_field_fqnxyz = (2 * (quad_field_fqnxyz ** 1)
@@ -712,7 +712,7 @@ def partial_der_of_double_well_potential_wrt_density_Gauss_quad(discretization, 
     quad_field_fqnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=quad_points_coord)
+        quad_points_coords_iq=quad_points_coord)
 
     quad_field_fqnxyz = (quad_field_fqnxyz ** 2) * (1 - quad_field_fqnxyz) ** 2
     # Multiply with quadrature weights
@@ -972,7 +972,7 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
     phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
         nodal_field_fnxyz=phase_field_1nxyz,
         quad_field_fqnxyz=None,
-        quad_points_coords_dq=None)  # TODO[Martin] missing exact integration
+        quad_points_coords_iq=None)  # TODO[Martin] missing exact integration
     # apply material distribution
     # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], p)
 

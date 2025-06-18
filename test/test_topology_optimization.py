@@ -72,7 +72,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
                                       problem_type=problem_type)
 
     discretization = domain.Discretization(cell=my_cell,
-                                           nb_of_pixels_global=number_of_pixels,
+                                           nb_of_pixels_global=tuple(number_of_pixels),
                                            discretization_type=discretization_type,
                                            element_type=element_type)
 
