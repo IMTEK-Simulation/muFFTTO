@@ -66,8 +66,9 @@ material_data_field_C_0 = np.einsum('ijkl,qxy...->ijklqxy...', elastic_C_1,
                                                       *discretization.nb_of_pixels])))
 
 # material distribution
-phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels
-                                                  , microstructure_name='random_distribution')
+phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                  microstructure_name='random_distribution',
+                                                  seed=1)
 phase_field[:, :phase_field.shape[1] // 2] = 1
 phase_field[:, phase_field.shape[1] // 2:] = 2.5
 # apply material distribution
@@ -88,12 +89,12 @@ K_old = discretization.get_system_matrix(material_data_field=material_data_field
 #print('rank' f'{MPI.COMM_WORLD.rank:6} K_old=' f'{K_old}')
 print('rank' f'{MPI.COMM_WORLD.rank:6} K_old shape=' f'{K_old.shape}')
 
-preconditioner = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
 
 # np.sum(preconditioner[...,0:int(number_of_pixels[0]/2+1),:,:]-preconditioner_NEW)
 
-M_fun = lambda x: discretization.apply_preconditioner(preconditioner_Fourier_fnfnqks=preconditioner,
+M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                       nodal_field_fnxyz=x)
 
 
@@ -103,7 +104,7 @@ displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=displacement_field,
+    displacement_field_inxyz=displacement_field,
     macro_gradient_field_ijqxyz=macro_gradient_field,
     formulation='small_strain')
 
