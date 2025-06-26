@@ -152,7 +152,7 @@ for ration in [-0.5]:
     norms_sigma = []
     norms_pf = []
     num_iteration_ = []
-    preconditioer = 'Green' # ['Green','Jacobi','Jacobi_Green']
+    preconditioer = 'Jacobi' # ['Green','Jacobi','Jacobi_Green']
     # np.concatenate([np.arange(0.1, 1., 0.2),np.arange(1, 10, 2),np.arange(10, 110, 10)])
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     # weights = np.concatenate(

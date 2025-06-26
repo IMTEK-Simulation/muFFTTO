@@ -2,6 +2,15 @@ import matplotlib as mpl
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
+import os
+
+script_name = 'exp_paper_JG_2D_elasticity_TO'
+file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+
+src = '../figures/'  # source folder\
+
 
 # Enable LaTeX rendering
 plt.rcParams.update({
@@ -94,22 +103,16 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             name2_128 = (
                 f'{optimizer}_muFFTTO_elasticity_{script_name}_N{N}_E_target_{E_target:.2f}_Poisson_{poison_target:.2f}_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_mac_{macro_multip}_p{p}_prec=Jacobi_Green_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}')
             xopt2_128 = np.load('../exp_data/' + name2_128 + f'xopt_log.npz', allow_pickle=True)
-
+            # Jacobi
+            name3_128 = (
+                f'{optimizer}_muFFTTO_elasticity_{script_name}_N{N}_E_target_{E_target:.2f}_Poisson_{poison_target:.2f}_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_mac_{macro_multip}_p{p}_prec=Jacobi_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}')
+            xopt3_128 = np.load('../exp_data/' + name3_128 + f'xopt_log.npz', allow_pickle=True)
             N = 64
             cores = 6
             eta_mult = 0.02
             src = '../figures/'  # source folder\
             fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-            # dgo = (xopt.f.num_iteration_.transpose()[::3] +
-            #        xopt.f.num_iteration_.transpose()[1::3] +
-            #        xopt.f.num_iteration_.transpose()[2::3]) / 3
-            # jacoby = (xopt3.f.num_iteration_.transpose()[::3] +
-            #           xopt3.f.num_iteration_.transpose()[1::3] +
-            #           xopt3.f.num_iteration_.transpose()[2::3]) / 3
-            # combi = (xopt2.f.num_iteration_.transpose()[::3] +
-            #          xopt2.f.num_iteration_.transpose()[1::3] +
-            #          xopt2.f.num_iteration_.transpose()[2::3]) / 3
             fig = plt.figure()
             x_points = np.arange(-0.3, 1.3, 0.01)
             dw = x_points ** 2 * (1 - x_points) ** 2
@@ -157,7 +160,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
             plt.grid(True)
             # plt.minorticks_on()
-            fname = src + fig_data_name + '{}'.format('.png')
+            fname = figure_folder_path + fig_data_name + '{}'.format('.png')
             print(('create figure: {}'.format(fname)))
             plt.legend()
             plt.show()
@@ -266,6 +269,9 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         dgo_128 = (xopt_128.f.num_iteration_.transpose()[::3] +
                      xopt_128.f.num_iteration_.transpose()[1::3] +
                      xopt_128.f.num_iteration_.transpose()[2::3]) / 3
+        jacobi_128 = (xopt3_128.f.num_iteration_.transpose()[::3] +
+                     xopt3_128.f.num_iteration_.transpose()[1::3] +
+                     xopt3_128.f.num_iteration_.transpose()[2::3]) / 3
         combi_128 = (xopt2_128.f.num_iteration_.transpose()[::3] +
                      xopt2_128.f.num_iteration_.transpose()[1::3] +
                      xopt2_128.f.num_iteration_.transpose()[2::3]) / 3
@@ -287,18 +293,24 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     ax_iterations.plot(np.linspace(1, 1000, dgo.shape[0]), dgo, "g", label='Green N=64', linewidth=1)
     ax_iterations.plot(np.linspace(1, 1000, jacoby.shape[0]), jacoby, "b", label='Jacobi N=64', linewidth=1)
     ax_iterations.plot(np.linspace(1, 1000, combi.shape[0]), combi, "k", label='Jacobi - Green N=64', linewidth=2)
+
     ax_iterations.plot(np.linspace(1, 1000, dgo_32.shape[0]), dgo_32, "g", label='Green N=32', linewidth=1,
                        linestyle=':')
-    ax_iterations.plot(np.linspace(1, 1000, dgo_128.shape[0]),  dgo_128, "g",
-                       label='Green N=128', linewidth=1, linestyle='-.')
     ax_iterations.plot(np.linspace(1, 1000, jacoby_32.shape[0]), jacoby_32, "b", label='Jacobi N=32', linewidth=1,
                        linestyle=':')
     ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), combi_32, "k", label='Jacobi - Green N=32', linewidth=2,
                        linestyle=':')
-    ax_iterations.plot(np.linspace(1, 1000, combi_128.shape[0]), combi_128, "k", label='Jacobi - Green N=128',
+
+    # ax_iterations.plot(np.linspace(1, 1000, dgo_128.shape[0]),  dgo_128, "g",
+    #                    label='Green N=128', linewidth=1, linestyle='-.')
+    #
+    # ax_iterations.plot(np.linspace(1, 1000, combi_128.shape[0]), combi_128, "k", label='Jacobi - Green N=128',
+    #                    linewidth=2, linestyle='-.')
+    ax_iterations.plot(np.linspace(1, 1000, jacobi_128.shape[0]), jacobi_128, "b", label='Jacobi N=128',
                        linewidth=2, linestyle='-.')
-    ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), np.ones(combi_32.shape[0]) * 1228, "k",
-                       label='Jacobi - Green N=1024', linewidth=2, linestyle='--')
+    #
+    # ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), np.ones(combi_32.shape[0]) * 1228, "k",
+    #                    label='Jacobi - Green N=1024', linewidth=2, linestyle='--')
 
     ax_iterations.set_xlim(1, 1000)
     ax_iterations.set_xticks([1, 1000])
@@ -548,10 +560,11 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax1.yaxis.set_ticks_position('none')
     # ax_iterations.semilogy(xopt_middle[17, :] ** 2, "b", label=r'Jacobi-Green', linewidth=1)
     # ax_iterations.semilogy(xopt_end[17, :] ** 2, "k", label=r'Jacobi', linewidth=1)
-    fname = src + 'exp_paper_JG_2D_elasticity_TO_iterations' + '{}'.format('.pdf')
+    fname = figure_folder_path + 'exp_paper_JG_2D_elasticity_TO_iterations' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     plt.show()
+
     plot_movie = False
     if plot_movie:
         for nb_tiles in [1]:
@@ -871,7 +884,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     cbar.set_ticks(ticks=[1e-8, 0.5, 1])
     cbar.set_ticklabels([f'$10^{{{-8}}}$', 0.5, 1])
 
-    fname = src + 'exp_paper_JG_2D_elasticity_TO_iterations_green_only' + '{}'.format('.pdf')
+    fname = figure_folder_path + 'exp_paper_JG_2D_elasticity_TO_iterations_green_only' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     plt.show()
