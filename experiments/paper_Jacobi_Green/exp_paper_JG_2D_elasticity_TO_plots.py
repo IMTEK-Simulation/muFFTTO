@@ -11,6 +11,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 src = '../figures/'  # source folder\
 
+
 # Enable LaTeX rendering
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
@@ -266,11 +267,11 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                     xopt2_32.f.num_iteration_.transpose()[1::3] +
                     xopt2_32.f.num_iteration_.transpose()[2::3]) / 3
         dgo_128 = (xopt_128.f.num_iteration_.transpose()[::3] +
-                   xopt_128.f.num_iteration_.transpose()[1::3] +
-                   xopt_128.f.num_iteration_.transpose()[2::3]) / 3
+                     xopt_128.f.num_iteration_.transpose()[1::3] +
+                     xopt_128.f.num_iteration_.transpose()[2::3]) / 3
         jacobi_128 = (xopt3_128.f.num_iteration_.transpose()[::3] +
-                      xopt3_128.f.num_iteration_.transpose()[1::3] +
-                      xopt3_128.f.num_iteration_.transpose()[2::3]) / 3
+                     xopt3_128.f.num_iteration_.transpose()[1::3] +
+                     xopt3_128.f.num_iteration_.transpose()[2::3]) / 3
         combi_128 = (xopt2_128.f.num_iteration_.transpose()[::3] +
                      xopt2_128.f.num_iteration_.transpose()[1::3] +
                      xopt2_128.f.num_iteration_.transpose()[2::3]) / 3
@@ -300,6 +301,17 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                        linestyle=':')
     ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), combi_32, "k", label='Jacobi - Green N=32', linewidth=2,
                        linestyle=':')
+
+    # ax_iterations.plot(np.linspace(1, 1000, dgo_128.shape[0]),  dgo_128, "g",
+    #                    label='Green N=128', linewidth=1, linestyle='-.')
+    #
+    # ax_iterations.plot(np.linspace(1, 1000, combi_128.shape[0]), combi_128, "k", label='Jacobi - Green N=128',
+    #                    linewidth=2, linestyle='-.')
+    ax_iterations.plot(np.linspace(1, 1000, jacobi_128.shape[0]), jacobi_128, "b", label='Jacobi N=128',
+                       linewidth=2, linestyle='-.')
+    #
+    # ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), np.ones(combi_32.shape[0]) * 1228, "k",
+    #                    label='Jacobi - Green N=1024', linewidth=2, linestyle='--')
 
     ax_iterations.plot(np.linspace(1, 1000, dgo_128.shape[0]), dgo_128, "g",
                        label='Green N=128', linewidth=1, linestyle='-.')
