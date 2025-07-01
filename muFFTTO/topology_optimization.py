@@ -454,7 +454,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                                          axis=(0, 1)),
                                                                      discretization.roll(discretization.fft,
                                                                                          phase_field_1nxyz[0, 0],
-                                                                                         -1 * np.array([1, 1]),
+                                                                                          -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
 
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4

@@ -324,7 +324,7 @@ if __name__ == '__main__':
     # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
     cbar.set_ticks(ticks=[1e-8, 0.5, 1])
     cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
-    ax_cbar.set_ylabel(r'Density $\rho_{n\rm{-laminate} } $')
+    ax_cbar.set_ylabel(r'Density $\rho_{\rm{laminate} } $')
 
     ax_cbar.text(-0.25, 1.15, f'(a)', transform=ax_cbar.transAxes)
     fname = src + 'JG_exp4_single_geometry_{}{}'.format(geometry_ID, '.pdf')

@@ -152,7 +152,7 @@ for ration in [-0.5]:
     norms_sigma = []
     norms_pf = []
     num_iteration_ = []
-    preconditioer = 'Green' # ['Green','Jacobi','Jacobi_Green']
+    preconditioer = 'Jacobi' # ['Green','Jacobi','Jacobi_Green']
     # np.concatenate([np.arange(0.1, 1., 0.2),np.arange(1, 10, 2),np.arange(10, 110, 10)])
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     # weights = np.concatenate(
@@ -280,7 +280,7 @@ for ration in [-0.5]:
                         # compute homogenized stress field corresponding t
                     homogenized_stresses[load_case] = discretization.get_homogenized_stress(
                         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                        displacement_field_fnxyz=displacement_field_load_case[load_case],
+                        displacement_field_inxyz=displacement_field_load_case[load_case],
                         macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
                         formulation='small_strain')
                     # print('homogenized stress = \n'          ' {} '.format(homogenized_stresses[load_case] )) # good in MPI
@@ -555,7 +555,7 @@ if __name__ == '__main__':
         # compute homogenized stress field corresponding t
         homogenized_stresses[load_case] = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-            displacement_field_fnxyz=displacement_field,
+            displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
         _info['target_stress' + f'{load_case}'] = target_stresses[load_case]
@@ -583,7 +583,7 @@ if __name__ == '__main__':
             # compute homogenized stress field corresponding
             homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-                displacement_field_fnxyz=displacement_field_ij,
+                displacement_field_inxyz=displacement_field_ij,
                 macro_gradient_field_ijqxyz=macro_gradient_field,
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
