@@ -434,8 +434,10 @@ class Discretization:
         # swap first two axis becouse
         # muGrid consider first index of derivative and second of displacement component
         if self.cell.unknown_shape > 1:
-            grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
-            grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
+            #grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1)
+            #grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
+            #grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
+            grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
