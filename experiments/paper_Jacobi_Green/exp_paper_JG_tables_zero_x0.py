@@ -697,6 +697,15 @@ nb_it_Green_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
                                      [4., 8., 16., 24., 27., 28., 28., 0., 0.],
                                      [4., 8., 16., 24., 27., 28., 28., 28., 0.],
                                      [4., 8., 16., 24., 27., 28., 28., 28., 28.]])
+nb_it_Green_linear_1_e06 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 0., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 13., 0., 0., 0., 0., 0., 0.],
+                                     [4., 8., 13., 14., 0., 0., 0., 0., 0.],
+                                     [4., 8., 13., 14., 14., 0., 0., 0., 0.],
+                                     [4., 8., 13., 14., 14., 14., 0., 0., 0.],
+                                     [4., 8., 13., 14., 14., 14., 14., 0., 0.],
+                                     [4., 8., 13., 14., 14., 14., 14., 14., 0.],
+                                     [4., 8., 13., 14., 14., 14., 14., 14., 14.]])
 
 nb_it_combi_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
                                      [8., 6., 0., 0., 0., 0., 0., 0., 0.],
@@ -707,6 +716,15 @@ nb_it_combi_linear_1_e14 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
                                      [10., 19., 16., 14., 12., 8., 8., 0., 0.],
                                      [11., 20., 20., 17., 14., 12., 8., 8., 0.],
                                      [11., 22., 25., 19., 17., 15., 12., 8., 8.]])
+nb_it_combi_linear_1_e06 = np.array([[4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                     [6., 4., 0., 0., 0., 0., 0., 0., 0.],
+                                     [8., 6., 5., 0., 0., 0., 0., 0., 0.],
+                                     [9., 7., 6., 5., 0., 0., 0., 0., 0.],
+                                     [9., 9., 7., 6., 5., 0., 0., 0., 0.],
+                                     [9., 10., 8., 7., 5., 5., 0., 0., 0.],
+                                     [9., 13., 11., 8., 7., 5., 5., 0., 0.],
+                                     [10., 16., 13., 11., 10., 7., 6., 5., 0.],
+                                     [11., 20., 17., 13., 11., 10., 9., 6., 6.]])
 
 ################## ################## LINEAR  FOR 10^6 precision ################## ################## ##################
 nb_it_Green_linear_2_e06 = np.array([
@@ -944,6 +962,15 @@ nb_it_Jacobi_linear_1_e14 = np.array([[7., 0., 0., 0., 0., 0., 0., 0., 0.],
                                       [448., 579., 0., 0., 0., 0., 0., 0., 0.],
                                       [904., 0., 0., 0., 0., 0., 0., 0., 0.],
                                       [1816., 0., 0., 0., 0., 0., 0., 0., 0.]])
+nb_it_Jacobi_linear_1_e06 = np.array([[7., 0., 0., 0., 0., 0., 0., 0., 0.],
+                                      [11., 15., 0., 0., 0., 0., 0., 0., 0.],
+                                      [21., 25., 27., 0., 0., 0., 0., 0., 0.],
+                                      [47., 56., 57., 57., 0., 0., 0., 0., 0.],
+                                      [102., 122., 123., 123., 122., 0., 0., 0., 0.],
+                                      [205., 247., 256., 258., 258., 258., 0., 0., 0.],
+                                      [426., 511., 524., 523., 523., 524., 525., 0., 0.],
+                                      [878., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 0.],
+                                      [1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000., 1000.]])
 
 nb_it_Jacobi_linear_4_e14 = np.array([
     [7., 0., 0., 0., 0., 0., 0., 0., 0.],
@@ -999,7 +1026,7 @@ nb_it_combi_n_laminate_sinrhs_4_e14 = np.array([[12., 0., 0., 0., 0., 0., 0., 0.
 
 # nb_pix_multips = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 #
-plot_jacobi_single=False
+plot_jacobi_single = False
 if plot_jacobi_single:
     nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
     Nx = (np.asarray(nb_pix_multips))
@@ -1012,8 +1039,8 @@ if plot_jacobi_single:
     rhs = False
     linestyles = ['-', '--', ':']
     colors = ['red', 'blue', 'green', 'orange', 'purple']
-    precc = 14
-    for phase_contrast in [2, 4]:
+    precc = 6
+    for phase_contrast in [1, 4]:
         ratio = phase_contrast
         fig = plt.figure(figsize=(4.5, 3.5))
         gs = fig.add_gridspec(1, 1, hspace=0.2, wspace=0.1, width_ratios=[3, ],
@@ -1070,20 +1097,21 @@ if plot_jacobi_single:
 
         ax.text(-0.1, 1.09, '(a)', transform=ax.transAxes)
 
-        fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rhoJacobi{}{}'.format(geometry_ID, precc, phase_contrast, '.pdf')
+        fname = src + 'JG_exp4_GRID_DEP_nb_its{}_geom_{}_rhoJacobi{}{}'.format(geometry_ID, precc, phase_contrast,
+                                                                               '.pdf')
         print(('create figure: {}'.format(fname)))
         plt.savefig(fname, bbox_inches='tight')
 
     plt.show()
 
 #
-plot_this=True
+plot_this = True
 if plot_this:
     nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
-#
- #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
+    #
+    #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
     # material distribution
     geometry_ID = 'linear'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
     # rhs = 'sin_wave'
@@ -1091,11 +1119,11 @@ if plot_this:
     linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
     precc = 6
-    fig = plt.figure(figsize=(8.5, 5.5))#11, 7.0
+    fig = plt.figure(figsize=(8.5, 5.5))  # 11, 7.0
     gs = fig.add_gridspec(2, 4, hspace=0.22, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
                           height_ratios=[1, 1])
     row = 0
-    for phase_contrast in [2, 4]:  # 1, 4
+    for phase_contrast in [1, 4]:  # 1, 4
         ratio = phase_contrast
         if geometry_ID == 'linear':
             divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
@@ -1115,7 +1143,8 @@ if plot_this:
             elif geometry_ID == 'linear':
                 if precc == 14:
                     nb_iterations = (nb_it_Green_linear_1_e14[:, :])
-
+                elif precc == 6:
+                    nb_iterations = (nb_it_Green_linear_1_e06[:, :])
             elif geometry_ID == 'right_cluster_x3':
                 if precc == 14:
                     nb_iterations = (nb_it_Green_right_cluster_x3_1_e14[:, :])
@@ -1214,9 +1243,11 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Green ')
@@ -1248,8 +1279,8 @@ if plot_this:
             if geometry_ID == 'linear':
                 if precc == 14:
                     nb_iterations = (nb_it_Jacobi_linear_1_e14[:, :])
-                # elif precc == 6:
-                #     nb_iterations = (nb_it_Jacobi_linear_1_e06[:, :])
+                elif precc == 6:
+                    nb_iterations = (nb_it_Jacobi_linear_1_e06[:, :])
             elif geometry_ID == 'sine_wave_':
                 if precc == 14:
                     nb_iterations = (nb_it_Jacobi_sine_wave_0_e14[:, :])
@@ -1301,9 +1332,11 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Jacobi ')
@@ -1340,6 +1373,8 @@ if plot_this:
             elif geometry_ID == 'linear':
                 if precc == 14:
                     nb_iterations = (nb_it_combi_linear_1_e14[:, :])
+                if precc == 6:
+                    nb_iterations = (nb_it_combi_linear_1_e06[:, :])
             elif geometry_ID == 'right_cluster_x3':
                 if precc == 14:
                     nb_iterations = (nb_it_combi_right_cluster_x3_1_e14[:, :])
@@ -1434,9 +1469,11 @@ if plot_this:
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+                    transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Number of iterations \n Green-Jacobi')
@@ -1485,7 +1522,7 @@ Nx = (np.asarray(nb_pix_multips))
 X, Y = np.meshgrid(Nx, Nx, indexing='ij')
 
 # material distribution
-for geometry_ID in ['linear', 'sine_wave_']: # linear
+for geometry_ID in ['linear', 'sine_wave_']:  # linear
 
     # rhs = 'sin_wave'
     rhs = False
@@ -1630,7 +1667,7 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
         #
 
         fname = src + 'JG_exp_tables_zero_x0_{}_geom_{}_rho_{}_contrast{}'.format(geometry_ID, precc, phase_contrast,
-                                                                                    '.pdf')
+                                                                                  '.pdf')
         print(('create figure: {}'.format(fname)))
         plt.savefig(fname, bbox_inches='tight')
 
@@ -1640,7 +1677,7 @@ Nx = (np.asarray(nb_pix_multips))
 X, Y = np.meshgrid(Nx, Nx, indexing='ij')
 
 # material distribution
-for geometry_ID in ['linear', 'sine_wave_']: # linear
+for geometry_ID in ['linear', 'sine_wave_']:  # linear
 
     # rhs = 'sin_wave'
     rhs = False
@@ -1652,7 +1689,7 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
     for phase_contrast in [2, 4]:  # 1, 4
         ratio = phase_contrast
         fig = plt.figure(figsize=(4, 3.5))
-        gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.25, width_ratios=[1.2,  0.03],
+        gs = fig.add_gridspec(1, 2, hspace=0.2, wspace=0.25, width_ratios=[1.2, 0.03],
                               height_ratios=[1])
         if geometry_ID == 'linear':
             divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
@@ -1721,11 +1758,10 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
         cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
 
         fname = src + 'JG_exp_tables_Green_zero_x0_{}_geom_{}_rho_{}_contrast{}'.format(geometry_ID, precc,
-                                                                                         phase_contrast,
-                                                                                         '.pdf')
+                                                                                        phase_contrast,
+                                                                                        '.pdf')
         print(('create figure: {}'.format(fname)))
         plt.savefig(fname, bbox_inches='tight')
-
 
         # plot Jacobi green
         fig = plt.figure(figsize=(4, 3.5))
@@ -1797,8 +1833,9 @@ for geometry_ID in ['linear', 'sine_wave_']: # linear
 
         #
 
-        fname = src + 'JG_exp_tables_Jacobi_zero_x0_{}_geom_{}_rho_{}_contrast{}'.format(geometry_ID, precc, phase_contrast,
-                                                                                    '.pdf')
+        fname = src + 'JG_exp_tables_Jacobi_zero_x0_{}_geom_{}_rho_{}_contrast{}'.format(geometry_ID, precc,
+                                                                                         phase_contrast,
+                                                                                         '.pdf')
         print(('create figure: {}'.format(fname)))
         plt.savefig(fname, bbox_inches='tight')
 

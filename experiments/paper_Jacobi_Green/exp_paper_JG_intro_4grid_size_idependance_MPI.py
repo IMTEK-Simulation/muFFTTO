@@ -33,7 +33,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [  2,3, 4 ,5,6,7,8,9,10] #,8,9,10 # ,8,9,10    6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [  2,3, 4,5,6,7,8,9,10 ] #,5,6,7,8,9,10,8,9,10 # ,8,9,10    6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -43,7 +43,7 @@ ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
 #ratios = np.array([1, 1e4,1e8, ])  # np.arange(1,5)  # 17  33
 #ratios = np.array([1,4])  # np.arange(1,5)  # 17  33
-ratios = np.array([2,4])# ,4
+ratios = np.array([1, ])# ,4
 
 nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
@@ -124,7 +124,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                  *discretization.nb_of_pixels])))
 
-        print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+       # print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
         # material distribution
         geometry_ID = 'linear'  #left_cluster_x2 sine_wave_ linear symmetric_linear laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
@@ -248,7 +248,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
             x_init=discretization.get_displacement_sized_field()
 
-            x_init=np.random.random(discretization.get_displacement_sized_field().shape)
+            # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
             # perturb_disx = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
             #                                                    microstructure_name='linear',
             #                                                    coordinates=discretization.fft.coords)
@@ -326,7 +326,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun, steps=int(1000), toler=1e-6, # 5000
                                                     norm_type='rz')
             nb_it[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms['residual_rr']))
-            print('nb it  = {} '.format(len(norms['residual_rr'])))
+            #print('nb it  = {} '.format(len(norms['residual_rr'])))
 
             norm_rz.append(norms['residual_rz'])
             norm_rr.append(norms['residual_rr'])
@@ -345,7 +345,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             norm_rMr_combi.append(norms_combi['data_scaled_rr'])
 
             #
-            displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_Jacobi, steps=int(1),
+            displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_Jacobi, steps=int(1000),
                                                                   toler=1e-6,
                                                                 norm_type='data_scaled_rr',
                                                                 norm_metric=M_fun)
