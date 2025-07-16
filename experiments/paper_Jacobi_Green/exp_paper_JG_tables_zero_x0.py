@@ -1113,7 +1113,7 @@ if plot_this:
     #
     #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
     # material distribution
-    geometry_ID = 'linear'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    geometry_ID = 'sine_wave_'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
     # rhs = 'sin_wave'
     rhs = False
     linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
@@ -1123,7 +1123,7 @@ if plot_this:
     gs = fig.add_gridspec(2, 4, hspace=0.22, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
                           height_ratios=[1, 1])
     row = 0
-    for phase_contrast in [1, 4]:  # 1, 4
+    for phase_contrast in [2, 4]:  # 1, 4
         ratio = phase_contrast
         if geometry_ID == 'linear':
             divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
@@ -1256,9 +1256,9 @@ if plot_this:
 
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
-        ax.set_ylabel(r'\#  material pixels - $p$~of~$\mathcal{G}_p$')
+        ax.set_ylabel(r'\#  material pixels - $p$')#$p$~of~$\mathcal{G}_p$
         if row == 1:
-            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+            ax.set_xlabel(r'\#  nodal points - $n$')#~of~$\mathcal{T}_n$
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
         # ax2 = ax.twinx()
@@ -1346,7 +1346,7 @@ if plot_this:
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
         if row == 1:
-            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+            ax.set_xlabel(r'\#  nodal points - $n$')#~of~$\mathcal{T}_n$
 
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])
@@ -1483,7 +1483,7 @@ if plot_this:
         # ax.yaxis.set_label_position('right')
         # ax.yaxis.tick_right()
         if row == 1:
-            ax.set_xlabel(r'\#  nodal points - $n$~of~$\mathcal{T}_n$')
+            ax.set_xlabel(r'\#  nodal points - $n$')#~of~$\mathcal{T}_n$
 
         ax.set_xticks(Nx)
         ax.set_xticklabels([f'$2^{{{i}}}$' for i in Nx])

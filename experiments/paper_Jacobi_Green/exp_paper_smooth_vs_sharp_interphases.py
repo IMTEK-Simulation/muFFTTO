@@ -329,8 +329,14 @@ if plot:
     row = 0
     for sharp in [False, True]:
         ax_error = fig.add_subplot(gs_error[row, 0])
+        ax_error.text(-0.12, 1.05, rf'\textbf{{(b.{row+1}}})  ', transform=ax_error.transAxes)
 
         ax_geom = fig.add_subplot(gs_geom[row, 1])
+
+        if row ==0 :
+            ax_geom.text(-0.2, 1.21, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_geom.transAxes)
+        elif row ==1 :
+            ax_geom.text(-0.2, 1.16, rf'\textbf{{(a.{row+1})}}  ', transform=ax_geom.transAxes)
 
         divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
         cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
@@ -398,7 +404,7 @@ if plot:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
 
             ax_error.set_ylabel('Norm of residua - '
-                                r'$||r_{k}||_{G^{-1}} $')
+                                r'$||r_{k}||_{G} $')#^{-1}
             #ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])

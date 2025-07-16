@@ -280,7 +280,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
     nb_tiles = 1
     # fig = plt.figure(figsize=(11, 6.5))
-    fig = plt.figure(figsize=(8.3, 6.0))
+    fig = plt.figure(figsize=(8.3, 6.1))
 
     plt.rcParams.update({'font.size': 11})
     plt.rcParams["font.family"] = "Arial"
@@ -288,6 +288,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     gs = fig.add_gridspec(2, 4, width_ratios=[3, 3, 3, 0.2]
                           , height_ratios=[1, 1.7], hspace=0.07)
     ax_iterations = fig.add_subplot(gs[1:, :])
+    ax_iterations.text(-0.1, 1.0, r'(b)  ', transform=ax_iterations.transAxes)
 
     ax_iterations.plot(np.linspace(1, 1000, dgo.shape[0]), dgo, "g", label='Green N=64', linewidth=1)
     ax_iterations.plot(np.linspace(1, 1000, jacoby.shape[0]), jacoby, "b", label='Jacobi N=64', linewidth=1)
@@ -372,7 +373,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                            color='Blue'
                            )
     ax_iterations.annotate(text=r'Jacobi - $\mathcal{T}$' + f'$_{{{64}}}$',
-                           xy=(500, 410.0),
+                           xy=(500, 430.0),
                            xytext=(550., 270.6),
                            arrowprops=dict(arrowstyle='->',
                                            color='Blue',
@@ -381,8 +382,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                            color='Blue'
                            )
     ax_iterations.annotate(text=r'Jacobi - $\mathcal{T}$' + f'$_{{{128}}}$',
-                         xy=(400, 620.0),
-                         xytext=(450., 750.6),
+                         xy=(525, 830.0),
+                         xytext=(575., 500.0),
                            arrowprops=dict(arrowstyle='->',
                                            color='Blue',
                                            lw=1,
@@ -390,8 +391,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                            color='Blue'
                            )
     ax_iterations.annotate(text=r'Green - $\mathcal{T}$' + f'$_{{{32}}}$',
-                           xy=(700, 1100.0),
-                           xytext=(750., 750.0),
+                           xy=(600, 1100.0),
+                           xytext=(650., 1400. ),
                            arrowprops=dict(arrowstyle='->',
                                            color='Green',
                                            lw=1,
@@ -399,8 +400,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                            color='Green'
                            )
     ax_iterations.annotate(text=r'Green - $\mathcal{T}$' + f'$_{{{64}}}$',
-                           xy=(600, 2300.0),
-                           xytext=(650., 1400.),
+                           xy=(800, 2300.0),
+                           xytext=(850., 1400.),
                            arrowprops=dict(arrowstyle='->',
                                            color='Green',
                                            lw=1,
@@ -417,6 +418,9 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                            color='Green'
                            )
     #####
+
+    #
+
     init = 1
     middle = 34
     end = 1200
@@ -429,13 +433,15 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
     cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
     ax_init = fig.add_subplot(gs[0, 0])
+    ax_init.text(-0.2, 1.2, r'(a.1)  ', transform=ax_init.transAxes)
+
     # ax_init= fig.add_axes([0.15, 0.6, 0.1, 0.2])
     xopt_init = np.load('../exp_data/' + name + f'_it{init}.npy', allow_pickle=True)
     # xopt_init128 = np.load('../exp_data/' + name2_128 + f'_it{init}.npy', allow_pickle=True)
     pcm = ax_init.pcolormesh(np.tile(xopt_init ** 2, (nb_tiles, nb_tiles)),
                              cmap=cmap_, linewidth=0,
                              rasterized=True, norm=divnorm)
-    ax_init.set_title(r'Initial  density $\rho_0$', wrap=True)
+    ax_init.set_title(f'Initial \n density' + r'$\rho_0$', wrap=True)
     # ax_init.set_ylabel(r'Density $\rho$')
     ax_init.set_aspect('equal', 'box')
     ax_init.set_xlim([0, 64])
@@ -469,12 +475,14 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax1.set_aspect('equal', adjustable='box')
 
     ax_middle = fig.add_subplot(gs[0, 1])
+    ax_middle.text(-0.2, 1.2, r'(a.2)  ', transform=ax_middle.transAxes)
+
     # ax_middle = fig.add_axes([0.5, 0.6, 0.1, 0.2])
     xopt_middle = np.load('../exp_data/' + name2 + f'_it{middle}.npy', allow_pickle=True)
     ax_middle.pcolormesh(np.tile(xopt_middle ** 2, (nb_tiles, nb_tiles)),
                          cmap=cmap_, norm=divnorm, linewidth=0,
                          rasterized=True)
-    ax_middle.set_title(r'Intermediate  density $\rho_k$', wrap=True)
+    ax_middle.set_title(f'Intermediate \n density '+r'$\rho_k$', wrap=True)
     ax_middle.set_aspect('equal', 'box')
     ax_middle.set_xlim([0, 64])
     ax_middle.set_xticks([])
@@ -501,6 +509,8 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax1.yaxis.set_ticks_position('none')
     #
     ax_end = fig.add_subplot(gs[0, 2])
+    ax_end.text(-0.2, 1.2, r'(a.3)  ', transform=ax_end.transAxes)
+
     # ax_end = fig.add_axes([0.7, 0.3, 0.1, 0.2])
     xopt_end = np.load('../exp_data/' + name2 + f'_it{end}.npy', allow_pickle=True)
     # xopt_init128t_end = np.load('../exp_data/' + name2_128 + f'_it{end}.npy', allow_pickle=True)
@@ -508,7 +518,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     pcm = ax_end.pcolormesh(np.tile(xopt_end ** 2, (nb_tiles, nb_tiles)),
                             cmap=cmap_, norm=divnorm, linewidth=0,
                             rasterized=True)
-    ax_end.set_title(r'Converged density $\rho_k^{\rm opt}$', wrap=True)
+    ax_end.set_title(f'Converged \n density' + r'$\rho_k^{{\rm opt}}$', wrap=True)
     ax_end.set_aspect('equal', 'box')
     ax_end.set_xlim([0, 64])
     ax_end.set_xticks([])
@@ -705,7 +715,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
     ax_iterations.set_xlim(1, 1000)
     ax_iterations.set_xticks([1, 1000])
-    ax_iterations.set_xticklabels([f'Start', f'Converged'])
+    ax_iterations.set_xticklabels([f'Initial', f'Converged'])
     ax_iterations.set_ylim([1, 2600])
     ax_iterations.set_yscale('linear')
 
