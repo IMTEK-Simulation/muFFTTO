@@ -288,7 +288,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     gs = fig.add_gridspec(2, 4, width_ratios=[3, 3, 3, 0.2]
                           , height_ratios=[1, 1.7], hspace=0.07)
     ax_iterations = fig.add_subplot(gs[1:, :])
-    ax_iterations.text(-0.1, 1.0, r'(b)  ', transform=ax_iterations.transAxes)
+    ax_iterations.text(-0.1, 1.0, rf'\textbf{{(b)}}', transform=ax_iterations.transAxes)
 
     ax_iterations.plot(np.linspace(1, 1000, dgo.shape[0]), dgo, "g", label='Green N=64', linewidth=1)
     ax_iterations.plot(np.linspace(1, 1000, jacoby.shape[0]), jacoby, "b", label='Jacobi N=64', linewidth=1)
@@ -433,7 +433,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
     cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
     ax_init = fig.add_subplot(gs[0, 0])
-    ax_init.text(-0.2, 1.2, r'(a.1)  ', transform=ax_init.transAxes)
+    ax_init.text(-0.2, 1.2, rf'\textbf{{(a.1)}}', transform=ax_init.transAxes)
 
     # ax_init= fig.add_axes([0.15, 0.6, 0.1, 0.2])
     xopt_init = np.load('../exp_data/' + name + f'_it{init}.npy', allow_pickle=True)
@@ -475,7 +475,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax1.set_aspect('equal', adjustable='box')
 
     ax_middle = fig.add_subplot(gs[0, 1])
-    ax_middle.text(-0.2, 1.2, r'(a.2)  ', transform=ax_middle.transAxes)
+    ax_middle.text(-0.2, 1.2, rf'\textbf{{(a.2)}}', transform=ax_middle.transAxes)
 
     # ax_middle = fig.add_axes([0.5, 0.6, 0.1, 0.2])
     xopt_middle = np.load('../exp_data/' + name2 + f'_it{middle}.npy', allow_pickle=True)
@@ -509,7 +509,7 @@ for ration in [0, ]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax1.yaxis.set_ticks_position('none')
     #
     ax_end = fig.add_subplot(gs[0, 2])
-    ax_end.text(-0.2, 1.2, r'(a.3)  ', transform=ax_end.transAxes)
+    ax_end.text(-0.2, 1.2, rf'\textbf{{(a.3)}}', transform=ax_end.transAxes)
 
     # ax_end = fig.add_axes([0.7, 0.3, 0.1, 0.2])
     xopt_end = np.load('../exp_data/' + name2 + f'_it{end}.npy', allow_pickle=True)

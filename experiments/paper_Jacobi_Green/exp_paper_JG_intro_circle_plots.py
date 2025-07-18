@@ -88,8 +88,8 @@ if plot_v3:
     ax_global.set_xticks([0,rhos[1],rhos[2]])
     ax_global.set_xticklabels([0,'I','II'])
     #
-    ax_global.set_xlabel(r'\# filter applications - $n_\mathrm{f}$')
-    ax_global.set_ylabel(r'\# CG iterations')
+    ax_global.set_xlabel(r'\# filter applications - $i$')
+    ax_global.set_ylabel(r'\# preconditioned CG iterations')
     ax_global.annotate(text=f'Green',#\n contrast = 100
                       xy=(filter_ids[1000], nb_it[0][:nb_of_filters][1000]),
                       xytext=(1000., 80.),
@@ -124,7 +124,7 @@ if plot_v3:
     # axis for cross sections
     ax_cross = fig.add_axes([0.56, 0.45, 0.4, 0.4])
     #ax_cross.set_title(r' $n_\mathrm{f}=0 $', y=-0.2)
-    ax_cross.text(-0.45, 1.0, r'(b)  ', transform=ax_cross.transAxes)
+    ax_cross.text(-0.45, 1.0, rf'\textbf{{(b)}}', transform=ax_cross.transAxes)
 
 
 
@@ -134,7 +134,7 @@ if plot_v3:
             filer_id = filter_ids[rhos[geom_ax]]
             ax_geom_1 = fig.add_axes([0.145, 0.3, 0.2, 0.2])
             ax_geom_1.set_title(r' $\rho_0 $')
-            ax_geom_1.text(-0.1, 1.1, r'(a.1)  ', transform=ax_geom_1.transAxes)
+            ax_geom_1.text(-0.1, 1.1, rf'\textbf{{(a.1)}}', transform=ax_geom_1.transAxes)
             ax_cross.annotate(text=fr'$\rho_{filer_id}$',  # \n contrast = 100
                               xy=(nb_of_pixels_global[0]//3-2, 1e-3),
                               xytext=(nb_of_pixels_global[0]//10, 1e-3),
@@ -149,7 +149,7 @@ if plot_v3:
             filer_id = filter_ids[rhos[geom_ax]]
             ax_geom_1 = fig.add_axes([0.29, 0.22, 0.2, 0.2])
             ax_geom_1.set_title(fr' $\rho_{{\mathrm{{{ rhos_to_print[geom_ax]}}}}} $')
-            ax_geom_1.text(-0.1, 1.1, r'(a.2)  ', transform=ax_geom_1.transAxes)
+            ax_geom_1.text(-0.1, 1.1, rf'\textbf{{(a.2)}}', transform=ax_geom_1.transAxes)
             ax_cross.annotate(text=fr'$\rho_{{\mathrm{{{ rhos_to_print[geom_ax]}}}}}$',  # \n contrast = 100
                               xy=(nb_of_pixels_global[0]//2,  1e-4),
                               xytext=(nb_of_pixels_global[0]//2-7, 5e-4),
@@ -164,7 +164,7 @@ if plot_v3:
             filer_id = filter_ids[rhos[geom_ax]]
             ax_geom_1 = fig.add_axes([0.445, 0.19, 0.2, 0.2])#
             ax_geom_1.set_title(fr' $\rho_{{\mathrm{{{ rhos_to_print[geom_ax]}}}}}$')
-            ax_geom_1.text(-0.1, 1.1,'(a.3)', transform=ax_geom_1.transAxes)
+            ax_geom_1.text(-0.1, 1.1,rf'\textbf{{(a.3)}}', transform=ax_geom_1.transAxes)
             ax_cross.annotate(text=fr'$\rho_{{\mathrm{{{ rhos_to_print[geom_ax]}}}}}$',  # \n contrast = 100
                               xy=(nb_of_pixels_global[0]//2, 9e-3),
                               xytext=(nb_of_pixels_global[0]//2-10, 1.e-1),
@@ -230,7 +230,7 @@ if plot_v3:
         #ax_cross.set_aspect('equal', adjustable='datalim')
         #ax2.set_aspect('equal')
         ax_cross.set_box_aspect(1)  # Maintain square aspect ratio
-        ax_cross.set_ylabel(r'Density $\rho_{n_{\mathrm{f}}}$')
+        ax_cross.set_ylabel(r'Density $\rho_{i}$')
 
    #  ax_cbar1 = fig.add_axes([ 0.22, 0.63, 0.01, 0.2])
    # # 0.16, 0.22,
@@ -250,7 +250,7 @@ if plot_v3:
     # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
     cbar.set_ticks(ticks=[1e-8, 0.5, 1])
     cbar.set_ticklabels([r'$10^{-4}$', 0.5, 1])
-    ax_cbar.set_ylabel(r'Density $\rho_{n_{\mathrm{f}}}$')
+    ax_cbar.set_ylabel(r'Density $\rho_{i}$')
 
     fig.tight_layout()
     fname = script_name_save+ f'_N{number_of_pixels[0]}_v3' + '{}'.format('.pdf')

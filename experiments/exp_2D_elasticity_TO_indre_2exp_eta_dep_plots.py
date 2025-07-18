@@ -178,7 +178,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             roll_x = 16
             roll_y = -21
             ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}',
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
                          xy=(19, 1.0),
                          xytext=(23., 0.6),
                          arrowprops=dict(arrowstyle='->',
@@ -187,12 +187,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          ls='-'),
                          color=colors[i]
                          )
-            ax0.text(letter_offset, 0.97, '(b)', transform=ax1.transAxes)
+            ax0.text(letter_offset, 1.05, '(b)', transform=ax1.transAxes)
         if i == 1:
             roll_x = -4
             roll_y = -21
             ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}',
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
                      xy=(20, 0.3),
                      xytext=(12., 0.1),
                      arrowprops=dict(arrowstyle='->',
@@ -201,13 +201,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                      ls='-'),
                      color=colors[i]
                      )
-            ax0.text(letter_offset, 0.97, '(c)', transform=ax1.transAxes)
+            ax0.text(letter_offset, 1.05, '(c)', transform=ax1.transAxes)
 
         elif i == 2:
             roll_x = -3
             roll_y = -23
             ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}',
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
                      xy=(18, 0.85),
                      xytext=(11., 0.4),
                      arrowprops=dict(arrowstyle='->',
@@ -216,13 +216,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                      ls='-'),
                      color=colors[i]
                      )
-            ax0.text(letter_offset, 0.97, '(d)', transform=ax1.transAxes)
+            ax0.text(letter_offset, 1.05, '(d)', transform=ax1.transAxes)
 
         elif i == 3:
             roll_x = 1
             roll_y = -25
             ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' +f'{eta_mult}',
+            ax0.annotate(text=r'$\eta = $' +f'{eta_mult}'+r'$L$',
                          xy=(15, 0.85),
                          xytext=(5., 0.5),
                          arrowprops=dict(arrowstyle='->',
@@ -231,7 +231,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          ls='-'),
                          color=colors[i]
                          )
-            ax0.text(letter_offset, 0.97, '(e)', transform=ax1.transAxes)
+            ax0.text(letter_offset, 1.05, '(e)', transform=ax1.transAxes)
 
         # phase_field=phase_field**2
         phase_field = np.roll(phase_field, roll_x, axis=1)
@@ -268,7 +268,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             ax_cb.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=-65)
             ax_cb.yaxis.set_ticks_position('left')
              #ax_cb.xaxis.set_label_position('left')
-        ax1.set_xlabel(r'$\eta = $' +f'{eta_mult}')
+        ax1.set_xlabel(r'$\eta = $' +f'{eta_mult}'+r'$L$')
 
         ax1.set_xlim(0, N - 1)
         ax1.set_ylim(0, N - 1)
@@ -292,7 +292,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     #ax0.yaxis.set_ticks_position('none')
     ax0.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
     ax0.set_xlim(0, N - 1)
-    ax0.text(0.01, 0.8, '(a)', transform=ax0.transAxes)
+    ax0.text(-0.05, 1.1, '(a)', transform=ax0.transAxes)
     #ax0.set_ylim(0, N - 1)
         #ax0.set_aspect('equal')
     #ax1.set_ylabel(r'Position y')

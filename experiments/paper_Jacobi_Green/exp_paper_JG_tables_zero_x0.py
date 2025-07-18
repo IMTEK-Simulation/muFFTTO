@@ -1113,7 +1113,7 @@ if plot_this:
     #
     #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
     # material distribution
-    geometry_ID = 'sine_wave_'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    geometry_ID = 'linear'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
     # rhs = 'sin_wave'
     rhs = False
     linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
@@ -1123,7 +1123,7 @@ if plot_this:
     gs = fig.add_gridspec(2, 4, hspace=0.22, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
                           height_ratios=[1, 1])
     row = 0
-    for phase_contrast in [2, 4]:  # 1, 4
+    for phase_contrast in [1, 4]:  # 2, 4 for sine wave
         ratio = phase_contrast
         if geometry_ID == 'linear':
             divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
@@ -1267,9 +1267,10 @@ if plot_this:
         ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
         #    ax.set_aspect('equal')
         if row == 0:
-            ax.text(-0.25, 1.15, f'(a.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.25, 1.15, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
+
         elif row == 1:
-            ax.text(-0.25, 1.05, f'(a.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.25, 1.05, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
 
         # jacobi  graph
         gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
@@ -1358,9 +1359,9 @@ if plot_this:
 
         # ax.set_zlabel('# CG iterations')
         if row == 0:
-            ax.text(-0.17, 1.15, f'(b.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.17, 1.15, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
         elif row == 1:
-            ax.text(-0.17, 1.05, f'(b.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.17, 1.05, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
         # plot Jacobi green
         gs2 = gs[row, 2].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
         ax = fig.add_subplot(gs2[0, 0])
@@ -1494,9 +1495,9 @@ if plot_this:
         #   ax.set_aspect('equal')
 
         if row == 0:
-            ax.text(-0.17, 1.15, f'(c.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.17, 1.15, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
         elif row == 1:
-            ax.text(-0.17, 1.05, f'(c.{row + 1})', transform=ax.transAxes)
+            ax.text(-0.17, 1.05, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
         # Adding a color bar with custom ticks and labels
         cbar_ax = fig.add_subplot(gs[row, 3])
         cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
