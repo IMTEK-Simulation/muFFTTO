@@ -2,15 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import muGrid
 
-from muGrid.Solvers import conjugate_gradients
-
-try:
-    from mpi4py import MPI
-
-    comm = muGrid.Communicator(MPI.COMM_WORLD)
-except ImportError:
-    comm = muGrid.Communicator()
-
 
 def basisFunctions(knotVector, u, i, p):
     if p == 0:
@@ -79,36 +70,23 @@ if __name__ == "__main__":
     n_control_v = 2
 
     nb_derivatives = 2  # der in x and y direction
-    nb_quad_points = 9  # bilinear elements/basis
-    nb_nodal_points = 1  # just for muGrid framework
+    nb_quad_points = 4  # bilinear elements/basis
+    nb_nodes = 1  # just for muGrid framework
     nb_nodes_i = 2  # of the stencil in x direction
     nb_nodes_j = 2  # of the stencil in y direction
 
-    B_dqnijk = np.zeros([nb_derivatives, nb_quad_points, nb_nodal_points, nb_nodes_i, nb_nodes_j])
+    B_dqnijk = np.zeros([nb_derivatives, nb_quad_points, nb_nodes, nb_nodes_i, nb_nodes_j])
 
     # quad points
-    # quad_point_helper_0 = 0.5 + 1 / (2 * np.sqrt(3))
-    # quad_points_par_q_old = np.array([[0.5 - 1 / (2 * np.sqrt(3)), 0.5 - 1 / (2 * np.sqrt(3))],
-    #                               [0.5 + 1 / (2 * np.sqrt(3)), 0.5 - 1 / (2 * np.sqrt(3))],
-    #                               [0.5 + 1 / (2 * np.sqrt(3)), 0.5 + 1 / (2 * np.sqrt(3))],
-    #                               [0.5 - 1 / (2 * np.sqrt(3)), 0.5 + 1 / (2 * np.sqrt(
-    #                                   3))]])  # TODO: Rescale the positions of the quadrature points  based on the shape of your element
-
-    # q_pts_x = np.array([0.5 - 1 / (2 * np.sqrt(3)), 0.5 + 1 / (2 * np.sqrt(3))])
-    # quad_points_par_q = np.meshgrid(q_pts_x, q_pts_x)
-    # q_weights_x = np.array([1/2, 1/2 ])
-    # weights = np.outer(q_weights_x, q_weights_x).flatten()
-    q_pts_x = np.array([0.5 - np.sqrt(3 / 5)/ 2, .5, 0.5 + np.sqrt(3 / 5) / 2])
-    quad_points_par_q = np.meshgrid(q_pts_x, q_pts_x)
-    q_weights_x = np.array([(5 / 9) / 2, (8 / 9) / 2, (5 / 9) / 2])
-    #q_weights_x = np.array([1/3, 1/3, 1/3])
-    weights = np.outer(q_weights_x, q_weights_x).flatten()
-
+    quad_point_helper_0 = 0.5 + 1 / (2 * np.sqrt(3))
+    quad_points_par_q = np.array([[0.5 - 1 / (2 * np.sqrt(3)), 0.5 - 1 / (2 * np.sqrt(3))],
+                                  [0.5 + 1 / (2 * np.sqrt(3)), 0.5 - 1 / (2 * np.sqrt(3))],
+                                  [0.5 + 1 / (2 * np.sqrt(3)), 0.5 + 1 / (2 * np.sqrt(3))],
+                                  [0.5 - 1 / (2 * np.sqrt(3)), 0.5 + 1 / (2 * np.sqrt(
+                                      3))]])  # TODO: Rescale the positions of the quadrature points  based on the shape of your element
     for q in range(nb_quad_points):
         # quadrature points
-        #u_q, v_q = quad_points_par_q_old[q]
-        u_q = quad_points_par_q[0].flatten()[q]
-        v_q = quad_points_par_q[1].flatten()[q]
+        u_q, v_q = quad_points_par_q[q]
 
         x_idx, y_idx, dB_du, dB_dv = evaluate_basis_and_derivatives(
             u_q, v_q, knot_u, knot_v, degree, n_control_u, n_control_v
@@ -121,9 +99,7 @@ if __name__ == "__main__":
         B_dqnijk[0, q, 0, ...] = np.copy(dB_du_ij)
         B_dqnijk[1, q, 0, ...] = np.copy(dB_dv_ij)
 
-    nb_grid_points = 100
-    fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=(nb_grid_points, nb_grid_points),
-                                      sub_pts={"quad_points":   nb_quad_points, "nodal_points": 1})
+    fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=(3, 3), sub_pts={"quad_points": 4, "nodal_points": 1})
 
     # max_basis = 4
     gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
@@ -132,75 +108,46 @@ if __name__ == "__main__":
     #### Test field
 
     # quad_coordinates = discretization.get_quad_points_coordinates()
-    #x_coords, y_coords = np.meshgrid(np.arange(nb_grid_points), np.arange(nb_grid_points), indexing='ij')
+    x, y = np.meshgrid(np.arange(3), np.arange(3))
+    u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
+    temp_field_inxyz.s[0, 0, :, :] = u_fun_4x3y(x, y)
 
-
-    # u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
-    # temp_field_inxyz.s[0, 0, :, :] = u_fun_4x3y(x, y)
-    #
-    # # TODO This has to be a discretization stencil dependant # for degree 2 this may be [-1, -1]
+    # TODO This has to be a discretization stencil dependant # for degree 2 this may be [-1, -1]
     point_of_origin = [0, 0]
+
+    op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
+
+    op.apply(nodal_field=temp_field_inxyz, quadrature_point_field=gradiant_field_ijqxyz)
+
+    print()  # for i in range(2):
+    #     for j in range(2):
+    #         gradiant_feild.s[0, :N, 0, i, j] = dB_du
+    #         gradiant_feild.s[1, :N, 0, i, j] = dB_dv
+    #         gradiant_feild.s[2, :N, 0, i, j] = x_idx
+    #         gradiant_feild.s[3, :N, 0, i, j] = y_idx
+    #         gradiant_feild.s[4, 0, 0, i, j] = u_q
+    #         gradiant_feild.s[4, 1, 0, i, j] = v_q
     #
-    # op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
+    # print("derivative", gradiant_feild.s[0, :N, 0, i, j])
+    # print("derivative", gradiant_feild.s[1, :N, 0, i, j])
     #
-    # op.apply(nodal_field=temp_field_inxyz, quadrature_point_field=gradiant_field_ijqxyz)
-
-    print('----------------------------------------------')  # for i in range(2):
-
-    grad_op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
-   # weights = np.ones([nb_quad_points])
-
-
-
-    rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
-    solution = fc.real_field("solution", components_shape=(1,), sub_division="nodal_points")
-
-    x_coords = np.zeros([2, nb_nodal_points, nb_grid_points, nb_grid_points])
-    x_coords[:, 0, ...] = np.copy(rhs.coords)
-
-    rhs.p[0] = (1 + np.cos(2*np.pi*x_coords[0]/nb_grid_points) * np.cos(2*np.pi*x_coords[1]/nb_grid_points)) ** 10
-    rhs.p -= np.mean(rhs.p)
-
-    grid_spacing = 1 / np.array(nb_grid_points)
-
-
-    def hessp(x,Ax ):
-        """
-        Function to compute the product of the Hessian matrix with a vector.
-        The Hessian is represented by the convolution operator.
-        """
-        # decomposition.communicate_ghosts(x)
-        #x = laplace_2(x)
-        grad_op.apply(nodal_field=x, quadrature_point_field=gradiant_field_ijqxyz)
-        grad_op.transpose(quadrature_point_field=gradiant_field_ijqxyz, nodal_field=Ax, weights=weights)
-
-        # We need the minus sign because the Laplace operator is negative
-        # definite, but the conjugate-gradients solver assumes a
-        # positive-definite operator.
-        #Ax.s /= -np.mean(grid_spacing) ** 2  # Scale by grid spacing
-
-        return Ax
-
-    def callback(it, x, r, p):
-        """
-        Callback function to print the current solution, residual, and search direction.
-        """
-        print(f"{it:5} {np.dot(r.ravel(), r.ravel()):.5}")
-
-
-    conjugate_gradients(
-        comm,
-        fc,
-        hessp,  # linear operator
-        rhs,
-        solution,
-        tol=1e-6,
-        callback=callback,
-        maxiter=1000,
-    )
-
-    if plt is not None:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-        ax1.imshow(rhs.p[0])
-        ax2.imshow(solution.p[0])
-        plt.show()
+    # spans_u = [(knot_u[i], knot_u[i + 1]) for i in range(len(knot_u) - 1) if knot_u[i] != knot_u[i + 1]]
+    # spans_v = [(knot_v[i], knot_v[i + 1]) for i in range(len(knot_v) - 1) if knot_v[i] != knot_v[i + 1]]
+    #
+    # fig, ax = plt.subplots(figsize=(5, 5))
+    # for (u0, u1) in spans_u:
+    #     ax.plot([u0, u0], [0, 1], 'k--', alpha=0.5)
+    #     ax.plot([u1, u1], [0, 1], 'k--', alpha=0.5)
+    # for (v0, v1) in spans_v:
+    #     ax.plot([0, 1], [v0, v0], 'k--', alpha=0.5)
+    #     ax.plot([0, 1], [v1, v1], 'k--', alpha=0.5)
+    #
+    # ax.plot([u_q], [v_q], 'ro', markersize=8)
+    # ax.set_xlim(-0.1, 1.1)
+    # ax.set_ylim(-0.1, 1.1)
+    # ax.set_xlabel('u')
+    # ax.set_ylabel('v')
+    # ax.set_aspect("equal")
+    # ax.grid(True, alpha=0.3)
+    # plt.tight_layout()
+    # plt.show()

@@ -433,11 +433,11 @@ class Discretization:
         op.apply(nodal_field=u_inxyz, quadrature_point_field=grad_u_ijqxyz)
         # swap first two axis becouse
         # muGrid consider first index of derivative and second of displacement component
-        if self.cell.unknown_shape > 1:
+        #if self.cell.unknown_shape > 1:
             #grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1)
             #grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
             #grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
-            grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
+         #   grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
@@ -502,7 +502,9 @@ class Discretization:
         grad_u_ijqxyz = (grad_u_ijqxyz + np.swapaxes(grad_u_ijqxyz, 0, 1)) / 2
         return grad_u_ijqxyz
 
-    def apply_gradient_transposed_operator(self, gradient_field_ijqxyz, div_u_fnxyz=None,
+    def apply_gradient_transposed_operator(self,
+                                           gradient_field_ijqxyz,
+                                           div_u_fnxyz=None,
                                            apply_weights=True):
         """
            Function that computes "Divergence"  of stress/flux field : gradient_of_u_fdqxyz.
@@ -544,19 +546,19 @@ class Discretization:
         op = ConvolutionOperator([0, 0], B_dqnijk)
 
         ###### TODO delete when mugrid ordering is fixed
-        gradient_field_jiqxyz = np.swapaxes(gradient_field_ijqxyz.s, 0, 1).copy()
+        #gradient_field_jiqxyz = np.swapaxes(gradient_field_ijqxyz.s, 0, 1).copy()
 
         # Get a tensor-field (for example to represent the strain)
-        grad_u_jiqxyz = self.field_collection.real_field(
-            unique_name='temp_field',  # name of the field
-            # components_shape=(self.domain_dimension,),  # shape of components
-            components_shape=(*self.cell.gradient_shape[::-1],),  # shape of components
-            sub_division='quad_points'  # sub-point type
-        )
-        grad_u_jiqxyz.s = np.copy(gradient_field_jiqxyz)
+        # grad_u_jiqxyz = self.field_collection.real_field(
+        #     unique_name='temp_field',  # name of the field
+        #     # components_shape=(self.domain_dimension,),  # shape of components
+        #     components_shape=(*self.cell.gradient_shape[::-1],),  # shape of components
+        #     sub_division='quad_points'  # sub-point type
+        # )
+       # grad_u_jiqxyz.s = np.copy(gradient_field_jiqxyz)
         ###### TODO
         # apply B^transposed via the convolution operator
-        op.transpose(quadrature_point_field=grad_u_jiqxyz, nodal_field=div_u_fnxyz, weights=weights)
+        op.transpose(quadrature_point_field=gradient_field_ijqxyz, nodal_field=div_u_fnxyz, weights=weights)
         # transpose(self, quadrature_point_field, nodal_field, weights, p_float=None, *args, **kwargs):
         return div_u_fnxyz
 
@@ -1332,7 +1334,7 @@ class Discretization:
         # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
         gradient_ijqxyz = self.apply_gradient_transposed_operator(gradient_field_ijqxyz=gradient_ijqxyz,
                                                                   div_u_fnxyz=displacement_field,
-                                                                  pply_weights=True)
+                                                                  apply_weights=True)
         # TODO should I displacement_field this field?
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:force=')  # f'{force}')
 
