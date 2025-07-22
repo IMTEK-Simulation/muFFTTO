@@ -60,19 +60,19 @@ class DiscretizationTestCase(unittest.TestCase):
             du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
             du_fun_3 = lambda y: 3 + 0 * y
 
-            temperature = discretization.get_temperature_sized_field()
-            temperature_gradient = discretization.get_temperature_gradient_size_field()
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field()
+            temperature = discretization.get_temperature_sized_field(name='temperature')
+            temperature_gradient = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(  name='anal_gradient_of_temp')
 
-            temperature[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
+            temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
                                                  nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-            temperature_gradient_anal[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
+            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
             temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
             # test 1
-            average = np.ndarray.sum(temperature_gradient)
+            average = np.ndarray.sum(temperature_gradient.s)
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                      problem_type)
             self.assertLessEqual(average, 1e-14, message)
@@ -80,10 +80,10 @@ class DiscretizationTestCase(unittest.TestCase):
             # test 2
             # compare values of gradient element wise --- without last-- periodic pixel that differs
             value_1 = np.all(
-                temperature_gradient[..., 0:-1, 0:-1] == temperature_gradient_anal[..., 0:-1, 0:-1])
+                temperature_gradient.s[..., 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1])
             diff = np.ndarray.sum(
-                temperature_gradient[..., 0:-1, 0:-1] - temperature_gradient_anal[..., 0:-1, 0:-1])
-            value = np.allclose(temperature_gradient[..., 0:-1, 0:-1], temperature_gradient_anal[..., 0:-1, 0:-1],
+                temperature_gradient.s[..., 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1])
+            value = np.allclose(temperature_gradient.s[..., 0:-1, 0:-1], temperature_gradient_anal.s[..., 0:-1, 0:-1],
                                 rtol=1e-16, atol=1e-14)
             self.assertTrue(value,
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(

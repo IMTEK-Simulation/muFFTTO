@@ -327,7 +327,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             """ 
                 %   x_3____e=1__x_4
                 %   |            |
-                %   |  q=4   q=3 |
+                %   |  q=3   q=4 |
                 %   |            |
                 %   |  q=1   q=2 |
                 %   x_1_________x_2 - --------x
