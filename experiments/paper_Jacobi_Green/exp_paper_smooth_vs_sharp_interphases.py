@@ -301,7 +301,7 @@ if compute:
                 results_name = f'N64_{ratio}_sharp_{sharp}'
 
                 np.savez(data_folder_path + results_name + f'_log.npz', **_info)
-                print(data_folder_path + results_name + f'.npy')
+                print(data_folder_path + results_name + f'_log.npz')
 
 plot = True
 if plot:
@@ -403,8 +403,7 @@ if plot:
             if sharp:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
 
-            ax_error.set_ylabel('Norm of residua - '
-                                r'$||r_{k}||_{G} $')#^{-1}
+            ax_error.set_ylabel('Norm of residual')# - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
             #ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])

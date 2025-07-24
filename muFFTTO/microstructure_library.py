@@ -17,7 +17,7 @@ def get_geometry(nb_voxels,
                  **kwargs):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
-                                   'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles',
+                                   'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles','2_circles',
                                    'symmetric_linear', 'hashin_inclusion_2D',
                                    'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
                                    'laminate', 'laminate2', 'laminate_log',
@@ -76,6 +76,20 @@ def get_geometry(nb_voxels,
                 (x_lim / 4, 3 * y_lim / 4, y_lim / 8),  # Circle 2
                 (3 * x_lim / 4, 3 * y_lim / 4, y_lim / 8),  # Circle 3
                 (3 * x_lim / 4, y_lim / 4, y_lim / 8)  # Circle 4
+            ]
+            # Apply circle masks
+            for cx, cy, r in circles:
+                mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
+                phase_field[mask] = 0  # Set pixels inside the circle to 1
+        case '2_circles':
+            phase_field = np.ones(nb_voxels)
+            x_lim = coordinates[0][-1, -1]
+            y_lim = coordinates[1][-1, -1]
+            # Define circle parameters (center coordinates and radius)
+            circles = [
+                (x_lim / 6, 3*y_lim / 4, y_lim / 10),  # Circle 1
+                (3 *x_lim / 6,  4*y_lim / 6, y_lim / 10),  # Circle 2
+                (5 * x_lim / 6, 3 * y_lim / 4, y_lim / 10),
             ]
             # Apply circle masks
             for cx, cy, r in circles:
