@@ -17,7 +17,7 @@ formulation = 'small_strain'
 
 
 domain_size = [1, 1]
-number_of_pixels = (1024, 1024)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -52,14 +52,14 @@ geometry_ID = 'square_inclusion'
 phase_field_smooth = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                   microstructure_name=geometry_ID,
                                                   coordinates=discretization.fft.coords)
-folder_name = 'experiments/exp_data/'  # s'exp_data/'
-
-#phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
-#phase_field_l = np.load('../experiments/exp_data/lbfg_muFFTTO_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_E_target_0.15_Poisson_-0.5_Poisson0_0.0_w4.0_eta0.0203_p2_bounds=False_FE_NuMPI6_nb_load_cases_3_energy_objective_False_random_True_it20.npy', allow_pickle=True)
-#phase_field_l = np.load('../experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy', allow_pickle=True)
-phase_field_l = load_npy('experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy',
-                     tuple(discretization.fft.subdomain_locations),
-                     tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+# folder_name = 'experiments/exp_data/'  # s'exp_data/'
+#
+# #phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
+# #phase_field_l = np.load('../experiments/exp_data/lbfg_muFFTTO_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_E_target_0.15_Poisson_-0.5_Poisson0_0.0_w4.0_eta0.0203_p2_bounds=False_FE_NuMPI6_nb_load_cases_3_energy_objective_False_random_True_it20.npy', allow_pickle=True)
+# #phase_field_l = np.load('../experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy', allow_pickle=True)
+# phase_field_l = load_npy('experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy',
+#                      tuple(discretization.fft.subdomain_locations),
+#                      tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
 #phase = 1 * np.ones(number_of_pixels)
 inc_contrast = 0.
@@ -73,7 +73,9 @@ inc_contrast = 0.
 #phase_fem[:] = phase_field_l
 
 phase_field=discretization.get_scalar_sized_field()
-phase_field[0,0]= phase_field_l
+#phase_field[0,0]= phase_field_l
+phase_field[0,0]= phase_field_smooth
+
 #phase_field[0,0]=phase_field[0,0]/np.min(phase_field[0,0])
 
 #np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)

@@ -62,7 +62,7 @@ def make_parallelograms(displ, cmap=mpl.cm.jet):
 ### ----- Prepare figure ----- ###
 fig = plt.figure()
 
-gs = fig.add_gridspec(nrows=1, ncols=1)
+gs = fig.add_gridspec(nrows=1, ncols=2)
 
 ax = fig.add_subplot(gs[0, 0])
 ax.set_aspect('equal')
@@ -155,6 +155,10 @@ cell_points = np.stack((cell_points_x, cell_points_y))*N
 ### ----- Finish plot ----- ###
 contour = ax.contourf(np.tile(phase_field, (3, 3)), cmap='gray_r', vmin=0, vmax=1)
 
+ax_defg = fig.add_subplot(gs[0, 1])
+
+pcm = ax_defg.pcolormesh(x_deformed, y_deformed, phase_field, cmap=mpl.cm.Greys, vmin=0, vmax=2,
+                             rasterized=True)
 
 # Colorbar
 # divider = make_axes_locatable(ax)
@@ -209,7 +213,7 @@ print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right
 fig.savefig(fname, bbox_inches='tight')
 plt.show()
 
-
+quit()
 plot_figs = False
 plot_movie = False
 if plot_movie:
