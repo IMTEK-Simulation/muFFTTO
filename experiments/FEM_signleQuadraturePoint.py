@@ -80,11 +80,11 @@ if __name__ == "__main__":
 
     nb_derivatives = 2  # der in x and y direction
     nb_quad_points = 9  # bilinear elements/basis
-    nb_nodes = 1  # just for muGrid framework
+    nb_nodal_points = 1  # just for muGrid framework
     nb_nodes_i = 2  # of the stencil in x direction
     nb_nodes_j = 2  # of the stencil in y direction
 
-    B_dqnijk = np.zeros([nb_derivatives, nb_quad_points, nb_nodes, nb_nodes_i, nb_nodes_j])
+    B_dqnijk = np.zeros([nb_derivatives, nb_quad_points, nb_nodal_points, nb_nodes_i, nb_nodes_j])
 
     # quad points
     # quad_point_helper_0 = 0.5 + 1 / (2 * np.sqrt(3))
@@ -132,7 +132,9 @@ if __name__ == "__main__":
     #### Test field
 
     # quad_coordinates = discretization.get_quad_points_coordinates()
-    x, y = np.meshgrid(np.arange(nb_grid_points), np.arange(nb_grid_points), indexing='ij')
+    #x_coords, y_coords = np.meshgrid(np.arange(nb_grid_points), np.arange(nb_grid_points), indexing='ij')
+
+
     # u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
     # temp_field_inxyz.s[0, 0, :, :] = u_fun_4x3y(x, y)
     #
@@ -150,10 +152,13 @@ if __name__ == "__main__":
 
 
 
-    rhs = fc.real_field("rhs")
-    solution = fc.real_field("solution")
+    rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
+    solution = fc.real_field("solution", components_shape=(1,), sub_division="nodal_points")
 
-    rhs.p = (1 + np.cos(2*np.pi*x/nb_grid_points) * np.cos(2*np.pi*y/nb_grid_points)) ** 10
+    x_coords = np.zeros([2, nb_nodal_points, nb_grid_points, nb_grid_points])
+    x_coords[:, 0, ...] = np.copy(rhs.coords)
+
+    rhs.p[0] = (1 + np.cos(2*np.pi*x_coords[0]/nb_grid_points) * np.cos(2*np.pi*x_coords[1]/nb_grid_points)) ** 10
     rhs.p -= np.mean(rhs.p)
 
     grid_spacing = 1 / np.array(nb_grid_points)
@@ -196,6 +201,6 @@ if __name__ == "__main__":
 
     if plt is not None:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-        ax1.imshow(rhs.p)
-        ax2.imshow(solution.p)
+        ax1.imshow(rhs.p[0])
+        ax2.imshow(solution.p[0])
         plt.show()
