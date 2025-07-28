@@ -214,7 +214,6 @@ fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=nb_grid_points,
                                            "nodal_points": nb_nodal_points})
 # I need  less nodal points than pixel. Exactly one less for degree = 2
 
-gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
 
 temp_field_inxyz = fc.real_field("temperature", components_shape=(1,), sub_division="nodal_points")
 temp_coef = fc.real_field("temperature_coef", components_shape=(1,), sub_division="nodal_points")
@@ -233,13 +232,12 @@ grad_op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
 
 # xq_coords = np.zeros([nb_quad_points, nb_grid_points])
 
-rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
 solution = fc.real_field("solution", components_shape=(1,), sub_division="nodal_points")
 
 x_coords = np.zeros([2, nb_nodal_points, nb_grid_points[0], nb_grid_points[1]])
 for n_p in range(nb_nodal_points):
     for dim in range(2):
-        x_coords[dim, n_p, ...] = np.copy(rhs.coords[dim]) * domain_size[dim]
+        x_coords[dim, n_p, ...] = np.copy(solution.coords[dim]) * domain_size[dim]
 
 # del_x = (rhs.coords[0, 1, 0] - rhs.coords[0, 0, 0])
 # del_y = (rhs.coords[1, 0, 1] - rhs.coords[1, 0, 0])
@@ -251,11 +249,39 @@ x_coords[1, 2, ...] += del_y / 2
 x_coords[0, 3, ...] += del_x / 2
 x_coords[1, 3, ...] += del_y / 2
 
-rhs.s[0] = ( np.cos(2 * np.pi * x_coords[0]  ) * np.cos(
-    2 * np.pi * x_coords[1] ))
 
-#rhs.p = (x_coords[0] ) ** 2#+ x_coords[1]
+
+# set macroscopic gradient
+macro_gradient = np.array([1.0, 0])
+
+# create material data field
+mat_contrast = 1
+mat_contrast_2 = 5
+conductivity_C_1 = np.array([[1., 0], [0, 5.0]])
+#
+material_field_ijqxy = fc.real_field("mat_data", components_shape=(2, 2), sub_division="quad_points")
+
+material_field_ijqxy.s[:, :,...]=conductivity_C_1[:,:,np.newaxis, np.newaxis, np.newaxis]
+
+phase_field = np.zeros(nb_grid_points)
+phase_field[:nb_grid_points[0] // 2, :nb_grid_points[1] // 2] = 1
+# apply material distribution  --- square
+material_field_ijqxy.s[:, :,:,:nb_grid_points[0] // 2, :nb_grid_points[1] // 2]*=2
+
+
+macro_grad_f = fc.real_field("macro_grad_f", components_shape=(1,2), sub_division="quad_points")
+macro_grad_f.s[0,:,...]=np.array([1.0,1.])[:,np.newaxis, np.newaxis, np.newaxis]
+
+
+macro_grad_f.s = np.einsum('ij...,uj...->ui...', material_field_ijqxy,
+                                    macro_grad_f.s)  # 'u' just to keep the size of array consistent
+rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
+
+grad_op.transpose(quadrature_point_field=macro_grad_f, nodal_field=rhs, weights=weights)
+
+# rhs.p = (x_coords[0] ) ** 2#+ x_coords[1]
 rhs.p -= np.mean(rhs.p)
+
 
 
 def hessp(x, Ax):
@@ -265,7 +291,11 @@ def hessp(x, Ax):
     """
     # decomposition.communicate_ghosts(x)
     # x = laplace_2(x)
+    gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
+
     grad_op.apply(nodal_field=x, quadrature_point_field=gradiant_field_ijqxyz)
+    gradiant_field_ijqxyz.s = np.einsum('ij...,uj...->ui...', material_field_ijqxy,  gradiant_field_ijqxyz.s)  # 'u' just to keep the size of array consistent
+
     grad_op.transpose(quadrature_point_field=gradiant_field_ijqxyz, nodal_field=Ax, weights=weights)
 
     # We need the minus sign because the Laplace operator is negative
@@ -296,6 +326,19 @@ conjugate_gradients(
 
 if plt is not None:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+    pcm = ax1.pcolormesh(x_coords[0, 0], x_coords[1, 0], rhs.s[0, 0],
+                         # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
+                         rasterized=True)
+    pcm = ax2.pcolormesh(x_coords[0, 0], x_coords[1, 0], solution.s[0, 0],
+                         # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
+                         rasterized=True)
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
+    # ax1.imshow(rhs.p[0])
+    # ax2.imshow(solution.p[0])
+    plt.show()
+
+    fig, (ax1, ax2) = plt.subplots(2, 2, figsize=(10, 5))
     pcm = ax1.pcolormesh(x_coords[0, 0], x_coords[1, 0], rhs.s[0, 0],
                          # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
                          rasterized=True)
