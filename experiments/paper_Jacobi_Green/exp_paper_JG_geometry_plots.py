@@ -195,7 +195,7 @@ if __name__ == '__main__':
     cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
     ax_cbar.set_ylabel(r'Density $\rho_{\rm{cos} } $')
 
-    ax_cbar.text(-0.25, 1.15, f'(b)', transform=ax_cbar.transAxes)
+    ax_cbar.text(-0.25, 1.15, rf'\textbf{{(b)}}', transform=ax_cbar.transAxes)
 
     fname = src + 'JG_exp4_geometry_{}{}'.format(geometry_ID , '.pdf')
     print(('create figure: {}'.format(fname)))
@@ -326,7 +326,7 @@ if __name__ == '__main__':
     cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
     ax_cbar.set_ylabel(r'Density $\rho_{\rm{laminate} } $')
 
-    ax_cbar.text(-0.25, 1.15, f'(a)', transform=ax_cbar.transAxes)
+    ax_cbar.text(-0.25, 1.15, rf'\textbf{{(a)}}', transform=ax_cbar.transAxes)
     fname = src + 'JG_exp4_single_geometry_{}{}'.format(geometry_ID, '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')

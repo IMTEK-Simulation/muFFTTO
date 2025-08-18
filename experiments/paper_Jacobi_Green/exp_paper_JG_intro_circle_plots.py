@@ -89,7 +89,7 @@ if plot_v3:
     ax_global.set_xticklabels([0,'I','II'])
     #
     ax_global.set_xlabel(r'\# filter applications - $i$')
-    ax_global.set_ylabel(r'\# preconditioned CG iterations')
+    ax_global.set_ylabel(r'\# PCG iterations')
     ax_global.annotate(text=f'Green',#\n contrast = 100
                       xy=(filter_ids[1000], nb_it[0][:nb_of_filters][1000]),
                       xytext=(1000., 80.),
@@ -124,7 +124,7 @@ if plot_v3:
     # axis for cross sections
     ax_cross = fig.add_axes([0.56, 0.45, 0.4, 0.4])
     #ax_cross.set_title(r' $n_\mathrm{f}=0 $', y=-0.2)
-    ax_cross.text(-0.45, 1.0, rf'\textbf{{(b)}}', transform=ax_cross.transAxes)
+    ax_cross.text(-0.3, 0.95, rf'\textbf{{(b)}}', transform=ax_cross.transAxes)
 
 
 
@@ -145,6 +145,12 @@ if plot_v3:
                               fontsize=12,
                               color=colors[-geom_ax]
                               )
+            # Draw arrow for x₁ axis
+            # ax_geom_1.annotate('', xy=(128, 0), xytext=(0,0),
+            #             arrowprops=dict(arrowstyle='->', linewidth=1))
+            # ax_geom_1.text(100, -50, r'$x_1$', fontsize=12)
+
+
         if geom_ax == 1:
             filer_id = filter_ids[rhos[geom_ax]]
             ax_geom_1 = fig.add_axes([0.29, 0.22, 0.2, 0.2])

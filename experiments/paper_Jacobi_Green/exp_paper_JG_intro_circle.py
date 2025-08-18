@@ -38,7 +38,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix = [2**8]  # ,2,3,3,2,
+nb_pix = 2**4  # ,2,3,3,2,
 number_of_pixels = (nb_pix , nb_pix )
 
 contrast = 1e-4
@@ -46,11 +46,11 @@ contrast = 1e-4
 
 ratios = np.arange(5000)
 
-nb_it = np.zeros((len(nb_pix_multips), ratios.size), )
-nb_it_combi = np.zeros((len(nb_pix_multips), ratios.size), )
-nb_it_Jacobi = np.zeros((len(nb_pix_multips), ratios.size), )
-nb_it_Richardson = np.zeros((len(nb_pix_multips), ratios.size), )
-nb_it_Richardson_combi = np.zeros((len(nb_pix_multips), ratios.size), )
+nb_it = np.zeros((len(number_of_pixels), ratios.size), )
+nb_it_combi = np.zeros((len(number_of_pixels), ratios.size), )
+nb_it_Jacobi = np.zeros((len(number_of_pixels), ratios.size), )
+nb_it_Richardson = np.zeros((len(number_of_pixels), ratios.size), )
+nb_it_Richardson_combi = np.zeros((len(number_of_pixels), ratios.size), )
 
 norm_rr_combi = []
 norm_rz_combi = []

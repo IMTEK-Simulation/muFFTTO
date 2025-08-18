@@ -66,7 +66,7 @@ def evaluate_basis_and_derivatives(u_q, v_q, knot_u, knot_v, degree, n_u, n_v):
 
 
 ############################################################################################3
-domain_size = (1, 2)
+domain_size = (1, 1)
 nb_grid_points = (50, 50)
 del_x = domain_size[0] / nb_grid_points[0]
 del_y = domain_size[1] / nb_grid_points[1]
@@ -279,7 +279,6 @@ rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
 
 grad_op.transpose(quadrature_point_field=macro_grad_f, nodal_field=rhs, weights=weights)
 
-# rhs.p = (x_coords[0] ) ** 2#+ x_coords[1]
 rhs.p -= np.mean(rhs.p)
 
 
@@ -319,7 +318,7 @@ conjugate_gradients(
     hessp=hessp,  # linear operator
     b=rhs,
     x=solution,
-    tol=1e-6,
+    tol=1e-2,
     callback=callback,
     maxiter=1000,
 )
@@ -338,15 +337,18 @@ if plt is not None:
     # ax2.imshow(solution.p[0])
     plt.show()
 
-    fig, (ax1, ax2) = plt.subplots(2, 2, figsize=(10, 5))
-    pcm = ax1.pcolormesh(x_coords[0, 0], x_coords[1, 0], rhs.s[0, 0],
-                         # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
-                         rasterized=True)
-    pcm = ax2.pcolormesh(x_coords[0, 0], x_coords[1, 0], solution.s[0, 0],
-                         # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
-                         rasterized=True)
-    ax1.set_aspect('equal')
-    ax2.set_aspect('equal')
-    # ax1.imshow(rhs.p[0])
-    # ax2.imshow(solution.p[0])
+    fig, ax = plt.subplots(2, 2, figsize=(10, 5))
+
+    counter=0
+    for i in range(2):
+        for j in range(2):
+            # pcm = ax[i,j].pcolormesh(x_coords[0, 0], x_coords[1, 0], rhs.s[0, 0],
+            #              # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
+            #              rasterized=True)
+            pcm = ax[i,j].pcolormesh(x_coords[0, 0], x_coords[1, 0], solution.s[0, counter],
+                                 # cmap=mpl.cm.Greys, vmin=contrast, vmax=1, linewidth=0,
+                                 rasterized=True)
+            counter+=1
+            ax[i,j] .set_aspect('equal')
+
     plt.show()

@@ -1076,9 +1076,9 @@ if plot_jacobi_single:
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
         if geometry_ID == 'sine_wave_' and phase_contrast == 1:
-            ax.text(0.05, 0.92, f'Total phase contrast \n' + r'$\kappa^^{\rm tot}=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.92, f'Total phase contrast \n' + r'$\chi^^{\rm tot}=\infty$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
         ax.set_title('Number of iteration \n Jacobi   ')
         # ax.set_zlim(1 ,100)
@@ -1113,7 +1113,7 @@ if plot_this:
     #
     #   nb_pix_multips = [2, 4, 5, 6, 7, 8]
     # material distribution
-    geometry_ID = 'linear'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
+    geometry_ID = 'sine_wave_'  # linear  # 'abs_val' sine_wave_   ,laminate_log  geometry_ID = 'right_cluster_x3'  # laminate2       # 'abs_val' sine_wave_   ,laminate_log
     # rhs = 'sin_wave'
     rhs = False
     linestyles = ['-', '--', ':', '-.', '--', ':', '-.']
@@ -1123,7 +1123,7 @@ if plot_this:
     gs = fig.add_gridspec(2, 4, hspace=0.22, wspace=0.25, width_ratios=[1.2, 1.2, 1.2, 0.03],
                           height_ratios=[1, 1])
     row = 0
-    for phase_contrast in [1, 4]:  # 2, 4 for sine wave
+    for phase_contrast in [2, 4]:  # 2, 4 for sine wave
         ratio = phase_contrast
         if geometry_ID == 'linear':
             divnorm = mpl.colors.Normalize(vmin=0, vmax=100)
@@ -1239,14 +1239,14 @@ if plot_this:
 
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
 
         if row == 0:
@@ -1267,10 +1267,10 @@ if plot_this:
         ax.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
         #    ax.set_aspect('equal')
         if row == 0:
-            ax.text(-0.25, 1.15, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.15, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
 
         elif row == 1:
-            ax.text(-0.25, 1.05, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.05, rf'\textbf{{(a.{row + 1}) }}', transform=ax.transAxes)
 
         # jacobi  graph
         gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
@@ -1329,14 +1329,14 @@ if plot_this:
 
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
 
         if row == 0:
@@ -1359,9 +1359,9 @@ if plot_this:
 
         # ax.set_zlabel('# CG iterations')
         if row == 0:
-            ax.text(-0.17, 1.15, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.15, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
         elif row == 1:
-            ax.text(-0.17, 1.05, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.05, rf'\textbf{{(b.{row + 1}) }}', transform=ax.transAxes)
         # plot Jacobi green
         gs2 = gs[row, 2].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
         ax = fig.add_subplot(gs2[0, 0])
@@ -1468,12 +1468,12 @@ if plot_this:
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa^{\rm tot}=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n ' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\kappa^{{\rm tot}}=10^{{{phase_contrast}}}$',
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
                     transform=ax.transAxes)
 
         if row == 0:
@@ -1495,9 +1495,9 @@ if plot_this:
         #   ax.set_aspect('equal')
 
         if row == 0:
-            ax.text(-0.17, 1.15, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.15, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
         elif row == 1:
-            ax.text(-0.17, 1.05, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
+            ax.text(-0.20, 1.05, rf'\textbf{{(c.{row + 1}) }}', transform=ax.transAxes)
         # Adding a color bar with custom ticks and labels
         cbar_ax = fig.add_subplot(gs[row, 3])
         cbar = plt.colorbar(pcm, location='left', cax=cbar_ax, ticklocation='right')  # Specify the ticks
@@ -1576,13 +1576,13 @@ for geometry_ID in ['linear', 'sine_wave_']:  # linear
 
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Total number of iteration \n Green ')
@@ -1633,11 +1633,11 @@ for geometry_ID in ['linear', 'sine_wave_']:  # linear
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n  $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n  $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Total number of iteration \n Jacobi-Green  ')
@@ -1731,13 +1731,13 @@ for geometry_ID in ['linear', 'sine_wave_']:  # linear
 
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-        # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Total number of iteration \n Green ')
@@ -1800,11 +1800,11 @@ for geometry_ID in ['linear', 'sine_wave_']:  # linear
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
         if geometry_ID == 'sine_wave_' and phase_contrast == 2:
-            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\kappa=\infty$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
-            ax.text(0.05, 0.82, f'Total phase contrast \n $\kappa=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n $\chi=10^{{{-phase_contrast}}}$', transform=ax.transAxes)
         else:
-            ax.text(0.05, 0.82, f'Total phase contrast \n  $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+            ax.text(0.05, 0.82, f'Total phase contrast \n  $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
         if row == 0:
             ax.set_title('Total number of iteration \n Jacobi-Green  ')
@@ -1957,9 +1957,9 @@ for phase_contrast in [1, 4]:
     pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
     if geometry_ID == 'sine_wave_' and phase_contrast == 1:
-        ax.text(0.05, 0.92, r'Total phase contrast $\kappa=\infty$', transform=ax.transAxes)
+        ax.text(0.05, 0.92, r'Total phase contrast $\chi=\infty$', transform=ax.transAxes)
     else:
-        ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
     ax.set_title('Total number of iteration \n Jacobi-Green  ')
     # ax.set_zlim(1 ,100)
@@ -2104,11 +2104,11 @@ for phase_contrast in [1, 4]:
 
     pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
-    # ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
     if geometry_ID == 'sine_wave_' and phase_contrast == 1:
-        ax.text(0.05, 0.92, r'Total phase contrast $\kappa=\infty$', transform=ax.transAxes)
+        ax.text(0.05, 0.92, r'Total phase contrast $\chi=\infty$', transform=ax.transAxes)
     else:
-        ax.text(0.05, 0.92, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+        ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
 
     ax.set_title('Total number of iteration \n Green ')
     # ax.set_zlim(1 ,100)
@@ -2298,7 +2298,7 @@ for phase_contrast in [1, 4]:
 
     pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.text(0.1, 0.8, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
     ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -2492,7 +2492,7 @@ for phase_contrast in [1, 4]:
 
     pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.text(0.1, 0.8, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
     ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -2684,7 +2684,7 @@ for phase_contrast in [1, 4]:
 
     pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-    ax.text(0.1, 0.8, f'Total phase contrast $\kappa=10^{phase_contrast}$', transform=ax.transAxes)
+    ax.text(0.1, 0.8, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
     ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -2870,7 +2870,7 @@ for phase_contrast in [4]:
 
     pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-    ax.text(0.1, 0.8, r'Total phase contrast $\kappa=\infty$', transform=ax.transAxes)
+    ax.text(0.1, 0.8, r'Total phase contrast $\chi=\infty$', transform=ax.transAxes)
     ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
     # ax.set_zlim(1 ,100)
     ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3047,7 +3047,7 @@ for i in range(relative_nb_iterations.shape[0]):
             ax.text(i + 2, j + 2, f'{1 / relative_nb_iterations[i, j]:.1f}',
                     ha='center', va='center', color='white')
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n' + r' nb_{JG}/nb_{G}'
                                                  '\n cosine function')
 # ax.set_zlim(1 ,100)
@@ -3090,7 +3090,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3132,7 +3132,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3174,7 +3174,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3214,7 +3214,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n cosine function _ zeros inverse')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3253,7 +3253,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^4$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^4$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n abs function ')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3289,7 +3289,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n abs function ')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')
@@ -3359,7 +3359,7 @@ divnorm = mpl.colors.TwoSlopeNorm(vmin=0., vcenter=1., vmax=relative_nb_iteratio
 
 pcm = ax.pcolormesh(X, Y, relative_nb_iterations_1, label='PCG: Green + Jacobi', cmap='seismic', norm=divnorm)
 
-ax.text(0.1, 0.8, r'Total phase contrast $\kappa=10^1$', transform=ax.transAxes)
+ax.text(0.1, 0.8, r'Total phase contrast $\chi=10^1$', transform=ax.transAxes)
 ax.set_title('Relative number of iteration \n Jacobi-Green / Green ')
 # ax.set_zlim(1 ,100)
 ax.set_ylabel(r'\# data/geometry sampling points (x direction)')

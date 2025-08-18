@@ -924,6 +924,9 @@ class Discretization:
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
             for f in np.arange(0, self.cell.unknown_shape):
                 shape_function_gradients_fdnijk[f] = np.copy(self.B_grad_at_pixel_dqnijk)
+
+
+
             for pixel_node in np.ndindex(
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
                 # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator: loop over pixel node =' f'{pixel_node}')
