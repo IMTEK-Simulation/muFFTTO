@@ -41,7 +41,7 @@ conductivity_C_1 = mat_contrast_1 * np.array([[1., 0], [0, 1.0]])
 
 conductivity_C_ref = np.array([[1., 0], [0, 1.0]])
 rho_max = 1
-rho_min = 1e-4
+rho_min = 1e-5
 
 eigen_C1 = sp.linalg.eigh(a=rho_min * conductivity_C_1, b=conductivity_C_ref, eigvals_only=True)
 eigen_C2 = sp.linalg.eigh(a=rho_max * conductivity_C_1, b=conductivity_C_ref, eigvals_only=True)
@@ -87,7 +87,7 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-sharp = True
+sharp = False
 if sharp:
     # phase_field = scale_field(phase_field_origin, min_val=1 / 10 ** ratio, max_val=1.0)
     phase_field_origin[phase_field_origin < 0.5] = rho_min  # phase_field_min#
@@ -128,7 +128,7 @@ temperatute_field_precise, norms_precise = solvers.PCG(Afun=K_fun,
                                                        lambda_min=eigen_LB)
 
 parameters_CG = {'exact_solution': temperatute_field_precise,
-                 'energy_lower_estim': True,
+                 'energy_lower_bound': True,
                  'tau': 0.25}
 
 error_in_Aeff_00 = []
@@ -170,7 +170,7 @@ ax_norms.semilogy(norms['energy_iter_error'],
                   alpha=0.5, marker='x', linewidth=1, markersize=5, markevery=5)
 ax_norms.semilogy(norms['energy_upper_bound'], label='Upper bound PT', color='Green',
                   alpha=0.5, marker='v', linewidth=1, markersize=5, markevery=5)
-ax_norms.semilogy(norms['energy_lower_estim'], label='Lower estim PT', color='Red',
+ax_norms.semilogy(norms['energy_lower_bound'], label='Lower estim PT', color='Red',
                   alpha=0.5, marker='^', linewidth=1, markersize=5, markevery=5)
 
 ax_norms.semilogy(norms['residual_rz'] / eigen_LB,
@@ -208,7 +208,7 @@ plt.legend()
 plt.show()
 
 true_e_error = np.asarray(norms['energy_iter_error'])
-lower_estim = np.asarray(norms['energy_lower_estim'])
+lower_estim = np.asarray(norms['energy_lower_bound'])
 upper_estim = lower_estim / (1 - parameters_CG['tau'])
 upper_bound = np.asarray(norms['energy_upper_bound'])
 trivial_lower_bound = np.asarray(norms['residual_rz'] / eigen_UB)

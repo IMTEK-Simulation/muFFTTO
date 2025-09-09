@@ -1,7 +1,31 @@
 import numpy as np
+import scipy as sc
+
 import scipy.sparse.linalg as sp
+import itertools
+import matplotlib.pyplot as plt
 
+# smoother of the phase-field
+def apply_smoother_log10(phase):
+    # Define a 2D smoothing kernel
+    kernel = np.array([[0.0625, 0.125, 0.0625],
+                       [0.125, 0.25, 0.125],
+                       [0.0625, 0.125, 0.0625]])
+    # Apply convolution for smoothing
+    smoothed_arr = sc.signal.convolve2d(np.log10(phase[0]), kernel, mode='same', boundary='wrap')
+    # Fix bouarders
+    smoothed_arr[0, :] = 0  # First row
+    smoothed_arr[-1, :] = 0  # Last row
+    smoothed_arr[:, 0] = 0  # First column
+    smoothed_arr[:, -1] = 0  # Last column
 
+    # Fix center point
+    smoothed_arr[phase.shape[1] // 2 - 1:phase.shape[1] // 2 + 1,
+    phase.shape[2] // 2 - 1:phase.shape[2] // 2 + 1] = -4
+
+    smoothed_arr = 10 ** smoothed_arr
+
+    return smoothed_arr
 def solve_sparse(A, b, M=None):
     num_iters = 0
 
@@ -18,7 +42,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 48  # number of voxels (assumed equal for all directions)
+N_x = N_y = 243  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1, 1  # pixel size / grid spacing
@@ -93,89 +117,119 @@ def B_t(flux_ijqxyz, div_flux_ixy=None):
 
 
 # PROBLEM DEFINITION ######################################################
+# material data --- thermal_conductivity
+mat_contrast = 1.
+inc_contrast = 1e-4
+
 # Material distribution: Square inclusion with: Obnosov solution
 phase = np.ones([nb_quad_points_per_pixel, N_x, N_y])
 phase[:, phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4,
-phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= 0
+phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= inc_contrast
 
-# material data --- thermal_conductivity
-mat_contrast = 1.
-inc_contrast =10
+nb_of_filters=150
+nb_it_wrt_filter = []
 
-A2_0 = mat_contrast * np.eye(ndim)
-A2_1 = inc_contrast * np.eye(ndim)
+for aplication in np.arange(nb_of_filters):
+    phase[0] = apply_smoother_log10(phase)
 
-# Material data matrix --- conductivity matrix A_ij per quad point           [grid of tensors]
-mat_data_ijqxy = np.einsum('ij,qxy', A2_0, phase)
-mat_data_ijqxy += np.einsum('ij,qxy', A2_1, 1 - phase)
+    plot_cross = False#bool(aplication % 20 == 0)
+    if plot_cross:
+        plt.figure()
+        ax_cross = plt.gca()
+        ax_cross.semilogy(phase[0, :, phase.shape[1] // 2], linewidth=1)
 
-# apply quadrature weights
-mat_data_ijqxy = np.einsum('ijq...,q->ijq...', mat_data_ijqxy, quadrature_weights)
 
-# Macroscopic gradient ---  loading
-macro_grad_j = np.array([1, 0])
-E_jqxy = np.einsum('j,qxy', macro_grad_j,
-                   np.ones([nb_quad_points_per_pixel, N_x, N_y]))  # set macroscopic gradient loading
-E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
+    A2_0 = mat_contrast * np.eye(ndim)
+    #A2_1 = inc_contrast * np.eye(ndim)
 
-# System matrix function
-K_fun_I = lambda x: B_t(
-    dot21(mat_data_ijqxy,
-          B(u_ixy=x.reshape(temp_shape)))).reshape(-1)
-# right hand side vector
-b_I = -B_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
+    # Material data matrix --- conductivity matrix A_ij per quad point           [grid of tensors]
+    mat_data_ijqxy = np.einsum('ij,qxy', A2_0, phase)
+    #mat_data_ijqxy += np.einsum('ij,qxy', A2_1, 1 - phase)
 
-# Preconditioner IN FOURIER SPACE #############################################
-ref_mat_data_ij = np.array([[1, 0], [0, 1]])
-# apply quadrature weights
-ref_mat_data_ij = ref_mat_data_ij * quadrature_weights[0]
-M_diag_ixy = np.zeros([n_u_dofs, N_x, N_y])
-for d in range(n_u_dofs):
-    unit_impuls_ixy = np.zeros(temp_shape)
-    unit_impuls_ixy[d, 0, 0] = 1
-    # M_diag_ixy[:, d, 0, 0] = 1
-    # response of the system to unit impulses
-    M_diag_ixy[d, ...] = B_t(
-        dot21(A=ref_mat_data_ij, v=B(u_ixy=unit_impuls_ixy)))  # TODO {change back!!!!§}
+    # apply quadrature weights
+    mat_data_ijqxy = np.einsum('ijq...,q->ijq...', mat_data_ijqxy, quadrature_weights)
 
-# Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
-M_diag_ixy = (fft(x=M_diag_ixy))  # imaginary part is zero
-# Compute the inverse of preconditioner
-M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
-# M_diag_ixy= np.linalg.pinv(M_diag_ixy)
+    # Macroscopic gradient ---  loading
+    macro_grad_j = np.array([1, 0])
+    E_jqxy = np.einsum('j,qxy', macro_grad_j,
+                       np.ones([nb_quad_points_per_pixel, N_x, N_y]))  # set macroscopic gradient loading
+    E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
 
-# Preconditioner function
-dot11 = lambda A, v: np.einsum('i...,i...  ->i...', A, v)  # dot product between precon and
-M_fun_I = lambda x: np.real((ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape))))).reshape(-1))
+    # System matrix function
+    K_fun_I = lambda x: B_t(
+        dot21(mat_data_ijqxy,
+              B(u_ixy=x.reshape(temp_shape)))).reshape(-1)
+    # right hand side vector
+    b_I = -B_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
 
-###### Solver ######
-u_sol_vec, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
-    b=b_I,
-    M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
+    # Preconditioner IN FOURIER SPACE #############################################
+    ref_mat_data_ij = np.array([[1, 0], [0, 1]])
+    # apply quadrature weights
+    ref_mat_data_ij = ref_mat_data_ij * quadrature_weights[0]
+    M_diag_ixy = np.zeros([n_u_dofs, N_x, N_y])
+    for d in range(n_u_dofs):
+        unit_impuls_ixy = np.zeros(temp_shape)
+        unit_impuls_ixy[d, 0, 0] = 1
+        # M_diag_ixy[:, d, 0, 0] = 1
+        # response of the system to unit impulses
+        M_diag_ixy[d, ...] = B_t(
+            dot21(A=ref_mat_data_ij, v=B(u_ixy=unit_impuls_ixy)))  # TODO {change back!!!!§}
 
-print('Number of steps  PCG = {}'.format(num_iters))
+    # Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
+    M_diag_ixy = (fft(x=M_diag_ixy))  # imaginary part is zero
+    # Compute the inverse of preconditioner
+    M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
+    # M_diag_ixy= np.linalg.pinv(M_diag_ixy)
 
-du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
-aux_ijqxy = du_sol_ijqxy + E_ijqxy
-A_eff = np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol
-print('homogenised properties preconditioned A11 = {}'.format(A_eff))
-print('END PCG')
+    # Preconditioner function
+    dot11 = lambda A, v: np.einsum('i...,i...  ->i...', A, v)  # dot product between precon and
+    M_fun_I = lambda x: np.real((ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape))))).reshape(-1))
 
-# Reference solution without preconditioner
-u_sol_plain_I, status, num_iters = solve_sparse(
-    A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
-    b=b_I,
-    M=None)
-print('Number of steps plain= {}'.format(num_iters))
+    ###### Solver ######
+    u_sol_vec, status, num_iters_PCG = solve_sparse(
+        A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+        b=b_I,
+        M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
 
-du_sol_plain_ijqxy = B(u_ixy=u_sol_plain_I.reshape(temp_shape))
+    print('Number of steps  PCG = {}'.format(num_iters_PCG))
+    nb_it_wrt_filter.append(num_iters_PCG)
 
-aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
-print('homogenised properties plain A11 = {}'.format(
-    np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
-print('END CG')
+    du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
+    aux_ijqxy = du_sol_ijqxy + E_ijqxy
+    A_eff = np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol
+    print('homogenised properties preconditioned A11 = {}'.format(A_eff))
+    print('END PCG')
 
-J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
-print('Analytical effective properties A11 = {}'.format(J_eff))
-print('Error A11 = {}, contrast = {}, N = {}'.format(A_eff - J_eff , inc_contrast/mat_contrast, N_x))
+    # Reference solution without preconditioner
+    # u_sol_plain_I, status, num_iters = solve_sparse(
+    #     A=sp.LinearOperator(shape=(ndof, ndof), matvec=K_fun_I, dtype='float'),
+    #     b=b_I,
+    #     M=None)
+    # print('Number of steps plain= {}'.format(num_iters))
+    #
+    # du_sol_plain_ijqxy = B(u_ixy=u_sol_plain_I.reshape(temp_shape))
+    #
+    # aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
+    # print('homogenised properties plain A11 = {}'.format(
+    #     np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+    # print('END CG')
+
+    J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * inc_contrast) / (3 * mat_contrast + inc_contrast))
+    print('Analytical effective properties A11 = {}'.format(J_eff))
+    print('Error A11 = {}, contrast = {}, N = {}'.format(A_eff - J_eff , inc_contrast/mat_contrast, N_x))
+
+    if plot_cross:
+
+        plt.title(f'FEM, nb_filter = {aplication}')
+        ax_cross.tick_params(axis='y', labelcolor='black')
+        ax_cross.set_xticks([])
+        ax_cross.set_xticklabels([])
+        plt.show()
+
+print(nb_it_wrt_filter)
+plt.figure()
+plt.plot(nb_it_wrt_filter)
+plt.title(f'FEM, Nx= {N_x}')
+plt.xlabel('Number of filters')
+plt.ylabel('Number of iterations')
+plt.show()

@@ -74,7 +74,7 @@ class Discretization:
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         self.sub_domain_size = np.prod(self.fft.nb_subdomain_grid_pts)
         # size of the MPI subdomain
-        if not discretization_type in ['finite_element']:
+        if not discretization_type in ['finite_element', 'Fourier']:
             raise ValueError(
                 'Unrecognised discretization type {}. Choose from ' \
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
@@ -120,7 +120,28 @@ class Discretization:
             # material_data_field     [d,d,q,x,y,z] - conductivity
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
+        if discretization_type == 'Fourier':
+            # finite element properties
+            self.element_type = element_type
+            self.nb_quad_points_per_pixel = None
+            self.quadrature_weights = None
+            self.quad_points_coord = None
+            self.quad_points_coord_parametric = None
 
+            self.get_discretization_info(element_type)
+            # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
+            # print('rank' f'{MPI.COMM_WORLD.rank:6}')
+            # print('B matrix ' f'{self.B_grad_at_pixel_dqnijk}')
+            self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
+            self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
+            self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
+                                       *self.nb_of_pixels]
+            # displacement              [f,n,x,y,z]
+            # rhs                       [f,n,x,y,z]
+            # macro_gradient_field    [f,d,q,x,y,z]
+            # material_data_field     [d,d,q,x,y,z] - conductivity
+            # material_data_field [d,d,d,d,q,x,y,z] - elasticity
+            #  rhs=-Dt*A*E
     def get_nodal_points_coordinates(self):
         """
         Function to calculate nodal points coordinates

@@ -120,7 +120,7 @@ temperatute_field_precise, norms_precise = solvers.PCG(Afun=K_fun,
                                                        lambda_min=eigen_LB)
 
 parameters_CG = {'exact_solution': temperatute_field_precise,
-                 'energy_lower_estim': True,
+                 'energy_lower_bound': True,
                  'tau': 0.25}
 
 error_in_Aeff_00 = []
@@ -162,7 +162,7 @@ ax_norms.semilogy(norms['energy_iter_error'],
                   alpha=0.5, marker='x', linewidth=1, markersize=5, markevery=5)
 ax_norms.semilogy(norms['energy_upper_bound'], label='Upper bound PT', color='Green',
                   alpha=0.5, marker='v', linewidth=1, markersize=5, markevery=5)
-ax_norms.semilogy(norms['energy_lower_estim'], label='Lower estim PT', color='Red',
+ax_norms.semilogy(norms['energy_lower_bound'], label='Lower estim PT', color='Red',
                   alpha=0.5, marker='^', linewidth=1, markersize=5, markevery=5)
 
 ax_norms.semilogy(norms['residual_rz'] / eigen_LB,
@@ -200,7 +200,7 @@ plt.legend()
 plt.show()
 
 true_e_error = np.asarray(norms['energy_iter_error'])
-lower_estim = np.asarray(norms['energy_lower_estim'])
+lower_estim = np.asarray(norms['energy_lower_bound'])
 upper_estim = lower_estim / (1 - parameters_CG['tau'])
 upper_bound = np.asarray(norms['energy_upper_bound'])
 trivial_lower_bound = np.asarray(norms['residual_rz'] / eigen_UB)

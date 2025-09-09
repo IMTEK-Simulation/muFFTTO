@@ -155,10 +155,10 @@ cell_points = np.stack((cell_points_x, cell_points_y))*N
 ### ----- Finish plot ----- ###
 contour = ax.contourf(np.tile(phase_field, (3, 3)), cmap='gray_r', vmin=0, vmax=1)
 
-ax_defg = fig.add_subplot(gs[0, 1])
-
-pcm = ax_defg.pcolormesh(x_deformed, y_deformed, phase_field, cmap=mpl.cm.Greys, vmin=0, vmax=2,
-                             rasterized=True)
+# ax_defg = fig.add_subplot(gs[0, 1])
+#
+# pcm = ax_defg.pcolormesh(x_deformed, y_deformed, phase_field, cmap=mpl.cm.Greys, vmin=0, vmax=2,
+#                              rasterized=True)
 
 # Colorbar
 # divider = make_axes_locatable(ax)

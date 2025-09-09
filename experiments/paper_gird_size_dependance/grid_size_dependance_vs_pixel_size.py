@@ -7,7 +7,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 problem_type = 'conductivity'
-discretization_type = 'fourier'#'finite_element' #,
+discretization_type = 'finite_element'
 element_type = 'bilinear_rectangle' #  #'linear_triangles'# linear_triangles_tilled
 #formulation = 'small_strain'
 geometry_ID = 'square_inclusion'

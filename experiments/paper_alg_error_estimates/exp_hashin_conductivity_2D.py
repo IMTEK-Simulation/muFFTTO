@@ -25,7 +25,7 @@ geometry_ID = 'hashin_inclusion_2D'
 domain_size = [1, 1]
 dim = len(domain_size)
 
-grids_sizes =[8,9,10 ]# [3, 4, 5,6,7]  # [3, 4, 5, 6, 7, 8, 9]  # [8,9,10,11], 10
+grids_sizes =[3, 4, 5,6,7]  # [8,9,10 ]# [3, 4, 5,6,7]  # [3, 4, 5, 6, 7, 8, 9]  # [8,9,10,11], 10
 rhos = [-3, -2, -1, 1, 2, 3]#[1, 3]  # [-3, -2, -1, 1, 2, 3]
 for anisotropy in [False, True]:  # ,True
     for rho in rhos:
