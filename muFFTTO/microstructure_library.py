@@ -17,7 +17,8 @@ def get_geometry(nb_voxels,
                  **kwargs):
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
-                                   'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles','2_circles',
+                                   'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles',
+                                   '2_circles',
                                    'symmetric_linear', 'hashin_inclusion_2D',
                                    'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
                                    'laminate', 'laminate2', 'laminate_log',
@@ -87,8 +88,8 @@ def get_geometry(nb_voxels,
             y_lim = coordinates[1][-1, -1]
             # Define circle parameters (center coordinates and radius)
             circles = [
-                (x_lim / 6, 3*y_lim / 4, y_lim / 10),  # Circle 1
-                (3 *x_lim / 6,  4*y_lim / 6, y_lim / 10),  # Circle 2
+                (x_lim / 6, 3 * y_lim / 4, y_lim / 10),  # Circle 1
+                (3 * x_lim / 6, 4 * y_lim / 6, y_lim / 10),  # Circle 2
                 (5 * x_lim / 6, 3 * y_lim / 4, y_lim / 10),
             ]
             # Apply circle masks
@@ -177,9 +178,9 @@ def get_geometry(nb_voxels,
                 phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2) + np.power(coordinates[1] - 0.5, 2))) < 0.2] = 0
             elif nb_voxels.size == 3:
                 phase_field[
-                    np.power(coordinates[0], 2) +
-                    np.power(coordinates[1], 2) +
-                    np.power(coordinates[2], 2) < 0.3] = 1
+                    np.power(coordinates[0] - 0.5, 2) +
+                    np.power(coordinates[1] - 0.5, 2) +
+                    np.power(coordinates[2] - 0.5, 2) < 0.1] = 0
 
         case 'circle_inclusions':
             nb_circles = kwargs['nb_circles']
@@ -190,7 +191,7 @@ def get_geometry(nb_voxels,
             random_centers = kwargs['random_centers']
 
             inclusion_box_size = 1 / nb_circles
-            perturb_of_centers=inclusion_box_size/2-r_n
+            perturb_of_centers = inclusion_box_size / 2 - r_n
 
             phase_field = np.zeros(nb_voxels)
             dim = np.size(nb_voxels)
@@ -213,7 +214,7 @@ def get_geometry(nb_voxels,
 
                         center = np.array([centers_x[i, j], centers_y[i, j]])
                         if random_centers:
-                            center += (perturb_of_centers*0.99) * np.random.uniform(-1, 1)
+                            center += (perturb_of_centers * 0.99) * np.random.uniform(-1, 1)
                         r_center = np.zeros_like(coordinates)
                         for d in np.arange(dim):
                             r_center[d] = coordinates[d, ...] - center[d]
@@ -254,7 +255,7 @@ def get_geometry(nb_voxels,
                 phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
                     3 * 2 * np.pi * coordinates[1])
             elif nb_voxels.size == 3:
-                phase_field =  0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
                     3 * 2 * np.pi * coordinates[1]) + 0.25 * np.cos(
                     3 * 2 * np.pi * coordinates[2])
         case 'sine_wave_':

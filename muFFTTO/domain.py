@@ -691,7 +691,9 @@ class Discretization:
                     # TODO 3D interpolation is not tested
         return quad_field_fqnxyz, N_at_quad_points_qnijk
 
-    def get_rhs(self, material_data_field_ijklqxyz, macro_gradient_field_ijqxyz):
+    def get_rhs(self, material_data_field_ijklqxyz,
+                macro_gradient_field_ijqxyz,
+                rhs_inxyz):
         """
         Function that computes right hand side vector of linear elastic homogenization problem
         rhs= - B^t: C: E
@@ -724,14 +726,13 @@ class Discretization:
         stress = self.get_gradient_size_field(name='stress_temporary')
         stress.s = self.apply_material_data(material_data_field_ijklqxyz, macro_gradient_field_ijqxyz)
 
-        rhs_fnxyz = self.get_unknown_size_field(name='rhs_')
         self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
-                                                div_u_fnxyz=rhs_fnxyz,
+                                                div_u_fnxyz=rhs_inxyz,
                                                 apply_weights=True)
-        rhs_fnxyz.s *= -1
-        return rhs_fnxyz
+        rhs_inxyz.s *= -1
+        return rhs_inxyz
 
-    def get_macro_gradient_field(self, macro_gradient_ij):
+    def get_macro_gradient_field(self, macro_gradient_ij, macro_gradient_field_ijqxyz):
         """
         Function that returns macro gradient field E from single macro gradient vector
 
@@ -744,7 +745,7 @@ class Discretization:
         macro_gradient_field_ijqxyz:  quadrature point field of macroscopic gradient [i,j,q, x,y,z]
         """
 
-        macro_gradient_field_ijqxyz = self.get_gradient_size_field(name='macro_gradient')
+        # macro_gradient_field_ijqxyz = self.get_gradient_size_field(name='macro_gradient')
         macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
 
@@ -788,8 +789,11 @@ class Discretization:
                                                          grad_u_ijqxyz=strain_ijqxyz)
 
         strain_ijqxyz.s = strain_ijqxyz.s + macro_gradient_field_ijqxyz.s  # compute total strain
-        material_data_field_ijklqxyz.s = self.apply_quadrature_weights(material_data_field_ijklqxyz)
-        stress_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, strain_ijqxyz)
+
+        mat_data_temp = self.get_material_data_size_field(name='weighted_data_field_temporary')
+        mat_data_temp.s= material_data_field_ijklqxyz.s
+        mat_data_temp.s = self.apply_quadrature_weights(mat_data_temp)
+        stress_ijqxyz = self.apply_material_data(mat_data_temp, strain_ijqxyz)
 
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
         homogenized_stress_ij = Reductor_numpi.sum(stress_ijqxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #

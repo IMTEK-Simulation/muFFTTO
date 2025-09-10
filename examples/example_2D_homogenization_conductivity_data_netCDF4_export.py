@@ -13,7 +13,7 @@ element_type = 'linear_triangles'  # #'linear_triangles'# linear_triangles_tille
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (64, 64)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -24,12 +24,9 @@ discretization = domain.Discretization(cell=my_cell,
                                        element_type=element_type)
 start_time = time.time()
 
-# set macroscopic gradient
-macro_gradient = np.array([1.0, 0])
-
 # create material data field
 mat_contrast = 1
-mat_contrast_2 = 1e-4
+mat_contrast_2 = 1e-2
 conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 
 material_data_field_C_0 = discretization.get_material_data_size_field(name='ref_conductivity_tensor')
@@ -51,12 +48,10 @@ material_data_field_C_0_rho.s = mat_contrast * material_data_field_C_0.s[..., :,
 material_data_field_C_0_rho.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 2)
 
 # Set up the equilibrium system
-macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
 
-# Solve mechanical equilibrium constrain
-rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
 
-K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
+K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
+                                                     displacement_field=x)
 # M_fun = lambda x: 1 * x
 K_matrix = discretization.get_system_matrix(material_data_field_C_0_rho)
 # preconditioner_old = discretization.get_preconditioner_DELETE(reference_material_data_field_ijklqxyz=material_data_field_C_0.s)
@@ -65,16 +60,43 @@ preconditioner = discretization.get_preconditioner_NEW(reference_material_data_f
 # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
-x_1 = K_fun(rhs)
+# x_1 = K_fun(rhs)
 # initial solution
 init_x_0 = discretization.get_unknown_size_field(name='init_solution')
 solution_field = discretization.get_unknown_size_field(name='solution')
+macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
-solution_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=init_x_0.s, P=M_fun, steps=int(500), toler=1e-12)
-nb_it = len(norms['residual_rz'])
-print(' nb_ steps CG =' f'{nb_it}')
+dim = discretization.domain_dimension
+homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 
-# ----------------------------------------------------------------------
+for i in range(dim):
+    # set macroscopic gradient
+    macro_gradient = np.zeros([dim])
+    macro_gradient[i] = 1
+
+    macro_gradient_field.s.fill(0)
+    macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+                                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
+
+    # Solve mechanical equilibrium constrain
+    rhs_field.s.fill(0)
+    rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                                 macro_gradient_field_ijqxyz=macro_gradient_field,
+                                 rhs_inxyz=rhs_field)
+
+    init_x_0.s.fill(0)
+    solution_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=init_x_0.s, P=M_fun, steps=int(500), toler=1e-12)
+    nb_it = len(norms['residual_rz'])
+    print(' nb_ steps CG =' f'{nb_it}')
+    # compute homogenized stress field corresponding to displacement
+    homogenized_A_ij[i, :] = discretization.get_homogenized_stress(
+        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        displacement_field_inxyz=solution_field,
+        macro_gradient_field_ijqxyz=macro_gradient_field)
+
+ # ----------------------------------------------------------------------
+print('homogenized conductivity tangent = \n {}'.format(homogenized_A_ij))
 
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress(
