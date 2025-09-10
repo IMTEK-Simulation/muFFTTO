@@ -42,10 +42,10 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 243  # number of voxels (assumed equal for all directions)
+N_x = N_y = 16  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
-delta_x, delta_y = 1, 1  # pixel size / grid spacing
+delta_x, delta_y = 1/N_x, 1/N_y  # pixel size / grid spacing
 pixel_size = (delta_x, delta_y)
 domain_vol = (delta_x * N_x) * (delta_y * N_y)  # domain volume
 
@@ -123,14 +123,14 @@ inc_contrast = 1e-4
 
 # Material distribution: Square inclusion with: Obnosov solution
 phase = np.ones([nb_quad_points_per_pixel, N_x, N_y])
-phase[:, phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4,
-phase.shape[2] * 1 // 4:phase.shape[2] * 3 // 4] *= inc_contrast
+phase[:, phase.shape[1] * 1 // 4+1:phase.shape[1] * 3 // 4+1,
+phase.shape[2] * 1 // 4+1:phase.shape[2] * 3 // 4+1] *= inc_contrast
 
 nb_of_filters=150
 nb_it_wrt_filter = []
 
 for aplication in np.arange(nb_of_filters):
-    phase[0] = apply_smoother_log10(phase)
+    #phase[0] = apply_smoother_log10(phase)
 
     plot_cross = False#bool(aplication % 20 == 0)
     if plot_cross:
@@ -184,6 +184,11 @@ for aplication in np.arange(nb_of_filters):
     # Preconditioner function
     dot11 = lambda A, v: np.einsum('i...,i...  ->i...', A, v)  # dot product between precon and
     M_fun_I = lambda x: np.real((ifft(dot11(M_diag_ixy, fft(x=x.reshape(temp_shape))))).reshape(-1))
+
+    # x_grad= B(u_ixy=b_I.reshape(temp_shape))
+    # x_div=B_t( dot21(mat_data_ijqxy,
+    #           B(u_ixy=b_I.reshape(temp_shape)))).reshape(-1)
+    # x_1 = K_fun_I(b_I)
 
     ###### Solver ######
     u_sol_vec, status, num_iters_PCG = solve_sparse(

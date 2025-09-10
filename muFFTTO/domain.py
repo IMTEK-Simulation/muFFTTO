@@ -2,7 +2,6 @@ import warnings
 
 import numpy as np
 import scipy as sc
-from reportlab.lib.pagesizes import elevenSeventeen
 
 from muFFTTO import discretization_library
 
@@ -182,6 +181,7 @@ class Discretization:
             # material_data_field     [d,d,q,x,y,z] - conductivity
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
+
     def get_nodal_points_coordinates(self):
         """
         Function to calculate nodal points coordinates
@@ -421,23 +421,19 @@ class Discretization:
         B_dqnijk = self.B_grad_at_pixel_dqnijk
         point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
         op = ConvolutionOperator(point_of_origin, B_dqnijk)
-        print('op.pixel_operator.shape')
-        print(op.pixel_operator.shape)
-        print(u_inxyz.s.shape)
-        # print(u_inxyz.get_stride(0))
-        print(grad_u_ijqxyz.s.shape)
-        print('grad_u_ijqxyz.s.shape')
+        # print('op.pixel_operator.shape')
 
         # Apply the gradient operator to the nodal field and write result to the quad field
 
-        op.apply(nodal_field=u_inxyz, quadrature_point_field=grad_u_ijqxyz)
+        op.apply(nodal_field=u_inxyz,
+                 quadrature_point_field=grad_u_ijqxyz)
         # swap first two axis becouse
         # muGrid consider first index of derivative and second of displacement component
-        #if self.cell.unknown_shape > 1:
-            #grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1)
-            #grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
-            #grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
-         #   grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
+        # if self.cell.unknown_shape > 1:
+        # grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1)
+        # grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
+        # grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
+        #   grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
@@ -534,31 +530,23 @@ class Discretization:
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
         # clear div array
-        div_u_fnxyz.p.fill(0)
-        # bring shape_function gradients
-        B_dqnijk = self.B_grad_at_pixel_dqnijk
         # get quadrature weights
         if apply_weights:
             weights = self.quadrature_weights
         else:
             weights = np.ones(self.quadrature_weights.shape)
+        # div_u_fnxyz.p.fill(0)
+        # bring shape_function gradients
+        B_dqnijk = self.B_grad_at_pixel_dqnijk
+
         # prepare convolution operator
-        op = ConvolutionOperator([0, 0], B_dqnijk)
+        point_of_origin = self.domain_dimension * [0, ]
+        op = ConvolutionOperator(point_of_origin, B_dqnijk)
 
-        ###### TODO delete when mugrid ordering is fixed
-        #gradient_field_jiqxyz = np.swapaxes(gradient_field_ijqxyz.s, 0, 1).copy()
-
-        # Get a tensor-field (for example to represent the strain)
-        # grad_u_jiqxyz = self.field_collection.real_field(
-        #     unique_name='temp_field',  # name of the field
-        #     # components_shape=(self.domain_dimension,),  # shape of components
-        #     components_shape=(*self.cell.gradient_shape[::-1],),  # shape of components
-        #     sub_division='quad_points'  # sub-point type
-        # )
-       # grad_u_jiqxyz.s = np.copy(gradient_field_jiqxyz)
-        ###### TODO
         # apply B^transposed via the convolution operator
-        op.transpose(quadrature_point_field=gradient_field_ijqxyz, nodal_field=div_u_fnxyz, weights=weights)
+        op.transpose(quadrature_point_field=gradient_field_ijqxyz,
+                     nodal_field=div_u_fnxyz,
+                     weights=weights)
         # transpose(self, quadrature_point_field, nodal_field, weights, p_float=None, *args, **kwargs):
         return div_u_fnxyz
 
@@ -729,11 +717,18 @@ class Discretization:
         # material_data_field     [d,d,q,x,y,z] - conductivity
         # rhs                       [f,n,x,y,z]
         #  rhs=-Dt*wA*E
-        material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)
-        stress = self.apply_material_data(material_data_field_ijklqxyz, macro_gradient_field_ijqxyz)
-        rhs_fnxyz = self.apply_gradient_transposed_operator(stress)
 
-        return -rhs_fnxyz
+        # material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)  TODO{ML} oldREMOVE  :"
+
+        stress = self.get_gradient_size_field(name='stress_temporary')
+        stress.s = self.apply_material_data(material_data_field_ijklqxyz, macro_gradient_field_ijqxyz)
+
+        rhs_fnxyz = self.get_unknown_size_field(name='rhs_')
+        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
+                                                div_u_fnxyz=rhs_fnxyz,
+                                                apply_weights=True)
+        rhs_fnxyz.s *= -1
+        return rhs_fnxyz
 
     def get_macro_gradient_field(self, macro_gradient_ij):
         """
@@ -748,9 +743,9 @@ class Discretization:
         macro_gradient_field_ijqxyz:  quadrature point field of macroscopic gradient [i,j,q, x,y,z]
         """
 
-        macro_gradient_field_ijqxyz = self.get_gradient_size_field()
-        macro_gradient_field_ijqxyz[..., :] = macro_gradient_ij[
-            (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.ndim - 2)]
+        macro_gradient_field_ijqxyz = self.get_gradient_size_field(name='macro_gradient')
+        macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
+            (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
 
         return macro_gradient_field_ijqxyz
 
@@ -782,13 +777,17 @@ class Discretization:
                     - int (C * (macro_grad + micro_grad))  dx / | domain |
          """
 
-        if formulation == 'small_strain':
-            strain_ijqxyz = self.apply_gradient_operator_symmetrized(displacement_field_inxyz)
-        else:
-            strain_ijqxyz = self.apply_gradient_operator(displacement_field_inxyz)
+        strain_ijqxyz = self.get_gradient_size_field(name='strain_temp')
 
-        strain_ijqxyz = strain_ijqxyz + macro_gradient_field_ijqxyz  # compute total strain
-        material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)
+        if formulation == 'small_strain':
+            strain_ijqxyz = self.apply_gradient_operator_symmetrized(u_inxyz=displacement_field_inxyz,
+                                                                     grad_u_ijqxyz=strain_ijqxyz)
+        else:
+            strain_ijqxyz = self.apply_gradient_operator(u_inxyz=displacement_field_inxyz,
+                                                         grad_u_ijqxyz=strain_ijqxyz)
+
+        strain_ijqxyz.s = strain_ijqxyz.s + macro_gradient_field_ijqxyz.s  # compute total strain
+        material_data_field_ijklqxyz.s = self.apply_quadrature_weights(material_data_field_ijklqxyz)
         stress_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, strain_ijqxyz)
 
         Reductor_numpi = Reduction(MPI.COMM_WORLD)
@@ -868,7 +867,7 @@ class Discretization:
         -------
         weighted_material_data_ijqxyz:
         """
-        weighted_material_data_ijqxyz = np.einsum('ijq...,q->ijq...', material_data_ijqxyz, self.quadrature_weights)
+        weighted_material_data_ijqxyz = np.einsum('ijq...,q->ijq...', material_data_ijqxyz.s, self.quadrature_weights)
         return weighted_material_data_ijqxyz
 
     def apply_quadrature_weights_elasticity(self, material_data_ijklqxyz):
@@ -884,7 +883,7 @@ class Discretization:
         -------
         weighted_material_data_ijklqxyz:
         """
-        weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz,
+        weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz.s,
                                                     self.quadrature_weights)
 
         return weighted_material_data_ijklqxyz
@@ -907,16 +906,16 @@ class Discretization:
 
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
-        stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field)
+        stress = np.einsum('ijkl...,lk...->ij...', material_data.s, gradient_field.s)
 
         return stress
 
     def apply_material_data_conductivity(self, material_data, gradient_field):
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
-        flux = np.einsum('ij...,uj...->ui...', material_data,
-                         gradient_field)  # 'u' just to keep the size of array consistent
+        flux_ijnxyz = np.einsum('ij...,uj...->ui...', material_data.s,
+                                gradient_field.s)  # 'u' just to keep the size of array consistent
 
-        return flux
+        return flux_ijnxyz
 
     def get_system_matrix(self, material_data_field):
         """
@@ -1004,37 +1003,42 @@ class Discretization:
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
         # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
 
-        unit_impulse_fnxyz = self.get_unknown_size_field()
+        unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
         # print()
 
-        # print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
+        # print('unit_impulse_inxyz.shape = {}'.format(unit_impulse_inxyz.shape))
 
-        preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_fnxyz.shape[:2] + unit_impulse_fnxyz.shape)
-        # print('preconditioner_diagonals_fnfnxyz.shape = {}'.format(preconditioner_diagonals_fnfnxyz.shape))
-        # construct unit impulses responses for all type of DOFs
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} self.fft.ifftfreq[0]=' f'{self.fft.icoords[0]}')
-        # print('rank' f'{MPI.COMM_WORLD.rank:6}  self.fft.ifftfreq[1]=' f'{self.fft.icoords[1]}')
-
-        # print(            'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node=' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
-        # check if I have zero frequency on the core
+        preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
+        # preconditioner_diagonals_ininxyz =   self.fft.real_space_field(
+        #     unique_name='Greens_diagonal_r',  # name of the field
+        #     # components_shape=(self.domain_dimension,),  # shape of components
+        #     shape=(*self.unknown_size[:2]+self.unknown_size[:1],),  # shape of components
+        #     sub_division='nodal_points'  # sub-point type
+        # )# TODO{WARNING} this is very tricky way. I do not know how the mugrid handle this shape
 
         # TODO self.fft.icoords == 0, axis = 0
         # loop over all types of degree of freedom [f,n]
 
-        for impulse_position in np.ndindex(unit_impulse_fnxyz.shape[0:2]):
+        for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
             # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
 
-            unit_impulse_fnxyz.fill(0)  # empty the unit impulse vector
+            unit_impulse_inxyz.s.fill(0)  # empty the unit impulse vector
             if np.any(np.all(self.fft.icoords == 0, axis=0)):
                 # print(                   'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node =' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
                 # set 1 --- the unit impulse --- to a proper positions
-                unit_impulse_fnxyz[impulse_position + (0,) * (unit_impulse_fnxyz.ndim - 2)] = 1
-            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW unit_impulse_fnxyz=' f'{unit_impulse_fnxyz}')
+                unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW unit_impulse_inxyz=' f'{unit_impulse_inxyz}')
+
+            # preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
+            #     material_data_field=reference_material_data_field_ijklqxyz.s,
+            #     displacement_field=unit_impulse_inxyz.s,
+            #     formulation=formulation)
 
             preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
                 material_data_field=reference_material_data_field_ijklqxyz,
-                displacement_field=unit_impulse_fnxyz,
+                displacement_field=unit_impulse_inxyz,
                 formulation=formulation)
+
             MPI.COMM_WORLD.Barrier()
 
             # print('4 = \n   core {}'.format(MPI.COMM_WORLD.rank))
@@ -1043,7 +1047,17 @@ class Discretization:
         # print(preconditioner_diagonals_fnfnxyz.reshape([2, 2, *preconditioner_diagonals_fnfnxyz.shape[-2:]]))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6}  ')
         # construct diagonals from unit impulses responses using FFT
-        preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+
+        # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+        preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
+            unique_name='Greens_diagonal_f',  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+        )  #
+        preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+
+        # preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_ininxyz)
+
         # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
         #     preconditioner_diagonals_fnfnqks_NEW = np.expand_dims(preconditioner_diagonals_fnfnqks_NEW,
         #                                                           axis=(0, 1, 2, 3))
@@ -1062,9 +1076,9 @@ class Discretization:
                     0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
                 continue
 
-            local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)],
-                                               (np.prod(unit_impulse_fnxyz.shape[0:2]),
-                                                np.prod(unit_impulse_fnxyz.shape[0:2])))
+            local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_ininqks.s[(..., *pixel_index)],
+                                               (np.prod(unit_impulse_inxyz.s.shape[0:2]),
+                                                np.prod(unit_impulse_inxyz.s.shape[0:2])))
             # print('rank' f'{MPI.COMM_WORLD.rank:6}  Local matrix of preconditioner NEW ')
             # print(pixel_index)
             # print(local_matrix_ijkl_NEW)
@@ -1073,10 +1087,10 @@ class Discretization:
             local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
 
             # rearrange local inverse matrix into global field
-            preconditioner_diagonals_fnfnqks_NEW[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
-                    unit_impulse_fnxyz.shape[0:2] + unit_impulse_fnxyz.shape[0:2]))
+            preconditioner_diagonals_ininqks.s[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
+                    unit_impulse_inxyz.s.shape[0:2] + unit_impulse_inxyz.s.shape[0:2]))
         # print('7 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-        return preconditioner_diagonals_fnfnqks_NEW
+        return preconditioner_diagonals_ininqks
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
                                   formulation=None):
@@ -1164,8 +1178,6 @@ class Discretization:
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
             for f in np.arange(0, self.cell.unknown_shape):
                 shape_function_gradients_fdnijk[f] = np.copy(self.B_grad_at_pixel_dqnijk)
-
-
 
             for pixel_node in np.ndindex(
                     *np.ones([self.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
@@ -1304,21 +1316,29 @@ class Discretization:
         return nodal_field_fnxyz
 
     def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
+        # the ouput array is numpy array for compatibility with solvers
 
-        gradient_ijqxyz = self.get_gradient_size_field(name='temp_gradient_field_for_apply_system_matrix')
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
+        # chcek if the field is nump. If yes, make a muGrid array of it
+        if isinstance(displacement_field, np.ndarray):
+            uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz')
+            uknown_inxyz.s = displacement_field
+        else:
+            uknown_inxyz = displacement_field
+
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
 
         if np.all(formulation == 'small_strain'):
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
             # print('3.02 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            gradient_ijqxyz = self.apply_gradient_operator_symmetrized(u_inxyz=displacement_field,
-                                                                       grad_u_ijqxyz=gradient_ijqxyz)
+            self.apply_gradient_operator_symmetrized(u_inxyz=uknown_inxyz,
+                                                     grad_u_ijqxyz=gradient_ijqxyz)
         else:
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
             # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=' f'{displacement_field}')
             # print('3.03 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            gradient_ijqxyz = self.apply_gradient_operator(u_inxyz=displacement_field,
-                                                           grad_u_ijqxyz=gradient_ijqxyz)
+            self.apply_gradient_operator(u_inxyz=uknown_inxyz,
+                                         grad_u_ijqxyz=gradient_ijqxyz)
         MPI.COMM_WORLD.Barrier()
 
         # print('apply_quadrature_weights = \n   core {}'.format(MPI.COMM_WORLD.rank))
@@ -1326,19 +1346,20 @@ class Discretization:
         # material_data_field = self.apply_quadrature_weights(material_data_field) #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
         # compute stress/flux field
-        gradient_ijqxyz = self.apply_material_data(material_data=material_data_field,
-                                                   gradient_field=gradient_ijqxyz.s)
+
+        gradient_ijqxyz.s = self.apply_material_data(material_data=material_data_field,
+                                                     gradient_field=gradient_ijqxyz)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
         MPI.COMM_WORLD.Barrier()
 
         # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
-        gradient_ijqxyz = self.apply_gradient_transposed_operator(gradient_field_ijqxyz=gradient_ijqxyz,
-                                                                  div_u_fnxyz=displacement_field,
-                                                                  apply_weights=True)
-        # TODO should I displacement_field this field?
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:force=')  # f'{force}')
+        div_stress_inxyz = self.get_unknown_size_field(name='div_stress')
 
-        return gradient_ijqxyz
+        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                div_u_fnxyz=div_stress_inxyz,
+                                                apply_weights=True)
+
+        return div_stress_inxyz.s
 
     def apply_system_matrix_old(self, material_data_field, displacement_field, formulation=None):
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
@@ -1557,9 +1578,21 @@ class Discretization:
         return np.zeros([self.domain_dimension, self.domain_dimension, self.domain_dimension,
                          self.domain_dimension, self.nb_quad_points_per_pixel, *self.nb_of_pixels])
 
-    def get_material_data_size_field(self):
+    def get_material_data_size_field_numpy(self):
         # return zero field for the (discretized) material data
         return np.zeros(self.material_data_size)
+
+    def get_material_data_size_field(self, name):
+        # return zero muGrid field for the (discretized) material data
+        # quadrature point field
+        material_data_ijqxyz = self.fft.real_space_field(
+            unique_name=name,  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            shape=(*self.cell.material_data_shape,),  # shape of components
+            sub_division='quad_points'  # sub-point type
+        )
+
+        return material_data_ijqxyz
 
     def get_discretization_info(self, element_type):
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
