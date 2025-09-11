@@ -4,8 +4,6 @@ import numpy as np
 import scipy as sc
 import time
 
-
-
 from muFFTTO import domain
 from muFFTTO import solvers
 
@@ -73,7 +71,7 @@ def objective_function_phase_field(discretization,
     # double - well potential
     # integrant = (phase_field_1nxyz ** 2) * (1 - phase_field_1nxyz) ** 2
     # f_dw = (np.sum(integrant) / np.prod(integrant.shape)) * discretization.cell.domain_volume
-   # if discretization.element_type == 'linear_triangles':
+    # if discretization.element_type == 'linear_triangles':
     f_dw = compute_double_well_potential_analytical(discretization=discretization,
                                                     phase_field_1nxyz=phase_field_1nxyz)
     # if discretization.element_type != 'linear_triangles' :
@@ -318,7 +316,7 @@ def compute_double_well_potential_Gauss_quad(discretization, phase_field_1nxyz):
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
 
-    nb_quad_points_per_pixel = 18 #
+    nb_quad_points_per_pixel = 18  #
     quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
         element_type=discretization.element_type,
         nb_quad_points_per_pixel=nb_quad_points_per_pixel)
@@ -454,7 +452,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                                          axis=(0, 1)),
                                                                      discretization.roll(discretization.fft,
                                                                                          phase_field_1nxyz[0, 0],
-                                                                                          -1 * np.array([1, 1]),
+                                                                                         -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
 
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
@@ -685,6 +683,7 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization, 
 
     return (drho_squared - 2 * drho_cubed + drho_quartic)
 
+
 def partial_der_of_double_well_potential_wrt_density_Gauss_quad(discretization, phase_field_1nxyz):
     raise ValueError(
         'NOT FINISHED{} '.format(discretization.element_type))
@@ -699,7 +698,7 @@ def partial_der_of_double_well_potential_wrt_density_Gauss_quad(discretization, 
         raise ValueError(
             'precise  evaluation works only for linear triangles. You provided {} '.format(discretization.element_type))
 
-    nb_quad_points_per_pixel = 18 #
+    nb_quad_points_per_pixel = 18  #
     quad_points_coord, quad_points_weights = domain.get_gauss_points_and_weights(
         element_type=discretization.element_type,
         nb_quad_points_per_pixel=nb_quad_points_per_pixel)
@@ -719,8 +718,6 @@ def partial_der_of_double_well_potential_wrt_density_Gauss_quad(discretization, 
     quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 
     return discretization.mpi_reduction.sum(quad_field_fqnxyz)
-
-
 
 
 def partial_der_of_double_well_potential_wrt_density_analytical_fast(discretization, phase_field_1nxyz, eta=1):
@@ -908,7 +905,10 @@ def compute_gradient_of_phase_field_potential(discretization, phase_field_1nxyz)
     # Input: phase_field [1,n,x,y,z]
     # Output: potential [1]
     # phase field gradient potential = int (  (grad(rho))^2 )    dx
-    phase_field_gradient_ijqxyz = discretization.apply_gradient_operator(phase_field_1nxyz)
+    phase_field_gradient_ijqxyz = discretization.get_gradient_of_scalar_field(name='temp_gradient_cgophfp')
+
+    phase_field_gradient_ijqxyz = discretization.apply_gradient_operator(u_inxyz=phase_field_1nxyz,
+                                                                         grad_u_ijqxyz=phase_field_gradient_ijqxyz.s)
     f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient_ijqxyz ** 2))
     return f_rho_grad
 
@@ -2074,9 +2074,9 @@ def sensitivity_with_adjoint_problem_FE(discretization,
     #                                                                                          p)
 
     material_data_field_C_0_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
-                                                                                            np.power(
-                                                                                                phase_field_at_quad_poits_1qnxyz,
-                                                                                                p))[0, :, 0, ...]
+        np.power(
+            phase_field_at_quad_poits_1qnxyz,
+            p))[0, :, 0, ...]
     # stress difference potential
     # rhs=-Dt*wA*E  -- we can use it to assemble df_du_field
 
@@ -2367,7 +2367,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
 
     # Adjoint problem
     # compute strain field from to displacement and macro gradient
-    #strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
+    # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
 
     stress_difference_ij = target_stress_ij - actual_stress_ij
     stress_difference_ijqxyz = discretization.get_gradient_size_field()

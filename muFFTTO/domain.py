@@ -1091,7 +1091,7 @@ class Discretization:
             MPI.COMM_WORLD.Barrier()
 
             # print('5 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            original_shape_ininqks=preconditioner_diagonals_ininqks.shape
+            original_shape_ininqks = preconditioner_diagonals_ininqks.shape
             prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(1, 3))
 
             # Assume A_ijklxyz is of shape (d, d, x, y, z)
@@ -1103,12 +1103,12 @@ class Discretization:
             A_batch = A_reshaped.transpose(2, 0, 1)  # shape: (N, d, d)
 
             # Invert each matrix using np.linalg.inv (vectorized)
-            A_batch[d_i:,...]  = np.linalg.inv(A_batch[d_i:,...])  # shape: (N, d, d)
+            A_batch[d_i:, ...] = np.linalg.inv(A_batch[d_i:, ...])  # shape: (N, d, d)
 
             # Transpose back and reshape to original shape
-            A_inv = A_batch.transpose(1, 2, 0).reshape(d_i, d_j,*spatial_dims)
+            A_inv = A_batch.transpose(1, 2, 0).reshape(d_i, d_j, *spatial_dims)
 
-            preconditioner_diagonals_ininqks.s=A_inv.reshape(original_shape_ininqks)
+            preconditioner_diagonals_ininqks.s = A_inv.reshape(original_shape_ininqks)
 
             # for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
             #
@@ -1557,9 +1557,23 @@ class Discretization:
 
         return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
 
-    def get_scalar_field(self):
+    def get_scalar_field(self, name):
         # return zero field with the shape of one scalar per nodal point
-        return np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+        # np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
+        return self.fft.real_space_field(
+            unique_name=name,  # name of the field
+            shape=(1,),  # shape of components
+            sub_division='nodal_points'  # sub-point type
+        )
+
+    def get_gradient_of_scalar_field(self, name):
+        # return zero field with the shape of gradeint of one scalar per nodal point
+        # np.zeros([dim, self.nb_quad_per_pixel, *self.nb_of_pixels])
+        return self.fft.real_space_field(
+            unique_name=name,  # name of the field
+            shape=(1, self.cell.domain_dimension,),  # shape of components
+            sub_division='quad_points'  # sub-point type
+        )
 
     def get_temperature_gradient_size_field(self, name):
         # return zero field for  the  (discretized)  gradient of temperature
