@@ -5,15 +5,17 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
+from mpi4py import MPI
+
 
 problem_type = 'conductivity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'  # #'linear_triangles'# linear_triangles_tilled
 # formulation = 'small_strain'
-geometry_ID = 'square_inclusion'
+geometry_ID = 'square_inclusion' # 'sine_wave_' #
 
 domain_size = [1, 1]
-number_of_pixels = (32, 32)
+number_of_pixels = (1024, 1024)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -29,8 +31,9 @@ mat_contrast = 1
 mat_contrast_2 = 1e-2
 conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 
-material_data_field_C_0 = discretization.get_material_data_size_field(name='ref_conductivity_tensor')
+material_data_field_C_0 = discretization.get_material_data_size_field(name='conductivity_tensor')
 
+# populate the field with C_1 material
 material_data_field_C_0.s = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
@@ -41,22 +44,21 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
                                                   coordinates=discretization.fft.coords)
 
 # apply material distribution
-material_data_field_C_0_rho = discretization.get_material_data_size_field(name='conductivity_tensor')
 
-material_data_field_C_0_rho.s = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
+material_data_field_C_0.s = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
                                                                                                1)
-material_data_field_C_0_rho.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 2)
+material_data_field_C_0.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 2)
 
 # Set up the equilibrium system
 
 
-K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
+K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0,
                                                      displacement_field=x)
 # M_fun = lambda x: 1 * x
-K_matrix = discretization.get_system_matrix(material_data_field_C_0_rho)
+# K_matrix = discretization.get_system_matrix(material_data_field_C_0)
 # preconditioner_old = discretization.get_preconditioner_DELETE(reference_material_data_field_ijklqxyz=material_data_field_C_0.s)
 
-preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+preconditioner = discretization.get_preconditioner_NEW(reference_material_data_ijkl=conductivity_C_1)
 # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
@@ -81,7 +83,7 @@ for i in range(dim):
 
     # Solve mechanical equilibrium constrain
     rhs_field.s.fill(0)
-    rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+    rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0,
                                  macro_gradient_field_ijqxyz=macro_gradient_field,
                                  rhs_inxyz=rhs_field)
 
@@ -91,7 +93,7 @@ for i in range(dim):
     print(' nb_ steps CG =' f'{nb_it}')
     # compute homogenized stress field corresponding to displacement
     homogenized_A_ij[i, :] = discretization.get_homogenized_stress(
-        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
 
@@ -100,7 +102,7 @@ print('homogenized conductivity tangent = \n {}'.format(homogenized_A_ij))
 
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress(
-    material_data_field_ijklqxyz=material_data_field_C_0_rho,
+    material_data_field_ijklqxyz=material_data_field_C_0,
     displacement_field_inxyz=solution_field,
     macro_gradient_field_ijqxyz=macro_gradient_field)
 

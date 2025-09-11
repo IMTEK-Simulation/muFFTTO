@@ -11,9 +11,9 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (32,)
+number_of_pixels = 3 * (64,)
 
-geometry_ID = 'sine_wave_'#'circle_inclusion'
+geometry_ID = 'sine_wave_'
 
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -30,7 +30,7 @@ conductivity_C_1 = 1 * np.array([[1, 0, 0],
                                  [0, 1, 0],
                                  [0, 0, 1]])
 
-material_data_field_C_0 = discretization.get_material_data_size_field(name='ref_conductivity_tensor')
+material_data_field_C_0 = discretization.get_material_data_size_field(name=' conductivity_tensor')
 material_data_field_C_0.s = np.einsum('ij,qxyz->ijqxyz', conductivity_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
@@ -40,17 +40,17 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
                                                   microstructure_name=geometry_ID,
                                                   coordinates=discretization.fft.coords)
 
-microstructure_library.visualize_voxels(phase_field_xyz=phase_field)
+# microstructure_library.visualize_voxels(phase_field_xyz=phase_field)
 
 # apply material distribution
-material_data_field_C_0_rho = discretization.get_material_data_size_field(name='conductivity_tensor')
-material_data_field_C_0_rho.s = material_data_field_C_0.s[..., :, :, :] * np.power(phase_field, 1)
-material_data_field_C_0_rho.s += 5 * material_data_field_C_0.s[..., :, :, :] * np.power(1 - phase_field, 1)
+material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * np.power(phase_field, 1)
+material_data_field_C_0.s += 5 * material_data_field_C_0.s[..., :, :, :] * np.power(1 - phase_field, 1)
 
 # linear system
-K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho,
+K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0,
                                                      displacement_field=x)
-preconditioner = discretization.get_preconditioner_NEW(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+
+preconditioner = discretization.get_preconditioner_NEW(reference_material_data_ijkl=conductivity_C_1)
 
 # preconditioner
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
@@ -76,7 +76,7 @@ for i in range(dim):
 
     # Solve equilibrium constrain
     rhs_field.s.fill(0)
-    rhs_field = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+    rhs_field = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0,
                                        macro_gradient_field_ijqxyz=macro_gradient_field,
                                        rhs_inxyz=rhs_field )
     # solver
@@ -87,13 +87,17 @@ for i in range(dim):
     # ----------------------------------------------------------------------
     # compute homogenized stress field corresponding to displacement
     homogenized_A_ij[i, :] = discretization.get_homogenized_stress(
-        material_data_field_ijklqxyz=material_data_field_C_0_rho,
+        material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=temperature_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
 
 print('homogenized elastic tangent = \n {}'.format(homogenized_A_ij))
 end_time = time.time()
+elapsed_time = end_time - start_time
 
+print("Elapsed time: ", elapsed_time)
+print("Elapsed time: ", elapsed_time / 60)
+quit()
 microstructure_library.visualize_voxels(phase_field_xyz=temperature_field.s[0, 0])
 
 grad_field = discretization.get_gradient_size_field(name='solution_gradient')
