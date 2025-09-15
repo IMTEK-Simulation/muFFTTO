@@ -355,6 +355,8 @@ if compute:
             if np.linalg.norm(b_I)  < 1.e-5 and iiter > 0: break
             # update Newton iteration counter
             iiter += 1
+
+
         nb_new_it.append(iiter)
         print('Newton steps = {}'.format(iiter))
         # end-of-increment: update history

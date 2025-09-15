@@ -14,7 +14,7 @@ element_type = 'linear_triangles'  # #'linear_triangles'# linear_triangles_tille
 geometry_ID = 'square_inclusion'  # 'sine_wave_' #
 
 domain_size = [1, 1]
-number_of_pixels = (32, 32)
+number_of_pixels = 2*(1024, )
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -31,9 +31,9 @@ mat_contrast_2 = 1e-2
 conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 
 material_data_field_C_0 = discretization.get_material_data_size_field(name='conductivity_tensor')
-
+material_data_field_C_0 = material_data_field_C_0.s
 # populate the field with C_1 material
-material_data_field_C_0.s = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
+material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 
@@ -44,9 +44,9 @@ phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of
 
 # apply material distribution
 
-material_data_field_C_0.s = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
+material_data_field_C_0 = mat_contrast * material_data_field_C_0[..., :, :] * np.power(phase_field,
                                                                                            1)
-material_data_field_C_0.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 2)
+material_data_field_C_0 += mat_contrast_2 * material_data_field_C_0[..., :, :] * np.power(1 - phase_field, 2)
 
 # Set up the equilibrium system
 
@@ -71,9 +71,13 @@ M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
 # x_1 = K_fun(rhs)
 # initial solution
 init_x_0 = discretization.get_unknown_size_field(name='init_solution')
+init_x_0 = init_x_0.s
 solution_field = discretization.get_unknown_size_field(name='solution')
+solution_field = solution_field.s
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+# macro_gradient_field = macro_gradient_field.s
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+# rhs_field = rhs_field.s
 
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
@@ -93,8 +97,8 @@ for i in range(dim):
                                  macro_gradient_field_ijqxyz=macro_gradient_field,
                                  rhs_inxyz=rhs_field)
 
-    init_x_0.s.fill(0)
-    solution_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=init_x_0.s, P=M_fun, steps=int(500), toler=1e-12)
+    init_x_0.fill(0)
+    solution_field, norms = solvers.PCG(K_fun, rhs, x0=init_x_0, P=M_fun, steps=int(500), toler=1e-12)
     nb_it = len(norms['residual_rz'])
     print(' nb_ steps CG =' f'{nb_it}')
     # compute homogenized stress field corresponding to displacement

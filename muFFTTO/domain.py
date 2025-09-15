@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import scipy as sc
+from reportlab.lib.pagesizes import elevenSeventeen
 
 from muFFTTO import discretization_library
 
@@ -380,65 +381,38 @@ class Discretization:
                 - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
                 - q is quadrature point index
         """
-        # fc = muGrid.GlobalFieldCollection(tuple(self.nb_of_pixels), sub_pts={"quad": 2})
-
-        # if grad_u_ijqxyz is None:  # if gradient_of_u is not specified, determine the size
-        #     gradient_of_u_shape = list(u_inxyz.shape)  # [f,n,x,y,z]
-        #     gradient_of_u_shape.insert(1, self.domain_dimension)  # [f,d,n,x,y,z]
-        #     gradient_of_u_shape[2] = self.nb_quad_points_per_pixel  # [f,d,q,x,y,z]
-        #     grad_u_ijqxyz = np.zeros(gradient_of_u_shape)  # create gradient field
-        #
-        # grad_u_ijqxyz = self.get_gradient_size_field(name='gradient_of_displacement')
-
-        # MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:gradient_of_u_shape ' f'{gradient_of_u_shape}')
-        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_gradient_operator:displacement_field_shape=' f'{u.shape}')
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
 
-        if isinstance(grad_u_ijqxyz, np.ndarray):
-            grad_u_ijqxyz.fill(0)  # To ensure that gradient field is empty/zero
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(u_inxyz, np.ndarray):
+
+            shape = (*u_inxyz.shape[:1],)
+            nodal_field_inxyz = self.get_custom_size_nodal_field(name='temp_nodal_field_inxyz',
+                                                                 shape=shape)
+            nodal_field_inxyz.s = u_inxyz
         else:
-            grad_u_ijqxyz.p.fill(0)  # To ensure that gradient field is empty/zero
-        # gradient_of_u_selfroll = np.copy(gradient_of_u)
-        # Derivative stencil of shape (2, quad, 2, 2)
-        # gradient = np.array(
-        #     [
-        #         [  # Derivative in x-direction
-        #             [[[-1, 0], [1, 0]]],  # Bottom-left triangle (first quadrature point)
-        #             [[[0, -1], [0, 1]]],  # Top-right triangle (second quadrature point)
-        #         ],
-        #         [  # Derivative in y-direction
-        #             [[[-1, 1], [0, 0]]],  # Bottom-left triangle (first quadrature point)
-        #             [[[0, 0], [-1, 1]]],  # Top-right triangle (second quadrature point)
-        #         ],
-        #     ],
-        # )
+            nodal_field_inxyz = u_inxyz
 
-        # Get nodal field
-        # nodal_field = fc.real_field("nodal-field")
-        # nodal_field.s = u_inxyz[0]
-        #
-        # # Get quadrature field of shape (2, quad, nx, ny)
-        # quad_field = fc.real_field("quad-field", (2,), "quad")
-        # B_dqnijk = self.B_grad_at_pixel_dqnijk
-        # point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
-        # op = ConvolutionOperator(point_of_origin, B_dqnijk)
-        # print('op.pixel_operator.shape')
+        if isinstance(grad_u_ijqxyz, np.ndarray):
+            shape = (*grad_u_ijqxyz.shape[:2],)
+            quad_field_ijqxyz = self.get_custom_size_quad_field(name='temp_quad_field_ijqxyz',
+                                                                shape=shape)
+            quad_field_ijqxyz.s = grad_u_ijqxyz
 
-        # Apply the gradient operator to the nodal field and write result to the quad field
+            quad_field_ijqxyz.s.fill(0)  # To ensure that gradient field is empty/zero
+        else:
+            quad_field_ijqxyz = grad_u_ijqxyz
+            quad_field_ijqxyz.s.fill(0)  # To ensure that gradient field is empty/zero
 
-        self.conv_op.apply(nodal_field=u_inxyz,
-                           quadrature_point_field=grad_u_ijqxyz)
-        # swap first two axis becouse
-        # muGrid consider first index of derivative and second of displacement component
-        # if self.cell.unknown_shape > 1:
-        # grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1)
-        # grad_u_jiqxyz = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
-        # grad_u_ijqxyz.s = np.copy(grad_u_jiqxyz)
-        #   grad_u_ijqxyz.s = np.swapaxes(grad_u_ijqxyz.s, 0, 1).copy()
-        return grad_u_ijqxyz
+        self.conv_op.apply(nodal_field=nodal_field_inxyz,
+                           quadrature_point_field=quad_field_ijqxyz)
+
+        if isinstance(grad_u_ijqxyz, np.ndarray):
+            return quad_field_ijqxyz.s
+        else:
+            return quad_field_ijqxyz
 
     def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
         """
@@ -524,12 +498,29 @@ class Discretization:
                 - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
                 - n is a nodal point index
            """
+        # if the input is ndArray, create muGrid field out of it
+
+        if isinstance(gradient_field_ijqxyz, np.ndarray):
+            shape = (*gradient_field_ijqxyz.shape[:2],)
+            quad_field_ijqxyz = self.get_custom_size_quad_field(name='temp_quad_field_ijqxyz',
+                                                                shape=shape)
+            quad_field_ijqxyz.s = gradient_field_ijqxyz
+        else:
+            quad_field_ijqxyz = gradient_field_ijqxyz
 
         if div_u_fnxyz is None:  # if div_u_fnxyz is not specified, determine the size
             div_u_fnxyz_shape = list(gradient_field_ijqxyz.shape)  # [f,d,q,x,y,z]
             div_u_fnxyz_shape.pop(1)  # [f,q,x,y,z]
             div_u_fnxyz_shape[1] = self.nb_nodes_per_pixel  # [f,n,x,y,z]
             div_u_fnxyz = np.zeros(div_u_fnxyz_shape)  # create div field
+
+        if isinstance(div_u_fnxyz, np.ndarray):
+            shape = (*div_u_fnxyz.shape[:1],)
+            nodal_field_inxyz = self.get_custom_size_nodal_field(name='temp_nodal_field_inxyz',
+                                                                 shape=shape)
+            nodal_field_inxyz.s = div_u_fnxyz
+        else:
+            nodal_field_inxyz = div_u_fnxyz
 
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
@@ -548,10 +539,16 @@ class Discretization:
         # op = ConvolutionOperator(point_of_origin, B_dqnijk)
 
         # apply B^transposed via the convolution operator
-        self.conv_op.transpose(quadrature_point_field=gradient_field_ijqxyz,
-                               nodal_field=div_u_fnxyz,
+        self.conv_op.transpose(quadrature_point_field=quad_field_ijqxyz,
+                               nodal_field=nodal_field_inxyz,
                                weights=weights)
         # transpose(self, quadrature_point_field, nodal_field, weights, p_float=None, *args, **kwargs):
+
+        if isinstance(div_u_fnxyz, np.ndarray):
+            return quad_field_ijqxyz.s
+        else:
+            return quad_field_ijqxyz
+
         return div_u_fnxyz
 
     def apply_gradient_transposed_operator_OLD(self, gradient_of_u_fdqxyz, div_u_fnxyz=None):
@@ -794,7 +791,10 @@ class Discretization:
         strain_ijqxyz.s = strain_ijqxyz.s + macro_gradient_field_ijqxyz.s  # compute total strain
 
         mat_data_temp = self.get_material_data_size_field(name='weighted_data_field_temporary')
-        mat_data_temp.s = material_data_field_ijklqxyz.s
+        if isinstance(material_data_field_ijklqxyz, np.ndarray):
+            mat_data_temp.s = material_data_field_ijklqxyz
+        else:
+            mat_data_temp.s = material_data_field_ijklqxyz.s
         mat_data_temp.s = self.apply_quadrature_weights(mat_data_temp)
         stress_ijqxyz = self.apply_material_data(mat_data_temp, strain_ijqxyz)
 
@@ -912,6 +912,15 @@ class Discretization:
                 'Unrecognised problem_type type {}. Choose from ' \
                 ' : conductivity, elasticity '.format(self.cell.problem_type))
 
+    def evaluate_material_model(self, material_data, gradient_field, **kwargs):
+        if "power_law_elasticity" in kwargs['mat_model']:
+            n = 0.3  # strain-hardening exponent
+            stress = np.einsum('ijkl...,lk...->ij...', material_data.s, np.power(gradient_field.s, n))
+        else:
+            raise ValueError('Unknown material model')
+
+        return stress
+
     def apply_material_data_elasticity(self, material_data, gradient_field):
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
@@ -933,7 +942,10 @@ class Discretization:
                 flux_ijnxyz = np.einsum('ij,uj...->ui...', material_data,
                                         gradient_field.s)  # 'u' just to keep the size of array consistent
             else:
-                raise ValueError('The reference material_data for conductivity hase more dimensions than 2')
+                flux_ijnxyz = np.einsum('ij...,uj...->ui...', material_data,
+                                        gradient_field.s)
+
+                # raise ValueError('The reference material_data for conductivity hase more dimensions than 2')
         else:
             flux_ijnxyz = np.einsum('ij...,uj...->ui...', material_data.s,
                                     gradient_field.s)  # 'u' just to keep the size of array consistent
@@ -1403,7 +1415,7 @@ class Discretization:
         nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
         return nodal_field_fnxyz
 
-    def apply_system_matrix(self, material_data_field, displacement_field, formulation=None):
+    def apply_system_matrix(self, material_data_field, displacement_field, formulation=None, **kwargs):
         # the ouput array is numpy array for compatibility with solvers
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
@@ -1435,9 +1447,15 @@ class Discretization:
         # material_data_field = self.apply_quadrature_weights(material_data_field) #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
         # compute stress/flux field
+        if "mat_model" in kwargs:
 
-        gradient_ijqxyz.s = self.apply_material_data(material_data=material_data_field,
-                                                     gradient_field=gradient_ijqxyz)
+            gradient_ijqxyz.s = self.evaluate_material_model(material_data=material_data_field,
+                                                             gradient_field=gradient_ijqxyz,
+                                                             **kwargs)
+        else:  # assume linear elastic material law
+            gradient_ijqxyz.s = self.apply_material_data(material_data=material_data_field,
+                                                         gradient_field=gradient_ijqxyz)
+
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
         MPI.COMM_WORLD.Barrier()
 
@@ -1509,6 +1527,24 @@ class Discretization:
         #     shape=(*self.cell.gradient_shape,),  # shape of components
         #     sub_division='quad_points'  # sub-point type
         # )
+        return u_inxyz
+
+    def get_custom_size_nodal_field(self, name, shape):
+        # return zero field with the shape of unknown
+        u_inxyz = self.fft.real_space_field(
+            unique_name=name,  # name of the field
+            shape=shape,  # shape of components
+            sub_division='nodal_points')  # sub-point type
+
+        return u_inxyz
+
+    def get_custom_size_quad_field(self, name, shape):
+        # return zero field with the shape of unknown
+        u_inxyz = self.fft.real_space_field(
+            unique_name=name,  # name of the field
+            shape=shape,  # shape of components
+            sub_division='quad_points')  # sub-point type
+
         return u_inxyz
 
     def get_gradient_size_field_OLD(self):
