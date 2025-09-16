@@ -732,6 +732,46 @@ class Discretization:
         rhs_inxyz.s *= -1
         return rhs_inxyz
 
+    def get_rhs_explicit_stress(self, stress_function,
+                                gradient_field_ijqxyz,
+                                rhs_inxyz, **kwargs):
+        """
+        Function that computes right hand side vector of linear elastic homogenization problem
+        rhs= - B^t: C: E+grad_U
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - q is a quadrature point index
+
+        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
+            - shape [i,j,q,x,y,z]
+            - q is quadrature point index
+
+        Returns
+        -------
+        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+
+        """
+
+        # macro_gradient_field    [f,d,q,x,y,z]
+        # material_data_field [d,d,d,d,q,x,y,z] - elasticity
+        # material_data_field     [d,d,q,x,y,z] - conductivity
+        # rhs                       [f,n,x,y,z]
+        #  rhs=-Dt*wA*E
+
+        # material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)  TODO{ML} oldREMOVE  :"
+
+        stress = self.get_gradient_size_field(name='stress_temporary')
+        stress.s, _ = stress_function(gradient_field_ijqxyz)
+        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
+                                                div_u_fnxyz=rhs_inxyz,
+                                                apply_weights=True)
+        rhs_inxyz.s *= -1
+        return rhs_inxyz
+
     def get_macro_gradient_field(self, macro_gradient_ij, macro_gradient_field_ijqxyz):
         """
         Function that returns macro gradient field E from single macro gradient vector
@@ -916,6 +956,8 @@ class Discretization:
         if "power_law_elasticity" in kwargs['mat_model']:
             n = 0.3  # strain-hardening exponent
             stress = np.einsum('ijkl...,lk...->ij...', material_data.s, np.power(gradient_field.s, n))
+
+
         else:
             raise ValueError('Unknown material model')
 
@@ -1448,7 +1490,6 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
         # compute stress/flux field
         if "mat_model" in kwargs:
-
             gradient_ijqxyz.s = self.evaluate_material_model(material_data=material_data_field,
                                                              gradient_field=gradient_ijqxyz,
                                                              **kwargs)
@@ -1458,6 +1499,45 @@ class Discretization:
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
         MPI.COMM_WORLD.Barrier()
+
+        # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
+        div_stress_inxyz = self.get_unknown_size_field(name='div_stress')
+
+        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                div_u_fnxyz=div_stress_inxyz,
+                                                apply_weights=True)
+
+        return div_stress_inxyz.s
+
+    def apply_system_matrix_explicit_stress(self,
+                                            stress_function,
+                                            displacement_field,
+                                            formulation=None,
+                                            **kwargs):
+        # the ouput array is numpy array for compatibility with solvers
+
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
+        # chcek if the field is nump. If yes, make a muGrid array of it
+        if isinstance(displacement_field, np.ndarray):
+            uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz')
+            uknown_inxyz.s = displacement_field
+        else:
+            uknown_inxyz = displacement_field
+
+        # allocate temporary fields
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
+
+        if np.all(formulation == 'small_strain'):
+            self.apply_gradient_operator_symmetrized(u_inxyz=uknown_inxyz,
+                                                     grad_u_ijqxyz=gradient_ijqxyz)
+        else:
+            self.apply_gradient_operator(u_inxyz=uknown_inxyz,
+                                         grad_u_ijqxyz=gradient_ijqxyz)
+        MPI.COMM_WORLD.Barrier()
+
+        # Evaluate constitutive law
+
+        gradient_ijqxyz.s, _ = stress_function(gradient_ijqxyz)
 
         # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
         div_stress_inxyz = self.get_unknown_size_field(name='div_stress')

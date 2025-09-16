@@ -62,10 +62,10 @@ class DiscretizationTestCase(unittest.TestCase):
 
             temperature = discretization.get_temperature_sized_field(name='temperature')
             temperature_gradient = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(  name='anal_gradient_of_temp')
+            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(name='anal_gradient_of_temp')
 
             temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                                 nodal_coordinates[1, 0, :, :])
+                                                   nodal_coordinates[1, 0, :, :])
             temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
             temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
 
@@ -252,10 +252,10 @@ class DiscretizationTestCase(unittest.TestCase):
             for dir in range(domain_size.__len__()):
                 value_1 = np.all(
                     grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] == temperature_gradient_anal.s[0, dir, ..., 0:-1,
-                                                                0:-1])
+                    0:-1])
                 diff = np.ndarray.sum(
                     grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] - temperature_gradient_anal.s[0, dir, ..., 0:-1,
-                                                               0:-1])
+                    0:-1])
                 value = np.allclose(grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1],
                                     temperature_gradient_anal.s[0, dir, ..., 0:-1, 0:-1],
                                     rtol=1e-12, atol=1e-14)
@@ -318,10 +318,10 @@ class DiscretizationTestCase(unittest.TestCase):
                     # compare values of gradient element wise --- without last-- periodic pixel that differs
                     value_1 = np.all(
                         grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal.s[direction,
-                                                                          dir, :, 0:-1, 0:-1])
+                        dir, :, 0:-1, 0:-1])
                     diff = np.ndarray.sum(
                         grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal.s[direction,
-                                                                         dir, :, 0:-1, 0:-1])
+                        dir, :, 0:-1, 0:-1])
                     value = np.allclose(grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1],
                                         displacement_gradient_anal.s[direction, dir, :, 0:-1, 0:-1],
                                         rtol=1e-16, atol=1e-14)
@@ -943,12 +943,14 @@ class DiscretizationTestCase(unittest.TestCase):
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
                 preconditioner_Fourier = discretization.get_preconditioner_NEW(
-                    reference_material_data_field_ijklqxyz=ref_material_data_field)
+                    reference_material_data_ijkl=mat_1)
 
-                M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier, x)
+                M_fun = lambda x: discretization.apply_preconditioner_NEW(
+                    preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
+                    nodal_field_fnxyz=x)
 
                 # set up random field
-                x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
+                x_0 = np.random.rand(*discretization.get_unknown_size_field(name='Unknown').shape)
                 for f in range(discretization.cell.unknown_shape[0]):
                     x_0[f] -= x_0[f].mean()
                 # apply system matrix
