@@ -969,8 +969,8 @@ class Discretization:
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
                 stress = np.einsum('ijkl,lk...->ij...', material_data, gradient_field.s)
-            else:
-                raise ValueError('The reference material_data for elasticity hase more dimensions than 4')
+            elif material_data.ndim > 4:
+                stress = np.einsum('ijkl...,lk...->ij...', material_data, gradient_field.s)
         else:
             stress = np.einsum('ijkl...,lk...->ij...', material_data.s, gradient_field.s)
 
@@ -1489,13 +1489,9 @@ class Discretization:
         # material_data_field = self.apply_quadrature_weights(material_data_field) #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
         # compute stress/flux field
-        if "mat_model" in kwargs:
-            gradient_ijqxyz.s = self.evaluate_material_model(material_data=material_data_field,
-                                                             gradient_field=gradient_ijqxyz,
-                                                             **kwargs)
-        else:  # assume linear elastic material law
-            gradient_ijqxyz.s = self.apply_material_data(material_data=material_data_field,
-                                                         gradient_field=gradient_ijqxyz)
+
+        gradient_ijqxyz.s = self.apply_material_data(material_data=material_data_field,
+                                                     gradient_field=gradient_ijqxyz)
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
         MPI.COMM_WORLD.Barrier()
