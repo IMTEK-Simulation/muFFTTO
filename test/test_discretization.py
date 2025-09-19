@@ -1000,16 +1000,17 @@ class DiscretizationTestCase(unittest.TestCase):
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
 
-                ref_material_data_field = np.copy(material_data_field)
+               # ref_material_data_field = np.copy(material_data_field)
+                x_0=discretization.get_unknown_size_field(name='x_0')
+                x_0.s = np.random.rand(*x_0.s.shape)
 
-                x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
                 for f in range(discretization.cell.unknown_shape[0]):
-                    x_0[f] -= x_0[f].mean()
+                    x_0.s[f] -= x_0.s[f].mean()
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
                 preconditioner = discretization.get_preconditioner_NEW(
-                    reference_material_data_field_ijklqxyz=ref_material_data_field)
+                    reference_material_data_ijkl=mat_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
 
@@ -1020,7 +1021,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 print(np.sum(diff))
                 self.assertTrue(np.allclose(x_0, x_1, rtol=1e-15, atol=1e-15),
                                 'Preconditioner is not the inverse of the system matrix with homogeneous'
-                                ' data: 2D element {} in {} problem.'.format(
+                                ' data: 3D element {} in {} problem.'.format(
                                     element_type, problem_type))
 
     def test_plot_2D_mesh(self, plot=False):
