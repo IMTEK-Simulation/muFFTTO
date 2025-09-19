@@ -313,7 +313,7 @@ if compute:
                                                                     norm_type='data_scaled_rr',
                                                                     norm_metric=M_fun,
                                                                     callback=my_callback)
-                results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
+                results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
                 #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
                 old_displ_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
 
