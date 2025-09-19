@@ -238,7 +238,7 @@ if compute:
 
                 # omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
 
-                preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
+                preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=I4s)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
@@ -248,9 +248,9 @@ if compute:
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho)
 
-                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                M_fun_combi = lambda x: K_diag_alg.s * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
-                    nodal_field_fnxyz=K_diag_alg * x)
+                    nodal_field_fnxyz=K_diag_alg.s * x)
                 # #
                 M_fun_Jacobi = lambda x: K_diag_alg.s * K_diag_alg.s * x
 
@@ -283,6 +283,7 @@ if compute:
                 print(f'Green its = {nb_it} ')
                 #########
                 #displacement_field.s.fill(0)
+                x_init.s.fill(0)
                 displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
                                                                     P=M_fun_combi,
                                                                     steps=int(4000),
@@ -302,9 +303,9 @@ if compute:
                 #       ' sharp={}'.format(homogenized_stresses, sharp))
                 #
                 print(f'GJ its = {nb_it_combi} ')
-                displacement_field.s.fill(0)
-
-                displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s, x0=displacement_field.s,
+                #displacement_field.s.fill(0)
+                x_init.s.fill(0)
+                displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
                                                                       P=M_fun_Jacobi,
                                                                       steps=int(4),
                                                                       toler=1e-12,

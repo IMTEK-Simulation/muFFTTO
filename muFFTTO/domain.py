@@ -1370,7 +1370,7 @@ class Discretization:
         # K_diag_inv_sym = K_diag ** (-1 / 2)
         print(f'number of nearly zero diagonal = {np.size(diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-16])}')
         # TODO: not sure if 0 or 1 is better
-        diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-14] = 0
+        diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-16] = 0
         diagonal_fnxyz.s[diagonal_fnxyz.s != 0] = diagonal_fnxyz.s[diagonal_fnxyz.s != 0] ** (-1 / 2)
         # diagonal_fnxyz ** (-1 / 2)
         return diagonal_fnxyz

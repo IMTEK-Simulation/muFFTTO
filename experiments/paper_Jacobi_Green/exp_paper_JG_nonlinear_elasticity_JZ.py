@@ -16,7 +16,7 @@ folder_name = '../exp_data/'
 
 preconditioner_type = 'Jacobi_Green'  # 'Jacobi_Green'# 'Green'#_Green_1Q
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([5]):
+    for nnn in 2 ** np.array([3]):
         number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
@@ -162,8 +162,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         def constitutive_q_points(strain_ijqxyz):
             phase_field = np.zeros([*number_of_pixels])
             phase_field[
-                1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4, 1 * number_of_pixels[0] // 4:3 * number_of_pixels[
-                    0] // 4, :] = 1.
+                1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4, 1 * number_of_pixels[0] // 4:3 *
+                                                                                                        number_of_pixels[
+                                                                                                            0] // 4, :] = 1.
             # phase_field[:26, :, :] = 1.
 
             # sig_P1, K4_P1 = nonlinear_elastic_q_points(strain_ijqxyz.s, K=2)
@@ -226,7 +227,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                                                                            macro_gradient_field_ijqxyz=macro_gradient_inc_field)
 
         # assembly preconditioner
-        preconditioner = discretization.get_preconditioner_NEW(
+        preconditioner = discretization.get_preconditioner_Green_fast(
             reference_material_data_ijkl=I4s)  # K4_ijklqyz.mean(axis=(4, 5, 6, 7))
 
         M_fun_Green = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
@@ -307,8 +308,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
 
                 # compute strain from the displacement increment
-                strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_increment_field,
-                                                                                         grad_u_ijqxyz=strain_fluc_field)
+                strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                    u_inxyz=displacement_increment_field,
+                    grad_u_ijqxyz=strain_fluc_field)
 
                 total_strain_field.s += strain_fluc_field.s
                 displacement_fluctuation_field.s += displacement_increment_field.s
@@ -335,8 +337,10 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                                                                    rhs_inxyz=rhs_field)
                 # rhs *= -1
                 # print('=====================')
-                print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s) / En))
-                print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(np.linalg.norm(rhs_field.s) / rhs_t_norm))
+                print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
+                    np.linalg.norm(strain_fluc_field.s) / En))
+                print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
+                    np.linalg.norm(rhs_field.s) / rhs_t_norm))
 
                 print('Rhs {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
                 print('strain_fluc_field {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s)))
