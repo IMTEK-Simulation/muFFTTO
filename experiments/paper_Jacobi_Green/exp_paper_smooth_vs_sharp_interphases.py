@@ -237,11 +237,13 @@ if compute:
                 M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
                 x_init = discretization.get_displacement_sized_field()
                 # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
-
+                def my_callback(x_0):
+                    print('mean_x0 {}'.format(x_0.mean()))
                 displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun,
                                                         steps=int(10000), toler=1e-12,
                                                         norm_type='data_scaled_rr',
-                                                        norm_metric=M_fun)
+                                                        norm_metric=M_fun,
+                                                        callback=my_callback)
                 results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
                 np.save(data_folder_path + results_name + f'G.npy', displacement_field)
                 results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
@@ -273,7 +275,8 @@ if compute:
                                                                     steps=int(4000),
                                                                     toler=1e-12,
                                                                     norm_type='data_scaled_rr',
-                                                                    norm_metric=M_fun)
+                                                                    norm_metric=M_fun,
+                                                                    callback=my_callback)
                 # save strain fluctuation
                 results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
                 np.save(data_folder_path + results_name + f'GJ.npy', displacement_field_combi)
