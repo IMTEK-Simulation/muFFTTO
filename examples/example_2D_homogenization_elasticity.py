@@ -114,6 +114,8 @@ preconditioner = discretization.get_preconditioner_Green_fast(reference_material
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                           nodal_field_fnxyz=x)
 
+# K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0)
+
 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
     material_data_field_ijklqxyz=material_data_field_C_0)
 

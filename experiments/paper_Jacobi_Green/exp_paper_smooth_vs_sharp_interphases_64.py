@@ -130,7 +130,7 @@ if compute:
                                                          kind='linear')
         C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
-        material_data_field_C_0 = discretization.get_material_data_size_field(name='conductivity_tensor')
+        material_data_field_C_0 = discretization.get_material_data_size_field(name='mat_Data')
         material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                               np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                 *discretization.nb_of_pixels])))
@@ -157,6 +157,17 @@ if compute:
         # nb_it_Jacobi=[]
         # phase_field_origin =# np.abs(phase_field_smooth - 1)
         # flipped_arr = 1 - phase_field
+
+        macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
+        rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+        x_init = discretization.get_displacement_sized_field(name='x_init')
+        displacement_field = discretization.get_unknown_size_field(name='solution')
+
+        # Set up right hand side
+        macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+                                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
+
+
         phase_field_min = np.min(phase_field_origin)
         phase_field_max = np.max(phase_field_origin)
 
@@ -211,13 +222,10 @@ if compute:
 
                 # apply material distribution
 
-                # Set up right hand side
-                macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
-                macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
-                                                                               macro_gradient_field_ijqxyz=macro_gradient_field)
+
                 # perturb=np.random.random(macro_gradient_field.shape)
                 # macro_gradient_field += perturb#-np.mean(perturb)
-                rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+
                 # Solve mechanical equilibrium constrain
                 rhs_field = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
                                                    macro_gradient_field_ijqxyz=macro_gradient_field,
@@ -228,28 +236,28 @@ if compute:
 
                 # plotting eigenvalues
 
-                omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
+                # omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
 
                 preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
 
+               # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
+
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho)
 
-                M_fun_combi = lambda x: K_diag_alg.s * discretization.apply_preconditioner_NEW(
+                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
-                    nodal_field_fnxyz=K_diag_alg.s * x)
+                    nodal_field_fnxyz=K_diag_alg * x)
                 # #
                 M_fun_Jacobi = lambda x: K_diag_alg.s * K_diag_alg.s * x
 
                 # init solution
-                x_init = discretization.get_displacement_sized_field(name='x_init')
                 x_init.s.fill(0)
                 #x_init=np.random.random(discretization.get_displacement_sized_field().shape)
 
-                displacement_field = discretization.get_unknown_size_field(name='solution')
                 displacement_field.s.fill(0)
 
                 displacement_field.s, norms = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s, P=M_fun,
@@ -316,9 +324,9 @@ if compute:
                 counter += 1
 
                 _info = {}
-                _info['norms_G'] = norms['data_scaled_rr']
-                _info['norms_GJ'] = norms_combi['data_scaled_rr']
-                _info['norms_J'] = norms_Jacobi['data_scaled_rr']
+                _info['norms_G'] = norms['residual_rr']#['data_scaled_rr']
+                _info['norms_GJ'] = norms_combi['residual_rr']#['data_scaled_rr']
+                _info['norms_J'] = norms_Jacobi['residual_rr']#['data_scaled_rr']
 
                 results_name = f'N64_{ratio}_sharp_{sharp}'
 
