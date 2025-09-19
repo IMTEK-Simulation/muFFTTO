@@ -16,7 +16,7 @@ folder_name = '../exp_data/'
 
 preconditioner_type = 'Jacobi_Green'  # 'Jacobi_Green'# 'Green'#_Green_1Q
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([3]):
+    for nnn in 2 ** np.array([8]):
         number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
@@ -237,6 +237,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         sum_Newton_its = 0
         start_time = time.time()
         iteration_total = 0
+
         # incremental loading
         for inc in range(ninc):
             print(f'Increment {inc}')

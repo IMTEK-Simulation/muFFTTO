@@ -1233,7 +1233,7 @@ class Discretization:
         return K_diag_inv_sym
 
     def get_preconditioner_Jacoby_fast(self, material_data_field_ijklqxyz,
-                                       name,
+                                       #name,
                                        gradient_of_u=None,
                                        formulation=None,
                                        prec_type=None,
@@ -1253,7 +1253,7 @@ class Discretization:
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
-        diagonal_fnxyz = self.get_unknown_size_field(name=name)
+        diagonal_fnxyz = self.get_unknown_size_field(name='temp_diagonal_inxyz')  # name
         # !/usr/bin/env python3
         if self.cell.problem_type == 'conductivity':
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
@@ -1375,7 +1375,7 @@ class Discretization:
         diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-16] = 0
         diagonal_fnxyz.s[diagonal_fnxyz.s != 0] = diagonal_fnxyz.s[diagonal_fnxyz.s != 0] ** (-1 / 2)
         # diagonal_fnxyz ** (-1 / 2)
-        return diagonal_fnxyz
+        return diagonal_fnxyz.s
 
     def apply_preconditioner_DELETE(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
         # apply preconditioner using FFT
@@ -1407,6 +1407,8 @@ class Discretization:
         # ffield_fnqks = self.fft.fourier_space_field('force_field',
         #                                     self.unknown_size[:-4])  # TODO [this is fixed for one node per pixel !!]
         # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
+        # allocate field
+        # temp_nodal_field_fnxyz = self.get_unknown_size_field(name='temp_nodal_field_fnxyz')
         # FFTn of input array
         ffield_fnqks = self.fft.fft(nodal_field_fnxyz)
         # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
@@ -1422,7 +1424,7 @@ class Discretization:
         # normalization
         ffield_fnqks *= self.fft.normalisation
         # iFFTn
-        nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
+        temp_nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
 
         # self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
         # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
@@ -1430,7 +1432,7 @@ class Discretization:
         #                                        axis=(0, 1))
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{nodal_field_fnxyz}')
 
-        return nodal_field_fnxyz
+        return temp_nodal_field_fnxyz
 
     def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
                                                jacobi_half_fnfnxyz,

@@ -89,7 +89,7 @@ if plot_data_vs_CG:
     # print time vs DOFS
     its_G = []
     its_GJ = []
-    Nx = Ny = 512
+    Nx = Ny = 256
     Nz = 1
     iterations = np.arange(7)  # numbers of grids points
     for iteration_total in iterations:

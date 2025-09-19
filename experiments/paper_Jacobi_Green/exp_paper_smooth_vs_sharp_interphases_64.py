@@ -246,7 +246,7 @@ if compute:
                 # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                    material_data_field_ijklqxyz=material_data_field_C_0_rho, name=f'Jacobi_{jacobi_counter}')
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho)#, name=f'Jacobi_{jacobi_counter}'
                 jacobi_counter += 1
                 M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
