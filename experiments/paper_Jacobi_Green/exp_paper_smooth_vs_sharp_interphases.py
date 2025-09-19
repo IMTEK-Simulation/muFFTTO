@@ -50,7 +50,7 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-compute = False
+compute = True
 if compute:
 
     domain_size = [1, 1]
@@ -294,9 +294,9 @@ if compute:
                 counter += 1
 
                 _info = {}
-                _info['norms_G'] = norms['data_scaled_rr']
-                _info['norms_GJ'] = norms_combi['data_scaled_rr']
-                _info['norms_J'] = norms_Jacobi['data_scaled_rr']
+                _info['norms_G'] = norms['residual_rr']#['data_scaled_rr']
+                _info['norms_GJ'] = norms_combi['residual_rr']#['data_scaled_rr']
+                _info['norms_J'] = norms_Jacobi['residual_rr']#['data_scaled_rr']
 
                 results_name = f'N64_{ratio}_sharp_{sharp}'
 

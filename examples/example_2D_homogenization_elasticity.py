@@ -91,7 +91,7 @@ phase_field_at_quad_poits_1qnxyz = \
 #material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
 #material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
 material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-                    phase_field_at_quad_poits_1qnxyz, 2)[0, :, 0, ...]
+                    phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
 
 # Set up right hand side
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
@@ -135,7 +135,7 @@ print(
 # compute homogenized stress field corresponding to displacement
 homogenized_stress = discretization.get_homogenized_stress(
     material_data_field_ijklqxyz=material_data_field_C_0_rho,
-    displacement_field_fnxyz=displacement_field,
+    displacement_field_inxyz=displacement_field,
     macro_gradient_field_ijqxyz=macro_gradient_field,
     formulation='small_strain')
 
@@ -167,7 +167,7 @@ for i in range(dim):
         # compute homogenized stress field corresponding
         homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-            displacement_field_fnxyz=displacement_field_ij,
+            displacement_field_inxyz=displacement_field_ij,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
 
