@@ -238,7 +238,7 @@ if compute:
 
                 # omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
 
-                preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=I4s)
+                preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
