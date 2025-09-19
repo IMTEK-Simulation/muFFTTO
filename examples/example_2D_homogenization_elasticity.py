@@ -109,7 +109,7 @@ K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0, x,
 # M_fun = lambda x: 1 * x
 # K= discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
-preconditioner = discretization.get_preconditioner_NEW(reference_material_data_ijkl=elastic_C_1)
+preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
 
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                           nodal_field_fnxyz=x)

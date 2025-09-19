@@ -1083,21 +1083,67 @@ class Discretization:
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
         # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
+
+        unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
+
+        preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
+
+        for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
+
+            unit_impulse_inxyz.s.fill(0)  # empty the unit impulse vector
+            if np.any(np.all(self.fft.icoords == 0, axis=0)):
+                # print(                   'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node =' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
+                # set 1 --- the unit impulse --- to a proper positions
+                unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
+
+            preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
+                material_data_field=reference_material_data_ijkl,
+                displacement_field=unit_impulse_inxyz,
+                formulation=formulation)
+
+            MPI.COMM_WORLD.Barrier()
+
+        # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+        preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
+            unique_name='Greens_diagonal_f',  # name of the field
+            # components_shape=(self.domain_dimension,),  # shape of components
+            shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+        )  #
+        preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+
+        for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
+
+            if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
+                    0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
+                continue
+
+            local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_ininqks.s[(..., *pixel_index)],
+                                               (np.prod(unit_impulse_inxyz.s.shape[0:2]),
+                                                np.prod(unit_impulse_inxyz.s.shape[0:2])))
+
+            local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
+
+            # rearrange local inverse matrix into global field
+            preconditioner_diagonals_ininqks.s[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
+                    unit_impulse_inxyz.s.shape[0:2] + unit_impulse_inxyz.s.shape[0:2]))
+        # print('7 = \n   core {}'.format(MPI.COMM_WORLD.rank))
+        # raise ValueError(f'The preconditioner for does not have to work '
+        #                 f'properly for {self.nb_nodes_per_pixel} number of nodes per pixel ')
+        return preconditioner_diagonals_ininqks
+
+    def get_preconditioner_Green_fast(self, reference_material_data_ijkl,
+                                      formulation=None):
+        # return diagonals of preconditioned matrix in Fourier space
+        # unit_impulse [f,n,x,y,z]
+        # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
+        # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
         if self.nb_nodes_per_pixel == 1:
             # for one node per pixel, we can simplify the algorithm
             # for more nodes per pixel, we can add it later
             unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
 
             preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
-            # preconditioner_diagonals_ininxyz =   self.fft.real_space_field(
-            #     unique_name='Greens_diagonal_r',  # name of the field
-            #     # components_shape=(self.domain_dimension,),  # shape of components
-            #     shape=(*self.unknown_size[:2]+self.unknown_size[:1],),  # shape of components
-            #     sub_division='nodal_points'  # sub-point type
-            # )# TODO{WARNING} this is very tricky way. I do not know how the mugrid handle this shape
-
-            # TODO self.fft.icoords == 0, axis = 0
-            # loop over all types of degree of freedom [f,n]
 
             for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
                 # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
@@ -1130,7 +1176,7 @@ class Discretization:
 
             # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
             preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
-                unique_name='Greens_diagonal_f',  # name of the field
+                unique_name='Greens_diagonal_fast',  # name of the field
                 # components_shape=(self.domain_dimension,),  # shape of components
                 shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
             )  #
@@ -1149,7 +1195,7 @@ class Discretization:
             MPI.COMM_WORLD.Barrier()
 
             # print('5 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            original_shape_ininqks = preconditioner_diagonals_ininqks.shape
+            original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape
             prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(1, 3))
 
             # Assume A_ijklxyz is of shape (d, d, x, y, z)
@@ -1161,81 +1207,16 @@ class Discretization:
             A_batch = A_reshaped.transpose(2, 0, 1)  # shape: (N, d, d)
 
             # Invert each matrix using np.linalg.inv (vectorized)
-            A_batch[d_i:, ...] = np.linalg.inv(A_batch[d_i:, ...])  # shape: (N, d, d)
+            A_batch[1:, ...] = np.linalg.inv(A_batch[1:, ...])  # shape: (N, d, d)
 
             # Transpose back and reshape to original shape
             A_inv = A_batch.transpose(1, 2, 0).reshape(d_i, d_j, *spatial_dims)
 
             preconditioner_diagonals_ininqks.s = A_inv.reshape(original_shape_ininqks)
 
-            # for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
-            #
-            #     if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
-            #             0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
-            #         continue
-            #
-            #     local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_ininqks.s[(..., *pixel_index)],
-            #                                        (np.prod(unit_impulse_inxyz.s.shape[0:2]),
-            #                                         np.prod(unit_impulse_inxyz.s.shape[0:2])))
-            #
-            #     # print('rank' f'{MPI.COMM_WORLD.rank:6}  Local matrix of preconditioner NEW ')
-            #     # print(pixel_index)
-            #     # print(local_matrix_ijkl_NEW)
-            #     # compute inversion
-            #     # print('6 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            #     local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
-            #
-            #     # rearrange local inverse matrix into global field
-            #     preconditioner_diagonals_ininqks.s[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
-            #             unit_impulse_inxyz.s.shape[0:2] + unit_impulse_inxyz.s.shape[0:2]))
-            # print('7 = \n   core {}'.format(MPI.COMM_WORLD.rank))
         else:
-            unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
-
-            preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
-
-            for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
-                # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
-
-                unit_impulse_inxyz.s.fill(0)  # empty the unit impulse vector
-                if np.any(np.all(self.fft.icoords == 0, axis=0)):
-                    # print(                   'rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW zero node =' f'{np.any(np.all(self.fft.icoords == 0, axis=0))}')
-                    # set 1 --- the unit impulse --- to a proper positions
-                    unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
-
-                preconditioner_diagonals_fnfnxyz[impulse_position] = self.apply_system_matrix(
-                    material_data_field=reference_material_data_ijkl,
-                    displacement_field=unit_impulse_inxyz,
-                    formulation=formulation)
-
-                MPI.COMM_WORLD.Barrier()
-
-            # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-            preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
-                unique_name='Greens_diagonal_f',  # name of the field
-                # components_shape=(self.domain_dimension,),  # shape of components
-                shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
-            )  #
-            preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-
-            for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
-
-                if np.all(self.fft.ifftfreq[(..., *pixel_index)] == (
-                        0,) * self.domain_dimension):  # avoid  inversion of zeros # TODO find better solution for setting this to 0
-                    continue
-
-                local_matrix_ijkl_NEW = np.reshape(preconditioner_diagonals_ininqks.s[(..., *pixel_index)],
-                                                   (np.prod(unit_impulse_inxyz.s.shape[0:2]),
-                                                    np.prod(unit_impulse_inxyz.s.shape[0:2])))
-
-                local_matrix_ijkl = np.linalg.inv(local_matrix_ijkl_NEW)
-
-                # rearrange local inverse matrix into global field
-                preconditioner_diagonals_ininqks.s[(..., *pixel_index)] = np.reshape(local_matrix_ijkl, (
-                        unit_impulse_inxyz.s.shape[0:2] + unit_impulse_inxyz.s.shape[0:2]))
-            # print('7 = \n   core {}'.format(MPI.COMM_WORLD.rank))
-            raise ValueError(f'The preconditioner for does not have to work '
-                             f'properly for {self.nb_nodes_per_pixel} number of nodes per pixel ')
+            raise ValueError(f'The fast assembly of Green preconditioner for does  work yet '
+                             f' for {self.nb_nodes_per_pixel} number of nodes per pixel ')
         return preconditioner_diagonals_ininqks
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
@@ -1360,7 +1341,7 @@ class Discretization:
                         diagonal_fnxyz.s[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node,
                                                               axis=(0, 1, 2))
 
-                       # print('Jacoby preconditioner  is not tested in 3D ')
+                        # print('Jacoby preconditioner  is not tested in 3D ')
                         warnings.warn("Jacoby preconditioner  is not tested in 3D")
 
         if prec_type == 'full':

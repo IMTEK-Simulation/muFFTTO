@@ -874,8 +874,8 @@ class DiscretizationTestCase(unittest.TestCase):
 
         global material_data_field
         domain_size = [2, 3]
-        for problem_type in ['conductivity',
-                             'elasticity']:  # 'conductivity','elasticity' 'elasticity', 'conductivity' # TODO add 'elasticity'
+        for problem_type in ['elasticity', 'conductivity'
+                             ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
             number_of_pixels = (3, 4)
@@ -942,9 +942,10 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
-                preconditioner_Fourier = discretization.get_preconditioner_NEW(
+                # preconditioner_Fourier_old = discretization.get_preconditioner_NEW(
+                #     reference_material_data_ijkl=mat_1)
+                preconditioner_Fourier = discretization.get_preconditioner_Green_fast(
                     reference_material_data_ijkl=mat_1)
-
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
                     nodal_field_fnxyz=x)
@@ -1000,8 +1001,8 @@ class DiscretizationTestCase(unittest.TestCase):
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
 
-               # ref_material_data_field = np.copy(material_data_field)
-                x_0=discretization.get_unknown_size_field(name='x_0')
+                # ref_material_data_field = np.copy(material_data_field)
+                x_0 = discretization.get_unknown_size_field(name='x_0')
                 x_0.s = np.random.rand(*x_0.s.shape)
 
                 for f in range(discretization.cell.unknown_shape[0]):
@@ -1009,7 +1010,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
-                preconditioner = discretization.get_preconditioner_NEW(
+                preconditioner = discretization.get_preconditioner_Green_fast(
                     reference_material_data_ijkl=mat_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)

@@ -230,7 +230,7 @@ if compute:
 
                 omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
 
-                preconditioner = discretization.get_preconditioner_NEW(reference_material_data_ijkl=elastic_C_1)
+                preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
@@ -443,7 +443,7 @@ if plot:
                                    [1.6, 5e-7],
                                    [2.0, 1e-9]])
 
-                arrows_GJ = [30, 70, 40]  # anotation arrows
+                arrows_GJ = [30, 70, 30]  # anotation arrows
                 text_GJ = np.array([[50, 1e-2],  # anotation Text position
                                     [100, 5e-5],
                                     [200, 1e-7]])
