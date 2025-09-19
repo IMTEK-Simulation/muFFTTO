@@ -14,7 +14,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (128, 128)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -90,7 +90,7 @@ phase_field_at_quad_poits_1qnxyz = \
 # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
 # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
 material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * np.power(
-    phase_field_at_quad_poits_1qnxyz, 2)[0, :, 0, ...]
+    phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
 
 # Set up right hand side
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
@@ -114,13 +114,13 @@ preconditioner = discretization.get_preconditioner_Green_fast(reference_material
 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                           nodal_field_fnxyz=x)
 
-# K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-#     material_data_field_ijklqxyz=material_data_field_C_0_rho)
+K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+    material_data_field_ijklqxyz=material_data_field_C_0)
+
+M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+    preconditioner_Fourier_fnfnqks=preconditioner,
+    nodal_field_fnxyz=K_diag_alg * x)
 #
-# M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-#     preconditioner_Fourier_fnfnqks=preconditioner,
-#     nodal_field_fnxyz=K_diag_alg * x)
-# #
 
 solution_field = discretization.get_unknown_size_field(name='solution')
 
@@ -128,9 +128,10 @@ solution_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=None, P=M_fun, steps=int(
 nb_it_comb = len(norms['residual_rz'])
 norm_rz = norms['residual_rz'][-1]
 norm_rr = norms['residual_rr'][-1]
-
 print(
     '   nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+print(' residual_rr = {} \n '.format(norms['residual_rr']))
+print(' residual_rz = {} \n '.format(norms['residual_rz']))
 # print(norms)
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
