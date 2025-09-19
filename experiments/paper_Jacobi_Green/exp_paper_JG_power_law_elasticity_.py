@@ -2,7 +2,6 @@ import numpy as np
 import scipy as sc
 import time
 
-from keras.src.ops import arange
 from mpi4py import MPI
 from NuMPI.IO import save_npy, load_npy
 import matplotlib as mpl
@@ -135,7 +134,7 @@ def nonlin_elastic_tangent(strain, K):
     # volumetric strain
     strain_vol_ijqxyz = np.ndarray(shape=strain.shape)
     strain_vol_ijqxyz.fill(0)
-    for d in arange(discretization.domain_dimension):
+    for d in np.arange(discretization.domain_dimension):
         strain_vol_ijqxyz[d, d, ...] = strain_trace_qxyz
 
     # deviatoric strain

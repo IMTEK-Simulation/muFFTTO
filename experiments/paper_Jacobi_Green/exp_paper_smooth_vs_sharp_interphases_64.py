@@ -16,7 +16,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 
-script_name = 'exp_paper_smooth_vs_sharp_interphases'
+script_name = 'exp_paper_smooth_vs_sharp_interphases_64'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
@@ -50,7 +50,9 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-compute = False
+compute = True
+plot = True
+
 if compute:
 
     domain_size = [1, 1]
@@ -128,13 +130,15 @@ if compute:
                                                          kind='linear')
         C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
-        material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
+        material_data_field_C_0 = discretization.get_material_data_size_field(name='conductivity_tensor')
+        material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                                              np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                *discretization.nb_of_pixels])))
 
-        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                               np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                 *discretization.nb_of_pixels])))
+        #
+        # refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+        #                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
+        #                                                          *discretization.nb_of_pixels])))
 
         print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
@@ -142,6 +146,7 @@ if compute:
 
         geometry = np.load('../exp_data/' + name + f'_it{iteration}.npy', allow_pickle=True)
         phase_field_origin = np.abs(geometry)
+
         # phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
 
         # phase = 1 * np.ones(number_of_pixels)
@@ -185,7 +190,7 @@ if compute:
                 print(f'min ={np.min(phase_field)} ')
                 print(f'max ={np.max(phase_field)} ')
 
-                material_data_field_C_0_rho = np.copy(material_data_field_C_0[..., :, :, :]) * np.power(
+                material_data_field_C_0_rho = np.copy(material_data_field_C_0.s[..., :, :, :]) * np.power(
                     phase_field, 1)
 
                 # plt.figure()
@@ -207,12 +212,16 @@ if compute:
                 # apply material distribution
 
                 # Set up right hand side
-                macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+                macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
+                macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+                                                                               macro_gradient_field_ijqxyz=macro_gradient_field)
                 # perturb=np.random.random(macro_gradient_field.shape)
                 # macro_gradient_field += perturb#-np.mean(perturb)
-
+                rhs_field = discretization.get_unknown_size_field(name='rhs_field')
                 # Solve mechanical equilibrium constrain
-                rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+                rhs_field = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                                                   macro_gradient_field_ijqxyz=macro_gradient_field,
+                                                   rhs_inxyz=rhs_field)
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
                                                                      formulation='small_strain')
@@ -221,8 +230,7 @@ if compute:
 
                 omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
 
-                preconditioner = discretization.get_preconditioner_NEW(
-                    reference_material_data_field_ijklqxyz=refmaterial_data_field_I4s)
+                preconditioner = discretization.get_preconditioner_NEW(reference_material_data_ijkl=elastic_C_1)
 
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
@@ -230,19 +238,26 @@ if compute:
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho)
 
-                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                M_fun_combi = lambda x: K_diag_alg.s * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
-                    nodal_field_fnxyz=K_diag_alg * x)
+                    nodal_field_fnxyz=K_diag_alg.s * x)
                 # #
-                M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
-                x_init = discretization.get_displacement_sized_field()
-                # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
+                M_fun_Jacobi = lambda x: K_diag_alg.s * K_diag_alg.s * x
 
-                displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun,
-                                                        steps=int(10000), toler=1e-12,
-                                                        norm_type='data_scaled_rr',
-                                                        norm_metric=M_fun)
-                nb_it[i, counter] = (len(norms['residual_rz']))
+                # init solution
+                x_init = discretization.get_displacement_sized_field(name='x_init')
+                x_init.s.fill(0)
+                #x_init=np.random.random(discretization.get_displacement_sized_field().shape)
+
+                displacement_field = discretization.get_unknown_size_field(name='solution')
+                displacement_field.s.fill(0)
+
+                displacement_field.s, norms = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s, P=M_fun,
+                                                          steps=int(10000), toler=1e-12,
+                                                          norm_type='data_scaled_rr',
+                                                          norm_metric=M_fun
+                                                          )
+                nb_it[i, counter] = (len(norms['residual_rr']))
                 norm_rz.append(norms['residual_rz'])
                 norm_rr.append(norms['residual_rr'])
                 norm_rMr.append(norms['data_scaled_rr'])
@@ -254,17 +269,19 @@ if compute:
                 # print('Homogenized stress G  = \n {} \n'
                 #       ' sharp={}'.format(homogenized_stresses,sharp))
 
-                print(f'i={i} ')
-                print(f'counter    ={counter} ')
+                print(f'Ration ={ratio} ')
+                print(f'Sharp = {sharp} ')
 
-                print(nb_it)
+                print(f'Green its = {nb_it} ')
                 #########
-                displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi,
+                #displacement_field.s.fill(0)
+                displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
+                                                                    P=M_fun_combi,
                                                                     steps=int(4000),
                                                                     toler=1e-12,
                                                                     norm_type='data_scaled_rr',
                                                                     norm_metric=M_fun)
-                nb_it_combi[i, counter] = (len(norms_combi['residual_rz']))
+                nb_it_combi[i, counter] = (len(norms_combi['residual_rr']))
                 norm_rz_combi.append(norms_combi['residual_rz'])
                 norm_rr_combi.append(norms_combi['residual_rr'])
                 norm_rMr_combi.append(norms_combi['data_scaled_rr'])
@@ -276,11 +293,16 @@ if compute:
                 # print('Homogenized stress GJ  = \n {} \n'
                 #       ' sharp={}'.format(homogenized_stresses, sharp))
                 #
-                displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=None, P=M_fun_Jacobi, steps=int(4),
+                print(f'GJ its = {nb_it_combi} ')
+                displacement_field.s.fill(0)
+
+                displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s, x0=displacement_field.s,
+                                                                      P=M_fun_Jacobi,
+                                                                      steps=int(4),
                                                                       toler=1e-12,
                                                                       norm_type='data_scaled_rr',
                                                                       norm_metric=M_fun)
-                nb_it_Jacobi[i, counter] = (len(norms_Jacobi['residual_rz']))
+                nb_it_Jacobi[i, counter] = (len(norms_Jacobi['residual_rr']))
                 norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
                 norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
                 norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
@@ -303,7 +325,6 @@ if compute:
                 np.savez(data_folder_path + results_name + f'_log.npz', **_info)
                 print(data_folder_path + results_name + f'_log.npz')
 
-plot = True
 if plot:
     plt.rcParams.update({
         "text.usetex": True,  # Use LaTeX
@@ -312,35 +333,36 @@ if plot:
     plt.rcParams.update({'font.size': 11})
     plt.rcParams["font.family"] = "Arial"
 
-   # plt.rcParams.update({'font.size': 14})
+    # plt.rcParams.update({'font.size': 14})
     ratios = np.array([2, 5, 8])
 
-   # fig = plt.figure(figsize=(11.5, 6))
+    # fig = plt.figure(figsize=(11.5, 6))
     fig = plt.figure(figsize=(8.3, 5.0))
 
     # gs = fig.add_gridspec(1, 3)
     gs_global = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.2)
 
-    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.2 )  # 0.1, 1, 4
-    gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.1,1], hspace=0.1, wspace=0.5)  # 0.1, 1, 4
+    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.2)  # 0.1, 1, 4
+    gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.1, 1], hspace=0.1, wspace=0.5)  # 0.1, 1, 4
 
     ax_cbar = fig.add_subplot(gs_geom[:, 0])
     lines = ['-', '-.', '--', ':']
     row = 0
     for sharp in [False, True]:
         ax_error = fig.add_subplot(gs_error[row, 0])
-        ax_error.text(-0.12, 1.05, rf'\textbf{{(b.{row+1}}})  ', transform=ax_error.transAxes)
+        ax_error.text(-0.12, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_error.transAxes)
 
         ax_geom = fig.add_subplot(gs_geom[row, 1])
 
-        if row ==0 :
+        if row == 0:
             ax_geom.text(-0.2, 1.21, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_geom.transAxes)
-        elif row ==1 :
-            ax_geom.text(-0.2, 1.16, rf'\textbf{{(a.{row+1})}}  ', transform=ax_geom.transAxes)
+        elif row == 1:
+            ax_geom.text(-0.2, 1.16, rf'\textbf{{(a.{row + 1})}}  ', transform=ax_geom.transAxes)
 
         divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
         cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
         geometry = np.load('../exp_data/' + name + f'_it{iteration}.npy', allow_pickle=True)
+
         phase_field_origin = np.abs(geometry)
         phase_field_max = np.max(phase_field_origin)
 
@@ -359,7 +381,7 @@ if plot:
         ax_geom.set_yticks([0, 32, 64])
         # ax_geom.axis('equal' )
         ax_geom.set_aspect('equal', 'box')
-        if sharp :
+        if sharp:
             ax_geom.set_xlabel('pixel index')
         if sharp:
             ax_geom.set_title(r'$\rho_{\rm sharp}$', wrap=True)  # Density
@@ -387,8 +409,8 @@ if plot:
             # ax_1.semilogy(convergence,  label=f'estim {kappa}', color='k', linestyle=lines[i])
             # ax_geom.set_xticks([])
             # ax_geom.set_xticks([])
-            relative_error_G = norm_G #/ norm_G[0]
-            relative_error_GJ = norm_GJ #/ norm_GJ[0]
+            relative_error_G = norm_G  # / norm_G[0]
+            relative_error_GJ = norm_GJ  # / norm_GJ[0]
             ax_error.loglog(relative_error_G, label=fr'$\kappa=10^{{{-ratios[i]}}}$', color='g',
                             linestyle=lines[i], lw=2)
             #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
@@ -403,15 +425,15 @@ if plot:
             if sharp:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
 
-            ax_error.set_ylabel('Norm of residual')# - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
-            #ax_error.set_title(r'Relative  norm of residua', wrap=True)
+            ax_error.set_ylabel('Norm of residual')  # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
+            # ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
             ax_error.set_ylim([1e-10, 1])  # norm_rz[i][0]]/lb)
             ax_error.set_xlim([1, 1e3])
 
-            ax_error.set_yticks([1e-10,1e-5, 1])
-            ax_error.set_yticklabels([fr'$10^{{{-10}}}$',fr'$10^{{{-5}}}$',fr'$10^{{{0}}}$'])
+            ax_error.set_yticks([1e-10, 1e-5, 1])
+            ax_error.set_yticklabels([fr'$10^{{{-10}}}$', fr'$10^{{{-5}}}$', fr'$10^{{{0}}}$'])
             # ax_error.set_xscale('linear')
             # ax_error.legend(['Green', 'Green-Jacobi'], loc='best')
             if sharp:
@@ -421,7 +443,7 @@ if plot:
                                    [1.6, 5e-7],
                                    [2.0, 1e-9]])
 
-                arrows_GJ = [30, 70, 100]  # anotation arrows
+                arrows_GJ = [30, 70, 40]  # anotation arrows
                 text_GJ = np.array([[50, 1e-2],  # anotation Text position
                                     [100, 5e-5],
                                     [200, 1e-7]])
@@ -457,7 +479,7 @@ if plot:
             #                         [1.25, 3e-8],
             #                         [1.5, 1e-9]])
 
-            ax_error.annotate(text=f'Green-Jacobi\n'+ fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
+            ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
                               xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
                               xytext=(text_GJ[i, 0], text_GJ[i, 1]),
                               arrowprops=dict(arrowstyle='->',
@@ -467,7 +489,7 @@ if plot:
                               fontsize=9,
                               color='black'
                               )
-            ax_error.annotate(text=f'Green\n'+ fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
+            ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
                               xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
                               xytext=(text_G[i, 0], text_G[i, 1]),
                               arrowprops=dict(arrowstyle='->',

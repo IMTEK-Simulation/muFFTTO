@@ -14,7 +14,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (1024, 1024)
+number_of_pixels = (128, 128)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -71,9 +71,9 @@ inc_contrast = 0.
 # phase_fem = np.zeros([2, *number_of_pixels])
 # phase_fem[:] = phase_field_l
 
-phase_field = discretization.get_scalar_field()
+phase_field = discretization.get_scalar_field(name='phase_field')
 # phase_field[0,0]= phase_field_l
-phase_field[0, 0] = phase_field_smooth
+phase_field.s[0, 0] = phase_field_smooth
 
 # phase_field[0,0]=phase_field[0,0]/np.min(phase_field[0,0])
 

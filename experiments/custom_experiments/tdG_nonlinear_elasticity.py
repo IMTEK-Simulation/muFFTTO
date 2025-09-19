@@ -1,15 +1,17 @@
 import numpy as np
 import scipy.sparse.linalg as sp
 import itertools
+import matplotlib as mpl
+from matplotlib import pyplot as plt
 
 # turn of warning for zero division (occurs due to vectorization)
 np.seterr(divide='ignore', invalid='ignore')
 
 # ----------------------------------- GRID ------------------------------------
 
-Nx     = 31             # number of voxels in x-direction
-Ny     = 31             # number of voxels in y-direction
-Nz     =  1             # number of voxels in z-direction
+Nx     = 128             # number of voxels in x-direction
+Ny     = 128             # number of voxels in y-direction
+Nz     = 1             # number of voxels in z-direction
 shape  = [Nx,Ny,Nz]     # number of voxels as list: [Nx,Ny,Nz]
 ndof   = 3**2*Nx*Ny*Nz  # number of degrees-of-freedom
 
@@ -122,11 +124,12 @@ def nonlin_elastic(eps):
 # -------------------------
 
 def constitutive(eps):
-
-    phase = np.zeros([Nx,Ny,Nz]); phase[:26,:,:] = 1.
-
-    sig_P1,K4_P1 = nonlin_elastic(eps)
-    sig_P2,K4_P2 =        elastic(eps)
+    phase = np.zeros([Nx,Ny,Nz]);
+    #phase[:26,:,:] = 1.
+    phase[
+        1 * Nx // 4:3 * Nx // 4, 1 * Ny // 4:3 * Ny // 4, :] = 1.
+    sig_P1,K4_P1 =elastic(eps)
+    sig_P2,K4_P2 =    nonlin_elastic(eps)
 
     sig = phase*sig_P1+(1.-phase)*sig_P2
     K4  = phase*K4_P1 +(1.-phase)*K4_P2
@@ -152,15 +155,18 @@ eps   +=           DE
 En     = np.linalg.norm(eps)
 iiter  = 0
 
+import time
+start_time = time.time()
+
 # iterate as long as the iterative update does not vanish
 while True:
 
     # solve linear system using the Conjugate Gradient iterative solver
-    depsm,_ = sp.cg(atol=1.e-14,
+    depsm,  aaaa = sp.cg(atol=1.e-10,
       A = sp.LinearOperator(shape=(ndof,ndof),matvec=G_K_deps,dtype='float'),
       b = b,
     )
-
+    print(f'nb steps of CG = {aaaa}')
     # add solution of linear system to DOFs
     eps   += depsm.reshape(3,3,Nx,Ny,Nz)
 
@@ -170,6 +176,45 @@ while True:
     # check for convergence
     print('{0:10.2e}'.format(np.linalg.norm(depsm)/En))
     if np.linalg.norm(depsm)/En<1.e-6 and iiter>0: break
+    print('{0:10.2e}'.format(np.linalg.norm(b)))
+    if np.linalg.norm(b)<1.e-8 and iiter>0: break
 
     # update Newton iteration counter
     iiter += 1
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print("Elapsed time : ", elapsed_time)
+print("Elapsed time: ", elapsed_time / 60)
+
+
+fig = plt.figure(figsize=(9, 3.0))
+gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],
+                      height_ratios=[1, 1])
+
+# plot stress
+ax_strain_fluc = fig.add_subplot(gs[0, 0])
+
+pcm = ax_strain_fluc.pcolormesh(depsm.reshape(3, 3, Nx, Ny, Nz)[0, 1, ..., 0],
+                                cmap=mpl.cm.cividis,  # vmin=1., vmax=3.,
+                                rasterized=True)
+plt.colorbar(pcm, ax=ax_strain_fluc)
+plt.title('strain_fluc_field')
+# plot strain
+ax_strain = fig.add_subplot(gs[1, 0])
+
+pcm = ax_strain.pcolormesh(eps[0, 1, ..., 0],
+                           cmap=mpl.cm.cividis,  # vmin=1, vmax=3,
+                           rasterized=True)
+plt.colorbar(pcm, ax=ax_strain)
+plt.title('total_strain_field')
+# plot constitutive tangent
+ax_tangent = fig.add_subplot(gs[0, 1])
+
+pcm = ax_tangent.pcolormesh(K4[0, 0, 0, 0, ..., 0],
+                            cmap=mpl.cm.cividis,  # vmin=0, vmax=1500,
+                            rasterized=True)
+plt.colorbar(pcm, ax=ax_tangent)
+plt.title('material_data_field_C_0')
+
+plt.show()

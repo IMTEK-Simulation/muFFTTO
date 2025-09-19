@@ -9,10 +9,8 @@ from mpi4py import MPI
 from NuMPI.IO import save_npy, load_npy
 import os
 import matplotlib.pyplot as plt
-from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
 from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
-from sympy.physics.quantum.sho1d import omega
 
 from muFFTTO import domain
 from muFFTTO import solvers

@@ -931,8 +931,12 @@ class Discretization:
         -------
         weighted_material_data_ijklqxyz:
         """
-        weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz.s,
-                                                    self.quadrature_weights)
+        if isinstance(material_data_ijklqxyz, np.ndarray):
+            weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz,
+                                                        self.quadrature_weights)
+        else:
+            weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz.s,
+                                                        self.quadrature_weights)
 
         return weighted_material_data_ijklqxyz
 
@@ -1266,7 +1270,7 @@ class Discretization:
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
-        diagonal_fnxyz = self.get_unknown_size_field()
+        diagonal_fnxyz = self.get_unknown_size_field(name='diagonal_fnxyz')
         # !/usr/bin/env python3
         if self.cell.problem_type == 'conductivity':
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
@@ -1300,7 +1304,7 @@ class Discretization:
                                                      self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                      gradient_of_u_ijqnxy)
 
-                        diagonal_fnxyz[...] += self.roll(self.fft, div_at_quad_fnxy, 1 * pixel_node, axis=(0, 1))
+                        diagonal_fnxyz.s[...] += self.roll(self.fft, div_at_quad_fnxy, 1 * pixel_node, axis=(0, 1))
 
 
 
@@ -1311,12 +1315,12 @@ class Discretization:
                         div_fnxyz_pixel_node = np.einsum('dqn,fdqnxyz->nxyz',
                                                          self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                          gradient_of_u_fqnxy)
-                        diagonal_fnxyz += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
+                        diagonal_fnxyz.s += self.roll(self.fft, div_fnxyz_pixel_node, 1 * pixel_node, axis=(0, 1, 2))
                         print('Jacoby preconditioner  is not tested in 3D ')
 
         elif self.cell.problem_type == 'elasticity':
             if prec_type == 'full':
-                diagonal_matrices_fnfnxyz = np.zeros(diagonal_fnxyz.shape[:2] + diagonal_fnxyz.shape)
+                diagonal_matrices_fnfnxyz = np.zeros(diagonal_fnxyz.s.shape[:2] + diagonal_fnxyz.s.shape)
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
             for f in np.arange(0, self.cell.unknown_shape):
                 shape_function_gradients_fdnijk[f] = np.copy(self.B_grad_at_pixel_dqnijk)
@@ -1338,7 +1342,8 @@ class Discretization:
                                                      self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                      gradient_of_u_ijqnxy)
 
-                        diagonal_fnxyz[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node, axis=(0, 1))
+                        diagonal_fnxyz.s[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node,
+                                                              axis=(0, 1))
                         if prec_type == 'full':
                             diagonal_matrices_fnfnxyz[d, 0, ...] += self.roll(self.fft, div_at_quad_fnxy,
                                                                               1 * pixel_node,
@@ -1352,10 +1357,12 @@ class Discretization:
                                                      self.B_grad_at_pixel_dqnijk[(..., *pixel_node)],
                                                      gradient_of_u_ijqnxy)
 
-                        diagonal_fnxyz[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node,
-                                                            axis=(0, 1, 2))
+                        diagonal_fnxyz.s[d, ...] += self.roll(self.fft, div_at_quad_fnxy[d], 1 * pixel_node,
+                                                              axis=(0, 1, 2))
 
-                        print('Jacoby preconditioner  is not tested in 3D ')
+                       # print('Jacoby preconditioner  is not tested in 3D ')
+                        warnings.warn("Jacoby preconditioner  is not tested in 3D")
+
         if prec_type == 'full':
             # compute inverse of diagonals
             for pixel_index in np.ndindex(self.fft.coords[0].shape):
@@ -1380,10 +1387,10 @@ class Discretization:
             return diagonal_matrices_fnfnxyz
         # return self.apply_quadrature_weights_elasticity(material_data)
         # K_diag_inv_sym = K_diag ** (-1 / 2)
-        print(f'number of nearly zero diagonal = {np.size(diagonal_fnxyz[diagonal_fnxyz < 1e-16])}')
-
-        diagonal_fnxyz[diagonal_fnxyz < 1e-16] = 0
-        diagonal_fnxyz[diagonal_fnxyz != 0] = diagonal_fnxyz[diagonal_fnxyz != 0] ** (-1 / 2)
+        print(f'number of nearly zero diagonal = {np.size(diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-16])}')
+        # TODO: not sure if 0 or 1 is better
+        diagonal_fnxyz.s[diagonal_fnxyz.s < 1e-16] = 1
+        diagonal_fnxyz.s[diagonal_fnxyz.s != 0] = diagonal_fnxyz.s[diagonal_fnxyz.s != 0] ** (-1 / 2)
         # diagonal_fnxyz ** (-1 / 2)
         return diagonal_fnxyz
 

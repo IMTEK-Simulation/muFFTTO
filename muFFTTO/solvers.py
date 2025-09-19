@@ -121,8 +121,14 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         if norm_type == 'rz':
             if norms['residual_rz'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
+        if norm_type == 'rz_rel':
+            if norms['residual_rz'][-1] / norms['residual_rz'][0] < toler:  # TODO[Solver] check out stopping criteria
+                break
         if norm_type == 'rr':
             if norms['residual_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
+                break
+        if norm_type == 'rr_rel':
+            if norms['residual_rr'][-1] / norms['residual_rr'][0] < toler:  # TODO[Solver] check out stopping criteria
                 break
         if norm_type == 'energy':
             if norms['energy_upper_bound'][-1] < toler:  # TODO[Solver] check out stopping criteria
