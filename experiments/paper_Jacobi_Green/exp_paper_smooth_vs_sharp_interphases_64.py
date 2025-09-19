@@ -171,7 +171,7 @@ if compute:
 
         phase_field_min = np.min(phase_field_origin)
         phase_field_max = np.max(phase_field_origin)
-
+        jacobi_counter = 0
         min_idx = np.unravel_index(phase_field_origin.argmin(), phase_field_origin.shape)
         for i in np.arange(ratios.shape[0]):
             ratio = ratios[i]
@@ -246,13 +246,16 @@ if compute:
                 # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                    material_data_field_ijklqxyz=material_data_field_C_0_rho)
-
-                M_fun_combi = lambda x: K_diag_alg.s * discretization.apply_preconditioner_NEW(
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho, name=f'Jacobi_{jacobi_counter}')
+                jacobi_counter += 1
+                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
-                    nodal_field_fnxyz=K_diag_alg.s * x)
+                    nodal_field_fnxyz=K_diag_alg * x)
+
+                # M_fun_combi = lambda x: 1 * x
                 # #
-                M_fun_Jacobi = lambda x: K_diag_alg.s * K_diag_alg.s * x
+                # M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
+                M_fun_Jacobi = lambda x: 1 * x
 
                 # init solution
                 x_init.s.fill(0)
@@ -260,21 +263,29 @@ if compute:
 
                 displacement_field.s.fill(0)
 
+
+                def my_callback(x_0):
+                    print('mean_x0 {}'.format(x_0.mean()))
+
+
                 displacement_field.s, norms = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s, P=M_fun,
                                                           steps=int(10000), toler=1e-12,
                                                           norm_type='data_scaled_rr',
-                                                          norm_metric=M_fun
+                                                          norm_metric=M_fun,
+                                                          callback=my_callback
                                                           )
 
                 results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
-              #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
-                old_displ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
-                # results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
-                # np.save(data_folder_path + results_name + f'GJ.npy', rhs)
-                # results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
-                # np.save(data_folder_path + results_name + f'GJ.npy', K_diag_alg)
+                #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
+                old_displ_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
 
-                #_info_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                old_rhs_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
+
+                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                old_K_diag_alg_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
+
+                # _info_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
                 nb_it[i, counter] = (len(norms['residual_rr']))
                 norm_rz.append(norms['residual_rz'])
@@ -300,7 +311,18 @@ if compute:
                                                                     steps=int(4000),
                                                                     toler=1e-12,
                                                                     norm_type='data_scaled_rr',
-                                                                    norm_metric=M_fun)
+                                                                    norm_metric=M_fun,
+                                                                    callback=my_callback)
+                results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
+                #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
+                old_displ_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+
+                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                old_rhs_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+
+                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                old_K_diag_alg_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+
                 nb_it_combi[i, counter] = (len(norms_combi['residual_rr']))
                 norm_rz_combi.append(norms_combi['residual_rz'])
                 norm_rr_combi.append(norms_combi['residual_rr'])

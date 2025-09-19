@@ -1233,9 +1233,11 @@ class Discretization:
         return K_diag_inv_sym
 
     def get_preconditioner_Jacoby_fast(self, material_data_field_ijklqxyz,
+                                       name,
                                        gradient_of_u=None,
                                        formulation=None,
-                                       prec_type=None):
+                                       prec_type=None,
+                                       ):
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1251,7 +1253,7 @@ class Discretization:
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
-        diagonal_fnxyz = self.get_unknown_size_field(name='diagonal_fnxyz')
+        diagonal_fnxyz = self.get_unknown_size_field(name=name)
         # !/usr/bin/env python3
         if self.cell.problem_type == 'conductivity':
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
@@ -1421,6 +1423,7 @@ class Discretization:
         ffield_fnqks *= self.fft.normalisation
         # iFFTn
         nodal_field_fnxyz = self.fft.ifft(ffield_fnqks)
+
         # self.fft.ifft(ffield_fnqks,nodal_field_fnxyz)
         # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
         #     nodal_field_fnxyz = np.expand_dims(nodal_field_fnxyz,
