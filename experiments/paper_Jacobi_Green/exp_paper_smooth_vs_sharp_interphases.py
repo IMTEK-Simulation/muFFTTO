@@ -243,11 +243,11 @@ if compute:
                                                         norm_type='data_scaled_rr',
                                                         norm_metric=M_fun)
                 results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
-                np.save(data_folder_path + results_name + f'GJ.npy', displacement_field)
+                np.save(data_folder_path + results_name + f'G.npy', displacement_field)
                 results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
-                np.save(data_folder_path + results_name + f'GJ.npy', rhs)
+                np.save(data_folder_path + results_name + f'G.npy', rhs)
                 results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
-                np.save(data_folder_path + results_name + f'GJ.npy', K_diag_alg)
+                np.save(data_folder_path + results_name + f'G.npy', K_diag_alg)
 
 
 
