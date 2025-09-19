@@ -87,7 +87,6 @@ class DiscretizationTestCase(unittest.TestCase):
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
 
-
     def test_3D_gradients_linear_conductivity(self):
         domain_size = [3, 4, 5]
         problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
@@ -277,10 +276,10 @@ class DiscretizationTestCase(unittest.TestCase):
                     # compare values of gradient element wise --- without last-- periodic pixel that differs
                     value_1 = np.alltrue(
                         displacement_gradient[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal[direction,
-                                                                                dir, :, 0:-1, 0:-1])
+                        dir, :, 0:-1, 0:-1])
                     diff = np.ndarray.sum(
                         displacement_gradient[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal[direction,
-                                                                               dir, :, 0:-1, 0:-1])
+                        dir, :, 0:-1, 0:-1])
                     value = np.allclose(displacement_gradient[direction, dir, :, 0:-1, 0:-1],
                                         displacement_gradient_anal[direction, dir, :, 0:-1, 0:-1],
                                         rtol=1e-16, atol=1e-14)
@@ -901,7 +900,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 preconditioner_Fourier = discretization.get_preconditioner_NEW(
                     reference_material_data_field_ijklqxyz=ref_material_data_field)
 
-                M_fun = lambda x: discretization.get_preconditioner_NEW(preconditioner_Fourier, x)
+                M_fun = lambda x: discretization.apply_preconditioner_NEW(
+                    preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
+                    nodal_field_fnxyz=x)
 
                 # set up random field
                 x_0 = np.random.rand(*discretization.get_unknown_size_field().shape)
@@ -932,7 +933,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
             for element_type in ['trilinear_hexahedron']:
                 discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
+                                                       nb_of_pixels_global=number_of_pixels,
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
 
@@ -962,10 +963,18 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
-                preconditioner = discretization.get_preconditioner(
+                # preconditioner = discretization.get_preconditioner(
+                #     reference_material_data_field_ijklqxyz=ref_material_data_field)
+                #
+                # M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
+                preconditioner_Fourier = discretization.get_preconditioner_NEW(
                     reference_material_data_field_ijklqxyz=ref_material_data_field)
 
-                M_fun = lambda x: discretization.apply_preconditioner(preconditioner, x)
+                M_fun = lambda x: discretization.apply_preconditioner_NEW(
+                    preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
+                    nodal_field_fnxyz=x)
+
+
 
                 f_0 = K_fun(x_0)
                 x_1 = M_fun(f_0)
