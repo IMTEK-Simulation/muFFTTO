@@ -2,8 +2,6 @@ import numpy as np
 
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
-from reportlab.lib.pagesizes import elevenSeventeen
-
 
 def donothing(*args, **kwargs):
     pass
