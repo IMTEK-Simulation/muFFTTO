@@ -242,6 +242,15 @@ if compute:
                                                         steps=int(10000), toler=1e-12,
                                                         norm_type='data_scaled_rr',
                                                         norm_metric=M_fun)
+                results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', displacement_field)
+                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', rhs)
+                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', K_diag_alg)
+
+
+
                 nb_it[i, counter] = (len(norms['residual_rz']))
                 norm_rz.append(norms['residual_rz'])
                 norm_rr.append(norms['residual_rr'])
@@ -265,6 +274,15 @@ if compute:
                                                                     toler=1e-12,
                                                                     norm_type='data_scaled_rr',
                                                                     norm_metric=M_fun)
+                # save strain fluctuation
+                results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', displacement_field_combi)
+                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', rhs)
+                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                np.save(data_folder_path + results_name + f'GJ.npy', K_diag_alg)
+
+
                 nb_it_combi[i, counter] = (len(norms_combi['residual_rz']))
                 norm_rz_combi.append(norms_combi['residual_rz'])
                 norm_rr_combi.append(norms_combi['residual_rr'])
