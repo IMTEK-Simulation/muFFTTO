@@ -21,6 +21,8 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
+old_data_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_smooth_vs_sharp_interphases' + '/'
+
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
@@ -167,7 +169,6 @@ if compute:
         macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
                                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
 
-
         phase_field_min = np.min(phase_field_origin)
         phase_field_max = np.max(phase_field_origin)
 
@@ -222,7 +223,6 @@ if compute:
 
                 # apply material distribution
 
-
                 # perturb=np.random.random(macro_gradient_field.shape)
                 # macro_gradient_field += perturb#-np.mean(perturb)
 
@@ -243,7 +243,7 @@ if compute:
                 M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                           nodal_field_fnxyz=x)
 
-               # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
+                # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho)
@@ -256,7 +256,7 @@ if compute:
 
                 # init solution
                 x_init.s.fill(0)
-                #x_init=np.random.random(discretization.get_displacement_sized_field().shape)
+                # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
 
                 displacement_field.s.fill(0)
 
@@ -265,6 +265,17 @@ if compute:
                                                           norm_type='data_scaled_rr',
                                                           norm_metric=M_fun
                                                           )
+
+                results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
+              #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
+                old_displ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                # results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                # np.save(data_folder_path + results_name + f'GJ.npy', rhs)
+                # results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                # np.save(data_folder_path + results_name + f'GJ.npy', K_diag_alg)
+
+                #_info_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+
                 nb_it[i, counter] = (len(norms['residual_rr']))
                 norm_rz.append(norms['residual_rz'])
                 norm_rr.append(norms['residual_rr'])
@@ -282,7 +293,7 @@ if compute:
 
                 print(f'Green its = {nb_it} ')
                 #########
-                #displacement_field.s.fill(0)
+                # displacement_field.s.fill(0)
                 x_init.s.fill(0)
                 displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
                                                                     P=M_fun_combi,
@@ -303,7 +314,7 @@ if compute:
                 #       ' sharp={}'.format(homogenized_stresses, sharp))
                 #
                 print(f'GJ its = {nb_it_combi} ')
-                #displacement_field.s.fill(0)
+                # displacement_field.s.fill(0)
                 x_init.s.fill(0)
                 displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
                                                                       P=M_fun_Jacobi,
@@ -325,9 +336,9 @@ if compute:
                 counter += 1
 
                 _info = {}
-                _info['norms_G'] = norms['residual_rr']#['data_scaled_rr']
-                _info['norms_GJ'] = norms_combi['residual_rr']#['data_scaled_rr']
-                _info['norms_J'] = norms_Jacobi['residual_rr']#['data_scaled_rr']
+                _info['norms_G'] = norms['residual_rr']  # ['data_scaled_rr']
+                _info['norms_GJ'] = norms_combi['residual_rr']  # ['data_scaled_rr']
+                _info['norms_J'] = norms_Jacobi['residual_rr']  # ['data_scaled_rr']
 
                 results_name = f'N64_{ratio}_sharp_{sharp}'
 
