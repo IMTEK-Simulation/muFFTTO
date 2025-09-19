@@ -17,7 +17,7 @@ formulation = 'small_strain'
 
 
 domain_size = [1, 1]
-number_of_pixels = (32, 32)
+number_of_pixels = (16, 16)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -130,6 +130,8 @@ norm_rr = norms['residual_rr'][-1]
 
 print(
     '   nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+print(' residual_rr = {} \n '.format(norms['residual_rr']))
+print(' residual_rz = {} \n '.format(norms['residual_rz']))
 #print(norms)
 # ----------------------------------------------------------------------
 # compute homogenized stress field corresponding to displacement
