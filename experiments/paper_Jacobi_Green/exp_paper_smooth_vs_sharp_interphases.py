@@ -259,6 +259,7 @@ if compute:
 
                 print(nb_it)
                 #########
+                x_init.fill(0)
                 displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi,
                                                                     steps=int(4000),
                                                                     toler=1e-12,
@@ -268,6 +269,7 @@ if compute:
                 norm_rz_combi.append(norms_combi['residual_rz'])
                 norm_rr_combi.append(norms_combi['residual_rr'])
                 norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+                print(nb_it_combi)
                 # homogenized_stresses = discretization.get_homogenized_stress(
                 #     material_data_field_ijklqxyz=material_data_field_C_0_rho,
                 #     displacement_field_inxyz=displacement_field_combi,
