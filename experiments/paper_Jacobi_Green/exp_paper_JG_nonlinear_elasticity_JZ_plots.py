@@ -29,10 +29,10 @@ if plot_time_vs_dofs:
     time_GJ = []
     its_G = []
     its_GJ = []
-    Ns = 2 ** np.array([4, 5, 6, 7, 8, 9])  # numbers of grids points
+    Ns = 2 ** np.array([3,4, 5, 6, ])  # 7, 8, 9 numbers of grids points
     for N in Ns:
         Nx = Ny = N
-        Nz = 1
+        Nz =N# 1
         preconditioner_type = 'Green'
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
@@ -72,14 +72,16 @@ if plot_time_vs_dofs:
     plt.legend(loc='best')
     plt.show()
 
+
+
     fig = plt.figure(figsize=(9, 3.0))
     gs = fig.add_gridspec(1, 1, hspace=0.5, wspace=0.5, width_ratios=[1],
                           height_ratios=[1])
 
     plt.loglog(3 * Ns ** 2, time_GJ/its_GJ, 'k-', label='GJ')
     plt.loglog(3 * Ns ** 2, time_G/its_G, 'g-', label='G')
-    plt.loglog(3 * Ns ** 2, Ns ** 2 / 1e3, '--', label='linear')
-    plt.loglog(3 * Ns ** 2, Ns ** 2 * np.log(Ns ** 2) / 1e3, ':', label='N log N')
+    plt.loglog(3 * Ns ** 2, 3 * Ns ** 2 / 2e5, '--', label='linear')
+    plt.loglog(3 * Ns ** 2, 3 * Ns ** 2 * np.log(3 *Ns ** 2) / 1e6, ':', label='N log N')
     plt.xlabel('N Dofs')
     plt.ylabel('Time (s)/ nb CG iterations')
     plt.legend(loc='best')
@@ -89,9 +91,9 @@ if plot_data_vs_CG:
     # print time vs DOFS
     its_G = []
     its_GJ = []
-    Nx = Ny = 256
-    Nz = 1
-    iterations = np.arange(7)  # numbers of grids points
+    Nx = Ny = 64
+    Nz = Nx
+    iterations = np.arange(6)  # numbers of grids points
     for iteration_total in iterations:
         preconditioner_type = 'Green'
 

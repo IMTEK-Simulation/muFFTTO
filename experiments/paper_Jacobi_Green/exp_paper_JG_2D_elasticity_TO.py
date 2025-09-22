@@ -24,7 +24,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  #
-number_of_pixels = (128, 128)
+number_of_pixels = (32, 32)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -45,13 +45,13 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 # start_time =  MPI.Wtime()
 
 # create material data of solid phase rho=1
-K_0, G_0 =1,0.5
-E_0 = 9*K_0*G_0/(3*K_0+G_0)
-poison_0=(3*K_0-2*G_0)/(2*(3*K_0+G_0))
-#poison_0 = 0.2
-#G_0 = E_0 / (2 * (1 + poison_0))
+K_0, G_0 = 1, 0.5
+E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
+poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
+# poison_0 = 0.2
+# G_0 = E_0 / (2 * (1 + poison_0))
 K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
-K_0, G_0 =1,0.5
+K_0, G_0 = 1, 0.5
 print('1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
@@ -64,15 +64,15 @@ material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
                                                       *discretization.nb_of_pixels])))
 print('3 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 # Set up preconditioner
-preconditioner_fnfnqks = discretization.get_preconditioner_NEW(
-    reference_material_data_field_ijklqxyz=material_data_field_C_0)
+preconditioner_fnfnqks = discretization.get_preconditioner_Green_fast(
+    reference_material_data_ijkl=material_data_field_C_0)
 M_fun_Green = lambda x: discretization.apply_preconditioner_NEW(
     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
     nodal_field_fnxyz=x)
 # set up load cases
 nb_load_cases = 3
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_multip =1.0
+macro_multip = 1.0
 macro_gradients[0] = np.array([[1.0, 0.],
                                [0., .0]]) * macro_multip
 macro_gradients[1] = np.array([[.0, .0],
@@ -86,11 +86,11 @@ macro_gradients[2] = np.array([[.0, 0.5],
 
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
 left_macro_gradients[0] = np.array([[.0, .0],
-                                    [.0, 1.0]])* macro_multip
+                                    [.0, 1.0]]) * macro_multip
 left_macro_gradients[1] = np.array([[1.0, .0],
-                                    [.0, .0]])* macro_multip
+                                    [.0, .0]]) * macro_multip
 left_macro_gradients[2] = np.array([[.0, .5],
-                                    [0.5, 0.0]])* macro_multip
+                                    [0.5, 0.0]]) * macro_multip
 # left_macro_gradients[3] =  np.array([[.0, .0],
 #                                     [.0, 1.0]])
 # left_macro_gradients[5] = np.array([[0., .5],
@@ -152,7 +152,7 @@ for ration in [-0.5]:
     norms_sigma = []
     norms_pf = []
     num_iteration_ = []
-    preconditioer = 'Jacobi' # ['Green','Jacobi','Jacobi_Green']
+    preconditioer = 'Jacobi'  # ['Green','Jacobi','Jacobi_Green']
     # np.concatenate([np.arange(0.1, 1., 0.2),np.arange(1, 10, 2),np.arange(10, 110, 10)])
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     # weights = np.concatenate(
@@ -178,9 +178,9 @@ for ration in [-0.5]:
             def objective_function_multiple_load_cases(phase_field_1nxyz):
                 # print('Objective function:')
                 # reshape the field
-                zero_small_phases=False
+                zero_small_phases = False
                 if zero_small_phases:
-                    phase_field_1nxyz[phase_field_1nxyz<1e-5]=0
+                    phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
 
                 phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
 
@@ -244,29 +244,30 @@ for ration in [-0.5]:
                                                                                      x0=None,
                                                                                      P=M_fun,
                                                                                      steps=int(10000),
-                                                                                     toler=1e-10,
-                                                                                     norm_type='rr',
-                                                                                     norm_metric=M_fun_Green)
+                                                                                     toler=1e-6,
+                                                                                     norm_type='rel_rr',
+                                                                                     # norm_metric=M_fun_Green
+                                                                                     )
                     elif preconditioer == 'Jacobi':
                         displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
                                                                                      B=rhs_load_case,
                                                                                      x0=None,
                                                                                      P=M_fun,
                                                                                      steps=int(10000),
-                                                                                     toler=1e-10,
-                                                                                     norm_type='rr',
-                                                                                     norm_metric=M_fun_Green
+                                                                                     toler=1e-6,
+                                                                                     norm_type='rel_rr',
+                                                                                     # norm_metric=M_fun_Green
                                                                                      )
-                        #displacement_field_load_case[                            load_case],
+                        # displacement_field_load_case[                            load_case],
                     elif preconditioer == 'Jacobi_Green':
                         displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
                                                                                      B=rhs_load_case,
                                                                                      x0=None,
                                                                                      P=M_fun,
                                                                                      steps=int(10000),
-                                                                                     toler=1e-10,
-                                                                                     norm_type='rr',
-                                                                                     norm_metric=M_fun_Green
+                                                                                     toler=1e-6,
+                                                                                     norm_type='rel_rr',
+                                                                                     # norm_metric=M_fun_Green
                                                                                      )
 
                     if MPI.COMM_WORLD.rank == 0:
@@ -361,7 +362,6 @@ for ration in [-0.5]:
                 norms_sigma.append(objective_function)
                 return objective_function[0], s_phase_field.reshape(-1)
 
-
 if __name__ == '__main__':
     script_name = 'exp_paper_JG_2D_elasticity_TO'
 
@@ -430,8 +430,8 @@ if __name__ == '__main__':
     # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
     import os
 
-    #name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
-    #phase_field = np.load(os.path.expanduser('~/exp_data/' + name + f'_it{8740}.npy'), allow_pickle=True)
+    # name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
+    # phase_field = np.load(os.path.expanduser('~/exp_data/' + name + f'_it{8740}.npy'), allow_pickle=True)
     load_init_from_same_grid = False
     if load_init_from_same_grid:
         # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
@@ -441,7 +441,7 @@ if __name__ == '__main__':
             # phase= np.load(f'experiments/exp_data/'  + file_data_name)
             phase = np.load(os.path.expanduser('~/exp_data/' + file_data_name + f'_it{6000}.npy'), allow_pickle=True)
 
-            #phase = np.load(f'experiments/exp_data/' + file_data_name)
+            # phase = np.load(f'experiments/exp_data/' + file_data_name)
         else:
 
             # file_data_name = (
@@ -471,9 +471,10 @@ if __name__ == '__main__':
             norms_norm_grad_f.append(result_norms[3])
             norms_max_delta_x.append(result_norms[4])
             norms_norm_delta_x.append(result_norms[5])
-            file_data_name_it = (f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target:.2f}_'
-                                 f'Poisson_{poison_target:.2f}_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_'
-                                 f'mac_{macro_multip}_p{p}_prec={preconditioer}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}_it{iteration}')  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+            file_data_name_it = (
+                f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target:.2f}_'
+                f'Poisson_{poison_target:.2f}_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_'
+                f'mac_{macro_multip}_p{p}_prec={preconditioer}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}_it{iteration}')  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
             save_npy(folder_name + file_data_name_it + f'.npy',
                      result_norms[6].reshape([*discretization.nb_of_pixels]),
@@ -520,9 +521,10 @@ if __name__ == '__main__':
         _info['norms_pf'] = norms_pf
         _info['num_iteration_'] = num_iteration_
 
-        file_data_name = (f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target:.2f}_Poisson_{poison_target:.2f}'
-                          f'_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_mac_{macro_multip}_p{p}_prec={preconditioer}_bounds={bounds}'
-                          f'_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}')  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        file_data_name = (
+            f'lbfg_muFFTTO_{problem_type}_{script_name}_N{number_of_pixels[0]}_E_target_{E_target:.2f}_Poisson_{poison_target:.2f}'
+            f'_Poisson0_{poison_0:.2f}_w{w_mult:.2f}_eta{eta_mult}_mac_{macro_multip}_p{p}_prec={preconditioer}_bounds={bounds}'
+            f'_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_e_obj_{energy_objective}_random_{random_initial_geometry}')  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
         save_npy(folder_name + file_data_name + f'.npy', solution_phase[0, 0],
                  tuple(discretization.fft.subdomain_locations),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)

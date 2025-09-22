@@ -52,7 +52,7 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-compute = True
+compute = False
 plot = True
 
 if compute:
@@ -246,7 +246,7 @@ if compute:
                 # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                    material_data_field_ijklqxyz=material_data_field_C_0_rho)#, name=f'Jacobi_{jacobi_counter}'
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho, name=f'Jacobi_{jacobi_counter}')#
                 jacobi_counter += 1
                 M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
@@ -272,7 +272,7 @@ if compute:
                                                           steps=int(10000), toler=1e-12,
                                                           norm_type='data_scaled_rr',
                                                           norm_metric=M_fun,
-                                                          callback=my_callback
+                                                         # callback=my_callback
                                                           )
 
                 results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
@@ -312,7 +312,8 @@ if compute:
                                                                     toler=1e-12,
                                                                     norm_type='data_scaled_rr',
                                                                     norm_metric=M_fun,
-                                                                    callback=my_callback)
+                                                                   # callback=my_callback
+                                                                     )
                 results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
                 #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
                 old_displ_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)

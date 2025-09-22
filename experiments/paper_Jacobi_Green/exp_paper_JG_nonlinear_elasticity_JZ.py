@@ -16,8 +16,8 @@ folder_name = '../exp_data/'
 
 preconditioner_type = 'Jacobi_Green'  # 'Jacobi_Green'# 'Green'#_Green_1Q
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([8]):
-        number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+    for nnn in 2 ** np.array([  4, ]):
+        number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -269,7 +269,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     M_fun = M_fun_Green
                 elif preconditioner_type == 'Jacobi_Green':
                     K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                        material_data_field_ijklqxyz=K4_ijklqyz)
+                        material_data_field_ijklqxyz=K4_ijklqyz, name=f'Jacobi{sum_CG_its}')
                     M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                         preconditioner_Fourier_fnfnqks=preconditioner,
                         nodal_field_fnxyz=K_diag_alg * x)
