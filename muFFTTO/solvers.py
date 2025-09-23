@@ -3,6 +3,7 @@ import numpy as np
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
+
 def donothing(*args, **kwargs):
     pass
 
@@ -92,10 +93,16 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
 
     for k in np.arange(1, steps):
         Ap_0 = Afun(p_0)
+        # print('callback Ap_0 = {}'.format(np.linalg.norm(Ap_0)))
+        # print('ID Ap_0 = {}'.format(id(Ap_0)))
 
         alpha = float(r_0z_0 / scalar_product_mpi(p_0, Ap_0))
         x_k = x_k + alpha * p_0
-        callback(x_k)
+        # print('callback xo = {}'.format(np.linalg.norm(x_k)))
+        callback(x_k, r_0)
+        # print('callback xo = {}'.format(np.linalg.norm(x_k)))
+        # print('callback Ap_0 = {}'.format(np.linalg.norm(Ap_0)))
+        # print('ID Ap_0 = {}'.format(id(Ap_0)))
         # if xCG.val.mean() > 1e-10:
         #     print('iteration left zero-mean space {} \n {}'.format(xCG.name, xCG.val.mean()))
 

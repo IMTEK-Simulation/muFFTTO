@@ -62,6 +62,7 @@ def scale_field_log(field, min_val, max_val):
 
 plot = True
 compute = False
+enforce_mean = True
 if compute:
 
     domain_size = [1, 1]
@@ -255,9 +256,14 @@ if compute:
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
                     name=f'Jacobi_{jacobi_counter}')  # , name=f'Jacobi_{jacobi_counter}'
                 jacobi_counter += 1
-                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                M_fun_GJ = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
                     nodal_field_fnxyz=K_diag_alg * x)
+                if enforce_mean:
+                    # M_fun_combi = lambda x: (y := M_fun_GJ(x)) - np.mean(y)
+                    M_fun_combi = lambda x: (y := M_fun_GJ(x)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
+                else:
+                    M_fun_combi = lambda x: M_fun_GJ(x)
 
                 # M_fun_combi = lambda x: 1 * x
                 # #
@@ -469,7 +475,7 @@ if plot:
 
                 arrows_G = [5, 10, 15]  # anotation arrows
                 text_G = np.array([[1.2, 1e-2],  # anotation Text position
-                                   [1.6,1e-4],
+                                   [1.6, 1e-4],
                                    [2.0, 2e-6]])
 
                 arrows_GJ = [300, 600, 1000]  # anotation arrows

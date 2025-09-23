@@ -2,7 +2,6 @@ import warnings
 
 import numpy as np
 import scipy as sc
-from reportlab.lib.pagesizes import elevenSeventeen
 
 from muFFTTO import discretization_library
 
@@ -1233,7 +1232,6 @@ class Discretization:
         return K_diag_inv_sym
 
     def get_preconditioner_Jacoby_fast(self, material_data_field_ijklqxyz,
-                                       name,
                                        gradient_of_u=None,
                                        formulation=None,
                                        prec_type=None,
@@ -1253,7 +1251,8 @@ class Discretization:
         gradient_of_u.fill(0)  # To ensure that gradient field is empty/zero
         # gradient_of_u_selfroll = np.copy(gradient_of_u)
         # grad_at_points=np.sum(self.B_grad_at_pixel_dqnijk[:])
-        diagonal_fnxyz = self.get_unknown_size_field(name=name)  # name
+        diagonal_fnxyz = self.get_unknown_size_field(name='Jacobi_inxyz_preconditioner')  # name
+        diagonal_fnxyz.s.fill(0)
         # !/usr/bin/env python3
         if self.cell.problem_type == 'conductivity':
             shape_function_gradients_fdnijk = np.zeros([*self.cell.unknown_shape, *self.B_grad_at_pixel_dqnijk.shape])
@@ -1450,13 +1449,14 @@ class Discretization:
         nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
         return nodal_field_fnxyz
 
-    def apply_system_matrix(self, material_data_field, displacement_field, formulation=None, **kwargs):
+    def apply_system_matrix(self, material_data_field, displacement_field, output_field_inxyz=None, formulation=None,
+                            **kwargs):
         # the ouput array is numpy array for compatibility with solvers
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
         # chcek if the field is nump. If yes, make a muGrid array of it
         if isinstance(displacement_field, np.ndarray):
-            uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz')
+            uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz_temp')
             uknown_inxyz.s = displacement_field
         else:
             uknown_inxyz = displacement_field
@@ -1490,13 +1490,14 @@ class Discretization:
         MPI.COMM_WORLD.Barrier()
 
         # print('apply_gradient_transposed_operator = \n   core {}'.format(MPI.COMM_WORLD.rank))
-        div_stress_inxyz = self.get_unknown_size_field(name='div_stress')
+        if output_field_inxyz is None:
+            output_field_inxyz = self.get_unknown_size_field(name='output_field_inxyz')
 
         self.apply_gradient_transposed_operator(gradient_field_ijqxyz=gradient_ijqxyz,
-                                                div_u_fnxyz=div_stress_inxyz,
+                                                div_u_fnxyz=output_field_inxyz,
                                                 apply_weights=True)
 
-        return div_stress_inxyz.s
+        return output_field_inxyz.s
 
     def apply_system_matrix_explicit_stress(self,
                                             stress_function,

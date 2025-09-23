@@ -1,4 +1,5 @@
 from cProfile import label
+import os
 
 import numpy as np
 import scipy as sc
@@ -26,6 +27,17 @@ if MPI.COMM_WORLD.rank == 0:
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 
 src = '../figures/'
+script_name = 'exp_paper_JG_grid_size_independance'
+
+file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+if not os.path.exists(file_folder_path):
+    os.makedirs(file_folder_path)
+data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/')
+if not os.path.exists(data_folder_path):
+    os.makedirs(data_folder_path)
+figure_folder_path = (file_folder_path + '/figures/' + script_name + '/')
+if not os.path.exists(figure_folder_path):
+    os.makedirs(figure_folder_path)
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -33,7 +45,8 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [  2,3, 4,5,6,7,8,9,10 ] #,5,6,7,8,9,10,8,9,10 # ,8,9,10    6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [2, 3, 4,
+                  5]  # ,5,6,7,8,9,10,8,9,10 # ,8,9,10    6,7,8,9,10  ,7,8,9,10    , 6, 7, 8, 9, 10 # ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 
@@ -41,9 +54,9 @@ large = np.arange(0.9, 1.0 + 0.005, 0.005)
 ratios = np.concatenate((small, middle, large))
 ratios = np.arange(0., 1.1, 0.2)
 ratios = np.arange(0., 1.1, 0.2)
-#ratios = np.array([1, 1e4,1e8, ])  # np.arange(1,5)  # 17  33
-#ratios = np.array([1,4])  # np.arange(1,5)  # 17  33
-ratios = np.array([1, ])# ,4
+# ratios = np.array([1, 1e4,1e8, ])  # np.arange(1,5)  # 17  33
+# ratios = np.array([1,4])  # np.arange(1,5)  # 17  33
+ratios = np.array([1, ])  # ,4
 
 nb_it = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
 nb_it_combi = np.zeros((len(nb_pix_multips), len(nb_pix_multips), ratios.size), )
@@ -61,7 +74,7 @@ norm_energy_lb = []
 norm_energy_lb_combi = []
 norm_rMr_combi = []
 norm_rMr = []
-norm_rMr_Jacobi= []
+norm_rMr_Jacobi = []
 kontrast = []
 kontrast_2 = []
 eigen_LB = []
@@ -113,21 +126,17 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                          K=K_0,
                                                          mu=G_0,
                                                          kind='linear')
+        elastic_C_1_ijklq = np.broadcast_to(elastic_C_1[:, :, :, :, np.newaxis],
+                                            (2, 2, 2, 2, discretization.nb_quad_points_per_pixel))
         C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
-
-        material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
-
-        refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                               np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                 *discretization.nb_of_pixels])))
-
-       # print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+        material_data_field_C_0_rho = discretization.get_material_data_size_field(name='elastic_tensor')
+        material_data_field_C_0_rho.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                                                  np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                    *discretization.nb_of_pixels])))
 
         # material distribution
-        geometry_ID = 'linear'  #left_cluster_x2 sine_wave_ linear symmetric_linear laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
+        geometry_ID = 'linear'  # left_cluster_x2 sine_wave_ linear symmetric_linear laminate_log #n_laminate  laminate2  sine_wave_ #abs_val 'square_inclusion'#'circle_inclusion'#random_distribution  sine_wave_
 
 
         def scale_field(field, min_val, max_val):
@@ -146,21 +155,19 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
                                                                             coordinates=discretization.fft.coords,
                                                                             seed=1,
                                                                             parameter=number_of_pixels[0],
-                                                                            contrast= -ratio)#1 / 10 ** ratio
+                                                                            contrast=-ratio)  # 1 / 10 ** ratio
 
                 # if ratio <= 0:
                 #     phase_fied_small_grid += 1 / 10 ** ratio
-                #if ratio > 0:
-               # phase_fied_small_grid *= 10 ** ratio
-                #phase_fied_small_grid *= ratio
-                #phase_fied_small_grid += phase_fied_small_grid
-                #phase_fied_small_grid *=1e14
-                #phase_fied_small_grid += np.abs(np.sort(phase_fied_small_grid)[0, -2] - np.sort(phase_fied_small_grid)[0, -1])                # phase_fied_small_grid=np.copy(phase_field_smooth)
+                # if ratio > 0:
+                # phase_fied_small_grid *= 10 ** ratio
+                # phase_fied_small_grid *= ratio
+                # phase_fied_small_grid += phase_fied_small_grid
+                # phase_fied_small_grid *=1e14
+                # phase_fied_small_grid += np.abs(np.sort(phase_fied_small_grid)[0, -2] - np.sort(phase_fied_small_grid)[0, -1])                # phase_fied_small_grid=np.copy(phase_field_smooth)
 
-                #phase_fied_small_grid[:number_of_pixels[0]//2,:number_of_pixels[0]//2]=100
+                # phase_fied_small_grid[:number_of_pixels[0]//2,:number_of_pixels[0]//2]=100
                 phase_field_smooth = np.copy(phase_fied_small_grid)
-
-
 
             if kk > 0:
                 # phase_field_smooth = sc.ndimage.zoom(phase_fied_small_grid, zoom=nb_pix_multip, order=0)
@@ -171,7 +178,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             #                                                             microstructure_name=geometry_ID,
             #                                                             coordinates=discretization.fft.coords,
             #                                                             seed=1)
-            #print(phase_field_smooth)
+            # print(phase_field_smooth)
             # print(i + 2)
             # print(f'parametr = {i + 2}')
             # phase_field_smooth = np.abs(phase_field_smooth)
@@ -194,7 +201,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             #     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)#
             # if ratio > 0:
             #     phase_field = scale_field(phase_field, min_val=np.power(10,4-ratio), max_val=10 ** 4)#
-            #phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)  #
+            # phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)  #
             if ratio == 0:
                 pass
             else:
@@ -206,47 +213,20 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # phase_field = scale_field(phase_field, min_val=1, max_val=2)
             # phase_field[phase_field<=1/10**ratio]= 0
 
-            phase_fem = np.zeros([2, *number_of_pixels])
-            phase_fnxyz = discretization.get_scalar_sized_field()
-            # phase_fnxyz[0, 0, ...] = phase_field
-            #
-            # # np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
-            # # sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
-            #
-            # phase_field_at_quad_poits_1qnxyz = \
-            #     discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
-            #                                                  quad_field_fqnxyz=None,
-            #                                                  quad_points_coords_dq=None)[0]
-            #
-            # phase_field_at_quad_poits_1qnxyz[0, :, 0, ...] = phase_fnxyz
-            # apply material distribution
-            # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
-            # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
-            # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
-            # material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-            #     phase_field, 1)[0, :, 0, ...]
-            material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
+            # phase_fem = np.zeros([2, *number_of_pixels])
+            # phase_fnxyz = np.zeros([2, 1, *number_of_pixels])
+
+            material_data_field_C_0_rho = elastic_C_1_ijklq[..., np.newaxis, np.newaxis] * np.power(
                 phase_field, 1)
             # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
             # Set up right hand side
-            macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-            # np.random.seed(seed=1)
-            # perturb_dis=np.random.random(discretization.get_displacement_sized_field().shape)
-            # perturb_disx=microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-            #                                     microstructure_name='sine_wave_',
-            #                                     coordinates=discretization.fft.coords,
-            #                                     seed=1,
-            #                                     parameter=number_of_pixels[0],
-            #                                     contrast=-ratio)
-            # perturb_dis[0, 0] = perturb_disx**2
-            # perturb_dis[1, 0] = perturb_disx
-            # perturb=discretization.apply_gradient_operator_symmetrized( u=perturb_dis )
-            # perturb=scale_field(perturb, -0.4, 0.4)
-            # macro_gradient_field += (perturb-Reduction(MPI.COMM_WORLD).mean(perturb))
+
+            macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+                                                                           macro_gradient_field_ijqxyz=macro_gradient_inc_field)
 
             # Solve mechanical equilibrium constrain
             rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
-            x_init=discretization.get_displacement_sized_field()
+            x_init = discretization.get_displacement_sized_field()
 
             # x_init=np.random.random(discretization.get_displacement_sized_field().shape)
             # perturb_disx = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
@@ -254,7 +234,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             #                                                    coordinates=discretization.fft.coords)
             # x_init[0, 0] = -perturb_disx
             # x_init[1, 0] = -perturb_disx.transpose()
-            #perturb = discretization.apply_gradient_operator_symmetrized(u=-x_init)
+            # perturb = discretization.apply_gradient_operator_symmetrized(u=-x_init)
             print()
             K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
                                                                  formulation='small_strain')
@@ -275,28 +255,9 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # kontrast_2.append((max_val / min_val) / 10)
 
             omega = 1  # 2 / ( eig[-1]+eig[np.argmax(eig>0)])
-            # ax1.loglog(sorted(eig)[1:],label=f'{i}',marker='.', linewidth=0, markersize=1)
-            # ax1.set_ylim([1e-5, 1e1])
-            #
-            # K_diag_half = np.copy(np.diag(K))
-            # K_diag_half[K_diag_half < 9.99e-16] = 0
-            # K_diag_half[K_diag_half != 0] = 1/np.sqrt(K_diag_half[K_diag_half != 0])
-            #
-            # DKDsym = np.matmul(np.diag(K_diag_half),np.matmul(K,np.diag(K_diag_half)))
-            # eig = sc.linalg.eigh(a=DKDsym, b=M, eigvals_only=True)
-            #
-            # ax2.loglog(sorted(eig)[1:-2], label=f'{i}',marker='.', linewidth=0, markersize=1)
-            # ax2.set_ylim([1e-5, 1e1])
 
-            # K = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
-            # material_data_field_C_0=np.mean(material_data_field_C_0_rho,axis=(4,5,6))
-            # mean_material=np.mean(material_data_field_C_0_rho,axis=(4,5,6))
-            # material_data_field_C_0_ratio = np.einsum('ijkl,qxy->ijklqxy', mean_material,
-            #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
-            #                                                       *discretization.nb_of_pixels])))
-
-            preconditioner = discretization.get_preconditioner_NEW(
-                reference_material_data_field_ijklqxyz=refmaterial_data_field_I4s)
+            preconditioner = discretization.get_preconditioner_Green_fast(
+                reference_material_data_ijkl=elastic_C_1)
 
             M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                       nodal_field_fnxyz=x)
@@ -310,23 +271,10 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             # #
             M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
-            # K = discretization.get_system_matrix(material_data_field_C_0_rho)
-            # M = discretization.get_system_matrix(refmaterial_data_field_I4s)
-            #
-            # eig_G, _ = sc.linalg.eig(a=K, b=M)  # , eigvals_only=True
-            # eig_G = np.real(eig_G)
-            # K_diag_half = np.copy(np.diag(K))
-            # K_diag_half[K_diag_half < 9.99e-16] = 0
-            # K_diag_half[K_diag_half != 0] = 1 / np.sqrt(K_diag_half[K_diag_half != 0])
-            #
-            # DKDsym = np.matmul(np.diag(K_diag_half), np.matmul(K, np.diag(K_diag_half)))
-            # eig_JG, _ = sc.linalg.eig(a=DKDsym, b=M)  # , eigvals_only=True
-            # eig_JG = np.real(eig_JG)
-            # print(f'eig_G.min() = {eig_G[eig_G > 0].min()}')
-            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun, steps=int(1000), toler=1e-6, # 5000
+            displacement_field, norms = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun, steps=int(1000), toler=1e-6,  # 5000
                                                     norm_type='rz')
             nb_it[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms['residual_rr']))
-            #print('nb it  = {} '.format(len(norms['residual_rr'])))
+            # print('nb it  = {} '.format(len(norms['residual_rr'])))
 
             norm_rz.append(norms['residual_rz'])
             norm_rr.append(norms['residual_rr'])
@@ -334,7 +282,8 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
 
             # print(nb_it)
             #########
-            displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi, steps=int(1000),# 1000
+            displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_combi, steps=int(1000),
+                                                                # 1000
                                                                 toler=1e-6,
                                                                 norm_type='data_scaled_rr',
                                                                 norm_metric=M_fun
@@ -345,10 +294,11 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
             norm_rMr_combi.append(norms_combi['data_scaled_rr'])
 
             #
-            displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_Jacobi, steps=int(1000),
+            displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x_init, P=M_fun_Jacobi,
+                                                                  steps=int(1000),
                                                                   toler=1e-6,
-                                                                norm_type='data_scaled_rr',
-                                                                norm_metric=M_fun)
+                                                                  norm_type='data_scaled_rr',
+                                                                  norm_metric=M_fun)
             nb_it_Jacobi[kk + nb_starting_phases, nb_starting_phases, i] = (len(norms_Jacobi['residual_rr']))
             norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
             norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
@@ -520,7 +470,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
 
                     print(nb_it[:, :, i])
                     print('jacobi')
-                    print(nb_it_Jacobi[:,:,i])
+                    print(nb_it_Jacobi[:, :, i])
                     print('combi')
                     print(nb_it_combi[:, :, i])
                     print(geometry_ID)
@@ -539,7 +489,7 @@ if MPI.COMM_WORLD.rank == 0:
 
         print(nb_it[:, :, i])
         print('jacobi')
-        print(nb_it_Jacobi[:,:,i])
+        print(nb_it_Jacobi[:, :, i])
         print('combi')
         print(nb_it_combi[:, :, i])
         print(geometry_ID)

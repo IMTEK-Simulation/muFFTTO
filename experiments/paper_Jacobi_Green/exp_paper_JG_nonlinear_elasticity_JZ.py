@@ -14,10 +14,10 @@ from muFFTTO import solvers
 script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
 folder_name = '../exp_data/'
 
-preconditioner_type = 'Jacobi_Green'  # 'Jacobi_Green'# 'Green'#_Green_1Q
+enforce_mean = True
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([  4, ]):
-        number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+    for nnn in 2 ** np.array([3, 4, 5, 6, 7, 8, 9]):
+        number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -60,7 +60,6 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                                                element_type=element_type)
 
         _info['nb_of_pixels'] = discretization.nb_of_pixels_global
-
         _info['domain_size'] = domain_size
 
         start_time = time.time()
@@ -76,11 +75,11 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         I4s = (I4 + I4rt) / 2.
         I4d = (I4s - II / 3.)
 
-        II_qxyz = np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-                                  (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
-
-        I4d_qxyz = np.broadcast_to(I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-                                   (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
+        # II_qxyz = np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
+        #                           (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
+        #
+        # I4d_qxyz = np.broadcast_to(I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
+        #                            (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 
         model_parameters_non_linear = {'K': 2,
                                        'mu': 1,
@@ -104,9 +103,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             # bulk  modulus
 
             # elastic stiffness tensor, and stress response
-            C4 = K * II_qxyz + 2. * mu * I4d_qxyz
-
-            sig = np.einsum('ijklqxyz,lkqxyz  ->ijqxyz  ', C4, strain_ijqxyz)
+            # C4 = K * II_qxyz + 2. * mu * I4d_qxyz
+            C4 = K * II + 2. * mu * I4d
+            sig = np.einsum('ijkl,lkqxyz  ->ijqxyz  ', C4, strain_ijqxyz)
             # sig = ddot42(C4, strain)
 
             return sig, C4
@@ -149,12 +148,16 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             strain_dev_dyad = np.einsum('ijqxyz,klqxyz->ijklqxyz', strain_dev_ijqxyz, strain_dev_ijqxyz)
 
             K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qxyz ** (
-                    n - 3.) + strain_eq_qxyz ** (n - 1.) * I4d_qxyz)
+                    n - 3.) + strain_eq_qxyz ** (n - 1.) * I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis])
 
             # threshold = 1e-15
             # mask = (np.abs(strain_eq_qxyz) > threshold).astype(float)
 
-            K4 = K * II_qxyz + K4_d  # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
+            K4 = K * II[
+                ..., np.newaxis, np.newaxis, np.newaxis, np.newaxis] + K4_d  # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
+            #
+            # np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
+            #                 (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 
             return sig, K4
 
@@ -174,7 +177,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             # sig_P2, K4_P2 = linear_elastic_q_points(strain_ijqxyz.s, K=2)
 
             sig_ijqxyz = phase_field * sig_P1 + (1. - phase_field) * sig_P2
-            K4_ijklqxyz = phase_field * K4_P1 + (1. - phase_field) * K4_P2
+            K4_ijklqxyz = phase_field * K4_P1[
+                ..., np.newaxis, np.newaxis, np.newaxis, np.newaxis] + (1. - phase_field) * K4_P2
 
             # remove border pixels
             # sig_ijqxyz[..., 0:2, :] = 0
@@ -268,22 +272,30 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 if preconditioner_type == 'Green':
                     M_fun = M_fun_Green
                 elif preconditioner_type == 'Jacobi_Green':
+                    # K_ref = discretization.get_system_matrix(I4s)
+
                     K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                        material_data_field_ijklqxyz=K4_ijklqyz, name=f'Jacobi{sum_CG_its}')
-                    M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                        material_data_field_ijklqxyz=K4_ijklqyz)
+                    # GJ_matrix = np.diag(K_diag_alg.flatten()) @ K_ref @ np.diag(K_diag_alg.flatten())
+
+                    M_fun_GJ = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                         preconditioner_Fourier_fnfnqks=preconditioner,
                         nodal_field_fnxyz=K_diag_alg * x)
-                # mat_model_pars = {'mat_model': 'power_law_elasticity'}
+                    if enforce_mean:
+                        M_fun = lambda x: (y := M_fun_GJ(x)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
+                    else:
+                        M_fun = lambda x: M_fun_GJ(x)
+
+                        # mat_model_pars = {'mat_model': 'power_law_elasticity'}
                 K_fun = lambda x: discretization.apply_system_matrix(
                     material_data_field=K4_ijklqyz,  # constitutive_pixel
                     displacement_field=x,
                     formulation='small_strain')
 
-                # K_fun = lambda x: discretization.apply_system_matrix_explicit_stress(
-                #     stress_function=constitutive,  # constitutive_pixel
-                #     displacement_field=x,
-                #     formulation='small_strain',
-                #     **mat_model_pars)
+
+                def my_callback(x_0):
+                    print('mean_x0 {}'.format(x_0.mean()))
+
 
                 displacement_increment_field.s.fill(0)
                 displacement_increment_field.s, norms = solvers.PCG(Afun=K_fun,
@@ -291,7 +303,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                                                                     x0=displacement_increment_field.s,
                                                                     P=M_fun, steps=int(1000),
                                                                     toler=1e-14,
-                                                                    norm_type='rr')
+                                                                    norm_type='rr',
+                                                                    # callback=my_callback
+                                                                    )
                 if save_results:
                     results_name = (f'displacement_increment_field_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', displacement_increment_field.s)

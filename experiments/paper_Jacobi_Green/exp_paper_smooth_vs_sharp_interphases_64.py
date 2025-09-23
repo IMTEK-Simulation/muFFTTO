@@ -15,6 +15,7 @@ from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
+import copy
 
 script_name = 'exp_paper_smooth_vs_sharp_interphases_64'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
@@ -54,6 +55,8 @@ def scale_field_log(field, min_val, max_val):
 
 compute = False
 plot = True
+enforce_mean = True
+save_results = True
 
 if compute:
 
@@ -67,6 +70,9 @@ if compute:
     nb_it_Jacobi = np.zeros((ratios.size, 2))
     nb_it_Richardson = np.zeros((ratios.size, 2))
     nb_it_Richardson_combi = np.zeros((ratios.size, 2))
+
+    energy_evols_G = []
+    energy_evols_GJ = []
 
     norm_rr_combi = []
     norm_rz_combi = []
@@ -178,7 +184,7 @@ if compute:
 
             counter = 0
             for sharp in [False, True]:
-
+                _info = {}
                 #
                 # if ratio == 0:
                 #     phase_field = scale_field(phase_field, min_val=0, max_val=1.0)
@@ -246,11 +252,19 @@ if compute:
                 # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
                 K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                    material_data_field_ijklqxyz=material_data_field_C_0_rho, name=f'Jacobi_{jacobi_counter}')#
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho)  #
                 jacobi_counter += 1
-                M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                # M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+                #     preconditioner_Fourier_fnfnqks=preconditioner,
+                #     nodal_field_fnxyz=K_diag_alg * x)
+                M_fun_GJ = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     preconditioner_Fourier_fnfnqks=preconditioner,
                     nodal_field_fnxyz=K_diag_alg * x)
+                if enforce_mean:
+                    # M_fun_combi = lambda x: (y := M_fun_GJ(x)) - np.mean(y)
+                    M_fun_combi = lambda x: (y := M_fun_GJ(x)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
+                else:
+                    M_fun_combi = lambda x: M_fun_GJ(x)
 
                 # M_fun_combi = lambda x: 1 * x
                 # #
@@ -263,29 +277,54 @@ if compute:
 
                 displacement_field.s.fill(0)
 
+                K_fun_callback = lambda x: discretization.apply_system_matrix(
+                    material_data_field=material_data_field_C_0_rho,
+                    displacement_field=x,
+                    output_field_inxyz=x_init,
+                    formulation='small_strain')
 
-                def my_callback(x_0):
-                    print('mean_x0 {}'.format(x_0.mean()))
+                energy_evols_G = []
+
+
+                def my_callback_G(x_0, r_0=None):
+                    global rhs_field, K_fun_callback, energy_evols_G
+                    # if r_0 is not None:
+                    #     energy = np.sum(x_0 * (-rhs_field.s + -r_0))
+                    #     print('energy 2 {}'.format(energy))
+                    # else:
+                    energy = np.sum(x_0 * (2 * rhs_field.s - K_fun_callback(x_0)))
+                    print('energy {}'.format(energy))
+
+                    energy_evols_G.append(energy)
 
 
                 displacement_field.s, norms = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s, P=M_fun,
-                                                          steps=int(10000), toler=1e-12,
-                                                          norm_type='data_scaled_rr',
-                                                          norm_metric=M_fun,
-                                                         # callback=my_callback
+                                                          steps=int(10000), toler=1e-10,
+                                                          norm_type='rr',
+                                                          callback=my_callback_G
                                                           )
+                if save_results:
+                    results_name = (f'displacement_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_G.npy', displacement_field.s)
 
-                results_name = (f'displacement_field' + f'ration{i}_sharp{sharp}')
-                #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
-                old_displ_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
+                    # compute strain from the displacement increment
+                    strain_fluc_field = discretization.get_displacement_gradient_sized_field(
+                        name='strain_fluctuation_field_G')
+                    strain_fluc_field.s.fill(0)
+                    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                        u_inxyz=displacement_field,
+                        grad_u_ijqxyz=strain_fluc_field)
 
-                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
-                old_rhs_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
+                    results_name = (f'strain_fluc_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_G.npy', strain_fluc_field.s)
 
-                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
-                old_K_diag_alg_G = np.load(old_data_folder_path + results_name + f'G.npy', allow_pickle=True)
-
-                # _info_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+                    # strain_fluc_field.s.fill(0)
+                    strain_fluc_field.s = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
+                                                                             gradient_field=strain_fluc_field)
+                    results_name = (f'stress_fluc_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_G.npy', strain_fluc_field.s)
+                    results_name = (f'energy_evols_G_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_G.npy', energy_evols_G)
 
                 nb_it[i, counter] = (len(norms['residual_rr']))
                 norm_rz.append(norms['residual_rz'])
@@ -306,23 +345,65 @@ if compute:
                 #########
                 # displacement_field.s.fill(0)
                 x_init.s.fill(0)
+
+                energy_evols_GJ = []
+
+
+                def my_callback_GJ(x_0, r_0=None):
+                    global rhs_field, K_fun_callback, energy_evols_GJ
+
+                    # if r_0 is not None:
+                    #     energy = np.sum(x_0 * (-rhs_field.s + -r_0))
+                    #     print('energy 2 {}'.format(energy))
+                    # else:
+                    energy = np.sum(x_0 * (2 * rhs_field.s - K_fun_callback(x_0)))
+                    print('energy {}'.format(energy))
+
+                    energy_evols_GJ.append(energy)
+                    # print('mean_x0 {}'.format(x_0.mean()))
+
+
                 displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s, x0=x_init.s,
                                                                     P=M_fun_combi,
                                                                     steps=int(4000),
-                                                                    toler=1e-12,
-                                                                    norm_type='data_scaled_rr',
-                                                                    norm_metric=M_fun,
-                                                                   # callback=my_callback
-                                                                     )
-                results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
-                #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
-                old_displ_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                                                                    toler=1e-10,
+                                                                    norm_type='rr',
+                                                                    callback=my_callback_GJ
+                                                                    )
+                print(norms_combi['residual_rr'])
+                if save_results:
+                    results_name = (f'displacement_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_GJ.npy', displacement_field_combi)
 
-                results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
-                old_rhs_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                    # compute strain from the displacement increment
+                    strain_fluc_field = discretization.get_displacement_gradient_sized_field(
+                        name='strain_fluctuation_field_GJ')
+                    strain_fluc_field.s.fill(0)
+                    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                        u_inxyz=displacement_field_combi,
+                        grad_u_ijqxyz=strain_fluc_field)
 
-                results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
-                old_K_diag_alg_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                    results_name = (f'strain_fluc_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_GJ.npy', strain_fluc_field.s)
+
+                    # strain_fluc_field.s.fill(0)
+                    strain_fluc_field.s = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
+                                                                             gradient_field=strain_fluc_field)
+                    results_name = (f'stress_fluc_field_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_GJ.npy', strain_fluc_field.s)
+
+                    results_name = (f'energy_evols_GJ_' + f'ration{i}_sharp{sharp}')
+                    np.save(data_folder_path + results_name + f'_GJ.npy', energy_evols_GJ)
+
+                # results_name = (f'displacement_field_combi' + f'ration{i}_sharp{sharp}')
+                # #  np.save(old_data_folder_path + results_name + f'GJ.npy', displacement_field)
+                # old_displ_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                #
+                # results_name = (f'rhs' + f'ration{i}_sharp{sharp}')
+                # old_rhs_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
+                #
+                # results_name = (f'K_diag_alg' + f'ration{i}_sharp{sharp}')
+                # old_K_diag_alg_GJ = np.load(old_data_folder_path + results_name + f'GJ.npy', allow_pickle=True)
 
                 nb_it_combi[i, counter] = (len(norms_combi['residual_rr']))
                 norm_rz_combi.append(norms_combi['residual_rz'])
@@ -349,6 +430,7 @@ if compute:
                 norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
                 norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
                 norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
+
                 print(len(norms_Jacobi['residual_rz']))
 
                 # displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=None, P=M_fun,
@@ -358,7 +440,6 @@ if compute:
 
                 counter += 1
 
-                _info = {}
                 _info['norms_G'] = norms['residual_rr']  # ['data_scaled_rr']
                 _info['norms_GJ'] = norms_combi['residual_rr']  # ['data_scaled_rr']
                 _info['norms_J'] = norms_Jacobi['residual_rr']  # ['data_scaled_rr']
@@ -369,6 +450,262 @@ if compute:
                 print(data_folder_path + results_name + f'_log.npz')
 
 if plot:
+    ratios = np.array([2, 5, 8])
+    for sharp in [False, True]:
+        fig_err = plt.figure(figsize=(8.3, 5.0))
+
+        for i in np.arange(3, step=1):
+            results_name = (f'energy_evols_G_' + f'ration{i}_sharp{sharp}')
+            energy_evols_G = np.load(data_folder_path + results_name + f'_G.npy', allow_pickle=True)
+            results_name = (f'energy_evols_GJ_' + f'ration{i}_sharp{sharp}')
+            energy_evols_GJ = np.load(data_folder_path + results_name + f'_GJ.npy', allow_pickle=True)
+
+            fig_err.gca().semilogy(abs(np.diff(energy_evols_G)), label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='red', linestyle=':', lw=2)
+            fig_err.gca().semilogy(abs(np.diff(energy_evols_GJ)), label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='blue', linestyle=':', lw=2)
+
+            fig_err.gca().semilogy(energy_evols_G[-1]-energy_evols_G, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='red', linestyle='--', lw=2)
+            fig_err.gca().semilogy(energy_evols_GJ[-1]-energy_evols_GJ, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='blue', linestyle='--', lw=2)
+        plt.show()
+if plot:
+    plt.rcParams.update({
+        "text.usetex": True,  # Use LaTeX
+        # "font.family": "helvetica",  # Use a serif font
+    })
+    plt.rcParams.update({'font.size': 11})
+    plt.rcParams["font.family"] = "Arial"
+
+    # plt.rcParams.update({'font.size': 14})
+    ratios = np.array([2, 5, 8])
+
+    # fig = plt.figure(figsize=(11.5, 6))
+    fig = plt.figure(figsize=(8.3, 5.0))
+
+    # gs = fig.add_gridspec(1, 3)
+    gs_global = fig.add_gridspec(1, 3, width_ratios=[1, 2, 1], wspace=0.2)
+
+    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.2)  # 0.1, 1, 4
+    gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.1, 1], hspace=0.1, wspace=0.5)  # 0.1, 1, 4
+
+    ax_cbar = fig.add_subplot(gs_geom[:, 0])
+    lines = ['-', '-.', '--', ':']
+    row = 0
+    for sharp in [False, True]:
+        ax_error = fig.add_subplot(gs_error[row, 0])
+        ax_error.text(-0.12, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_error.transAxes)
+
+        ax_geom = fig.add_subplot(gs_geom[row, 1])
+
+        if row == 0:
+            ax_geom.text(-0.2, 1.21, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_geom.transAxes)
+        elif row == 1:
+            ax_geom.text(-0.2, 1.16, rf'\textbf{{(a.{row + 1})}}  ', transform=ax_geom.transAxes)
+
+        divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
+        cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
+        geometry = np.load('../exp_data/' + name + f'_it{iteration}.npy', allow_pickle=True)
+
+        phase_field_origin = np.abs(geometry)
+        phase_field_max = np.max(phase_field_origin)
+
+        phase_field = scale_field_log(np.copy(phase_field_origin), min_val=1 / (10 ** ratios[-1]),
+                                      max_val=phase_field_max)
+        if sharp:
+            phase_field[phase_field < 0.5] = 1 / 10 ** ratios[-1]  # phase_field_min#
+            phase_field[phase_field > 0.49] = phase_field_max  # 1
+
+        # np.unravel_index(phase_field_origin.argmin(), phase_field_origin.shape)
+        pcm = ax_geom.pcolormesh(np.tile(phase_field, (1, 1)),
+                                 cmap=cmap_, linewidth=0,
+                                 rasterized=True, norm=divnorm)
+
+        ax_geom.set_xticks([0, 32, 64])
+        ax_geom.set_yticks([0, 32, 64])
+        # ax_geom.axis('equal' )
+        ax_geom.set_aspect('equal', 'box')
+        if sharp:
+            ax_geom.set_xlabel('pixel index')
+        if sharp:
+            ax_geom.set_title(r'$\rho_{\rm sharp}$', wrap=True)  # Density
+        else:
+            ax_geom.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
+
+        for i in np.arange(ratios.size, step=1):
+            results_name = f'N64_{ratios[i]}_sharp_{sharp}'
+            _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
+
+            results_name = (f'energy_evols_G_' + f'ration{i}_sharp{sharp}')
+            energy_evols_G = np.load(data_folder_path + results_name + f'_G.npy', allow_pickle=True)
+            results_name = (f'energy_evols_GJ_' + f'ration{i}_sharp{sharp}')
+            energy_evols_GJ = np.load(data_folder_path + results_name + f'_GJ.npy', allow_pickle=True)
+
+            norm_G = _info['norms_G']
+            norm_GJ = _info['norms_GJ']
+            norm_J = _info['norms_J']
+            kappa = 10 ** ratios[i]
+
+            k = np.arange(max([len(norm_GJ), len(norm_G)]))
+            # print(f'k \n {k}')
+
+            convergence = ((np.sqrt(kappa) - 1) / (np.sqrt(kappa) + 1)) ** k
+            convergence = convergence  # *norm_rr[i][0]
+
+            relative_error_G = norm_G  # / norm_G[0]
+            relative_error_GJ = norm_GJ  # / norm_GJ[0]
+            ax_error.loglog(relative_error_G, label=fr'$\kappa=10^{{{-ratios[i]}}}$', color='g',
+                            linestyle=lines[i], lw=2)
+            #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
+            ax_error.loglog(relative_error_GJ, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                            color='black', linestyle=lines[i], lw=2)
+
+            ax_error.loglog(abs(np.diff(energy_evols_G)), label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                            color='red', linestyle=':', lw=2)
+            ax_error.loglog(abs(np.diff(energy_evols_GJ)), label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                            color='blue', linestyle=':', lw=2)
+            ax_error.loglog(energy_evols_G[-1] - energy_evols_G, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='red', linestyle='--', lw=2)
+            ax_error.loglog(energy_evols_GJ[-1] - energy_evols_GJ,
+                                   label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                   color='blue', linestyle='--', lw=2)
+            if sharp:
+                ax_error.set_xlabel(r'PCG iteration - $k$')
+
+            ax_error.set_ylabel('Norm of residual')  # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
+            # ax_error.set_title(r'Relative  norm of residua', wrap=True)
+
+            # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
+            ax_error.set_ylim([1e-10, 1])  # norm_rz[i][0]]/lb)
+            ax_error.set_xlim([1, 1e3])
+
+            ax_error.set_yticks([1e-10, 1e-5, 1])
+            ax_error.set_yticklabels([fr'$10^{{{-10}}}$', fr'$10^{{{-5}}}$', fr'$10^{{{0}}}$'])
+            # ax_error.set_xscale('linear')
+            # ax_error.legend(['Green', 'Green-Jacobi'], loc='best')
+            if sharp:
+
+                arrows_G = [5, 10, 15]  # anotation arrows
+                text_G = np.array([[1.2, 1e-4],  # anotation Text position
+                                   [1.6, 5e-7],
+                                   [2.0, 1e-9]])
+
+                arrows_GJ = [30, 70, 30]  # anotation arrows
+                text_GJ = np.array([[50, 1e-2],  # anotation Text position
+                                    [100, 5e-5],
+                                    [200, 1e-7]])
+            else:
+                arrows_G = [5, 70, 300]
+                text_G = np.array([[40, 1e-2],
+                                   [120, 1e-4],
+                                   [250, 1e-6]])
+
+                arrows_GJ = [3, 30, 60]
+                text_GJ = np.array([[1.2, 1e-5],
+                                    [1.6, 1e-7],
+                                    [2.0, 5e-10]])
+
+            ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
+                              xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
+                              xytext=(text_GJ[i, 0], text_GJ[i, 1]),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='black',
+                                              lw=1,
+                                              ls=lines[i]),
+                              fontsize=9,
+                              color='black'
+                              )
+            ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
+                              xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
+                              xytext=(text_G[i, 0], text_G[i, 1]),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='green',
+                                              lw=1,
+                                              ls=lines[i]),
+                              fontsize=9,
+                              color='green'
+                              )
+            ax_error.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+
+        cbar = plt.colorbar(pcm, location='left', cax=ax_cbar)
+        cbar.ax.yaxis.tick_left()
+        # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
+        # cbar.set_ticklabels([f'$10^{{{-4}}}$', f'$10^{{{-2}}}$', 1])
+        cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+        cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
+        row += 1
+
+    ##################### add strain difference
+    gs_diff = gs_global[2].subgridspec(2, 2, width_ratios=[1, 0.1], hspace=0.1, wspace=0.5)  # 0.1, 1, 4
+    sharpness = [False, True]
+    for row in [0, 1]:
+        ax_stress = fig.add_subplot(gs_diff[row, 0])
+        ax_stress_cbar = fig.add_subplot(gs_diff[row, 1])
+
+        i = 0
+
+        sharp = sharpness[row]
+
+        # load disp
+        results_name = (f'displacement_field_' + f'ration{i}_sharp{sharp}')
+        disp_G = np.load(data_folder_path + results_name + f'_G.npy', allow_pickle=True)
+        disp_GJ = np.load(data_folder_path + results_name + f'_GJ.npy', allow_pickle=True)
+
+        # load strain
+        results_name = (f'strain_fluc_field_' + f'ration{i}_sharp{sharp}')
+        strain_G = np.load(data_folder_path + results_name + f'_G.npy', allow_pickle=True)
+        strain_GJ = np.load(data_folder_path + results_name + f'_GJ.npy', allow_pickle=True)
+
+        # load stress
+        results_name = (f'stress_fluc_field_' + f'ration{i}_sharp{sharp}')
+        stress_G = np.load(data_folder_path + results_name + f'_G.npy', allow_pickle=True)
+        stress_GJ = np.load(data_folder_path + results_name + f'_GJ.npy', allow_pickle=True)
+
+        ### compute the difference
+        ij = (0, 0)
+
+        stress_diff = abs((stress_GJ.mean(axis=2)[ij + (...,)] - stress_G.mean(axis=2)[ij + (...,)]))
+        # stress_diff=stress_diff/ abs(stress_G.mean(axis=2)[ij + (...,)])
+
+        pcm = ax_stress.pcolormesh(np.tile(stress_diff, (1, 1)),
+                                   cmap=cmap_, linewidth=0,
+                                   rasterized=True,
+                                   # norm=divnorm
+                                   )
+
+        stress_diff_min = stress_diff.min()
+        stress_diff_max = stress_diff.max()
+
+        ax_stress.yaxis.tick_right()
+        ax_stress.set_xticks([0, 32, 64])
+        ax_stress.set_yticks([0, 32, 64])
+        ax_stress.set_aspect('equal')
+
+        cbar = plt.colorbar(pcm, location='right', cax=ax_stress_cbar)
+        cbar.ax.yaxis.set_ticks_position('right')  # move ticks to right
+        cbar.ax.yaxis.set_label_position('right')  # move label to right
+        cbar.set_ticks(ticks=[stress_diff_min, stress_diff_max / 2, stress_diff_max])
+        # cbar.set_ticklabels([f'{stress_diff_min:.0f}', f'{stress_diff_max / 2:.0f}', f'{stress_diff_max:.0f}'])
+        # Set scientific notation for ticks
+        #   formatter = mpl.ticker.ScalarFormatter(useMathText=True)
+        # cbar.ax.yaxis.set_major_formatter(mpl.ticker.ScalarFormatter(useMathText=True) )
+        cbar.ax.set_yticklabels(['$10^{' + str(int(np.log10(y))) + '}$' for y in cbar.ax.get_yticks()])
+
+        # formatter.set_scientific(True)
+        #  formatter.set_powerlimits((-2, 2))  # Controls when scientific notation kicks in
+        # cbar.ax.yaxis.set_major_formatter(formatter)
+
+        ax_stress_cbar.set_ylabel(fr'$|\sigma^{{G}}_{{11}}-\sigma^{{GJ}}_{{11}}|  $')
+
+    fig.tight_layout()
+    fname = f'exp_paper_JG_TO_64_sharp_vs_smoot_data_diff' + '{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(figure_folder_path + fname, bbox_inches='tight')
+    plt.show()
+
+plot_old = False  # without stress difference
+if plot_old:
     plt.rcParams.update({
         "text.usetex": True,  # Use LaTeX
         # "font.family": "helvetica",  # Use a serif font
@@ -551,12 +888,13 @@ if plot:
         cbar.set_ticks(ticks=[1e-8, 0.5, 1])
         cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
         row += 1
-
     fig.tight_layout()
     fname = f'exp_paper_JG_TO_64_sharp_vs_smoot' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(figure_folder_path + fname, bbox_inches='tight')
     plt.show()
+    ##################### add strain difference
+
 quit()
 if plot:
     ratios = np.array([2, 5, 8])
