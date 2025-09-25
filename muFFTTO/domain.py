@@ -846,6 +846,7 @@ class Discretization:
                          material_data_field_ijklqxyz,
                          displacement_field_inxyz,
                          macro_gradient_field_ijqxyz,
+                         output_stress_field_ijqxyz,
                          formulation=None):
         """
          Function that computes stress field (or flux)
@@ -869,15 +870,23 @@ class Discretization:
          -------
          stress_ij: nd array of stress of flux field
                     - stress= C * (macro_grad + micro_grad))
+                    :param output_field_ijqxyz:
          """
 
         if formulation == 'small_strain':
-            strain_ijqxyz = self.apply_gradient_operator_symmetrized(displacement_field_inxyz)
+            # output_field_ijqxyz is strain field
+            output_stress_field_ijqxyz = self.apply_gradient_operator_symmetrized(u_inxyz=displacement_field_inxyz,
+                                                                                  grad_u_ijqxyz=output_stress_field_ijqxyz)
         else:
-            strain_ijqxyz = self.apply_gradient_operator(displacement_field_inxyz)
-        strain_ijqxyz = strain_ijqxyz + macro_gradient_field_ijqxyz
-        stress_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, strain_ijqxyz)
-        return stress_ijqxyz
+            # output_field_ijqxyz is strain field
+            output_stress_field_ijqxyz = self.apply_gradient_operator(u_inxyz=displacement_field_inxyz,
+                                                                      grad_u_ijqxyz=output_stress_field_ijqxyz)
+
+        output_stress_field_ijqxyz.s = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        #output_stress_field_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, output_stress_field_ijqxyz)
+        output_stress_field_ijqxyz.s = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
+                                                 output_stress_field_ijqxyz.s)
+        return output_stress_field_ijqxyz
 
     def apply_quadrature_weights(self, material_data):
         """
@@ -1452,7 +1461,7 @@ class Discretization:
     def apply_system_matrix(self, material_data_field, displacement_field, output_field_inxyz=None, formulation=None,
                             **kwargs):
         # : muGrid.RealField | None < _muGrid.RealField
-        #< class '_muGrid.RealField'>
+        # < class '_muGrid.RealField'>
         # the ouput array is numpy array for compatibility with solvers
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')

@@ -194,8 +194,8 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         # print('Sensitivity_analytical')
         sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
             discretization=discretization,
-            material_data_field_ijkl=elastic_C_0_ijkl,
-            displacement_field_fnxyz=displacement_field,
+            base_material_data_ijkl=elastic_C_0_ijkl,
+            displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             phase_field_1nxyz=phase_field_1nxyz,
             target_stress_ij=target_stress_ij,
@@ -226,9 +226,10 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
     print(sensitivity_parts)
 
     epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
-    fd_sensitivity = discretization_fixture.get_scalar_sized_field()
-    fd_sensitivity_drho_dro = discretization_fixture.get_scalar_sized_field()
-    fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_sized_field()
+
+    fd_sensitivity = discretization_fixture.get_scalar_field(name='fd_sensitivity')
+    fd_sensitivity_drho_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
+    fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_dsigma_dro')
 
     error_fd_vs_analytical = []
     error_fd_vs_analytical_max = []
@@ -241,7 +242,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
-                phase_field = np.copy(phase_field_0_fixed.s)
+                phase_field = np.copy(phase_field_0_fixed)
                 #
                 phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / fd_scheme
                 phase_field_0 = phase_field.reshape(-1)
@@ -252,20 +253,20 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
                 of_minu_eps, f_sigma_minu_eps, f_rho_minu_eps, _, _ = my_objective_function(phase_field_0)
 
-                fd_sensitivity[0, 0, x, y] = (of_plus_eps - of_minu_eps) / (epsilon)
-                fd_sensitivity_drho_dro[0, 0, x, y] = (f_rho_plus_eps - f_rho_minu_eps) / (epsilon)
-                fd_sensitivity_dsigma_dro[0, 0, x, y] = (f_sigma_plus_eps - f_sigma_minu_eps) / (epsilon)
+                fd_sensitivity.s[0, 0, x, y] = (of_plus_eps - of_minu_eps) / (epsilon)
+                fd_sensitivity_drho_dro.s[0, 0, x, y] = (f_rho_plus_eps - f_rho_minu_eps) / (epsilon)
+                fd_sensitivity_dsigma_dro.s[0, 0, x, y] = (f_sigma_plus_eps - f_sigma_minu_eps) / (epsilon)
 
         error_fd_vs_analytical.append(
-            np.linalg.norm((fd_sensitivity - analytical_sensitivity)[0, 0], 'fro'))
+            np.linalg.norm((fd_sensitivity.s - analytical_sensitivity)[0, 0], 'fro'))
         error_fd_vs_analytical_max.append(
-            np.max((fd_sensitivity - analytical_sensitivity)[0, 0]))
+            np.max((fd_sensitivity.s - analytical_sensitivity)[0, 0]))
         norm_fd_sensitivity.append(
-            np.linalg.norm(fd_sensitivity[0, 0], 'fro'))
+            np.linalg.norm(fd_sensitivity.s[0, 0], 'fro'))
         norm_fd_sensitivity_df_dro.append(
-            np.linalg.norm(fd_sensitivity_drho_dro[0, 0], 'fro'))
+            np.linalg.norm(fd_sensitivity_drho_dro.s[0, 0], 'fro'))
         norm_fd_sensitivity_dsigma_dro.append(
-            np.linalg.norm(fd_sensitivity_dsigma_dro[0, 0], 'fro'))
+            np.linalg.norm(fd_sensitivity_dsigma_dro.s[0, 0], 'fro'))
     print()
     print(error_fd_vs_analytical)
     print(norm_fd_sensitivity)
