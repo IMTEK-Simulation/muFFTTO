@@ -14,9 +14,9 @@ from muFFTTO import solvers
 script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
 folder_name = '../exp_data/'
 
-enforce_mean = True
+enforce_mean = False
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([3, 4, 5, 6, 7, 8, 9]):
+    for nnn in 2 ** np.array([9]):  # 3, 4, 5, 6, 7, 8, 9
         number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
@@ -257,6 +257,20 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             # evaluate material law
             stress, K4_ijklqyz = constitutive(total_strain_field)  #
 
+            if save_results:
+                # save strain fluctuation
+                results_name = (f'strain_fluc_field' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
+                # save total  strain
+                results_name = (f'total_strain_field' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2))
+                # save stress
+                results_name = (f'stress' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', stress.mean(axis=2))
+                # save K4_ijklqyz
+                results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+
             En = np.linalg.norm(total_strain_field.s.mean(axis=2))
 
             rhs_t_norm = np.linalg.norm(rhs_field.s)
@@ -301,14 +315,12 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 displacement_increment_field.s, norms = solvers.PCG(Afun=K_fun,
                                                                     B=rhs_field.s,
                                                                     x0=displacement_increment_field.s,
-                                                                    P=M_fun, steps=int(1000),
+                                                                    P=M_fun,
+                                                                    steps=int(10000),
                                                                     toler=1e-14,
                                                                     norm_type='rr',
                                                                     # callback=my_callback
                                                                     )
-                if save_results:
-                    results_name = (f'displacement_increment_field_it{iteration_total}')
-                    np.save(data_folder_path + results_name + f'.npy', displacement_increment_field.s)
 
                 nb_it_comb = len(norms['residual_rr'])
                 norm_rz = norms['residual_rz'][-1]
@@ -321,6 +333,10 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 _info['nb_it_comb'] = nb_it_comb
 
                 # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
+                # update Newton iteration counter
+                iiter += 1
+                sum_Newton_its += 1
+                iteration_total += 1
 
                 # compute strain from the displacement increment
                 strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
@@ -329,8 +345,15 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
 
                 total_strain_field.s += strain_fluc_field.s
                 displacement_fluctuation_field.s += displacement_increment_field.s
-
+                # evaluate material law
+                stress, K4_ijklqyz = constitutive(total_strain_field)  #
+                # Recompute right hand side
+                rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel,
+                                                                   gradient_field_ijqxyz=total_strain_field,
+                                                                   rhs_inxyz=rhs_field)
                 if save_results:
+                    results_name = (f'displacement_increment_field_it{iteration_total}')
+                    np.save(data_folder_path + results_name + f'.npy', displacement_increment_field.s)
                     # save strain fluctuation
                     results_name = (f'strain_fluc_field' + f'_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
@@ -344,41 +367,38 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
 
-                # evaluate material law
-                stress, K4_ijklqyz = constitutive(total_strain_field)  #
-                # Recompute right hand side
-                rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel,
-                                                                   gradient_field_ijqxyz=total_strain_field,
-                                                                   rhs_inxyz=rhs_field)
                 # rhs *= -1
-                # print('=====================')
+
+                g_norm_div_stress = np.sum(rhs_field * M_fun_Green(rhs_field))
+                g_norm_div_stress_rel = np.sum(rhs_field * M_fun_Green(rhs_field)) / np.sum(stress)
+
+                print('=====================')
+                print('g_norm_stress {}'.format(g_norm_div_stress))
+                print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
+
+                print('=====================')
+                En = np.linalg.norm(total_strain_field.s)
                 print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
                     np.linalg.norm(strain_fluc_field.s) / En))
+
                 print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
                     np.linalg.norm(rhs_field.s) / rhs_t_norm))
 
                 print('Rhs {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
+
                 print('strain_fluc_field {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s)))
-                if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
-                if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
+
                 _info['norm_strain_fluc_field'] = np.linalg.norm(strain_fluc_field.s)
-                _info['norm_En'] = np.linalg.norm(strain_fluc_field.s)
+                _info['norm_En'] = En
+                _info['rhs_t_norm'] = rhs_t_norm
+                _info['norm_rhs_field'] = np.linalg.norm(rhs_field.s)
 
-                if np.linalg.norm(rhs_field.s) < 1.e-7 and iiter > 0: break
-                _info['norm_rhs_field)'] = np.linalg.norm(rhs_field.s)
-
-                # print('Norm of disp displacement_increment_field {0:10.2e}'.format(
-                #     np.linalg.norm(displacement_increment_field.s.mean(axis=1))))
-                # print('Norm of disp displacement_increment_field/ EN {0:10.2e}'.format(
-                #     np.linalg.norm(displacement_increment_field.s) / En))
-
-                np.savez(data_folder_path + f'info_log_it{iteration_total}.npz', **_info)
+                np.savez(data_folder_path + f'info_log_it{iteration_total - 1}.npz', **_info)
                 print(data_folder_path + f'info_log_it{iteration_total}.npz')
 
-                # update Newton iteration counter
-                iiter += 1
-                sum_Newton_its += 1
-                iteration_total += 1
+                # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
+                # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
+                if np.linalg.norm(rhs_field.s)  < 1.e-7 and iiter > 0: break
 
                 if iiter == 100:
                     break

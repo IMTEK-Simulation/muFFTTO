@@ -14,7 +14,7 @@ from muFFTTO import microstructure_library
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
     problem_type = 'elasticity'
-    element_types = ['linear_triangles_tilled','linear_triangles', 'bilinear_rectangle']
+    element_types = ['linear_triangles_tilled', 'linear_triangles', 'bilinear_rectangle']
 
     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                       problem_type=problem_type)
@@ -86,16 +86,18 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
     K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
 
-    elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                     K=K_0,
-                                                     mu=G_0,
-                                                     kind='linear')
+    elastic_C_0_ijkl = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                          K=K_0,
+                                                          mu=G_0,
+                                                          kind='linear')
 
-    material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
-                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                          *discretization.nb_of_pixels])))
+    material_data_field_C_0_ijklqxyz = discretization.get_material_data_size_field(name='base_material')
 
-    stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradient)
+    material_data_field_C_0_ijklqxyz.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0_ijkl,
+                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                     *discretization.nb_of_pixels])))
+
+    stress = np.einsum('ijkl,lk->ij', elastic_C_0_ijkl, macro_gradient)
 
     # create target material data
     print('init_stress = \n {}'.format(stress))
@@ -107,65 +109,81 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
     K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
-    elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                          K=K_targer,
-                                                          mu=G_target,
-                                                          kind='linear')
+    elastic_C_target_ijkl = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                               K=K_targer,
+                                                               mu=G_target,
+                                                               kind='linear')
     # # target_stress = np.array([[0.0, 0.05],
     # #                           [0.05, 0.0]])
-    target_stress = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradient)
-    print('target_stress = \n {}'.format(target_stress))
+    target_stress_ij = np.einsum('ijkl,lk->ij', elastic_C_target_ijkl, macro_gradient)
+    print('target_stress = \n {}'.format(target_stress_ij))
     # Set up the equilibrium system
-    macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+
+    macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
+    macro_gradient_field_ijqxyz = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+                                                                          macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz
+                                                                          )
     # M_fun = lambda x: 1 * x
-    preconditioner = discretization.get_preconditioner_NEW(
-        reference_material_data_field_ijklqxyz=material_data_field_C_0)
-    M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+    preconditioner_Green = discretization.get_preconditioner_Green_fast(
+        reference_material_data_ijkl=elastic_C_0_ijkl)
+
+    M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner_Green,
                                                               nodal_field_fnxyz=x)
 
     p = 2
     w = 1  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
     eta = 1
 
-    def my_objective_function(phase_field_1nxyz):
+    def my_objective_function(phase_field_1nxyz_flat):
         # print('Objective function:')
         # reshape the field
-        phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *number_of_pixels])
+        phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
+        phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *number_of_pixels])
 
         # Material data in quadrature points
+        # Todo: numpy array
         phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
-            nodal_field_fnxyz=phase_field_1nxyz,
+            nodal_field_fnxyz=phase_field_1nxyz.s,
             quad_field_fqnxyz=None,
             quad_points_coords_iq=None)
 
-        material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-            phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
-        # Solve mechanical equilibrium constrain
-        rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+        material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field(
+            name='data_field_in_objective')
+        material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                               np.power(phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
 
-        K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho,
-                                                             x,
+        # Solve mechanical equilibrium constrain
+        rhs_inxyz = discretization.get_unknown_size_field(name='rhs_field')
+        rhs_inxyz = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz.s,
+                                           macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+                                           rhs_inxyz=rhs_inxyz)
+
+        K_fun = lambda x: discretization.apply_system_matrix(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                             displacement_field=x,
                                                              formulation='small_strain')
         # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
         #     material_data_field_ijklqxyz=material_data_field_C_0_rho)
         # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
         #     preconditioner_Fourier_fnfnqks=preconditioner,
         #     nodal_field_fnxyz=K_diag_alg * x)
-
-        displacement_field, norms = solvers.PCG(K_fun, rhs, x0=None, P=M_fun, steps=int(1500), toler=1e-14)
+        displacement_field = discretization.get_unknown_size_field(name='displacement_field_')
+        displacement_field.s.fill(0)
+        displacement_field.s, norms = solvers.PCG(Afun=K_fun, B=rhs_inxyz,
+                                                  x0=None, P=M_fun,
+                                                  steps=int(1500), toler=1e-14)
 
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
-            material_data_field_ijklqxyz=material_data_field_C_0_rho,
+            material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
             displacement_field_inxyz=displacement_field,
-            macro_gradient_field_ijqxyz=macro_gradient_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             formulation='small_strain')
         # print('homogenized stress = \n'          ' {} '.format(homogenized_stress))
 
         f_sigma, f_rho = topology_optimization.objective_function_small_strain_testing(
             discretization=discretization,
             actual_stress_ij=homogenized_stress,
-            target_stress_ij=target_stress,
+            target_stress_ij=target_stress_ij,
             phase_field_1nxyz=phase_field_1nxyz,
             eta=eta,
             w=w)
@@ -176,11 +194,11 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         # print('Sensitivity_analytical')
         sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
             discretization=discretization,
-            material_data_field_ijklqxyz=material_data_field_C_0,
+            material_data_field_ijkl=elastic_C_0_ijkl,
             displacement_field_fnxyz=displacement_field,
-            macro_gradient_field_ijqxyz=macro_gradient_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             phase_field_1nxyz=phase_field_1nxyz,
-            target_stress_ij=target_stress,
+            target_stress_ij=target_stress_ij,
             actual_stress_ij=homogenized_stress,
             preconditioner_fun=M_fun,
             system_matrix_fun=K_fun,
@@ -191,17 +209,19 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
 
         objective_function += sensitivity_parts['adjoint_energy']
         # print(f'objective_function= {objective_function}')
-        print('adjoint_energy={}'.format(sensitivity_parts ))
+        print('adjoint_energy={}'.format(sensitivity_parts))
 
         return objective_function, f_sigma, f_rho, sensitivity_analytical, sensitivity_parts
 
     np.random.seed(1)
-    phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 1
-    # phase_field_0[0,0] =    discretization.fft.icoords[0]
-    phase_field_00 = np.copy(phase_field_0)
+    phase_field_0 = discretization.get_scalar_field(name='phase_field_0')
+    phase_field_0.s = np.random.rand(*phase_field_0.s.shape) ** 1
 
-    phase_field_0 = phase_field_0.reshape(-1)
-    analytical_sensitivity, sensitivity_parts = my_objective_function(phase_field_0)[-2:]
+    # save a copy of the original phase field
+    phase_field_0_fixed = np.copy(phase_field_0)
+    # flatten the array --- just nick
+    phase_field_0_flat = phase_field_0.s.ravel()  # TODO: check if this is copy or not
+    analytical_sensitivity, sensitivity_parts = my_objective_function(phase_field_0_flat)[-2:]
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
     print(sensitivity_parts)
 
@@ -221,7 +241,7 @@ def test_finite_difference_check_of_whole_objective_function(discretization_fixt
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
-                phase_field = np.copy(phase_field_00)
+                phase_field = np.copy(phase_field_0_fixed.s)
                 #
                 phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / fd_scheme
                 phase_field_0 = phase_field.reshape(-1)
@@ -410,7 +430,6 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
 
         print('f_sigma= \n'' {} '.format(f_sigma))
 
-
         # print('Sensitivity_analytical')
         # sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
         #     discretization=discretization,
@@ -442,9 +461,9 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
             p=p,
             weight=w)
 
-        objective_function = w * f_sigma + f_phase_field+adjoint_energies
+        objective_function = w * f_sigma + f_phase_field + adjoint_energies
         print(f'objective_function= {objective_function}')
-        #print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
+        # print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
 
         return objective_function, f_sigma, f_phase_field, sensitivity_analytical + s_phase_field
 
@@ -458,7 +477,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
     # print(sensitivity_parts)
 
-    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1,1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
+    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     fd_sensitivity = discretization_fixture.get_scalar_sized_field()
     fd_sensitivity_drho_dro = discretization_fixture.get_scalar_sized_field()
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_sized_field()
@@ -503,8 +522,8 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
     print(norm_fd_sensitivity)
     print(norm_fd_sensitivity_df_dro)
     print(norm_fd_sensitivity_dsigma_dro)
-    #print(error_fd_vs_analytical)
-    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], (np.asarray(epsilons)/2) ** 2)
+    # print(error_fd_vs_analytical)
+    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], (np.asarray(epsilons) / 2) ** 2)
     lin_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 1)
     if plot:
         import matplotlib.pyplot as plt
@@ -515,7 +534,7 @@ def test_finite_difference_check_of_whole_objective_function_energy_equivalence(
                    label=r' error_fd_vs_analytical_max'.format())
         # plt.loglog(epsilons, norm_fd_sensitivity - np.linalg.norm(analytical_sensitivity[0, 0], 'fro'),
         #            label=r' error_fd_vs_analytical'.format())
-        plt.loglog(np.asarray(epsilons)/2, quad_fit_of_error,
+        plt.loglog(np.asarray(epsilons) / 2, quad_fit_of_error,
                    label=r' quad_fit_of_error'.format())
         plt.loglog(epsilons, lin_fit_of_error,
                    label=r' lin_fit_of_error'.format())
@@ -1239,10 +1258,10 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
                     quad_points_coords_iq=None)
 
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0_ijklqxyz[..., :, :, :] * (
-                                                                                                            np.power(
-                                                                                                                phase_field_at_quad_poits_1qnxyz,
-                                                                                                                p))[0,
-                                                                                                        :, 0, ...]
+                    np.power(
+                        phase_field_at_quad_poits_1qnxyz,
+                        p))[0,
+                :, 0, ...]
 
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
@@ -1262,10 +1281,10 @@ def test_fd_check_of_adjoin_potential_wrt_phase_field_FE(discretization_fixture,
                     quad_field_fqnxyz=None,
                     quad_points_coords_iq=None)
                 material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0_ijklqxyz[..., :, :, :] * (
-                                                                                                            np.power(
-                                                                                                                phase_field_at_quad_poits_1qnxyz,
-                                                                                                                p))[0,
-                                                                                                        :, 0, ...]
+                    np.power(
+                        phase_field_at_quad_poits_1qnxyz,
+                        p))[0,
+                :, 0, ...]
 
                 stress_field = discretization_fixture.get_stress_field(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,

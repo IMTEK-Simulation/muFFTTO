@@ -1451,6 +1451,8 @@ class Discretization:
 
     def apply_system_matrix(self, material_data_field, displacement_field, output_field_inxyz=None, formulation=None,
                             **kwargs):
+        # : muGrid.RealField | None < _muGrid.RealField
+        #< class '_muGrid.RealField'>
         # the ouput array is numpy array for compatibility with solvers
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')

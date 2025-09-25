@@ -18,7 +18,6 @@ from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 from muFFTTO import microstructure_library
-from muFFTTO import method_of_moving_asymptotes_
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -329,7 +328,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz):
 
 
 if __name__ == '__main__':
-    script_name = 'example_2D_elasticity_TO'
+
+    script_name = os.path.splitext(os.path.basename(__file__))[0]
     file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/data/' + script_name + '/'
 

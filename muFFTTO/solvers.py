@@ -68,6 +68,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
 
     norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
     norms['residual_rz'].append(r_0z_0)
+
     if norm_energy_upper_bound:
         gamma_mu = 1 / lambda_min
         norms['energy_upper_bound'].append(gamma_mu * r_0z_0)
