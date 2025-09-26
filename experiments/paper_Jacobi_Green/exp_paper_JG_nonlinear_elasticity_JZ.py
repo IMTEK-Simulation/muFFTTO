@@ -16,7 +16,7 @@ folder_name = '../exp_data/'
 
 enforce_mean = False
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([9]):  # 3, 4, 5, 6, 7, 8, 9
+    for nnn in 2 ** np.array([2,3, 4, 5, 6, 7, 8, 9]):  # 3, 4, 5, 6, 7, 8, 9
         number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
@@ -271,6 +271,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
                 np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
 
+                results_name = (f'rhs_field' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=2))
             En = np.linalg.norm(total_strain_field.s.mean(axis=2))
 
             rhs_t_norm = np.linalg.norm(rhs_field.s)
@@ -366,6 +368,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     # save K4_ijklqyz
                     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+
+                    results_name = (f'rhs_field' + f'_it{iteration_total}')
+                    np.save(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=2))
 
                 # rhs *= -1
 

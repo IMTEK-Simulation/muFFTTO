@@ -413,8 +413,8 @@ if plot:
                                  cmap=cmap_, linewidth=0,
                                  rasterized=True, norm=divnorm)
 
-        ax_geom.set_xticks([0, 512, 1024])
-        ax_geom.set_yticks([0, 512, 1024])
+        ax_geom.set_xticks([1, 512, 1024])
+        ax_geom.set_yticks([1, 512, 1024])
         # ax_geom.axis('equal' )
         ax_geom.set_aspect('equal', 'box')
         if sharp:
@@ -467,7 +467,7 @@ if plot:
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
             ax_error.set_ylim([1e-6, 1e2])  # norm_rz[i][0]]/lb)
             ax_error.set_xlim([1, 1e4])
-
+           # ax_error.set_xscale('linear')
             ax_error.set_yticks([1e-6, 1e-2, 1e2])
             ax_error.set_yticklabels([fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{2}}}$'])
 

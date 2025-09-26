@@ -19,9 +19,11 @@ script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
 folder_name = '../exp_data/'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 
-plot_time_vs_dofs = False
+figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+
+plot_time_vs_dofs = True
 plot_stress_field = False
-plot_data_vs_CG = True
+plot_data_vs_CG = False
 
 if plot_time_vs_dofs:
     # print time vs DOFS
@@ -29,7 +31,7 @@ if plot_time_vs_dofs:
     time_GJ = []
     its_G = []
     its_GJ = []
-    Ns = 2 ** np.array([3, 4, 5, 6, 7, 8, 9])  # numbers of grids points
+    Ns = 2 ** np.array([4, 5, 6, 7, 8, 9])  # numbers of grids points
     for N in Ns:
         Nx = Ny = N
         Nz = 1  # N#
@@ -61,38 +63,43 @@ if plot_time_vs_dofs:
     gs = fig.add_gridspec(1, 1, hspace=0.5, wspace=0.5, width_ratios=[1],
                           height_ratios=[1])
     nb_dofs = 3 * Ns ** 2
-    plt.loglog(nb_dofs, time_GJ, 'k-', label='GJ')
-    plt.loglog(nb_dofs, time_G, '-', color='Green', label='G')
-    plt.loglog(nb_dofs, nb_dofs * np.log(nb_dofs) / (nb_dofs[0] * np.log(nb_dofs[0])) * time_G[0], ':',
-               label='N log N')
+    line1, = plt.loglog(nb_dofs, time_GJ, 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    line2, = plt.loglog(nb_dofs, time_G, '-x', color='Green', label='Green')
+    line3, = plt.loglog(nb_dofs, nb_dofs * np.log(nb_dofs) / (nb_dofs[0] * np.log(nb_dofs[0])) * time_G[0], ':',
+                        label=r'Quasilinear - $ \mathcal{O} (N_{\mathrm{N}} \log  N_{\mathrm{N}}$)')
     # plt.loglog(nb_dofs, nb_dofs / (nb_dofs[0]) * time_G[0], '--', label='linear')
 
-    plt.loglog(nb_dofs, time_GJ / its_GJ, 'k.-', label='time_GJ/its_GJ')
-    plt.loglog(nb_dofs, time_G / its_G, 'g.-', label='time_G/its_G')
+    line4, = plt.loglog(nb_dofs, time_GJ / its_GJ, 'k--', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    line5, = plt.loglog(nb_dofs, time_G / its_G, 'g--x', label='Green')
     # plt.loglog(nb_dofs,
     #            nb_dofs* np.log(nb_dofs) / (nb_dofs[0]  * np.log(nb_dofs)) * time_G[0] / its_G[0], ':',
     #            label='N log N')
-    plt.loglog(nb_dofs, nb_dofs / (nb_dofs[0]) * time_G[0] / its_G[0], '--', label='linear')
-    plt.xlabel('N Dofs')
+    line6, = plt.loglog(nb_dofs, nb_dofs / (nb_dofs[0]) * time_G[0] / its_G[0], '--', label=r'Linear - $\mathcal{O} (N_{\mathrm{N}})$')
+    plt.loglog(np.linspace(1e1, 1e8), 1e-4*np.linspace(1e1, 1e8), 'k-', linewidth=0.9)
+
+    plt.xlabel(r' $\#$ of degrees of freedom (DOFs) - $d N_{\mathrm{N}}$')
     plt.ylabel('Time (s)')
-    # plt.yscale('linear')
-    plt.legend(loc='best')
+    plt.gca().set_xlim([nb_dofs[0], nb_dofs[-1]])
+    plt.gca().set_xticks([1e3, 1e4, 1e5, 1e6])
+    plt.gca().set_ylim([1e-3, 1e4])
+
+   # plt.gca().set_xticks(iterations)
+
+    legend1 = plt.legend(handles=[line1, line2, line3], loc='upper left', title='Wall-clock time')
+
+    plt.gca().add_artist(legend1)  # Add the first legend manually
+
+    # Second legend (bottom right)
+    plt.legend(handles=[line4, line5, line6], loc='lower right', title='Wall-clock time / $\#$ of PCG iteration')
+
+    fig.tight_layout()
+    fname = f'time_scaling' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
+
+
     plt.show()
 
-    fig = plt.figure(figsize=(9, 3.0))
-    gs = fig.add_gridspec(1, 1, hspace=0.5, wspace=0.5, width_ratios=[1],
-                          height_ratios=[1])
-
-    plt.loglog(3 * Ns ** 2, time_GJ / its_GJ, 'k-', label='GJ')
-    plt.loglog(3 * Ns ** 2, time_G / its_G, 'g-', label='G')
-    plt.loglog(3 * Ns ** 2, 3 * Ns ** 2 / 2e5, '--', label='linear')
-    plt.loglog(3 * Ns ** 2, 3 * Ns ** 2 * np.log(3 * Ns ** 2) / 1e6, ':', label='N log N')
-    plt.xlabel('N Dofs')
-    plt.ylabel('Time (s)/ nb CG iterations')
-    # plt.yscale('linear')
-
-    plt.legend(loc='best')
-    plt.show()
 
 if plot_data_vs_CG:
     # print time vs DOFS
@@ -101,10 +108,13 @@ if plot_data_vs_CG:
     stress_diff_norm = []
     strain_fluc_norm = []
     strain_total_norm = []
-
+    diff_rhs_norm = []
     norm_rhs_G = []
     norm_rhs_GJ = []
-    Nx = Ny =  128
+    rhs_inf_G = []
+    rhs_inf_GJ = []
+
+    Nx = Ny = 512
     Nz = 1  # Nx
     iterations = np.arange(9)  # numbers of grids points
     for iteration_total in iterations:
@@ -120,6 +130,9 @@ if plot_data_vs_CG:
                                 allow_pickle=True)
         strain_total_G = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
                                  allow_pickle=True)
+
+        rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+
         its_G.append(_info_final_G.f.nb_it_comb)
         norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
 
@@ -128,26 +141,37 @@ if plot_data_vs_CG:
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                             + f'_{preconditioner_type}' + '/')
         if iteration_total < 8:
-
             _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
         stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
         strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
                                  allow_pickle=True)
         strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
                                   allow_pickle=True)
-        norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
-
-        stress_diff_norm.append(
-            np.linalg.norm(stress_G - stress_GJ) )# / np.linalg.norm(stress_G))
-        print(_info_final_G.f.norm_rr[0])
-        strain_fluc_norm.append(
-            np.linalg.norm(strain_fluc_G - strain_fluc_GJ) )# / _info_final_GJ.f.norm_En)
-        print(_info_final_GJ.f.norm_rr[0])
-        strain_total_norm.append(
-            np.linalg.norm(strain_total_G - strain_total_GJ))#/ _info_final_GJ.f.norm_En)
+        rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
         its_GJ.append(_info_final_GJ.f.nb_it_comb)
+        norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
 
+        diff_stress = stress_G - stress_GJ
+        stress_diff_norm.append(
+            np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
+        print(_info_final_G.f.norm_rr[0])
+
+        diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
+        strain_fluc_norm.append(
+            np.linalg.norm(diff_strain_fluc.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+        print(_info_final_GJ.f.norm_rr[0])
+        diff_strain_total = strain_total_G - strain_total_GJ
+        strain_total_norm.append(
+            np.linalg.norm(diff_strain_total.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+
+        diff_rhs = rhs_field_G - rhs_field_GJ
+        diff_rhs_norm.append(
+            np.linalg.norm(diff_rhs.ravel()))
+        rhs_inf_G.append(
+            np.linalg.norm(rhs_field_G.ravel(), ord=np.inf))
+        rhs_inf_GJ.append(
+            np.linalg.norm(rhs_field_GJ.ravel(), ord=np.inf))
     K = 2  # _info_final_G.f.model_parameters_linear
     its_G = np.array(its_G)
     its_GJ = np.array(its_GJ)
@@ -155,6 +179,7 @@ if plot_data_vs_CG:
     stress_diff_norm = np.array(stress_diff_norm)
     strain_fluc_norm = np.array(strain_fluc_norm)
     strain_total_norm = np.array(strain_total_norm)
+    diff_rhs_norm = np.array(diff_rhs_norm)
 
     norm_rhs_G = np.concatenate((np.array(np.atleast_1d(_info_final_G.f.rhs_t_norm)), np.array(norm_rhs_G)))
     norm_rhs_GJ = np.concatenate((np.array(np.atleast_1d(_info_final_GJ.f.rhs_t_norm)), np.array(norm_rhs_GJ)))
@@ -163,7 +188,7 @@ if plot_data_vs_CG:
     gs = fig.add_gridspec(2, 5, hspace=0.1, wspace=0.1, width_ratios=[0.05, 1, 1, 1, 1],
                           height_ratios=[1, 1.5])
 
-    gs10 = mpl.gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1, :], wspace=0.1)
+    gs10 = mpl.gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1, :], wspace=0.04)
 
     gs_global = fig.add_subplot(gs10[0, 0])
 
@@ -171,42 +196,122 @@ if plot_data_vs_CG:
     gs_global.plot(iterations, its_GJ, 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
     gs_global.set_xlabel(r'Newton iteration -  $i$')
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
-    gs_global.legend(loc='best')
+    # gs_global.legend(loc='best')
     gs_global.set_xlim(-0.05, iterations[-1] + .05)
+    gs_global.set_ylim(0., 800)
     gs_global.set_xticks(iterations)
+    gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
+                       xy=(iterations[3], its_GJ[3]),
+                       xytext=(0.5, 40.),
+                       arrowprops=dict(arrowstyle='->',
+                                       color='Black',
+                                       lw=1,
+                                       ls='-'),
+                       fontsize=11,
+                       color='Black',
+                       )
+    gs_global.annotate(text=f'Green',  # \n contrast = 100
+                       xy=(iterations[3], its_G[3]),
+                       xytext=(3, 500.),
+                       arrowprops=dict(arrowstyle='->',
+                                       color='k',
+                                       lw=1,
+                                       ls='-'),
+                       fontsize=11,
+                       color='k',
+                       )
+    gs_global.text(0.02, 0.93, rf'\textbf{{(b.1)}}', transform=gs_global.transAxes)
 
     # gs_global.set_ylim(0, 800)
 
     # Right y-axis
     ax2 = fig.add_subplot(gs10[0, 1])
-    ax2.semilogy(np.arange(len(stress_diff_norm[1:])) + 1, stress_diff_norm[1:], 'b--',
-                 label=r'$|| \mathsf{\bf{\sigma}}_{\rm{G}}^{(i)}- \mathsf{\bf{\sigma}}_{\rm{GJ}}^{(i)}||$')
+    ax2.semilogy(np.arange(len(stress_diff_norm[1:])) + 1, stress_diff_norm[1:], 'b->',
+                 label=r'$||(\mathsf{\bf{\sigma}}_{\rm{G}}^{(i)}- \mathsf{\bf{\sigma}}_{\rm{GJ}}^{(i)})||_{\infty}$')
+    ax2.annotate(text=r'Stress - $(\mathsf{\bf{\sigma}}_{\rm{G}}^{(i)}- \mathsf{\bf{\sigma}}_{\rm{GJ}}^{(i)})$',
+                 # \n contrast = 100
+                 xy=(2, stress_diff_norm[2]),
+                 xytext=(2, 1e-2),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='k',
+                                 lw=1,
+                                 ls='-'),
+                 fontsize=11,
+                 color='k',
+                 )
 
-    ax2.semilogy(np.arange(len(strain_fluc_norm[1:])) + 1, strain_fluc_norm[1:], 'r--',
-                 label=r'$|| \nabla \mathsf{\bf{\tilde{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{\tilde{u}}}_{\rm{GJ}} ^{(i)}||$')
-    ax2.semilogy(np.arange(len(strain_total_norm[1:])) + 1, strain_total_norm[1:], 'y.-',
-                 label=r'$|| \nabla \mathsf{\bf{{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{{u}}}_{\rm{GJ}} ^{(i)}||$')
+    ax2.semilogy(np.arange(len(strain_fluc_norm[1:])) + 1, strain_fluc_norm[1:], 'r-|',
+                 label=r'$||  \nabla \mathsf{\bf{\tilde{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{\tilde{u}}}_{\rm{GJ}} ^{(i)}||_{\infty}$')
+    ax2.annotate(
+        text=r'Strain - $(\nabla \mathsf{\bf{\tilde{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{\tilde{u}}}_{\rm{GJ}} ^{(i)})$',
+        # \n contrast = 100
+        xy=(4, strain_fluc_norm[4]),
+        xytext=(3.7, 5e-4),
+        arrowprops=dict(arrowstyle='->',
+                        color='k',
+                        lw=1,
+                        ls='-'),
+        fontsize=11,
+        color='k',
+    )
 
+    ax2.semilogy(np.arange(len(diff_rhs_norm[1:])) + 1, diff_rhs_norm[1:], '-x', color='brown',
+                 label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)} - \mathsf{\bf{f}}_{\rm{GJ}}^{(i)} ||_{\infty}$')
+    ax2.annotate(text=r'Force - $(\mathsf{\bf{f}}_{\rm{G}}^{(i)} - \mathsf{\bf{f}}_{\rm{GJ}}^{(i)})$',
+                 # \n contrast = 100
+                 xy=(4, diff_rhs_norm[4]),
+                 xytext=(0.2, 3e-8),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='k',
+                                 lw=1,
+                                 ls='-'),
+                 fontsize=11,
+                 color='k',
+                 )
 
-    ax2.semilogy(np.arange(len(norm_rhs_GJ)), norm_rhs_GJ, 'k:', marker='o', markerfacecolor='none',
-                 label=r'$|| \mathsf{\bf{f}}_{\rm{GJ}}^{(i)}||$')
-    ax2.semilogy(np.arange(len(norm_rhs_G)), norm_rhs_G, 'g:x',
-                 label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}||$')
+    ax2.semilogy(np.arange(len(rhs_inf_GJ)), rhs_inf_GJ, 'g:', marker='o', markerfacecolor='none',
+                 label=r'$|| \mathsf{\bf{f}}_{\rm{GJ}}^{(i)}||_{\infty}$')
+    ax2.annotate(text=r'Force - $\mathsf{\bf{f}}_{\rm{GJ}}^{(i)}$',  # \n contrast = 100
+                 xy=(4, rhs_inf_GJ[4]),
+                 xytext=(0.2, 5e-7),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='k',
+                                 lw=1,
+                                 ls='-'),
+                 fontsize=11,
+                 color='k',
+                 )
+
+    ax2.semilogy(np.arange(len(rhs_inf_G)), rhs_inf_G, 'k:x',
+                 label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}||_{\infty}$')
+    ax2.annotate(text=r'Force - $\mathsf{\bf{f}}_{\rm{G}}^{(i)}$',  # \n contrast = 100
+                 xy=(5, rhs_inf_G[5]),
+                 xytext=(6, 3e-7),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='k',
+                                 lw=1,
+                                 ls='-'),
+                 fontsize=11,
+                 color='k',
+                 )
+
     # ax2.semilogy(np.arange(len(norm_rhs_G)), abs(norm_rhs_G-norm_rhs_GJ), 'g:x',
     #              label=r'Green - $|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}-\mathsf{\bf{f}}_{\rm{GJ}}^{(i)}||$')
     # ax2.semilogy(np.arange(len(norm_rhs_G)), abs(norm_rhs_G - norm_rhs_GJ), 'g:x', label='error ')
 
     # ax2.set_ylabel('Norm of error', color='r')
 
-    ax2.set_ylim([1e-7, 1e-1])
-    ax2.set_yticks([1e-7, 1e-4, 1e-1])
-    ax2.set_yticklabels([r'$10^{-7}$', r'$10^{-4}$', r'$10^{-1}$'])
+    ax2.set_ylim([1e-10, 1e-1])
+    ax2.set_yticks([1e-10, 1e-7, 1e-4, 1e-1])
+    ax2.set_yticklabels([r'$10^{-10}$', r'$10^{-7}$', r'$10^{-4}$', r'$10^{-1}$'])
     ax2.yaxis.set_ticks_position('right')  # move ticks to right
     ax2.yaxis.set_label_position('right')  # move label to right
-    ax2.set_xlabel(r'Newton iteration -  $i$')
-    ax2.legend(loc='best')
+    ax2.set_xlabel(r'Newton iteration - $i$')
+    ax2.set_ylabel(r'$||{X} ||_{\infty}$')
+    # ax2.legend(loc='best')
     ax2.set_xlim(-0.05, iterations[-1] + .05)
     ax2.set_xticks(iterations)
+    ax2.text(0.02, 0.92, rf'\textbf{{(b.2)}}', transform=ax2.transAxes)
 
     # plot mat data 0 Newton iteration
     ijkl = (0, 0, 0, 0)
@@ -239,7 +344,7 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(-0.1, 1.1, rf'\textbf{{(a.2)}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.2)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -260,7 +365,7 @@ if plot_data_vs_CG:
     ax_cbar.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
     cbar.ax.yaxis.set_ticks_position('left')  # move ticks to right
     cbar.ax.yaxis.set_label_position('left')  # move label to right
-    ax_cbar.set_ylabel(r'${C}_{11}/K$')
+    ax_cbar.set_ylabel(r'$\mathrm{C}_{11}/\mathrm{K}$')
     # ----------------
     iteration_total = 0
     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
@@ -274,7 +379,7 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(-0.1, 1.1, rf'\textbf{{(a.1)}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.1)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -300,7 +405,7 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(-0.1, 1.1, rf'\textbf{{(a.{3})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{3})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -326,16 +431,18 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(-0.1, 1.1, rf'\textbf{{(a.{4})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{4})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
-    #ax_geom_0.set_xticks([])
-    #ax_geom_0.set_xticklabels([])
-    ax_geom_0.set_xticks([0, Nx//2, Nx])
-    ax_geom_0.set_yticks([0, Nx//2, Nx])
-    ax_geom_0.set_xlim([0, Nx - 1])
-    ax_geom_0.set_ylim([0, Nx - 1])
-    ax_geom_0.set_box_aspect(1)  # Maintain square aspect ratio
+    ax_geom_0.set_xticks([])
+    ax_geom_0.set_ylabel('Pixel index')
+    # ax_geom_0.set_xticks([0, Nx//2, Nx])
 
+    ax_geom_0.set_yticks([1, Nx // 2, Nx])
+    ax_geom_0.set_xlim([1, Nx])
+    ax_geom_0.set_ylim([1, Nx])
+    ax_geom_0.set_box_aspect(1)  # Maintain square aspect ratio
+    ax_geom_0.yaxis.set_ticks_position('right')
+    ax_geom_0.yaxis.set_label_position('right')
 
     # axis for cross sections
     add_stress_plot = False
@@ -386,6 +493,11 @@ if plot_data_vs_CG:
         cbar.ax.yaxis.set_ticks_position('right')  # move ticks to right
         cbar.ax.yaxis.set_label_position('right')  # move label to right
         ax_cbar2.set_ylabel(fr'$(\sigma^{{G}}_{{11}}-\sigma^{{GJ}}_{{11}})  $')
+
+    fig.tight_layout()
+    fname = f'fig_2' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
 
     plt.show()
 ##############################################################################################
