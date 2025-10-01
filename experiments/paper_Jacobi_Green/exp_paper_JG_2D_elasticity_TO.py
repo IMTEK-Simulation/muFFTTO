@@ -166,7 +166,7 @@ for ration in [-0.5]:
     # for w in np.arange(0.1, 1.1, 0.1):  # np.arange(0.2,0.):
     # weights = np.concatenate(
     #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20)])
-    weights = [3.9]  # np.concatenate([np.arange(0.1, 2., 1)])
+    weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
     for w_mult in weights:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
         for eta_mult in [0.01, ]:
             # np.arange(0.05, 0.5, 0.05):#[0.1, ]:  # np.arange(0.001, 0.01, 0.002):#[0.005, ]:  # np.arange(0.01, 0.5, 0.05):#
@@ -268,7 +268,7 @@ for ration in [-0.5]:
                                                                                            load_case].s,
                                                                                        P=M_fun,
                                                                                        steps=int(10000),
-                                                                                       toler=1e-6,
+                                                                                       toler=1e-14,
                                                                                        norm_type='rr_rel',
                                                                                        # norm_metric=M_fun_Green
                                                                                        )
@@ -290,7 +290,7 @@ for ration in [-0.5]:
                                                                                            load_case].s,
                                                                                        P=M_fun,
                                                                                        steps=int(10000),
-                                                                                       toler=1e-14,
+                                                                                       toler=1e-10,
                                                                                        norm_type='rr_rel',
                                                                                        # norm_metric=M_fun_Green
                                                                                        )
@@ -409,18 +409,34 @@ if __name__ == '__main__':
 
     # fp = 'exp_data/muFFTTO_elasticity_random_init_N16_E_target_0.25_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI2.npy'
     # phase = np.load(fp)
-    # # material distribution
     np.random.seed(MPI.COMM_WORLD.rank)
     phase_field_0 = discretization.get_scalar_field(name='phase_field_in_initial_')
-    phase_field_0.s = np.random.rand(*phase_field_0.s.shape) ** 1
+    if not random_initial_geometry:
+        geometry_ID = 'circle_inclusions'
+        nb_circles = 3  # number of circles in single dimention
+        vol_frac = 1 / 4
+        r_0 = np.sqrt(vol_frac / np.pi)
+        _geom_parameters = {'nb_circles': nb_circles,
+                            'r_0': r_0,
+                            'vol_frac': vol_frac,
+                            'random_density': True,
+                            'random_centers': True}
+        phase_field_0.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                                    microstructure_name=geometry_ID,
+                                                                    coordinates=discretization.fft.coords,
+                                                                    **_geom_parameters)
+
+        phase_field_0.s[phase_field_0.s > 1] = 1
+        phase_field_0.s[phase_field_0.s < 0] = 0
+        phase_field_0.s[0, 0]= abs(phase_field_0.s[0, 0] - 1)
+    # # material distribution
+
+    #phase_field_0.s = np.random.rand(*phase_field_0.s.shape) ** 1
+
     # phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
     # phase_field_0 = np.random.choice([0, 1], size=discretization.get_scalar_sized_field().shape,
     #                                  p=[0.5, 0.5])  # equal probability for 0 and 1
 
-    if not random_initial_geometry:
-        phase_field_0.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                                    microstructure_name='square_inclusion',
-                                                                    coordinates=discretization.fft.coords)
 
 
     def apply_filter(phase):
@@ -439,7 +455,7 @@ if __name__ == '__main__':
         return phase
 
 
-    phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
+    #phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
     phase_field_0 = apply_filter(phase_field_0)
     phase_field_00 = np.copy(phase_field_0)
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
@@ -516,6 +532,14 @@ if __name__ == '__main__':
                      tuple(discretization.fft.subdomain_locations),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             iterat += 1
+            plt.figure()
+            plt.contourf(result_norms.reshape([*discretization.nb_of_pixels]), cmap=mpl.cm.Greys)
+            # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+            plt.clim(0, 1)
+            plt.title(f'Iteration {iterat}')
+            plt.colorbar()
+            plt.show()
+
             if MPI.COMM_WORLD.size == 1:
                 print(data_folder_path + file_data_name_it + f'.npy')
 
@@ -529,7 +553,7 @@ if __name__ == '__main__':
                                           maxiter=1000,
                                           comm=MPI.COMM_WORLD,
                                           disp=True,
-                                          # callback=my_callback
+                                          callback=my_callback
                                           )
 
         solution_phase = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
