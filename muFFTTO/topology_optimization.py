@@ -626,7 +626,7 @@ def partial_der_of_double_well_potential_wrt_density_nodal(discretization,
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
 
     integrant_1nxyz = (
-                2 * phase_field_1nxyz.s * (2 * phase_field_1nxyz.s * phase_field_1nxyz.s - 3 * phase_field_1nxyz.s + 1))
+            2 * phase_field_1nxyz.s * (2 * phase_field_1nxyz.s * phase_field_1nxyz.s - 3 * phase_field_1nxyz.s + 1))
     # integral=discretization.mpi_reduction.sum(integrant_1nxyz)
 
     integral_fnxyz = (integrant_1nxyz / np.prod(integrant_1nxyz.shape)) * discretization.cell.domain_volume
@@ -1290,7 +1290,7 @@ def partial_derivative_of_objective_function_wrt_phase_field_OLD(discretization,
     return df_drho + dgradrho_drho + ddouble_well_drho_drho
 
 
-def partial_derivative_of_objective_function_wrt_phase_field(discretization,
+def partial_derivative_of_objective_function_wrt_phase_field_DELETE(discretization,
                                                              material_data_field_ijklqxyz,
                                                              displacement_field_fnxyz,
                                                              macro_gradient_field_ijqxyz,
@@ -1544,8 +1544,8 @@ def adjoint_potential(discretization,
 
     adjoint_potential_field = np.einsum('i...,i...->...', adjoint_field_inxyz.s, force_field_inxyz.s)
 
-    Reductor_numpi = Reduction(MPI.COMM_WORLD)
-    integral = Reductor_numpi.sum(adjoint_potential_field)  #
+    # Reductor_numpi = discretization.mpi_reduction(MPI.COMM_WORLD)
+    integral = discretization.mpi_reduction.sum(adjoint_potential_field)  #
 
     return integral
 
@@ -1566,7 +1566,7 @@ def partial_derivative_of_adjoint_potential_wrt_displacement(discretization,
     return force_field_fnxyz
 
 
-def partial_derivative_of_adjoint_potential_wrt_phase_field_pixel(discretization,
+def partial_derivative_of_adjoint_potential_wrt_phase_field_pixel_OLD(discretization,
                                                                   material_data_field_ijklqxyz,
                                                                   displacement_field_fnxyz,
                                                                   macro_gradient_field_ijqxyz,

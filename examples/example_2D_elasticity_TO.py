@@ -299,7 +299,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz):
                 load_case], adjoint_energies[
                 load_case] = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
                 discretization=discretization,
-                material_data_field_ijklqxyz=material_data_field_C_0,
+                base_material_data_ijkl=material_data_field_C_0,
                 displacement_field_fnxyz=displacement_field_load_case_list[load_case],
                 adjoint_field_last_step_fnxyz=adjoint_field_load_case_list[load_case],
                 macro_gradient_field_ijqxyz=macro_gradient_fields_list[load_case],

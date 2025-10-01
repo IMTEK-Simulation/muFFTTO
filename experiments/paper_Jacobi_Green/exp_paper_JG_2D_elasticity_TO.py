@@ -50,8 +50,8 @@ E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
 # poison_0 = 0.2
 # G_0 = E_0 / (2 * (1 + poison_0))
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
-K_0, G_0 = 1, 0.5
+# K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+# K_0, G_0 = 1, 0.5
 print('1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
@@ -261,39 +261,39 @@ for ration in [-0.5]:
                         rhs_inxyz=rhs_load_case_inxyz)
                     # if MPI.COMM_WORLD.size == 1:
                     #     print('rhs Of = {}'.format(np.linalg.norm(rhs_load_case)))
-                    if preconditioer == 'Green':
-                        displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                                                                                       B=rhs_load_case_inxyz.s,
-                                                                                       x0=displacement_field_load_case[
-                                                                                           load_case].s,
-                                                                                       P=M_fun,
-                                                                                       steps=int(10000),
-                                                                                       toler=1e-14,
-                                                                                       norm_type='rr_rel',
-                                                                                       # norm_metric=M_fun_Green
-                                                                                       )
-                    elif preconditioer == 'Jacobi':
-                        displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
-                                                                                     B=rhs_load_case_inxyz,
-                                                                                     x0=None,
-                                                                                     P=M_fun,
-                                                                                     steps=int(10000),
-                                                                                     toler=1e-6,
-                                                                                     norm_type='rr',
-                                                                                     # norm_metric=M_fun_Green
-                                                                                     )
-                        # displacement_field_load_case[                            load_case],
-                    elif preconditioer == 'Jacobi_Green':
-                        displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                                                                                       B=rhs_load_case_inxyz.s,
-                                                                                       x0=displacement_field_load_case[
-                                                                                           load_case].s,
-                                                                                       P=M_fun,
-                                                                                       steps=int(10000),
-                                                                                       toler=1e-10,
-                                                                                       norm_type='rr_rel',
-                                                                                       # norm_metric=M_fun_Green
-                                                                                       )
+                    # if preconditioer == 'Green':
+                    displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
+                                                                                   B=rhs_load_case_inxyz.s,
+                                                                                   x0=displacement_field_load_case[
+                                                                                       load_case].s,
+                                                                                   P=M_fun,
+                                                                                   steps=int(10000),
+                                                                                   toler=1e-14,
+                                                                                   norm_type='rr_rel',
+                                                                                   # norm_metric=M_fun_Green
+                                                                                   )
+                    # elif preconditioer == 'Jacobi':
+                    #     displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
+                    #                                                                  B=rhs_load_case_inxyz,
+                    #                                                                  x0=None,
+                    #                                                                  P=M_fun,
+                    #                                                                  steps=int(10000),
+                    #                                                                  toler=1e-6,
+                    #                                                                  norm_type='rr',
+                    #                                                                  # norm_metric=M_fun_Green
+                    #                                                                  )
+                    #     # displacement_field_load_case[                            load_case],
+                    # elif preconditioer == 'Jacobi_Green':
+                    #     displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
+                    #                                                                    B=rhs_load_case_inxyz.s,
+                    #                                                                    x0=displacement_field_load_case[
+                    #                                                                        load_case].s,
+                    #                                                                    P=M_fun,
+                    #                                                                    steps=int(10000),
+                    #                                                                    toler=1e-10,
+                    #                                                                    norm_type='rr_rel',
+                    #                                                                    # norm_metric=M_fun_Green
+                    #                                                                    )
 
                     if MPI.COMM_WORLD.rank == 0:
                         nb_it_comb = len(norms['residual_rz'])
@@ -547,9 +547,9 @@ if __name__ == '__main__':
         xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
                                           x=phase_field_0,
                                           jac=True,
-                                          maxcor=50,
-                                          gtol=1e-6,
-                                          ftol=1e-8,
+                                          maxcor=20,
+                                          gtol=1e-5,
+                                          ftol=1e-7,
                                           maxiter=1000,
                                           comm=MPI.COMM_WORLD,
                                           disp=True,

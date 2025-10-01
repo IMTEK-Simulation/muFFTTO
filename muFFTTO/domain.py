@@ -837,8 +837,8 @@ class Discretization:
         mat_data_temp.s = self.apply_quadrature_weights(mat_data_temp)
         stress_ijqxyz = self.apply_material_data(mat_data_temp, strain_ijqxyz)
 
-        Reductor_numpi = Reduction(MPI.COMM_WORLD)
-        homogenized_stress_ij = Reductor_numpi.sum(stress_ijqxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        #Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        homogenized_stress_ij = self.mpi_reduction.sum(stress_ijqxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress =' f'{homogenized_stress}')
         return homogenized_stress_ij / self.cell.domain_volume
 
@@ -1586,9 +1586,9 @@ class Discretization:
         stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
         #
         # integral = np.einsum('fdqxy...->fd', stress_field)
-        Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        #Reductor_numpi = Reduction(MPI.COMM_WORLD)
         # TODO change this to muGRID
-        integral = Reductor_numpi.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        integral = self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
 
         return integral
 
@@ -1840,7 +1840,7 @@ class Discretization:
         # Multiply with quadrature weights
         quad_field_fqnxyz = np.einsum('fq...,q->fq...', quad_field_fqnxyz, quad_points_weights)
 
-        Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        #Reductor_numpi = Reduction(MPI.COMM_WORLD)
         integral_fq = self.mpi_reduction.sum(quad_field_fqnxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # TODO: what kidn of sum I need here?
         return np.sum(quad_field_fqnxyz)
