@@ -11,7 +11,9 @@ from matplotlib import pyplot as plt
 from muFFTTO import domain
 from muFFTTO import solvers
 
-script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
+# script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+
 folder_name = '../exp_data/'
 
 enforce_mean = False

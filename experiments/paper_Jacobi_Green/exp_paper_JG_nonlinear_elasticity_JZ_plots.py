@@ -63,14 +63,14 @@ if plot_time_vs_dofs:
     gs = fig.add_gridspec(1, 1, hspace=0.5, wspace=0.5, width_ratios=[1],
                           height_ratios=[1])
     nb_dofs = 3 * Ns ** 2
-    line1, = plt.loglog(nb_dofs, time_GJ, 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
-    line2, = plt.loglog(nb_dofs, time_G, '-x', color='Green', label='Green')
+    line1, = plt.loglog(nb_dofs, time_G, '-x', color='Green', label='Green')
+    line2, = plt.loglog(nb_dofs, time_GJ, 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
     line3, = plt.loglog(nb_dofs, nb_dofs * np.log(nb_dofs) / (nb_dofs[0] * np.log(nb_dofs[0])) * time_G[0], ':',
                         label=r'Quasilinear - $ \mathcal{O} (N_{\mathrm{N}} \log  N_{\mathrm{N}}$)')
     # plt.loglog(nb_dofs, nb_dofs / (nb_dofs[0]) * time_G[0], '--', label='linear')
 
-    line4, = plt.loglog(nb_dofs, time_GJ / its_GJ, 'k--', marker='o', markerfacecolor='none', label='Green-Jacobi')
-    line5, = plt.loglog(nb_dofs, time_G / its_G, 'g--x', label='Green')
+    line4, = plt.loglog(nb_dofs, time_G / its_G, 'g--x', label='Green')
+    line5, = plt.loglog(nb_dofs, time_GJ / its_GJ, 'k--', marker='o', markerfacecolor='none', label='Green-Jacobi')
     # plt.loglog(nb_dofs,
     #            nb_dofs* np.log(nb_dofs) / (nb_dofs[0]  * np.log(nb_dofs)) * time_G[0] / its_G[0], ':',
     #            label='N log N')

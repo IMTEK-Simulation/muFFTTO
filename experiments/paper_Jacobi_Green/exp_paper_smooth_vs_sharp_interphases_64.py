@@ -53,7 +53,7 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-compute = False
+compute = True
 plot = True
 enforce_mean = True
 save_results = True
@@ -505,7 +505,7 @@ if plot_energy_evols:
                                    color='blue', linestyle='--', lw=2)
         plt.show()
 
-plot_strain_evols = False
+plot_strain_evols = True
 if plot_strain_evols:
     ratios = np.array([2, 5, 8])
     for sharp in [False, True]:
