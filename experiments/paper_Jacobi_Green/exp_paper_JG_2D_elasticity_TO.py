@@ -24,7 +24,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  #
-number_of_pixels = (32, 32)
+number_of_pixels = (64, 64)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -328,11 +328,13 @@ for ration in [-0.5]:
                             target_energy=target_energy[load_case]))
 
                         s_energy_and_adjoint_load_cases[
+                            load_case],adjoint_field_load_case[
                             load_case], adjoint_energies[
                             load_case] = topology_optimization.sensitivity_elastic_energy_and_adjoint_FE_NEW(
                             discretization=discretization,
-                            material_data_field_ijklqxyz=material_data_field_C_0,
-                            displacement_field_fnxyz=displacement_field_load_case[load_case],
+                            base_material_data_ijkl=elastic_C_0,
+                            displacement_field_inxyz=displacement_field_load_case[load_case],
+                            adjoint_field_inxyz=adjoint_field_load_case[load_case],
                             macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
                             left_macro_gradient_ij=left_macro_gradients[load_case],
                             phase_field_1nxyz=phase_field_1nxyz,
@@ -362,8 +364,8 @@ for ration in [-0.5]:
                             load_case] = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
                             discretization=discretization,
                             base_material_data_ijkl=elastic_C_0,
-                            displacement_field_fnxyz=displacement_field_load_case[load_case],
-                            adjoint_field_last_step_fnxyz=adjoint_field_load_case[load_case],
+                            displacement_field_inxyz=displacement_field_load_case[load_case],
+                            adjoint_field_inxyz=adjoint_field_load_case[load_case],
                             macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
                             phase_field_1nxyz=phase_field_1nxyz,
                             target_stress_ij=target_stresses[load_case],
