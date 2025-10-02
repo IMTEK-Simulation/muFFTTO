@@ -50,8 +50,8 @@ E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
 # poison_0 = 0.2
 # G_0 = E_0 / (2 * (1 + poison_0))
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
-K_0, G_0 = 1, 0.5
+# K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+# K_0, G_0 = 1, 0.5
 print('1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
@@ -190,7 +190,7 @@ for ration in [-0.5]:
                 # zero_small_phases = False
                 # if zero_small_phases:
                 #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
-
+                disp = False
                 phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
                 phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *number_of_pixels])
 
@@ -261,39 +261,19 @@ for ration in [-0.5]:
                         rhs_inxyz=rhs_load_case_inxyz)
                     # if MPI.COMM_WORLD.size == 1:
                     #     print('rhs Of = {}'.format(np.linalg.norm(rhs_load_case)))
-                    if preconditioer == 'Green':
-                        displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                                                                                       B=rhs_load_case_inxyz.s,
-                                                                                       x0=displacement_field_load_case[
-                                                                                           load_case].s,
-                                                                                       P=M_fun,
-                                                                                       steps=int(10000),
-                                                                                       toler=1e-14,
-                                                                                       norm_type='rr_rel',
-                                                                                       # norm_metric=M_fun_Green
-                                                                                       )
-                    elif preconditioer == 'Jacobi':
-                        displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
-                                                                                     B=rhs_load_case_inxyz,
-                                                                                     x0=None,
-                                                                                     P=M_fun,
-                                                                                     steps=int(10000),
-                                                                                     toler=1e-6,
-                                                                                     norm_type='rr',
-                                                                                     # norm_metric=M_fun_Green
-                                                                                     )
-                        # displacement_field_load_case[                            load_case],
-                    elif preconditioer == 'Jacobi_Green':
-                        displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                                                                                       B=rhs_load_case_inxyz.s,
-                                                                                       x0=displacement_field_load_case[
-                                                                                           load_case].s,
-                                                                                       P=M_fun,
-                                                                                       steps=int(10000),
-                                                                                       toler=1e-10,
-                                                                                       norm_type='rr_rel',
-                                                                                       # norm_metric=M_fun_Green
-                                                                                       )
+                    # if preconditioer == 'Green':
+                    displacement_field_load_case[load_case], norms = solvers.PCG_muGrid(
+                        discretization=discretization,
+                        Afun=K_fun,
+                        B=rhs_load_case_inxyz,
+                        x_k=displacement_field_load_case[
+                            load_case],
+                        P=M_fun,
+                        steps=int(10000),
+                        toler=1e-10,
+                        norm_type='rr',
+                        # norm_metric=M_fun_Green
+                    )
 
                     if MPI.COMM_WORLD.rank == 0:
                         nb_it_comb = len(norms['residual_rz'])
@@ -301,8 +281,8 @@ for ration in [-0.5]:
                         norm_rr = norms['residual_rr'][-1]
                         num_iteration_.append(nb_it_comb)
 
-                        print(
-                            'load case ' f'{load_case},  nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+                        # print(
+                        #     'load case ' f'{load_case},  nb_ steps CG of =' f'{nb_it_comb}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
                         # compute homogenized stress field corresponding t
                     homogenized_stresses[load_case] = discretization.get_homogenized_stress(
                         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
@@ -328,11 +308,13 @@ for ration in [-0.5]:
                             target_energy=target_energy[load_case]))
 
                         s_energy_and_adjoint_load_cases[
+                            load_case], adjoint_field_load_case[
                             load_case], adjoint_energies[
                             load_case] = topology_optimization.sensitivity_elastic_energy_and_adjoint_FE_NEW(
                             discretization=discretization,
-                            material_data_field_ijklqxyz=material_data_field_C_0,
-                            displacement_field_fnxyz=displacement_field_load_case[load_case],
+                            base_material_data_ijkl=elastic_C_0,
+                            displacement_field_inxyz=displacement_field_load_case[load_case],
+                            adjoint_field_inxyz=adjoint_field_load_case[load_case],
                             macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
                             left_macro_gradient_ij=left_macro_gradients[load_case],
                             phase_field_1nxyz=phase_field_1nxyz,
@@ -343,7 +325,8 @@ for ration in [-0.5]:
                             formulation='small_strain',
                             target_energy=target_energy[load_case],
                             p=p,
-                            weight=w)
+                            weight=w,
+                            disp=disp)
                         s_phase_field += s_energy_and_adjoint_load_cases[load_case]
 
                         f_sigmas_energy[load_case] += adjoint_energies[load_case]
@@ -353,17 +336,17 @@ for ration in [-0.5]:
                         f_sigmas[load_case] = w * (topology_optimization.compute_stress_equivalence_potential(
                             actual_stress_ij=homogenized_stresses[load_case],
                             target_stress_ij=target_stresses[load_case]))
-                        if MPI.COMM_WORLD.rank == 0:
-                            print('w*f_sigmas  = '          ' {} '.format(f_sigmas[load_case]))  # good in MPI
-                            print('sum of w*f_sigmas  = '          ' {} '.format(np.sum(f_sigmas)))
+                        # if MPI.COMM_WORLD.rank == 0:
+                        # print('w*f_sigmas  = '          ' {} '.format(f_sigmas[load_case]))  # good in MPI
+                        # print('sum of w*f_sigmas  = '          ' {} '.format(np.sum(f_sigmas)))
 
                         s_stress_and_adjoint_load_cases[load_case], adjoint_field_load_case[
                             load_case], adjoint_energies[
                             load_case] = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
                             discretization=discretization,
                             base_material_data_ijkl=elastic_C_0,
-                            displacement_field_fnxyz=displacement_field_load_case[load_case],
-                            adjoint_field_last_step_fnxyz=adjoint_field_load_case[load_case],
+                            displacement_field_inxyz=displacement_field_load_case[load_case],
+                            adjoint_field_inxyz=adjoint_field_load_case[load_case],
                             macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
                             phase_field_1nxyz=phase_field_1nxyz,
                             target_stress_ij=target_stresses[load_case],
@@ -372,18 +355,19 @@ for ration in [-0.5]:
                             system_matrix_fun=K_fun,
                             formulation='small_strain',
                             p=p,
-                            weight=w)
+                            weight=w,
+                            disp=disp)
                         s_phase_field += s_stress_and_adjoint_load_cases[load_case]
 
                         f_sigmas[load_case] += adjoint_energies[load_case]
 
                         objective_function += f_sigmas[load_case]
-
-                    if MPI.COMM_WORLD.rank == 0:
-                        print(
-                            'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
-                        print(
-                            'load case ' f'{load_case},  objective_function =' f'{objective_function}')
+                    if disp:
+                        if MPI.COMM_WORLD.rank == 0:
+                            print(
+                                'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
+                            print(
+                                'load case ' f'{load_case},  objective_function =' f'{objective_function}')
 
                 norms_sigma.append(objective_function)
                 return objective_function[0], s_phase_field.reshape(-1)
@@ -391,7 +375,7 @@ for ration in [-0.5]:
 if __name__ == '__main__':
     import os
 
-    script_name = os.path.splitext(os.path.basename(__file__))[0]
+    script_name = os.path.splitext(os.path.basename(__file__))[0] + f'_N_{number_of_pixels[0]}'
     file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
     figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
@@ -401,6 +385,9 @@ if __name__ == '__main__':
 
     if not os.path.exists(figure_folder_path):
         os.makedirs(figure_folder_path)
+
+    # log_name = 'final_log'
+    # _info=np.load(data_folder_path + log_name + f'info_log.npz',  allow_pickle=True)
 
     run_adam = False
     run_lbfg = True
@@ -428,17 +415,10 @@ if __name__ == '__main__':
 
         phase_field_0.s[phase_field_0.s > 1] = 1
         phase_field_0.s[phase_field_0.s < 0] = 0
-        phase_field_0.s[0, 0]= abs(phase_field_0.s[0, 0] - 1)
+        phase_field_0.s[0, 0] = abs(phase_field_0.s[0, 0] - 1)
+
+
     # # material distribution
-
-    #phase_field_0.s = np.random.rand(*phase_field_0.s.shape) ** 1
-
-    # phase_field_0 = np.random.randint(0, high=2, size=discretization.get_scalar_sized_field().shape) ** 1
-    # phase_field_0 = np.random.choice([0, 1], size=discretization.get_scalar_sized_field().shape,
-    #                                  p=[0.5, 0.5])  # equal probability for 0 and 1
-
-
-
     def apply_filter(phase):
         f_field = discretization.fft.fft(phase)
         # f_field[0, 0, np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
@@ -455,15 +435,10 @@ if __name__ == '__main__':
         return phase
 
 
-    #phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
+    # phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
     phase_field_0 = apply_filter(phase_field_0)
     phase_field_00 = np.copy(phase_field_0)
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
-
-    # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
-
-    # name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
-    # phase_field = np.load(os.path.expanduser('~/exp_data/' + name + f'_it{8740}.npy'), allow_pickle=True)
 
     load_init_from_same_grid = False
     if load_init_from_same_grid:
@@ -473,21 +448,14 @@ if __name__ == '__main__':
             # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
             # phase= np.load(f'experiments/exp_data/'  + file_data_name)
             phase = np.load(os.path.expanduser(data_folder_path + file_data_name + f'.npy'), allow_pickle=True)
-
-            # phase = np.load(f'experiments/exp_data/' + file_data_name)
         else:
-
-            # file_data_name = (
-            #    f'1muFFTTO_elasticity_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w}_eta{eta_mult}_p{p}_bounds=False_FE_NuMPI{8}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}.npy')
-
             phase = load_npy(data_folder_path + file_data_name,
                              tuple(discretization.fft.subdomain_locations),
                              tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
         phase_field_0.s[0, 0] = phase  # [discretization.fft.subdomain_slices]
 
-  # b
-
+    # b
 
     if MPI.COMM_WORLD.size == 1:
         print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f'')
@@ -501,8 +469,6 @@ if __name__ == '__main__':
     phase_field_0 = phase_field_0.s.ravel()
     print('Init objective function FE  = {}'.format(
         objective_function_multiple_load_cases(phase_field_00)[0]))
-
-
 
     if run_lbfg:
 
@@ -518,13 +484,13 @@ if __name__ == '__main__':
 
         def my_callback(result_norms):
             global iterat
-            iteration = result_norms[-1]
-            norms_f.append(result_norms[0])
-            norms_delta_f.append(result_norms[1])
-            norms_max_grad_f.append(result_norms[2])
-            norms_norm_grad_f.append(result_norms[3])
-            norms_max_delta_x.append(result_norms[4])
-            norms_norm_delta_x.append(result_norms[5])
+            # iteration = result_norms[-1]
+            # norms_f.append(result_norms[0])
+            # norms_delta_f.append(result_norms[1])
+            # norms_max_grad_f.append(result_norms[2])
+            # norms_norm_grad_f.append(result_norms[3])
+            # norms_max_delta_x.append(result_norms[4])
+            # norms_norm_delta_x.append(result_norms[5])
             file_data_name_it = f'iteration{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
             save_npy(data_folder_path + file_data_name_it + f'.npy',
@@ -547,10 +513,10 @@ if __name__ == '__main__':
         xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
                                           x=phase_field_0,
                                           jac=True,
-                                          maxcor=50,
-                                          gtol=1e-6,
-                                          ftol=1e-8,
-                                          maxiter=1000,
+                                          maxcor=20,
+                                          gtol=1e-5,
+                                          ftol=1e-5,
+                                          maxiter=2,
                                           comm=MPI.COMM_WORLD,
                                           disp=True,
                                           callback=my_callback
@@ -571,12 +537,12 @@ if __name__ == '__main__':
 
         _info['nb_of_pixels'] = discretization.nb_of_pixels_global
         # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
-        _info['norms_f'] = norms_f
-        _info['norms_delta_f'] = norms_delta_f
-        _info['norms_max_grad_f'] = norms_max_grad_f
-        _info['norms_norm_grad_f'] = norms_norm_grad_f
-        _info['norms_max_delta_x'] = norms_max_delta_x
-        _info['norms_norm_delta_x'] = norms_norm_delta_x
+        # _info['norms_f'] = norms_f
+        # _info['norms_delta_f'] = norms_delta_f
+        # _info['norms_max_grad_f'] = norms_max_grad_f
+        # _info['norms_norm_grad_f'] = norms_norm_grad_f
+        # _info['norms_max_delta_x'] = norms_max_delta_x
+        # _info['norms_norm_delta_x'] = norms_norm_delta_x
         _info['norms_sigma'] = norms_sigma
         _info['norms_pf'] = norms_pf
         _info['num_iteration_'] = num_iteration_
@@ -622,8 +588,10 @@ if __name__ == '__main__':
         M_fun = lambda x: discretization.apply_preconditioner_NEW(
             preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
             nodal_field_fnxyz=x)
-        displacement_field, norms = solvers.PCG(K_fun, rhs_field_final.s, x0=None, P=M_fun, steps=int(500),
-                                                toler=1e-8)
+
+        displacement_field = discretization.get_unknown_size_field(name='displacement_field_postprocess')
+        displacement_field.s, norms = solvers.PCG_numpy(K_fun, rhs_field_final.s, x0=None, P=M_fun, steps=int(500),
+                                                        toler=1e-8)
 
         # compute homogenized stress field corresponding t
         homogenized_stresses[load_case] = discretization.get_homogenized_stress(
@@ -637,30 +605,33 @@ if __name__ == '__main__':
         stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
         print(f'target_stresses[load_case] = {target_stresses[load_case]}')
         print(f'homogenized_stresses[load_case]= {homogenized_stresses[load_case]}')
-    quit()
-    dim = discretization.domain_dimension
+
     homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
     # compute whole homogenized elastic tangent
-    for i in range(dim):
-        for j in range(dim):
+    for i in range(2):
+        for j in range(2):
             # set macroscopic gradient
             macro_gradient_ij = np.zeros([dim, dim])
             macro_gradient_ij[i, j] = 1
             # Set up right hand side
-            macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij)
-
+            # macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij)
+            macro_gradient_field_ijqxyz = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient_ij,
+                                                                                  macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
             # Solve mechanical equilibrium constrain
-            rhs_ij = discretization.get_rhs(material_data_field_C_0_rho_quad, macro_gradient_field)
+            # rhs_ij = discretization.get_rhs(material_data_field_C_0_rho_quad, macro_gradient_field)
+            rhs_field_final = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
+                                                     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+                                                     rhs_inxyz=rhs_field_final)
 
-            displacement_field_ij, norms = solvers.PCG(K_fun, rhs_ij, x0=None, P=M_fun, steps=int(500),
-                                                       toler=1e-8)
+            displacement_field.s, norms = solvers.PCG_numpy(K_fun, rhs_field_final, x0=None, P=M_fun, steps=int(500),
+                                                            toler=1e-8)
 
             # ----------------------------------------------------------------------
             # compute homogenized stress field corresponding
             homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-                displacement_field_inxyz=displacement_field_ij,
-                macro_gradient_field_ijqxyz=macro_gradient_field,
+                displacement_field_inxyz=displacement_field,
+                macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
         print('Optimized elastic tangent = \n {}'.format(
@@ -671,4 +642,5 @@ if __name__ == '__main__':
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(folder_name + file_data_name + f'xopt_log.npz', **_info)
+        log_name = 'final_log'
+        np.savez(data_folder_path + log_name + f'info_log.npz', **_info)
