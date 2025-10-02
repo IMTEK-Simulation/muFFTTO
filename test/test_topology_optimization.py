@@ -302,7 +302,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([1, 1], 0, [6, 6])  # , ([3, 1.6], 0, [12, 13])
+    ([1, 1], 0, [6, 6]), ([3, 1.6], 0, [12, 13])
 ])
 def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_fixture, plot=True):
     problem_type = 'elasticity'
@@ -374,10 +374,10 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
     w = 2  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
     eta = 0.01
 
-    def my_objective_function_stress(phase_field_1nxyz_flat):
+    def my_objective_function_energy(phase_field_1nxyz_flat):
         # print('Objective function:')
         # reshape the field
-        phase_field_1nxyz = discretization.get_scalar_field(name='my_objective_function_stress')
+        phase_field_1nxyz = discretization.get_scalar_field(name='my_objective_function_energy')
         phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *number_of_pixels])
 
         # objective function phase field terms
@@ -420,11 +420,7 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
         #     nodal_field_fnxyz=K_diag_alg * x)
         displacement_field = discretization.get_unknown_size_field(name=f'displacement_field_load_case')
         displacement_field.s.fill(0)
-        displacement_field, norms = solvers.PCG_muGrid(discretization=discretization,
-                                                         Afun=K_fun,
-                                                         B=rhs, x_k=displacement_field, P=M_fun, steps=int(1500),
-                                                         toler=1e-16,
-                                                         norm_type='rr_rel')
+        displacement_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=None, P=M_fun, steps=int(1500), toler=1e-14)
 
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress(
@@ -473,13 +469,13 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
     phase_field_00 = np.copy(phase_field_0)
 
     phase_field_0 = phase_field_0.s.ravel()
-    analytical_sensitivity = my_objective_function_stress(phase_field_0)[-1]
+    analytical_sensitivity = my_objective_function_energy(phase_field_0)[-1]
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
     # print(sensitivity_parts)
 
     epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     fd_sensitivity = discretization_fixture.get_scalar_field(name='fd_sensitivity')
-    fd_sensitivity_drho_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
+    fd_sensitivity_drho_dro =discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_dsigma_dro')
 
     error_fd_vs_analytical = []
@@ -495,17 +491,17 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 phase_field_perturbed.s.fill(0)
-                phase_field_perturbed.s = np.copy(phase_field_00)
+                phase_field_perturbed.s=np.copy(phase_field_00)
                 # set phase_field to ones
                 #
                 phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] + epsilon / 2
                 phase_field_0 = phase_field_perturbed.s.reshape(-1)
-                of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _ = my_objective_function_stress(phase_field_0)
+                of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _ = my_objective_function_energy(phase_field_0)
 
                 phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] - epsilon
                 phase_field_0 = phase_field_perturbed.s.reshape(-1)
 
-                of_minu_eps, f_sigma_minu_eps, f_rho_minu_eps, _ = my_objective_function_stress(phase_field_0)
+                of_minu_eps, f_sigma_minu_eps, f_rho_minu_eps, _ = my_objective_function_energy(phase_field_0)
 
                 fd_sensitivity.s[0, 0, x, y] = (of_plus_eps - of_minu_eps) / epsilon
                 fd_sensitivity_drho_dro.s[0, 0, x, y] = (f_rho_plus_eps - f_rho_minu_eps) / epsilon
@@ -547,6 +543,7 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
         plt.xlabel('epsilon - size of Finite Difference step')
         plt.ylabel('Error')
         plt.show()
+
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
@@ -741,7 +738,7 @@ def test_fd_check_of_whole_objective_function_energy_equivalence(discretization_
 
     epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     fd_sensitivity = discretization_fixture.get_scalar_field(name='fd_sensitivity')
-    fd_sensitivity_drho_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
+    fd_sensitivity_drho_dro =discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_dsigma_dro')
 
     error_fd_vs_analytical = []
@@ -757,7 +754,7 @@ def test_fd_check_of_whole_objective_function_energy_equivalence(discretization_
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 phase_field_perturbed.s.fill(0)
-                phase_field_perturbed.s = np.copy(phase_field_00)
+                phase_field_perturbed.s=np.copy(phase_field_00)
                 # set phase_field to ones
                 #
                 phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] + epsilon / 2

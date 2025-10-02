@@ -2490,14 +2490,13 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # TODO
     # df_du_field = df_du_field / np.sum(target_stress_ij ** 2)
 
-    adjoint_field_inxyz, adjoint_norms = solvers.PCG_muGrid(discretization=discretization,
-                                                            Afun=system_matrix_fun,
-                                                            B=df_du_field,
-                                                            x_k=adjoint_field_inxyz,
-                                                            P=preconditioner_fun,
-                                                            steps=int(10000),
-                                                            toler=1e-10,
-                                                            norm_type='rr', )
+    adjoint_field_inxyz.s, adjoint_norms = solvers.PCG(Afun=system_matrix_fun,
+                                                       B=df_du_field.s,
+                                                       x0=adjoint_field_inxyz.s,
+                                                       P=preconditioner_fun,
+                                                       steps=int(10000),
+                                                       toler=1e-14,
+                                                       norm_type='rr_rel', )
     if disp and MPI.COMM_WORLD.rank == 0:
         nb_it_comb = len(adjoint_norms['residual_rz'])
         norm_rz = adjoint_norms['residual_rz'][-1]

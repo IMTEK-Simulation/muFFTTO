@@ -24,7 +24,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  #
-number_of_pixels = (32, 32)
+number_of_pixels = (64, 64)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -262,18 +262,38 @@ for ration in [-0.5]:
                     # if MPI.COMM_WORLD.size == 1:
                     #     print('rhs Of = {}'.format(np.linalg.norm(rhs_load_case)))
                     # if preconditioer == 'Green':
-                    displacement_field_load_case[load_case], norms = solvers.PCG_muGrid(
-                        discretization=discretization,
-                        Afun=K_fun,
-                        B=rhs_load_case_inxyz,
-                        x_k=displacement_field_load_case[
-                            load_case],
-                        P=M_fun,
-                        steps=int(10000),
-                        toler=1e-10,
-                        norm_type='rr',
-                        # norm_metric=M_fun_Green
-                    )
+                    displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
+                                                                                   B=rhs_load_case_inxyz.s,
+                                                                                   x0=displacement_field_load_case[
+                                                                                       load_case].s,
+                                                                                   P=M_fun,
+                                                                                   steps=int(10000),
+                                                                                   toler=1e-14,
+                                                                                   norm_type='rr_rel',
+                                                                                   # norm_metric=M_fun_Green
+                                                                                   )
+                    # elif preconditioer == 'Jacobi':
+                    #     displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
+                    #                                                                  B=rhs_load_case_inxyz,
+                    #                                                                  x0=None,
+                    #                                                                  P=M_fun,
+                    #                                                                  steps=int(10000),
+                    #                                                                  toler=1e-6,
+                    #                                                                  norm_type='rr',
+                    #                                                                  # norm_metric=M_fun_Green
+                    #                                                                  )
+                    #     # displacement_field_load_case[                            load_case],
+                    # elif preconditioer == 'Jacobi_Green':
+                    #     displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
+                    #                                                                    B=rhs_load_case_inxyz.s,
+                    #                                                                    x0=displacement_field_load_case[
+                    #                                                                        load_case].s,
+                    #                                                                    P=M_fun,
+                    #                                                                    steps=int(10000),
+                    #                                                                    toler=1e-10,
+                    #                                                                    norm_type='rr_rel',
+                    #                                                                    # norm_metric=M_fun_Green
+                    #                                                                    )
 
                     if MPI.COMM_WORLD.rank == 0:
                         nb_it_comb = len(norms['residual_rz'])
@@ -308,7 +328,7 @@ for ration in [-0.5]:
                             target_energy=target_energy[load_case]))
 
                         s_energy_and_adjoint_load_cases[
-                            load_case], adjoint_field_load_case[
+                            load_case],adjoint_field_load_case[
                             load_case], adjoint_energies[
                             load_case] = topology_optimization.sensitivity_elastic_energy_and_adjoint_FE_NEW(
                             discretization=discretization,
@@ -515,8 +535,8 @@ if __name__ == '__main__':
                                           jac=True,
                                           maxcor=20,
                                           gtol=1e-5,
-                                          ftol=1e-5,
-                                          maxiter=2,
+                                          ftol=1e-7,
+                                          maxiter=1000,
                                           comm=MPI.COMM_WORLD,
                                           disp=True,
                                           callback=my_callback
