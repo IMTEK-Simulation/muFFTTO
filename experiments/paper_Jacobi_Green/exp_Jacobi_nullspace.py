@@ -17,6 +17,9 @@ from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 import copy
 
+e=np.ones(5)
+J=np.diag(np.arange(5))
+
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'

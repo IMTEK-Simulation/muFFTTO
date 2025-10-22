@@ -61,7 +61,7 @@ def scale_field_log(field, min_val, max_val):
 
 
 plot = True
-compute = False
+compute = True
 enforce_mean = True
 if compute:
 

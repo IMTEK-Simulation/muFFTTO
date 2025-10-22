@@ -308,12 +308,28 @@ for d in range(n_u_dofs):
                 J_diag_ixy[:, d, x, y, z] = 1 / np.sqrt(
                     (B_t(dot21(A=mat_data_ijqxy, v=B(u_ixy=unit_impuls_ixy)))[d, x, y, z]))
 
+# Compute the Jacobi
+J_diag_comb_ixy = np.zeros([  n_u_dofs, n_u_dofs, *N])
+# TODO add dimension for elasticity
+for d in range(1):
+    for x_i in range(2):
+        for y_i in range(2):
+            for z_i in range(2):
+                comb_impuls_ixy = np.zeros(temp_shape)
+                comb_impuls_ixy[d,x_i::2, y_i::2, z_i::2] = 1.0# set impulses at regular intervals
+                # Create 2D grid
+                comb_impuls_ixy=B_t(dot21(A=mat_data_ijqxy, v=B(u_ixy=comb_impuls_ixy)))
+
+                J_diag_comb_ixy[:,d,x_i::2, y_i::2, z_i::2]  = np.where(comb_impuls_ixy[d,x_i::2, y_i::2, z_i::2] != 0.,1/ np.sqrt(comb_impuls_ixy[d,x_i::2, y_i::2, z_i::2]), 0.)
+
+
+
 # Jacobi   Preconditioner function
 # J_fun_half = lambda x:  J_diag_ixy * x.reshape(temp_shape)  # .reshape(-1)
 
 # Jacobi - Green  Preconditioner function
-JG_fun_I = lambda x: (J_diag_ixy * M_fun_I(J_diag_ixy * x.reshape(temp_shape)))  # .reshape(-1)
-JG_fun_C = lambda x: (J_diag_ixy * M_fun_C(J_diag_ixy * x.reshape(temp_shape)))  # .reshape(-1)
+JG_fun_I = lambda x: (J_diag_comb_ixy * M_fun_I(J_diag_comb_ixy * x.reshape(temp_shape)))  # .reshape(-1)
+JG_fun_C = lambda x: (J_diag_comb_ixy * M_fun_C(J_diag_comb_ixy * x.reshape(temp_shape)))  # .reshape(-1)
 
 # material data operator:
 apply_data = lambda x: dot21(mat_data_ijqxy, x.reshape(grad_shape)).reshape(-1)

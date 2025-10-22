@@ -24,7 +24,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  #
-number_of_pixels = (64, 64)
+number_of_pixels = (32, 32)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -535,7 +535,7 @@ if __name__ == '__main__':
                                           jac=True,
                                           maxcor=20,
                                           gtol=1e-5,
-                                          ftol=1e-7,
+                                          ftol=1e-5,
                                           maxiter=1000,
                                           comm=MPI.COMM_WORLD,
                                           disp=True,

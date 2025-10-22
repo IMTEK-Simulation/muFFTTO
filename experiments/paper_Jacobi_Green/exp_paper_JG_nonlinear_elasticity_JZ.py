@@ -18,8 +18,9 @@ folder_name = '../exp_data/'
 
 enforce_mean = False
 for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in 2 ** np.array([2,3, 4, 5, 6, 7, 8, 9]):  # 3, 4, 5, 6, 7, 8, 9
-        number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+    for nnn in [100,]:#2 ** np.array([ 7 ]):  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+        start_time = time.time()
+        number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -519,3 +520,6 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 plt.title('material_data_field_C_0')
 
             plt.show()
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("double_well_potential_plus_eps_Gauss_quad time: ", elapsed_time)

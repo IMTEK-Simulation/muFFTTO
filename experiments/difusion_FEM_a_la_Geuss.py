@@ -20,8 +20,8 @@ def apply_smoother_log10(phase):
     smoothed_arr[:, -1] = 0  # Last column
 
     # Fix center point
-    smoothed_arr[phase.shape[1] // 2 - 1:phase.shape[1] // 2 + 1,
-    phase.shape[2] // 2 - 1:phase.shape[2] // 2 + 1] = -4
+    # smoothed_arr[phase.shape[1] // 2 - 1:phase.shape[1] // 2 + 1,
+    # phase.shape[2] // 2 - 1:phase.shape[2] // 2 + 1] = -4
 
     smoothed_arr = 10 ** smoothed_arr
 
@@ -42,7 +42,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 2
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N_x = N_y = 16  # number of voxels (assumed equal for all directions)
+N_x = N_y = 32  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y)  # number of voxels
 
 delta_x, delta_y = 1/N_x, 1/N_y  # pixel size / grid spacing
@@ -130,9 +130,9 @@ nb_of_filters=150
 nb_it_wrt_filter = []
 
 for aplication in np.arange(nb_of_filters):
-    #phase[0] = apply_smoother_log10(phase)
+    phase[0] = apply_smoother_log10(phase)
 
-    plot_cross = False#bool(aplication % 20 == 0)
+    plot_cross = True#bool(aplication % 20 == 0)
     if plot_cross:
         plt.figure()
         ax_cross = plt.gca()
