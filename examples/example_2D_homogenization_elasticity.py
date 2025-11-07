@@ -14,7 +14,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (16, 16)
+number_of_pixels = (64, 64)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -38,9 +38,22 @@ elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  mu=G_0,
                                                  kind='linear')
 
-material_data_field_C_0 = discretization.get_material_data_size_field(name='elastic_tensor')
+#material_data_field_C_0 = discretization.get_material_data_size_field(name='elastic_tensor')
 
-material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+material_data_field_C_0 = discretization.field_collection.real_field(
+    unique_name='elastic_tensor',  # name of the field
+    components_shape=(*discretization.cell.material_data_shape,),  # shape of components
+    sub_division='quad_points'  # sub-point type
+)
+#### #TODO
+# ----- CHANGE CREATION OF THE FIELD
+### # TODO
+
+discretization.field_collection.real_field("nodal-field",(1,),"nodal_points" )
+
+
+
+material_data_field_C_0.sg = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 
@@ -50,7 +63,7 @@ print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elas
 geometry_ID = 'square_inclusion'
 phase_field_smooth = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                          microstructure_name=geometry_ID,
-                                                         coordinates=discretization.fft.coords)
+                                                         coordinates=discretization.fft.coordsg)
 # folder_name = 'experiments/exp_data/'  # s'exp_data/'
 #
 # #phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
@@ -73,26 +86,25 @@ inc_contrast = 0.
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 # phase_field[0,0]= phase_field_l
-phase_field.s[0, 0] = phase_field_smooth
+phase_field.sg[0, 0] = phase_field_smooth
 
 # phase_field[0,0]=phase_field[0,0]/np.min(phase_field[0,0])
 
 # np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
 # sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
 
-phase_field_at_quad_poits_1qnxyz = \
-    discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field,
-                                                 quad_field_fqnxyz=None,
-                                                 quad_points_coords_iq=None)[0]
-
-# apply material distribution
+# phase_field_at_quad_poits_1qnxyz = \
+#     discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_field,
+#                                                  quad_field_fqnxyz=None,
+#                                                  quad_points_coords_iq=None)[0]
+#
+# # apply material distribution
 # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
 # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
 # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
-material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * np.power(
-    phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+material_data_field_C_0.sg = material_data_field_C_0.sg[..., :, :, :] * phase_field.sg[0, 0]
 
-# Set up right hand side
+ # Set up right hand side
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
 macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
                                                                macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -106,22 +118,22 @@ rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_
 
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0, x,
                                                      formulation='small_strain')
-# M_fun = lambda x: 1 * x
+M_fun = lambda x: 1 * x
 # K= discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
-preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
-
-M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                          nodal_field_fnxyz=x)
-
-# K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0)
-
-K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-    material_data_field_ijklqxyz=material_data_field_C_0)
-
-M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-    preconditioner_Fourier_fnfnqks=preconditioner,
-    nodal_field_fnxyz=K_diag_alg * x)
+# preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
+#
+# M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+#                                                           nodal_field_fnxyz=x)
+#
+# # K_mat = discretization.get_system_matrix(material_data_field=material_data_field_C_0)
+#
+# K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+#     material_data_field_ijklqxyz=material_data_field_C_0)
+#
+# M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+#     preconditioner_Fourier_fnfnqks=preconditioner,
+#     nodal_field_fnxyz=K_diag_alg * x)
 #
 
 solution_field = discretization.get_unknown_size_field(name='solution')

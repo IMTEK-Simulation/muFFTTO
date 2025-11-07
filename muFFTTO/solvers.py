@@ -2,6 +2,7 @@ import numpy as np
 
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
+from _muGrid import Communicator, Field, FieldCollection
 
 
 def donothing(*args, **kwargs):
@@ -18,6 +19,123 @@ def findS(curve, Delta, l):
     S = Reduction(MPI.COMM_WORLD).max(curve[last_index:-1] / Delta[last_index: -1])
 
     return S
+
+
+def conjugate_gradients_mugrid(
+        comm: Communicator,
+        fc: FieldCollection,
+        hessp: callable,
+        b: Field,
+        x: Field,
+        P: callable,
+        tol: float = 1e-6,
+        maxiter: int = 1000,
+        callback: callable = None,
+):
+    """
+    Conjugate gradient method for matrix-free solution of the linear problem
+    Ax = b, where A is represented by the function hessp (which computes the
+    product of A with a vector). The method iteratively refines the solution x
+    until the residual ||Ax - b|| is less than tol or until maxiter iterations
+    are reached.
+
+    Parameters
+    ----------
+    comm : muGrid.Communicator
+        Communicator for parallel processing.
+    fc : muGrid.FieldCollection
+        Collection holding temporary fields of the CG algorithm.
+    hessp : callable
+        Function that computes the product of the Hessian matrix A with a vector.
+    b : muGrid.Field
+        Right-hand side vector.
+    x : muGrid.Field
+        Initial guess for the solution.
+    P : callable
+        Function that computes the product of the preconditioner matrix P with a vector.
+    tol : float, optional
+        Tolerance for convergence. The default is 1e-6.
+    maxiter : int, optional
+        Maximum number of iterations. The default is 1000.
+    callback : callable, optional
+        Function to call after each iteration with the current solution, residual,
+        and search direction.
+
+    Returns
+    -------
+    x : array_like
+        Approximate solution to the system Ax = b. (Same as input field x.)
+    """
+    tol_sq = tol * tol
+    p = fc.real_field(
+        unique_name="cg-search-direction",  # name of the field
+        components_shape=(*x.components_shape,),  # shape of components
+        sub_division='nodal_points'  # sub-point type
+    )
+    Ap = fc.real_field(
+        unique_name="cg-hessian-product",  # name of the field
+        components_shape=(*x.components_shape,),  # shape of components
+        sub_division='nodal_points'  # sub-point type
+    )
+    r = fc.real_field(
+        unique_name="cg-residual",  # name of the field
+        components_shape=(*x.components_shape,),  # shape of components
+        sub_division='nodal_points'  # sub-point type
+    )
+    z = fc.real_field(
+        unique_name="cg-preconditioner_residual",  # name of the field
+        components_shape=(*x.components_shape,),  # shape of components
+        sub_division='nodal_points'  # sub-point type
+    )
+
+    hessp(x, Ap)
+    r.s = b.s - Ap.s
+    P(r, z)
+    p.s = np.copy(z.s)  # residual
+
+    if callback:
+        callback(0, x.s, r.s, p.s)
+
+    rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
+    rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
+
+    if rr < tol_sq:
+        return x
+
+    for iteration in range(maxiter):
+        # Compute Hessian product
+        hessp(p, Ap)
+
+        # Update x (and residual)
+        pAp = comm.sum(np.dot(p.s.ravel(), Ap.s.ravel()))
+        if pAp <= 0:
+            raise RuntimeError("Hessian is not positive definite")
+
+        alpha = rz / pAp
+        x.s += alpha * p.s
+        r.s -= alpha * Ap.s
+
+        P(r, z)
+
+        if callback:
+            callback(iteration + 1, x.s, r.s, p.s)
+
+        # Check convergence
+        next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
+        next_rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))
+
+        if next_rr < tol_sq:
+            return x
+
+        # Update search direction
+        # beta = next_rr / rr
+        beta = next_rz / rz
+        p.s = z.s + beta * p.s
+        rz = next_rz
+        # p.s *= beta
+        # p.s += z.s
+
+    raise RuntimeError("Conjugate gradient algorithm did not converge")
 
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',

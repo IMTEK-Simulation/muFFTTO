@@ -11,7 +11,7 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (64,)
+number_of_pixels = 3 * (32,)
 
 geometry_ID = 'sine_wave_'
 

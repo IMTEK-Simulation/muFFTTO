@@ -28,3 +28,5 @@ experiments/exp_data/
 *.mp4
 
 *.zip
+
+*.iml
