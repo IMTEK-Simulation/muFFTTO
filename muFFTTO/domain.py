@@ -79,7 +79,7 @@ class Discretization:
         right_ghosts[-1] = 1
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
-        engine_='fftw' #'fftwmpi'#
+        engine_='fftwmpi'#'fftw' #
         self.fft = FFT(nb_grid_pts=nb_of_pixels_global,
                        engine=engine_,#
                        communicator=communicator,
@@ -89,7 +89,7 @@ class Discretization:
 
         self.fft.create_plan(1)
         ### TODO[MARTIN] I have to add multiple subpoints to nb_grid_pts
-        self.mpi_reduction = Reduction(communicator)
+        self.mpi_reduction = Reduction(MPI.COMM_WORLD)
 
         # comm = muGrid.Communicator(MPI.COMM_WORLD)
         # s = suggest_subdivisions(len(nb_grid_pts), comm.size)

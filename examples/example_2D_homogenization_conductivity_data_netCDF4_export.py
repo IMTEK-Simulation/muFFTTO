@@ -1,5 +1,7 @@
 import sys
 
+import matplotlib.pyplot as plt
+
 sys.path.append('..')  # Add parent directory to path
 
 import numpy as np
@@ -92,7 +94,7 @@ def K_fun(x, Ax):
 # K_matrix = discretization.get_system_matrix(material_data_field_C_0)
 # preconditioner_old = discretization.get_preconditioner_DELETE(reference_material_data_field_ijklqxyz=material_data_field_C_0.s)
 
-#preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=conductivity_C_1)
+# preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=conductivity_C_1)
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
 
 
@@ -110,8 +112,9 @@ def M_fun(x, Px):
     discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
-    #Px.s[...] =10* x.s[...]
-    #print()
+    # Px.s[...] = 1 * x.s[...]
+    # print()
+
 
 #  M_fun = lambda x: 1 * x
 
@@ -126,9 +129,6 @@ rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 
-
-
-
 for i in range(1):
     # set macroscopic gradient
     macro_gradient = np.zeros([dim])
@@ -136,10 +136,10 @@ for i in range(1):
 
     macro_gradient_field.sg.fill(0)
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
-                                            macro_gradient_field_ijqxyz=macro_gradient_field)
+                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
 
-   # print('rank' f'{MPI.COMM_WORLD.rank:6} material_data_field_C_0.s[0,0,0] =' f'{material_data_field_C_0.s[0,0,0]}')
-    #print('rank' f'{MPI.COMM_WORLD.rank:6} macro_gradient_field.s[0,0,0] =' f'{macro_gradient_field.s[0, 0,0]}')
+    # print('rank' f'{MPI.COMM_WORLD.rank:6} material_data_field_C_0.s[0,0,0] =' f'{material_data_field_C_0.s[0,0,0]}')
+    # print('rank' f'{MPI.COMM_WORLD.rank:6} macro_gradient_field.s[0,0,0] =' f'{macro_gradient_field.s[0, 0,0]}')
     discretization.fft.communicate_ghosts(field=macro_gradient_field)
     # Solve mechanical equilibrium constrain
     rhs_field.sg.fill(0)
@@ -147,7 +147,8 @@ for i in range(1):
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
 
-    #print('rank' f'{MPI.COMM_WORLD.rank:6} rhs_field =' f'{rhs_field.s}')
+
+    # print('rank' f'{MPI.COMM_WORLD.rank:6} rhs_field =' f'{rhs_field.s}')
 
     #    solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
     # solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
@@ -155,12 +156,12 @@ for i in range(1):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr=discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
         if discretization.fft.communicator.rank == 0:
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
-      #  print(f"{it:5} {discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel())):.5}")
 
+    #  print(f"{it:5} {discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel())):.5}")
 
     solvers.conjugate_gradients_mugrid(
         comm=discretization.fft.communicator,
@@ -173,11 +174,15 @@ for i in range(1):
         maxiter=2000,
         callback=callback,
     )
-
+    plt.figure()
+    plt.imshow(solution_field.s[0,0])
+    plt.title('rank' f'{MPI.COMM_WORLD.rank:6} ')
+    plt.colorbar()
+    plt.show()
     discretization.fft.communicate_ghosts(field=solution_field)
 
-    sum_sol=discretization.mpi_reduction.sum(solution_field.s,
-                           axis=tuple(range(-3, 0)))
+    sum_sol = discretization.mpi_reduction.sum(solution_field.s,
+                                               axis=tuple(range(-3, 0)))
     print('rank' f'{MPI.COMM_WORLD.rank:6} sum_sol =' f'{sum_sol}')
 
     # nb_it = len(norms['residual_rz'])
