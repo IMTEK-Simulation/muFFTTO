@@ -199,8 +199,7 @@ for i in range(1):
 
 # compute homogenized stress field corresponding to displacement
 homogenized_flux = discretization.get_homogenized_stress_mugrid(
-    material_data_field_ijklqxyz=material_data_field_C_0,
-    displacement_field_inxyz=solution_field,
+    material_data_field_ijklqxyz=material_data_field_C_0,  displacement_field_inxyz=solution_field,
     macro_gradient_field_ijqxyz=macro_gradient_field)
 
 print(homogenized_flux)

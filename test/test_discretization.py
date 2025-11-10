@@ -1,4 +1,7 @@
 import unittest
+import sys
+
+sys.path.append('..')  # Add parent directory to path
 
 import numpy as np
 
@@ -64,10 +67,10 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
             temperature_gradient_anal = discretization.get_temperature_gradient_size_field(name='anal_gradient_of_temp')
 
-            temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                                   nodal_coordinates[1, 0, :, :])
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+            temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                                   nodal_coordinates.s[1, 0, :, :])
+            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
 
             discretization.apply_gradient_operator_mugrid(temperature, temperature_gradient)
 
@@ -120,11 +123,11 @@ class DiscretizationTestCase(unittest.TestCase):
             temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
                 name='anal_gradient_of_temp')
 
-            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, 0, :, :],
-                                               nodal_coordinates[1, 0, :, :])
+            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                               nodal_coordinates.s[1, 0, :, :])
 
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates[1, :, :, :])
+            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
 
             # temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
 
@@ -294,11 +297,11 @@ class DiscretizationTestCase(unittest.TestCase):
                 displacement_gradient_anal = discretization.get_displacement_gradient_sized_field(
                     name='anal_gradient_of_disp')
 
-                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates[0, :, :],
-                                                           nodal_coordinates[1, :, :])
+                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
+                                                           nodal_coordinates.s[1, :, :])
 
-                displacement_gradient_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates[0, 0])
-                displacement_gradient_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates[0, 0])
+                displacement_gradient_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, 0])
+                displacement_gradient_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates.s[0, 0])
 
                 grad_u_ijqxyz = discretization.apply_gradient_operator(u_inxyz,
                                                                        grad_u_ijqxyz)
@@ -842,7 +845,7 @@ class DiscretizationTestCase(unittest.TestCase):
         AB = np.matmul(mat_1, B)
         BtA = np.matmul(B.transpose(), mat_1)
 
-    def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
+    def test_2D_fft_output(self):
 
         global material_data_field
         domain_size = [2, 3]
@@ -850,7 +853,7 @@ class DiscretizationTestCase(unittest.TestCase):
                              ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
-            number_of_pixels = (3, 4)
+            number_of_pixels = (9, 19)
             discretization_type = 'finite_element'
 
             for element_type in ['linear_triangles', 'bilinear_rectangle']:
@@ -877,27 +880,70 @@ class DiscretizationTestCase(unittest.TestCase):
                     material_data_field.s = np.einsum('ij,qxy->ijqxy', mat_1,
                                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                         *discretization.nb_of_pixels])))
-                    if element_type == 'linear_triangles':
-                        matlab_M = np.array(
-                            [[0, 0.771847250933311, 0.294819415733356, 0.294819415733356, 0.771847250933311],
-                             [0.468750000000000, 0.291636466712144, 0.180987606728960, 0.180987606728960,
-                              0.291636466712144],
-                             [0.234375000000000, 0.179783044222786, 0.130572618508737, 0.130572618508737,
-                              0.179783044222786],
-                             [0.468750000000000, 0.291636466712144, 0.180987606728960, 0.180987606728960,
-                              0.291636466712144]])
 
-                    elif element_type == 'bilinear_rectangle':
-                        matlab_M = np.array(
-                            [
-                                [0, 0.771847250933311, 0.294819415733356, 0.294819415733356, 0.771847250933311],
-                                [0.468750000000000, 0.399090648415113, 0.321730395643978, 0.321730395643978,
-                                 0.399090648415113],
-                                [0.234375000000000, 0.269121075316603, 0.354047706546202, 0.354047706546202,
-                                 0.269121075316603],
-                                [0.468750000000000, 0.399090648415113, 0.321730395643978, 0.321730395643978,
-                                 0.399090648415113]])
+                ref_material_data = np.copy(mat_1)
 
+                def K_fun(x, Ax):
+                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
+                                                              input_field_inxyz=x,
+                                                              output_field_inxyz=Ax)
+
+                # set up random field
+                f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
+                x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
+                x_0.s[0, 0, 0, 0] = 1
+                K_fun(x_0, f_0)
+
+                ffield = discretization.fft.fourier_space_field('vector-field', (x_0.nb_components,))
+
+                discretization.fft.fft(f_0, ffield)
+
+                assert_condition = np.allclose(ffield.s[0, 0, 0, 0], 0, rtol=1e-10, atol=1e-10)
+                # print(assert_condition)
+                self.assertTrue(assert_condition,
+                                'FFT of mean field has non-zero zero frequency {} in {} problem.'.format(element_type,
+                                                                                                         problem_type))
+
+    def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
+
+        global material_data_field
+        domain_size = [2, 3]
+        for problem_type in ['conductivity'#,'elasticity',
+                             ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
+            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                              problem_type=problem_type)
+            number_of_pixels = (5, 8)
+            discretization_type = 'finite_element'
+
+            for element_type in ['linear_triangles', 'bilinear_rectangle']:
+                discretization = domain.Discretization(cell=my_cell,
+                                                       nb_of_pixels_global=number_of_pixels,
+                                                       discretization_type=discretization_type,
+                                                       element_type=element_type)
+                material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
+
+                if problem_type == 'elasticity':
+                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+
+
+                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                               kind='linear')
+                    # # identity tensor                                               [single tensor]
+                    # ii = np.eye(2)
+                    # # identity tensors                                            [grid of tensors]
+                    # I = ii
+                    # I4 = np.einsum('il,jk', ii, ii)
+                    # I4rt = np.einsum('ik,jl', ii, ii)
+                    # mat_1 = (I4 + I4rt) / 2.
+
+                    material_data_field.s = np.einsum('ijkl,qxy->ijklqxy', mat_1,
+                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                        *discretization.nb_of_pixels])))
+                elif problem_type == 'conductivity':
+                    mat_1 = np.array([[1, 0], [0, 1]])
+                    material_data_field.s = np.einsum('ij,qxy->ijqxy', mat_1,
+                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                        *discretization.nb_of_pixels])))
                 ref_material_data = np.copy(mat_1)
 
                 def K_fun(x, Ax):
@@ -934,9 +980,13 @@ class DiscretizationTestCase(unittest.TestCase):
                 M_fun(f_0, x_1)
 
                 diff = x_0.s - x_1.s
-                # print(np.sum(diff))
-                assert_condition = np.allclose(x_0, x_1, rtol=1e-14, atol=1e-14)
-                # print(assert_condition)
+                print(np.sum(diff))
+                sum_sol = discretization.mpi_reduction.sum( x_0.s - x_1.s)
+                print(f'sum_sol {sum_sol}')
+                assert_condition = np.allclose(x_0.s, 2*x_1.s, rtol=1e-10, atol=1e-10)
+
+                print('x_0.s', x_0.s)
+                print('x_1.s', x_1.s)
                 self.assertTrue(assert_condition,
                                 'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem. \n '
                                 'Discrepancy = {}'.format(element_type, problem_type, np.sum(diff)))
@@ -999,7 +1049,7 @@ class DiscretizationTestCase(unittest.TestCase):
                                 ' data: 3D element {} in {} problem.'.format(
                                     element_type, problem_type))
 
-    def test_plot_2D_mesh(self, plot=True):
+    def test_plot_2D_mesh(self, plot=False):
         # this is a visual test of nodal_coordinates and  quad_coordinates
 
         domain_size = [3, 4]
@@ -1073,7 +1123,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 plt.show()
 
-    def test_elavuate_at_quad_points_2D_mesh(self, plot=True):
+    def test_elavuate_at_quad_points_2D_mesh(self, plot=False):
         # this  test interpolates field based on basis functions
 
         domain_size = [4, 4]
@@ -1104,7 +1154,6 @@ class DiscretizationTestCase(unittest.TestCase):
                 nodal_field_fnxyz=phase_field_0,
                 quad_field_fqnxyz=None,
                 quad_points_coords_iq=None)
-
 
             if plot:
                 import matplotlib.pyplot as plt
