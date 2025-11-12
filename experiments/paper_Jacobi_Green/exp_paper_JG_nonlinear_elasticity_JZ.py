@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 
 from muFFTTO import domain
 from muFFTTO import solvers
+from muFFTTO import microstructure_library
 
 # script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
 script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -17,10 +18,10 @@ script_name = os.path.splitext(os.path.basename(__file__))[0]
 folder_name = '../exp_data/'
 
 enforce_mean = False
-for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in [100,]:#2 ** np.array([ 7 ]):  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in ['Green']:  # 'Jacobi_Green',
+    for nnn in  2 ** np.array([ 3, 4, 5, 6]):#[32, ]:  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
-        number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+        number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -78,11 +79,6 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         I4s = (I4 + I4rt) / 2.
         I4d = (I4s - II / 3.)
 
-        # II_qxyz = np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-        #                           (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
-        #
-        # I4d_qxyz = np.broadcast_to(I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-        #                            (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 
         model_parameters_non_linear = {'K': 2,
                                        'mu': 1,
@@ -96,10 +92,24 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         _info['model_parameters_non_linear'] = model_parameters_non_linear
         _info['model_parameters_linear'] = model_parameters_linear
 
+        phase_field = discretization.get_scalar_field(name='phase_field')
 
+        geometry_ID = 'square_inclusion'
+        phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                                  microstructure_name=geometry_ID,
+                                                                  coordinates=discretization.fft.coords)
+        matrix_mask = phase_field.s[0, 0] == 0
+        inc_mask = phase_field.s[0, 0] > 0
+
+
+        # phase_field[:26, :, :] = 1.
         # linear elasticity
         # -----------------
-        def linear_elastic_q_points(strain_ijqxyz, **kwargs):
+        def linear_elastic_q_points(strain_ijqxyz,
+                                    tangent_ijklqxyz,
+                                    stress_ijqxyz,
+                                    phase_xyz,
+                                    **kwargs):
             # parameters
             K = kwargs['K']
             mu = kwargs['mu']  # mu = 1.  # shear modulus
@@ -107,15 +117,20 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
 
             # elastic stiffness tensor, and stress response
             # C4 = K * II_qxyz + 2. * mu * I4d_qxyz
-            C4 = K * II + 2. * mu * I4d
-            sig = np.einsum('ijkl,lkqxyz  ->ijqxyz  ', C4, strain_ijqxyz)
+            tangent_ijklqxyz.s[..., phase_xyz] = (K * II + 2. * mu * I4d)[..., None, None]
+            stress_ijqxyz.s[..., phase_xyz] = np.einsum('ijklqx...,lkqx...  ->ijqx...  ',
+                                                        tangent_ijklqxyz.s[..., phase_xyz],
+                                                        strain_ijqxyz.s[..., phase_xyz])
             # sig = ddot42(C4, strain)
-
-            return sig, C4
+           # print()
 
 
         ###
-        def nonlinear_elastic_q_points(strain, **kwargs):
+        def nonlinear_elastic_q_points(strain_ijqxyz,
+                                       tangent_ijklqxyz,
+                                       stress_ijqxyz,
+                                       phase_xyz,
+                                       **kwargs):
             # K = 2.  # bulk modulus
             # sigma = K*trace(small_strain)*I_ij  + sigma_0* (strain_eq/epsilon_0)^n * N_ijkl
             K = kwargs['K']
@@ -123,81 +138,76 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             eps0 = kwargs['eps0']  # = 0.03  # 0.2  # reference strain #    # 0.03                  # 0.1
             n = kwargs['n']  # 5.0  # 3.0  # hardening exponent  # # 5.0               # 10.0
 
-            strain_trace_qxyz = np.einsum('ii...', strain) / 3  # todo{2 or 3 in 2D }
+            strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3  # todo{2 or 3 in 2D }
             # strain_trace_xyz = np.einsum('ijxyz,ji ->xyz', strain, I) / 3  # todo{2 or 3 in 2D }
 
             # volumetric strain
-            strain_vol_ijqxyz = np.ndarray(shape=strain.shape)
-            strain_vol_ijqxyz.fill(0)
+            strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
+            # strain_vol_ijqxyz = np.ndarray(shape=strain.shape)
+            strain_vol_ijqxyz.s.fill(0)
             for d in np.arange(discretization.domain_dimension):
-                strain_vol_ijqxyz[d, d, ...] = strain_trace_qxyz
+                strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
 
             # deviatoric strain
-            strain_dev_ijqxyz = strain - strain_vol_ijqxyz
+            strain_dev_ijqxyz = discretization.get_gradient_size_field(name='strain_dev_ijqxyz')
+            strain_dev_ijqxyz.s[..., phase_xyz] = strain_ijqxyz.s[..., phase_xyz] - strain_vol_ijqxyz.s[..., phase_xyz]
 
             # equivalent strain
-            strain_dev_ddot = np.einsum('ijqxyz,jiqxyz-> qxyz', strain_dev_ijqxyz, strain_dev_ijqxyz)
-            strain_eq_qxyz = np.sqrt((2. / 3.) * strain_dev_ddot)
+            strain_dev_ddot = np.einsum('ijqx...,jiqx...-> qx...', strain_dev_ijqxyz.s[..., phase_xyz],
+                                        strain_dev_ijqxyz.s[..., phase_xyz])
+            strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
 
             #
-            sig = (3. * K * strain_vol_ijqxyz
-                   + 2. / 3. * sig0 / (eps0 ** n) *
-                   (strain_eq_qxyz ** (n - 1.)) * strain_dev_ijqxyz)
+            stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
+                                               + 2. / 3. * sig0 / (eps0 ** n) *
+                                               (strain_eq_qx ** (n - 1.)) * strain_dev_ijqxyz.s[..., phase_xyz])
             #
             # sig = 3. * K * strain_vol_ijqxyz * (strain_eq_qxyz == 0.).astype(float) + sig * (
             #         strain_eq_qxyz != 0.).astype(float)
 
             # K4_d = discretization.get_material_data_size_field(name='alg_tangent')
-            strain_dev_dyad = np.einsum('ijqxyz,klqxyz->ijklqxyz', strain_dev_ijqxyz, strain_dev_ijqxyz)
+            strain_dev_dyad = np.einsum('ijqx...,klqx...->ijklqx...', strain_dev_ijqxyz.s[..., phase_xyz],
+                                        strain_dev_ijqxyz.s[..., phase_xyz])
 
-            K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qxyz ** (
-                    n - 3.) + strain_eq_qxyz ** (n - 1.) * I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis])
+            K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qx ** (
+                    n - 3.) + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
 
             # threshold = 1e-15
             # mask = (np.abs(strain_eq_qxyz) > threshold).astype(float)
 
-            K4 = K * II[
-                ..., np.newaxis, np.newaxis, np.newaxis, np.newaxis] + K4_d  # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
-            #
-            # np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-            #                 (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
-
-            return sig, K4
+            tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
+            # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
 
 
-        def constitutive_q_points(strain_ijqxyz):
-            phase_field = np.zeros([*number_of_pixels])
-            phase_field[
-                1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4, 1 * number_of_pixels[0] // 4:3 *
-                                                                                                        number_of_pixels[
-                                                                                                            0] // 4, :] = 1.
-            # phase_field[:26, :, :] = 1.
+        def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
+            #            phase_field = np.zeros([*number_of_pixels])
+            global matrix_mask, inc_mask
+            linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
+                                    tangent_ijklqxyz=tangent_ijklqxyz,
+                                    stress_ijqxyz=stress_ijqxyz,
+                                    phase_xyz=matrix_mask,
+                                    **model_parameters_linear)
 
-            # sig_P1, K4_P1 = nonlinear_elastic_q_points(strain_ijqxyz.s, K=2)
-            sig_P2, K4_P2 = nonlinear_elastic_q_points(strain_ijqxyz.s, **model_parameters_non_linear)
-
-            sig_P1, K4_P1 = linear_elastic_q_points(strain_ijqxyz.s, **model_parameters_linear)  # inclusion
-            # sig_P2, K4_P2 = linear_elastic_q_points(strain_ijqxyz.s, K=2)
-
-            sig_ijqxyz = phase_field * sig_P1 + (1. - phase_field) * sig_P2
-            K4_ijklqxyz = phase_field * K4_P1[
-                ..., np.newaxis, np.newaxis, np.newaxis, np.newaxis] + (1. - phase_field) * K4_P2
-
-            # remove border pixels
-            # sig_ijqxyz[..., 0:2, :] = 0
-            # sig_ijqxyz[..., -2:, :] = 0
-            # K4_ijklqxyz[..., 0:2, :] = 0
-            # K4_ijklqxyz[..., -2:, :] = 0
-
-            return sig_ijqxyz, K4_ijklqxyz
+            nonlinear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
+                                       tangent_ijklqxyz=tangent_ijklqxyz,
+                                       stress_ijqxyz=stress_ijqxyz,
+                                       phase_xyz=inc_mask,
+                                       **model_parameters_non_linear)
 
 
-        def constitutive(strain_ijqxyz):
-            sig_ijqxyz, K4_ijklqxyz = constitutive_q_points(strain_ijqxyz)
-
-            return sig_ijqxyz, K4_ijklqxyz
+            print()
 
 
+        def constitutive(strain_ijqxyz,
+                         sig_ijqxyz,
+                         K4_ijklqxyz):
+
+            constitutive_q_points(strain_ijqxyz=strain_ijqxyz,
+                                  tangent_ijklqxyz=K4_ijklqxyz,
+                                  stress_ijqxyz=sig_ijqxyz)
+
+
+        macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
         macro_gradient_inc_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
 
         displacement_fluctuation_field = discretization.get_unknown_size_field(name='displacement_fluctuation_field')
@@ -207,17 +217,20 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         total_strain_field = discretization.get_displacement_gradient_sized_field(name='strain_field')
         rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
+        stress_field = discretization.get_displacement_gradient_sized_field(name='stress_field')
+        K4_ijklqyz = discretization.get_material_data_size_field_mugrid(name='K4_ijklqxyz')
+
         x = np.linspace(start=0, stop=domain_size[0], num=number_of_pixels[0])
         y = np.linspace(start=0, stop=domain_size[1], num=number_of_pixels[1])
         X, Y = np.meshgrid(x, y, indexing='ij')
 
         # evaluate material law
-        stress, K4_ijklqyz = constitutive(total_strain_field)
+        constitutive(total_strain_field, stress_field, K4_ijklqyz)
 
         if save_results:
             # save strain fluctuation
             results_name = (f'init_K')
-            np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+            np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4))
 
         # set macroscopic loading increment
         ninc = 1
@@ -230,15 +243,25 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         dt = 1. / float(ninc)
 
         # set macroscopic gradient
-        macro_gradient_inc_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient_inc,
-                                                                           macro_gradient_field_ijqxyz=macro_gradient_inc_field)
-
+        # macro_gradient_inc_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient_inc,
+        #                                                                    macro_gradient_field_ijqxyz=macro_gradient_inc_field)
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_inc,
+                                                       macro_gradient_field_ijqxyz=macro_gradient_inc_field)
         # assembly preconditioner
-        preconditioner = discretization.get_preconditioner_Green_fast(
+        preconditioner = discretization.get_preconditioner_Green_mugrid(
             reference_material_data_ijkl=I4s)  # K4_ijklqyz.mean(axis=(4, 5, 6, 7))
 
-        M_fun_Green = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                                        nodal_field_fnxyz=x)
+
+        #
+        # M_fun_Green = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+        #                                                                 nodal_field_fnxyz=x)
+
+        def M_fun_Green(x, Px):
+            discretization.fft.communicate_ghosts(x)
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                       input_nodal_field_fnxyz=x,
+                                                       output_nodal_field_fnxyz=Px)
+
 
         sum_CG_its = 0
         sum_Newton_its = 0
@@ -251,14 +274,35 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             print(f'==========================================================================')
 
             # strain-hardening exponent
-            total_strain_field.s[...] += macro_gradient_inc_field.s
+            total_strain_field.s[...] += macro_gradient_inc_field.s[...]
+
+            # evaluate material law
+            constitutive(total_strain_field, stress_field, K4_ijklqyz)
 
             # Solve mechanical equilibrium constrain
-            rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel
-                                                               gradient_field_ijqxyz=total_strain_field,
-                                                               rhs_inxyz=rhs_field)
+            # rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel
+            #                                                    gradient_field_ijqxyz=total_strain_field,
+            #                                                    rhs_inxyz=rhs_field)
+            # discretization.get_rhs_mugrid(material_data_field_ijklqxyz=K4_ijklqyz,  # constitutive_pixel
+            #                               macro_gradient_field_ijqxyz=total_strain_field,
+            #                               rhs_inxyz=rhs_field)
+
+            discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
+                                                           div_u_fnxyz=rhs_field,
+                                                           apply_weights=True)
+            rhs_field.s *= -1
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz shape.  =' f'{rhs_inxyz.s.shape}')
+            #       print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz.s[0] =' f'{rhs_inxyz.s[0]}')
+            #
+
+
+            #
+
+            # discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+            #                               macro_gradient_field_ijqxyz=macro_gradient_field,
+            #                               rhs_inxyz=rhs_field)
             # evaluate material law
-            stress, K4_ijklqyz = constitutive(total_strain_field)  #
+            # stress, K4_ijklqyz = constitutive(total_strain_field)  #
 
             if save_results:
                 # save strain fluctuation
@@ -269,13 +313,14 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 np.save(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2))
                 # save stress
                 results_name = (f'stress' + f'_it{iteration_total}')
-                np.save(data_folder_path + results_name + f'.npy', stress.mean(axis=2))
+                np.save(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2))
                 # save K4_ijklqyz
                 results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-                np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+                np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4))
 
                 results_name = (f'rhs_field' + f'_it{iteration_total}')
                 np.save(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=2))
+
             En = np.linalg.norm(total_strain_field.s.mean(axis=2))
 
             rhs_t_norm = np.linalg.norm(rhs_field.s)
@@ -306,26 +351,47 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                         M_fun = lambda x: M_fun_GJ(x)
 
                         # mat_model_pars = {'mat_model': 'power_law_elasticity'}
-                K_fun = lambda x: discretization.apply_system_matrix(
-                    material_data_field=K4_ijklqyz,  # constitutive_pixel
-                    displacement_field=x,
-                    formulation='small_strain')
 
 
-                def my_callback(x_0):
-                    print('mean_x0 {}'.format(x_0.mean()))
+                def K_fun(x, Ax):
+                    discretization.apply_system_matrix_mugrid(material_data_field=K4_ijklqyz,
+                                                              input_field_inxyz=x,
+                                                              output_field_inxyz=Ax)
+                    discretization.fft.communicate_ghosts(Ax)
+
+
+                norms = dict()
+                norms['residual_rr'] = []
+                norms['residual_rz'] = []
+
+
+                def callback(it, x, r, p, z):
+                    global norms
+                    """
+                    Callback function to print the current solution, residual, and search direction.
+                    """
+                    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                    norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                    norms['residual_rr'].append(norm_of_rr)
+                    norms['residual_rz'].append(norm_of_rz)
+
+                    if discretization.fft.communicator.rank == 0:
+                        print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
                 displacement_increment_field.s.fill(0)
-                displacement_increment_field.s, norms = solvers.PCG(Afun=K_fun,
-                                                                    B=rhs_field.s,
-                                                                    x0=displacement_increment_field.s,
-                                                                    P=M_fun,
-                                                                    steps=int(10000),
-                                                                    toler=1e-14,
-                                                                    norm_type='rr',
-                                                                    # callback=my_callback
-                                                                    )
+
+                solvers.conjugate_gradients_mugrid(
+                    comm=discretization.fft.communicator,
+                    fc=discretization.field_collection,
+                    hessp=K_fun,  # linear operator
+                    b=rhs_field,
+                    x=displacement_increment_field,
+                    P=M_fun,
+                    tol=1e-6,
+                    maxiter=2000,
+                    callback=callback,
+                )
 
                 nb_it_comb = len(norms['residual_rr'])
                 norm_rz = norms['residual_rz'][-1]
@@ -344,18 +410,30 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 iteration_total += 1
 
                 # compute strain from the displacement increment
-                strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                discretization.apply_gradient_operator_symmetrized_mugrid(
                     u_inxyz=displacement_increment_field,
                     grad_u_ijqxyz=strain_fluc_field)
 
                 total_strain_field.s += strain_fluc_field.s
                 displacement_fluctuation_field.s += displacement_increment_field.s
                 # evaluate material law
-                stress, K4_ijklqyz = constitutive(total_strain_field)  #
+                # stress, K4_ijklqyz = constitutive(total_strain_field)  #
+                constitutive(total_strain_field, stress_field, K4_ijklqyz)
+
                 # Recompute right hand side
-                rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel,
-                                                                   gradient_field_ijqxyz=total_strain_field,
-                                                                   rhs_inxyz=rhs_field)
+                # rhs_field = discretization.get_rhs_explicit_stress(stress_function=constitutive,  # constitutive_pixel,
+                #                                                    gradient_field_ijqxyz=total_strain_field,
+                #                                                    rhs_inxyz=rhs_field)
+                # discretization.get_rhs_mugrid(material_data_field_ijklqxyz=K4_ijklqyz,  # constitutive_pixel
+                #                               macro_gradient_field_ijqxyz=total_strain_field,
+                #                               rhs_inxyz=rhs_field)
+                discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
+                                                                         div_u_fnxyz=rhs_field,
+                                                                         apply_weights=True)
+                rhs_field.s *= -1
+
+
+
                 if save_results:
                     results_name = (f'displacement_increment_field_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', displacement_increment_field.s)
@@ -367,22 +445,22 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     np.save(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2))
                     # save stress
                     results_name = (f'stress' + f'_it{iteration_total}')
-                    np.save(data_folder_path + results_name + f'.npy', stress.mean(axis=2))
+                    np.save(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2))
                     # save K4_ijklqyz
                     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-                    np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+                    np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4))
 
                     results_name = (f'rhs_field' + f'_it{iteration_total}')
                     np.save(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=2))
 
                 # rhs *= -1
 
-                g_norm_div_stress = np.sum(rhs_field * M_fun_Green(rhs_field))
-                g_norm_div_stress_rel = np.sum(rhs_field * M_fun_Green(rhs_field)) / np.sum(stress)
-
-                print('=====================')
-                print('g_norm_stress {}'.format(g_norm_div_stress))
-                print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
+                # g_norm_div_stress = np.sum(rhs_field * M_fun_Green(rhs_field))
+                # g_norm_div_stress_rel = np.sum(rhs_field * M_fun_Green(rhs_field)) / np.sum(stress_field.s)
+                #
+                # print('=====================')
+                # print('g_norm_stress {}'.format(g_norm_div_stress))
+                # print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
 
                 print('=====================')
                 En = np.linalg.norm(total_strain_field.s)
@@ -406,7 +484,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
 
                 # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
                 # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
-                if np.linalg.norm(rhs_field.s)  < 1.e-7 and iiter > 0: break
+                if np.linalg.norm(rhs_field.s) < 1.e-7 and iiter > 0: break
 
                 if iiter == 100:
                     break
@@ -448,7 +526,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 np.savez(data_folder_path + f'info_log_final.npz', **_info)
                 print(data_folder_path + f'info_log_final.npz')
 
-            plot_sol_field = False
+            plot_sol_field = True
             if plot_sol_field:
                 fig = plt.figure(figsize=(9, 3.0))
                 gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],
@@ -482,13 +560,13 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 ax_strain.get_yaxis().set_visible(False)  # hides y-axis only
 
                 plt.title('strain_fluc_field')
-                max_stress = stress.mean(axis=2)[0, 1, ..., 0].max()
-                min_stress = stress.mean(axis=2)[0, 1, ..., 0].min()
+                max_stress = stress_field.s.mean(axis=2)[0, 1, ..., 0].max()
+                min_stress = stress_field.s.mean(axis=2)[0, 1, ..., 0].min()
 
                 print('stress min ={}'.format(min_stress))
                 print('stress max ={}'.format(max_stress))
                 ax_stress = fig.add_subplot(gs[1, 1])
-                pcm = ax_stress.pcolormesh(x_deformed, y_deformed, stress.mean(axis=2)[0, 1, ..., 0],
+                pcm = ax_stress.pcolormesh(x_deformed, y_deformed, stress_field.s.mean(axis=2)[0, 1, ..., 0],
                                            cmap=mpl.cm.cividis, vmin=min_stress, vmax=max_stress,
                                            rasterized=True)
                 ax_stress.spines['top'].set_visible(False)
@@ -503,7 +581,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
 
                 # plot constitutive tangent
                 ax_tangent = fig.add_subplot(gs[0, 1])
-                pcm = ax_tangent.pcolormesh(x_deformed, y_deformed, K4_ijklqyz.mean(axis=4)[0, 1, 0, 0, ..., 0],
+                pcm = ax_tangent.pcolormesh(x_deformed, y_deformed, K4_ijklqyz.s.mean(axis=4)[0, 1, 0, 0, ..., 0],
                                             cmap=mpl.cm.cividis,  # vmin=0, vmax=1500,
                                             rasterized=True)
                 ax_tangent.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -522,4 +600,4 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
             plt.show()
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print("double_well_potential_plus_eps_Gauss_quad time: ", elapsed_time)
+        print("  time: ", elapsed_time)

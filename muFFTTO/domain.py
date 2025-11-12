@@ -882,7 +882,7 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz shape.  =' f'{rhs_inxyz.s.shape}')
         #       print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz.s[0] =' f'{rhs_inxyz.s[0]}')
         #
-        rhs_inxyz.sg *= -1
+        rhs_inxyz.s *= -1
 
         self.fft.communicate_ghosts(field=rhs_inxyz)
 
@@ -925,6 +925,44 @@ class Discretization:
                                                 apply_weights=True)
         rhs_inxyz.s *= -1
         return rhs_inxyz
+    def get_rhs_explicit_stress_mugrid(self, stress_function,
+                                gradient_field_ijqxyz,
+                                rhs_inxyz, **kwargs):
+        """
+        Function that computes right hand side vector of linear elastic homogenization problem
+        rhs= - B^t: C: E+grad_U
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - q is a quadrature point index
+
+        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
+            - shape [i,j,q,x,y,z]
+            - q is quadrature point index
+
+        Returns
+        -------
+        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+
+        """
+
+        # macro_gradient_field    [f,d,q,x,y,z]
+        # material_data_field [d,d,d,d,q,x,y,z] - elasticity
+        # material_data_field     [d,d,q,x,y,z] - conductivity
+        # rhs                       [f,n,x,y,z]
+        #  rhs=-Dt*wA*E
+
+        # material_data_field_ijklqxyz = self.apply_quadrature_weights(material_data_field_ijklqxyz)  TODO{ML} oldREMOVE  :"
+
+        stress = self.get_gradient_size_field(name='stress_temporary')
+        stress.s, _ = stress_function(gradient_field_ijqxyz)
+        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
+                                                div_u_fnxyz=rhs_inxyz,
+                                                apply_weights=True)
+        rhs_inxyz.s *= -1
 
     def get_macro_gradient_field_mugrid(self,
                                         macro_gradient_ij,

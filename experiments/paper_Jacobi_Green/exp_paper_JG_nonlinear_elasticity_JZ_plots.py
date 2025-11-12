@@ -31,7 +31,7 @@ if plot_time_vs_dofs:
     time_GJ = []
     its_G = []
     its_GJ = []
-    Ns = 2 ** np.array([4, 5, 6, 7, 8, 9])  # numbers of grids points
+    Ns = 2 ** np.array([4, 5, 6, 7])#, 8, 9  # numbers of grids points
     for N in Ns:
         Nx = Ny = N
         Nz = 1  # N#

@@ -94,7 +94,7 @@ def conjugate_gradients_mugrid(
     p.s = np.copy(z.s)  # residual
 
     if callback:
-        callback(0, x.s, r.s, p.s)
+        callback(0, x.s, r.s, p.s,z.s)
 
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
@@ -118,7 +118,7 @@ def conjugate_gradients_mugrid(
         P(r, z)
 
         if callback:
-            callback(iteration + 1, x.s, r.s, p.s)
+            callback(iteration + 1, x.s, r.s, p.s,z.s)
 
         # Check convergence
         next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
