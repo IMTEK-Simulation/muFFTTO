@@ -23,15 +23,15 @@ from NuMPI.Testing.Subdivision import suggest_subdivisions
 parser = argparse.ArgumentParser(
     prog="Poisson", description="Solve the Poisson equation"
 )
-parser.add_argument("-n", "--nb-grid-pts", default="3,32")
+parser.add_argument("-n", "--nb-grid-pts", default="4,6")
 args = parser.parse_args()
 
 nb_grid_pts = [int(x) for x in args.nb_grid_pts.split(",")]
 
 fft = FFT(nb_grid_pts=nb_grid_pts,
-          engine='fftwmpi',
+          engine='fftwmpi',#
           communicator=comm,
-         nb_ghosts_left=[1, 1],
+          nb_ghosts_left=[1, 1],
           nb_ghosts_right=[1, 1],
           )
 print(fft.subdomain_slices)
@@ -45,19 +45,20 @@ fc.set_nb_sub_pts('quad_points', 2)
 # fc.set_nb_sub_pts('nodal_points', 1)
 
 # Get nodal field
-nodal_field = fc.real_field("nodal-field", )
+nodal_field = fc.real_field("nodal-field", (2,))
 
 # Get quadrature field of shape (2, quad, nx, ny)
-quad_field = fc.real_field("quad-field", (2,), "quad_points")
-if MPI.COMM_WORLD.rank == 0:#MPI.COMM_WORLD.size-1:
-    nodal_field.s[0, :,0] = 1
+quad_field = fc.real_field("quad-field", (2, 2, ), "quad_points") # (2, 2,) vector problem
+if MPI.COMM_WORLD.rank == 0:  # MPI.COMM_WORLD.size-1:
+    nodal_field.s[0, 0, 0, 0] = 1
 
-print(f' unit impulse before communication: nodal field with buffers in rank {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.sg}')
+print(
+    f' unit impulse before communication: nodal field with buffers in rank {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.sg}')
 MPI.COMM_WORLD.Barrier()
 
-
 fft.communicate_ghosts(nodal_field)
-print(f' unit impuls after communication: nodal field with buffers in rank {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.sg}')
+print(
+    f' unit impuls after communication: nodal field with buffers in rank {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.sg}')
 
 MPI.COMM_WORLD.Barrier()
 
@@ -88,12 +89,24 @@ fft.communicate_ghosts(quad_field)
 
 gradient_op.transpose(quadrature_point_field=quad_field,
                       nodal_field=nodal_field,
-                      weights=[1, 1]
+                      weights=[1 / 2, 1 / 2]
                       )
 
 fft.communicate_ghosts(nodal_field)
 
-print(f'unit impuls response : nodal field with buffers in rank {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.s}')
+f_nodal_field = fft.fourier_space_field(
+    unique_name='unit_impulse_response_inqks',  # name of the field
+    # nb_components=(self.domain_dimension,),  # shape of components
+    # nb_dof_per_pixel= nb_dofs_per_voxel,
+    shape=(2,),  # shape of components
+    # sub_division='nodal_points'
+)
+
+print(f'nodal_field {MPI.COMM_WORLD.rank} \n ' + f'{nodal_field.s}')
+
+fft.fft(nodal_field, f_nodal_field)
+print(
+    f'f_nodal_field   {MPI.COMM_WORLD.rank} \n ' + f'{(f_nodal_field.s)}')
 
 # plt.figure()
 # plt.plot(nodal_field.s[0, 0])

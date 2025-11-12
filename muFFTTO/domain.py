@@ -1532,7 +1532,7 @@ class Discretization:
                 #     displacement_field=unit_impulse_inxyz.s,
                 #     formulation=formulation)
 
-                self.fft.communicate_ghosts(unit_impulse_inxyz)
+               # self.fft.communicate_ghosts(unit_impulse_inxyz)
 
                 self.apply_system_matrix_mugrid(
                     material_data_field=reference_material_data_ijkl,
@@ -1540,28 +1540,28 @@ class Discretization:
                     output_field_inxyz=unit_impulse_response_inxyz,
                     formulation=formulation)
                 # TODO[] Unit impulse response is correct
-                print(f'unit_impulse_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_inxyz.sg}')
+               # print(f'unit_impulse_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_inxyz.sg}')
 
-                print(f'unit_impulse_response_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_response_inxyz.sg}')
+                #print(f'unit_impulse_response_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_response_inxyz.sg}')
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
                 # preconditioner_diagonals_injnxyz.s[impulse_position] = np.copy(unit_impulse_response_inxyz.s[...])
                 # self.fft.communicate_ghosts(preconditioner_diagonals_injnxyz)
-                print(
-                    f'unit_impulse_response_inqks before {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
+             #   print(
+              #      f'unit_impulse_response_inqks before {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
-                print(
-                    f'unit_impulse_response_inqks after {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
+                # print(
+                #     f'unit_impulse_response_inqks after {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
 
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
                 # aaaa=self.fft.fft(unit_impulse_response_inxyz.sg[..., 1:-1])
                 # print(unit_impulse_response_inqks)
 
-                MPI.COMM_WORLD.Barrier()
-
-            print(
-                f'preconditioner_diagonals_ininqks before inverse {MPI.COMM_WORLD.rank} \n ' + f'{(preconditioner_diagonals_ininqks.sg)}')
+                #MPI.COMM_WORLD.Barrier()
+            #
+            # print(
+            #     f'preconditioner_diagonals_ininqks before inverse {MPI.COMM_WORLD.rank} \n ' + f'{(preconditioner_diagonals_ininqks.s)}')
             # GOOD  CONDUCTIVITY
 
             # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
@@ -1584,24 +1584,24 @@ class Discretization:
             reshaped_matrices = prec_diagonals_ijqks.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
             # Transpose to shape (N, d, d) for batch inversion
             G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
-            print(
-                f'G_batch after transpose {MPI.COMM_WORLD.rank} \n ' + f'{(G_batch)}')
+            # print(
+            #     f'G_batch after transpose {MPI.COMM_WORLD.rank} \n ' + f'{(G_batch)}')
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)): # check if the core has zero mode
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not inverte zero mode
             else:
                 G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
 
-            print(
-                f'G_batch after inverse {MPI.COMM_WORLD.rank} \n ' + f'{(G_batch)}')
+            # print(
+            #     f'G_batch after inverse {MPI.COMM_WORLD.rank} \n ' + f'{(G_batch)}')
 
             #  # Reshape the result back to the original shape
             G_diag_ijxy = G_batch.transpose(1, 2, 0).reshape(nb_dofs_per_voxel, nb_dofs_per_voxel,
                                                              *preconditioner_diagonals_ininqks.shape[4:])
 
             preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
-            print(
-                f'preconditioner_diagonals_ininqks after inverse {MPI.COMM_WORLD.rank} \n ' + f'{(preconditioner_diagonals_ininqks.sg)}')
+            # print(
+            #     f'preconditioner_diagonals_ininqks after inverse {MPI.COMM_WORLD.rank} \n ' + f'{(preconditioner_diagonals_ininqks.sg)}')
         else:
             raise ValueError(f'The fast assembly of Green preconditioner for does  work yet '
                              f' for {self.nb_nodes_per_pixel} number of nodes per pixel ')

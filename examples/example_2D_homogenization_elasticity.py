@@ -18,7 +18,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (102, 64)
+number_of_pixels = (1024, 1024)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -35,7 +35,7 @@ macro_gradient = np.array([[1.0, 0], [0, 0.0]])
 
 # create material data field
 # K_0, G_0 = 1, 0.5 #domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.0)
+K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
 
 
 mat_contrast = 1
@@ -44,6 +44,7 @@ elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
+print(domain.compute_Voigt_notation_4order(elastic_C_1))
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
@@ -202,21 +203,30 @@ for i in range(dim):
         # set macroscopic gradient
         macro_gradient = np.zeros([dim, dim])
         macro_gradient[i, j] = 1
-        # Set up right hand side
-        # macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-        macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
+
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
                                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
+        # Set up right hand side
         # Solve mechanical equilibrium constrain
-        rhs_field = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0,
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                            macro_gradient_field_ijqxyz=macro_gradient_field,
                                            rhs_inxyz=rhs_field)
         # rhs_ij = discretization.get_rhs(material_data_field_C_0_rh, macro_gradient_field)
 
-        solution_field.s, norms = solvers.PCG(K_fun, rhs_field.s, x0=None, P=M_fun, steps=int(500), toler=1e-8)
-
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.fft.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,
+            x=solution_field,
+            P=M_fun,
+            tol=1e-6,
+            maxiter=2000,
+            callback=callback,
+        )
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress(
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
