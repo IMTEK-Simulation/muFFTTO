@@ -118,6 +118,9 @@ if plot_data_vs_CG:
     Nz = 1  # Nx
     iterations = np.arange(9)  # numbers of grids points
     for iteration_total in iterations:
+        i = 0
+        j = 1
+
         preconditioner_type = 'Green'
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
@@ -125,13 +128,13 @@ if plot_data_vs_CG:
         if iteration_total < 8:
             _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
 
-        stress_G = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
-        strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+        stress_G = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                 allow_pickle=True)
-        strain_total_G = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+        strain_total_G = np.load(data_folder_path + f'total_strain_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                  allow_pickle=True)
 
-        rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        rhs_field_G = np.load(data_folder_path + f'rhs_field_{i}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
         its_G.append(_info_final_G.f.nb_it_comb)
         norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
