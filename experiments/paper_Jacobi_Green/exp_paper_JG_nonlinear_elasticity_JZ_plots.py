@@ -22,8 +22,8 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 plot_time_vs_dofs = True
-plot_stress_field = False
-plot_data_vs_CG = False
+plot_stress_field = True
+plot_data_vs_CG = True
 
 if plot_time_vs_dofs:
     # print time vs DOFS
@@ -31,10 +31,11 @@ if plot_time_vs_dofs:
     time_GJ = []
     its_G = []
     its_GJ = []
-    Ns = 2 ** np.array([4, 5, 6, 7])#, 8, 9  # numbers of grids points
+    Ns = 2 ** np.array([4, 5,6,7,8])#, 7, 8, 9  # numbers of grids points
     for N in Ns:
-        Nx = Ny = N
-        Nz = 1  # N#
+        Nx = 3
+        Ny = N
+        Nz = N  # N#
         preconditioner_type = 'Green'
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
@@ -114,8 +115,9 @@ if plot_data_vs_CG:
     rhs_inf_G = []
     rhs_inf_GJ = []
 
-    Nx = Ny = 512
-    Nz = 1  # Nx
+    Nx = 3
+    Ny = 256
+    Nz = 256
     iterations = np.arange(9)  # numbers of grids points
     for iteration_total in iterations:
         i = 0
@@ -128,11 +130,15 @@ if plot_data_vs_CG:
         if iteration_total < 8:
             _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
 
-        stress_G = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        with open(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
+            magic = f.read(6)
+            print(f"Magic number: {magic}")
+
         strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                 allow_pickle=True)
         strain_total_G = np.load(data_folder_path + f'total_strain_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                  allow_pickle=True)
+        stress_G = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)#, allow_pickle=True
 
         rhs_field_G = np.load(data_folder_path + f'rhs_field_{i}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
@@ -145,12 +151,12 @@ if plot_data_vs_CG:
                             + f'_{preconditioner_type}' + '/')
         if iteration_total < 8:
             _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
-        stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
-        strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+        stress_GJ = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                  allow_pickle=True)
-        strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+        strain_total_GJ = np.load(data_folder_path + f'total_strain_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
                                   allow_pickle=True)
-        rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        rhs_field_GJ = np.load(data_folder_path + f'rhs_field_{i}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
         its_GJ.append(_info_final_GJ.f.nb_it_comb)
         norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
@@ -318,7 +324,7 @@ if plot_data_vs_CG:
 
     # plot mat data 0 Newton iteration
     ijkl = (0, 0, 0, 0)
-    results_name = (f'init_K')
+    results_name = (f'init_K_{0, 0}')
     K4_init = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     # plot mat data  in  Newton iterations
@@ -329,19 +335,21 @@ if plot_data_vs_CG:
 
     # first iteration
     iteration_total = 1
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_ijklqyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     # ax_geom_0 = fig.add_axes([0.3, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[0, 2])
 
-    max_K = K4_ijklqyz_G[ijkl + (..., 0)].max() / K
-    min_K = K4_ijklqyz_G[ijkl + (..., 0)].min() / K
-    mid_K = K4_init[ijkl + (Nx // 2, Nx // 2, 0)] / K
+    # max_K = K4_ijklqyz_G[ijkl + (..., 0)].max() / K
+    # min_K = K4_ijklqyz_G[ijkl + (..., 0)].min() / K
+    max_K = K4_ijklqyz_G[...,0].max() / K
+    min_K = K4_ijklqyz_G[...,0].min() / K
+    mid_K = K4_init[ (Nx // 2, Ny // 2,  Nz // 2)] / K# ijkl +
     norm = mpl.colors.TwoSlopeNorm(vmin=min_K, vcenter=mid_K, vmax=max_K)
     cmap_ = mpl.cm.cividis  # mpl.cm.seismic
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[ijkl + (..., 0)] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[...,0] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -371,12 +379,12 @@ if plot_data_vs_CG:
     ax_cbar.set_ylabel(r'$\mathrm{C}_{11}/\mathrm{K}$')
     # ----------------
     iteration_total = 0
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_ijklqyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     ax_geom_0 = fig.add_subplot(gs[0, 1])
     # ax_geom_0 = fig.add_axes([0.1, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[ijkl + (..., 0)] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[...,0] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -397,12 +405,12 @@ if plot_data_vs_CG:
     # for iteration_total in 6:
     iteration_total = 2
     # iteration_total = 2
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_ijklqyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     ax_geom_0 = fig.add_subplot(gs[0, 3])
     # ax_geom_0 = fig.add_axes([0.5, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[ijkl + (..., 0)] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[...,0] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -422,13 +430,13 @@ if plot_data_vs_CG:
     # for iteration_total in 6:
     iteration_total = 7
     # iteration_total = 2
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_ijklqyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[0, 4])
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[ijkl + (..., 0)] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[...,0] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -527,8 +535,11 @@ if plot_stress_field:
 
     # print time vs DOFS
     iteration_total = 6
-    Nx = Ny = 32
-    Nz = 1
+    Nx = 3
+    Ny = 256
+    Nz = 256
+    i = 0
+    j = 1
 
     preconditioner_type = 'Green'
     data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
@@ -536,11 +547,11 @@ if plot_stress_field:
 
     _info_final_G = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
-    results_name = (f'stress' + f'_it{iteration_total}')
+    results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
     stress_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-    results_name = (f'total_strain_field' + f'_it{iteration_total}')
+    results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
     total_strain_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i,0}' + f'_it{iteration_total}')
     K4_ijklqyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     K4_init = np.load(data_folder_path + 'init_K' + f'.npy', allow_pickle=True)
@@ -552,13 +563,13 @@ if plot_stress_field:
 
     _info_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
-    results_name = (f'stress' + f'_it{iteration_total}')
+    results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
     stress_field_GJ = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
-    results_name = (f'total_strain_field' + f'_it{iteration_total}')
+    results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
     total_strain_field_GJ = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_ijklqyz_GJ = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
     fig = plt.figure(figsize=(9, 9.0))
@@ -571,17 +582,17 @@ if plot_stress_field:
 
     # compute max min stress
     ij = (0, 1)
-    max_stress = stress_field_G[ij + (..., 0)].max()
-    min_stress = stress_field_G[ij + (..., 0)].min()
+    max_stress = stress_field_G[...,0].max() # ij + (..., 0)
+    min_stress = stress_field_G[...,0].min()
     divnorm = mpl.colors.Normalize(vmin=min_stress, vmax=max_stress)
     cmap_ = mpl.cm.cividis
 
-    pcm = gs_stress_G.pcolormesh(np.tile(stress_field_G[ij + (..., 0)], (1, 1)),
+    pcm = gs_stress_G.pcolormesh(np.tile(stress_field_G[...,0], (1, 1)),
                                  cmap=cmap_, linewidth=0,
                                  rasterized=True,
                                  # norm=divnorm
                                  )
-    pcm = gs_stress_GJ.pcolormesh(np.tile(stress_field_GJ[ij + (..., 0)], (1, 1)),
+    pcm = gs_stress_GJ.pcolormesh(np.tile(stress_field_GJ[...,0], (1, 1)),
                                   cmap=cmap_, linewidth=0,
                                   rasterized=True,
                                   # norm=divnorm
@@ -593,21 +604,21 @@ if plot_stress_field:
     gs_tot_strain_GJ = fig.add_subplot(gs[1, 1])
     ax_cbar_tot_strain = fig.add_subplot(gs[1, 2])
 
-    eq_strain_G = compute_eq_strain(total_strain_field_G)
-    eq_strain_GJ = compute_eq_strain(total_strain_field_GJ)
+    eq_strain_G =total_strain_field_G #compute_eq_strain(total_strain_field_G)
+    eq_strain_GJ =total_strain_field_GJ# compute_eq_strain(total_strain_field_GJ)
 
     #
-    max_strain = eq_strain_G[(..., 0)].max()
-    min_strain = eq_strain_G[(..., 0)].min()
+    max_strain = eq_strain_G[...,0].max()
+    min_strain = eq_strain_G[...,0].min()
     divnorm = mpl.colors.Normalize(vmin=min_strain, vmax=max_strain)
     cmap_ = mpl.cm.cividis
 
-    pcm = gs_tot_strain_G.pcolormesh(np.tile(eq_strain_G[(..., 0)], (1, 1)),
+    pcm = gs_tot_strain_G.pcolormesh(np.tile(eq_strain_G[...,0], (1, 1)),
                                      cmap=cmap_, linewidth=0,
                                      rasterized=True,
                                      # norm=divnorm
                                      )
-    pcm = gs_tot_strain_GJ.pcolormesh(np.tile(eq_strain_GJ[(..., 0)], (1, 1)),
+    pcm = gs_tot_strain_GJ.pcolormesh(np.tile(eq_strain_GJ[...,0], (1, 1)),
                                       cmap=cmap_, linewidth=0,
                                       rasterized=True,
                                       # norm=divnorm
@@ -621,17 +632,17 @@ if plot_stress_field:
 
     # compute max min stress
     ijkl = (0, 0, 0, 0)
-    max_K = K4_ijklqyz_G[ijkl + (..., 0)].max()
-    min_K = K4_ijklqyz_G[ijkl + (..., 0)].min()
+    max_K = K4_ijklqyz_G[...,0].max()
+    min_K = K4_ijklqyz_G[...,0].min()
     divnorm = mpl.colors.Normalize(vmin=min_K, vmax=max_K)
     cmap_ = mpl.cm.cividis
 
-    pcm = gs_K_G.pcolormesh(np.tile(K4_ijklqyz_G[ijkl + (..., 0)], (1, 1)),
+    pcm = gs_K_G.pcolormesh(np.tile(K4_ijklqyz_G[...,0], (1, 1)),
                             cmap=cmap_, linewidth=0,
                             rasterized=True,
                             # norm=divnorm
                             )
-    pcm = gs_K_GJ.pcolormesh(np.tile(K4_ijklqyz_GJ[ijkl + (..., 0)], (1, 1)),
+    pcm = gs_K_GJ.pcolormesh(np.tile(K4_ijklqyz_GJ[...,0], (1, 1)),
                              cmap=cmap_, linewidth=0,
                              rasterized=True,
                              # norm=divnorm

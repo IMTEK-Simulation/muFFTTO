@@ -2,6 +2,9 @@ import numpy as np
 import scipy as sc
 import time
 import os
+import sys
+
+sys.path.append('../..')  # Add parent directory to path
 
 from mpi4py import MPI
 from NuMPI.IO import save_npy, load_npy
@@ -21,10 +24,10 @@ data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
-for preconditioner_type in ['Green']:  # 'Jacobi_Green',
-    for nnn in 2 ** np.array([3, 4, 5, 6]):  # [32, ]:  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in ['Jacobi_Green', 'Green']:  #
+    for nnn in 2 ** np.array([5,6,7,8]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
-        number_of_pixels = (nnn, nnn, 1)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+        number_of_pixels = (3, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -231,9 +234,16 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
 
         if save_results:
             # save strain fluctuation
-            results_name = (f'init_K')
-            np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4))
+            i=0
+            temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
+
+            results_name = (f'init_K_{i, 0}')
+            to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
+            # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
+            save_npy(data_folder_path + results_name + f'.npy', to_save,
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
         # set macroscopic loading increment
         ninc = 1
         _info['ninc'] = ninc
@@ -288,7 +298,7 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
             # discretization.get_rhs_mugrid(material_data_field_ijklqxyz=K4_ijklqyz,  # constitutive_pixel
             #                               macro_gradient_field_ijqxyz=total_strain_field,
             #                               rhs_inxyz=rhs_field)
-
+            discretization.fft.communicate_ghosts(stress_field)
             discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                                      div_u_fnxyz=rhs_field,
                                                                      apply_weights=True)
@@ -304,47 +314,54 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
             #                               rhs_inxyz=rhs_field)
             # evaluate material law
             # stress, K4_ijklqyz = constitutive(total_strain_field)  #
+            print('save_results')
 
             if save_results:
+                temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
                 i = 0
                 j = 1
                 # save strain fluctuation
+                print('discretization.nb_of_pixels_global', discretization.nb_of_pixels_global)
+
                 results_name = (f'strain_fluc_field_{i, j}' + f'_it{iteration_total}')
-                to_save = np.copy(strain_fluc_field.s.mean(axis=2)[i, j])
+                to_save = np.copy(strain_fluc_field.s.mean(axis=2))[i, j]
+                to_save = np.array(to_save, dtype=np.float64)
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
-                         tuple(discretization.fft.subdomain_locations),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD,
+                         **temp_max_size_)
+
                 # save total  strain
                 results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
                 to_save = np.copy(total_strain_field.s.mean(axis=2)[i, j])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
-                         tuple(discretization.fft.subdomain_locations),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                 # save stress
                 results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
                 to_save = np.copy(stress_field.s.mean(axis=2)[i, j])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
-                         tuple(discretization.fft.subdomain_locations),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
                 # save K4_ijklqyz
                 results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
                 to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
-                         tuple(discretization.fft.subdomain_locations),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                 results_name = (f'rhs_field_{i}' + f'_it{iteration_total}')
                 to_save = np.copy(rhs_field.s.mean(axis=1)[i])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
-                         tuple(discretization.fft.subdomain_locations),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+            print('save_results')
             En = np.linalg.norm(total_strain_field.s.mean(axis=2))
 
             rhs_t_norm = np.linalg.norm(rhs_field.s)
@@ -362,19 +379,29 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
                 elif preconditioner_type == 'Jacobi_Green':
                     # K_ref = discretization.get_system_matrix(I4s)
 
-                    K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
+                    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
                         material_data_field_ijklqxyz=K4_ijklqyz)
+
+
                     # GJ_matrix = np.diag(K_diag_alg.flatten()) @ K_ref @ np.diag(K_diag_alg.flatten())
+                    def M_fun_Jacobi(x, Px):
+                        discretization.fft.communicate_ghosts(x)
+                        x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-                    M_fun_GJ = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-                        preconditioner_Fourier_fnfnqks=preconditioner,
-                        nodal_field_fnxyz=K_diag_alg * x)
-                    if enforce_mean:
-                        M_fun = lambda x: (y := M_fun_GJ(x)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
-                    else:
-                        M_fun = lambda x: M_fun_GJ(x)
+                        x_jacobi_temp.s = K_diag_alg.s * x.s
+                        discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                                   input_nodal_field_fnxyz=x_jacobi_temp,
+                                                                   output_nodal_field_fnxyz=Px)
 
-                        # mat_model_pars = {'mat_model': 'power_law_elasticity'}
+                        Px.s = K_diag_alg.s * Px.s
+
+
+                    # if enforce_mean:
+                    # M_fun = lambda x, Px: (y := M_fun_Jacobi(x, Px)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
+                    # else:
+                    M_fun = M_fun_Jacobi
+
+                    # mat_model_pars = {'mat_model': 'power_law_elasticity'}
 
 
                 def K_fun(x, Ax):
@@ -404,7 +431,7 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
 
 
                 displacement_increment_field.s.fill(0)
-
+                print('solvers')
                 solvers.conjugate_gradients_mugrid(
                     comm=discretization.fft.communicator,
                     fc=discretization.field_collection,
@@ -462,42 +489,42 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
                     to_save = np.copy(displacement_increment_field.s.mean(axis=1)[i])
                     # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                     # save strain fluctuation
                     results_name = (f'strain_fluc_field_{i, j}' + f'_it{iteration_total}')
                     to_save = np.copy(strain_fluc_field.s.mean(axis=2)[i, j])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                     # save total  strain
                     results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
                     to_save = np.copy(total_strain_field.s.mean(axis=2)[i, j])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
                     # save stress
                     results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
                     to_save = np.copy(stress_field.s.mean(axis=2)[i, j])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                     # save K4_ijklqyz
                     results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
                     to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
                     # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                     results_name = (f'rhs_field_{i}' + f'_it{iteration_total}')
                     to_save = np.copy(rhs_field.s.mean(axis=1)[i])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                             tuple(discretization.subdomain_locations_no_buffers),
+                             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                 # rhs *= -1
 
@@ -532,7 +559,7 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
                 # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
                 if np.linalg.norm(rhs_field.s) < 1.e-7 and iiter > 0: break
 
-                if iiter == 100:
+                if iiter == 10:
                     break
 
             # # linear part of displacement(X-domain_size[0]/2)
@@ -542,9 +569,6 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
                              + Y * macro_gradient_inc[1, 1] * inc)
             # displacement in voids should be zero
             # displacement_fluctuation_field.s[:, 0, :, :5] = 0.0
-
-            x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]
-            y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :, 0]
 
             print("element_type : ", element_type)
             print("number_of_pixels: ", number_of_pixels)
@@ -558,21 +582,24 @@ for preconditioner_type in ['Green']:  # 'Jacobi_Green',
             print("Elapsed time: ", elapsed_time / 60)
 
             if save_results:
-                # save deformed positions
-                results_name = (f'x_deformed' + f'_it{iteration_total}')
-                np.save(data_folder_path + results_name + f'.npy', x_deformed)
-                results_name = (f'y_deformed' + f'_it{iteration_total}')
-                np.save(data_folder_path + results_name + f'.npy', y_deformed)
+                # x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]
+                # y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :, 0]
+                # # save deformed positions
+                # results_name = (f'x_deformed' + f'_it{iteration_total}')
+                # np.save(data_folder_path + results_name + f'.npy', x_deformed)
+                #
+                # results_name = (f'y_deformed' + f'_it{iteration_total}')
+                # np.save(data_folder_path + results_name + f'.npy', y_deformed)
 
                 _info['sum_Newton_its'] = sum_Newton_its
                 _info['iteration_total'] = iteration_total
                 _info['sum_CG_its'] = sum_CG_its
                 _info['elapsed_time'] = elapsed_time
+                if MPI.COMM_WORLD.rank == 0:
+                    np.savez(data_folder_path + f'info_log_final.npz', **_info)
+                    print(data_folder_path + f'info_log_final.npz')
 
-                np.savez(data_folder_path + f'info_log_final.npz', **_info)
-                print(data_folder_path + f'info_log_final.npz')
-
-            plot_sol_field = True
+            plot_sol_field = False
             if plot_sol_field:
                 fig = plt.figure(figsize=(9, 3.0))
                 gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],

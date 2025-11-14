@@ -50,8 +50,8 @@ def get_geometry(nb_voxels,
         case 'square_inclusion':
 
             phase_field = np.ones(nb_voxels)
-            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
-                                       np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+            phase_field[np.logical_and(np.logical_and(coordinates[1] < 0.75, coordinates[2] < 0.75),
+                                       np.logical_and(coordinates[1] >= 0.25, coordinates[2] >= 0.25))] = 0
 
         case 'hashin_inclusion_2D':
             r1 = kwargs['rad_1']

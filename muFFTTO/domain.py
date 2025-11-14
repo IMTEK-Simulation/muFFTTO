@@ -2,6 +2,8 @@ import warnings
 
 import numpy as np
 import scipy as sc
+import itertools
+
 from pkg_resources import resource_isdir
 
 from muFFTTO import discretization_library
@@ -71,7 +73,8 @@ class Discretization:
         self.domain_dimension = cell.domain_dimension
         self.domain_size = cell.domain_size
         # total number of pixels/voxels, without periodic nodes
-        self.nb_of_pixels_global = nb_of_pixels_global
+        self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
+       # my_tuple =
         # print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
         left_ghosts = [0, ] * self.domain_dimension
         right_ghosts = [0, ] * self.domain_dimension
@@ -88,6 +91,14 @@ class Discretization:
                        )
 
         # self.fft.create_plan(1)
+        print('self.fft.nb_domain_grid_pts', self.fft.nb_domain_grid_pts)
+        print('self.fft.nb_subdomain_grid_pts', self.fft.nb_subdomain_grid_pts)
+        # self.fft.communicator.max(self.fft.nb_subdomain_grid_pts)
+        # comm.Allreduce(
+        #     np.array(nb_subdomain_grid_pts, order="C"),
+        #     np.array(nb_max_subdomain_grid_pts, order="C"),
+        #     op=MPI.MAX,
+        # )
         ### TODO[MARTIN] I have to add multiple subpoints to nb_grid_pts
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
 
@@ -107,7 +118,24 @@ class Discretization:
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         if engine_ == 'fftwmpi':
             warnings.warn(message='Be carefull about change in number of poitns ')
+            # adjust the number of points
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1] - 2  # TODO this is for buffer of size 1x1
+            # adjust subdomain location to not take into account buffers
+            sub_dom_locations = np.asarray(self.fft.subdomain_locations)
+            sub_dom_locations += left_ghosts
+            self.subdomain_locations_no_buffers = tuple(sub_dom_locations)
+           # print(f'{MPI.COMM_WORLD.rank:6} - {self.subdomain_locations_no_buffers}')
+
+            sub_dom_locations += left_ghosts
+            # compute max nb_max_subdomain_grid_pts for save npy TODO: THIS IS QUICK FIX considering pencil decompositon
+            max_size_of_subdomain = self.mpi_reduction.max(np.asarray(self.fft.nb_subdomain_grid_pts[-1])) - 2
+            self.nb_max_subdomain_grid_pts = np.asarray(self.fft.nb_subdomain_grid_pts)
+            self.nb_max_subdomain_grid_pts[-1] = max_size_of_subdomain
+
+            #print(' self.nb_max_subdomain_grid_pts', self.nb_max_subdomain_grid_pts)
+
+        else:
+            self.subdomain_locations_no_buffers = self.fft.subdomain_locations
 
         self.nb_of_pixels_with_buffers = np.asarray(self.fft.nb_subdomain_grid_pts,
                                                     dtype=np.intp)
@@ -925,9 +953,10 @@ class Discretization:
                                                 apply_weights=True)
         rhs_inxyz.s *= -1
         return rhs_inxyz
+
     def get_rhs_explicit_stress_mugrid(self, stress_function,
-                                gradient_field_ijqxyz,
-                                rhs_inxyz, **kwargs):
+                                       gradient_field_ijqxyz,
+                                       rhs_inxyz, **kwargs):
         """
         Function that computes right hand side vector of linear elastic homogenization problem
         rhs= - B^t: C: E+grad_U
@@ -1570,7 +1599,7 @@ class Discretization:
                 #     displacement_field=unit_impulse_inxyz.s,
                 #     formulation=formulation)
 
-               # self.fft.communicate_ghosts(unit_impulse_inxyz)
+                # self.fft.communicate_ghosts(unit_impulse_inxyz)
 
                 self.apply_system_matrix_mugrid(
                     material_data_field=reference_material_data_ijkl,
@@ -1578,15 +1607,15 @@ class Discretization:
                     output_field_inxyz=unit_impulse_response_inxyz,
                     formulation=formulation)
                 # TODO[] Unit impulse response is correct
-               # print(f'unit_impulse_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_inxyz.sg}')
+                # print(f'unit_impulse_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_inxyz.sg}')
 
-                #print(f'unit_impulse_response_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_response_inxyz.sg}')
+                # print(f'unit_impulse_response_inxyz {MPI.COMM_WORLD.rank} \n ' + f'{unit_impulse_response_inxyz.sg}')
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
                 # preconditioner_diagonals_injnxyz.s[impulse_position] = np.copy(unit_impulse_response_inxyz.s[...])
                 # self.fft.communicate_ghosts(preconditioner_diagonals_injnxyz)
-             #   print(
-              #      f'unit_impulse_response_inqks before {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
+                #   print(
+                #      f'unit_impulse_response_inqks before {MPI.COMM_WORLD.rank} \n ' + f'{(unit_impulse_response_inqks.sg)}')
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
                 # print(
@@ -1596,7 +1625,7 @@ class Discretization:
                 # aaaa=self.fft.fft(unit_impulse_response_inxyz.sg[..., 1:-1])
                 # print(unit_impulse_response_inqks)
 
-                #MPI.COMM_WORLD.Barrier()
+                # MPI.COMM_WORLD.Barrier()
             #
             # print(
             #     f'preconditioner_diagonals_ininqks before inverse {MPI.COMM_WORLD.rank} \n ' + f'{(preconditioner_diagonals_ininqks.s)}')
@@ -1625,7 +1654,7 @@ class Discretization:
             # print(
             #     f'G_batch after transpose {MPI.COMM_WORLD.rank} \n ' + f'{(G_batch)}')
             # Invert each matrix using np.linalg.inv (vectorized)
-            if np.any(np.all(self.fft.icoords == 0, axis=0)): # check if the core has zero mode
+            if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not inverte zero mode
             else:
                 G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
@@ -1657,6 +1686,55 @@ class Discretization:
         K_diag = np.diag(system_matrix).reshape(self.unknown_size)
         K_diag_inv_sym = K_diag ** (-1 / 2)
         return K_diag_inv_sym
+
+    def get_preconditioner_Jacobi_mugrid(self, material_data_field_ijklqxyz,
+                                         formulation=None):
+        # return diagonals of system matrix
+        # unit_impulse [f,n,x,y,z]
+        # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
+        # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
+
+        # print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
+        diagonal_inxyz = self.get_unknown_size_field(name='jacobi_diagonal_inxyz')
+        dirac_comb_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_inxyz_temporary')
+        dirac_comb_response_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_response_inxyz_temporary')
+
+        if self.domain_dimension == 2:
+            for d_i in range(self.cell.unknown_shape[0]):
+                for x_i in range(2):
+                    for y_i in range(2):
+                        dirac_comb_inxyz.s.fill(0)
+                        dirac_comb_inxyz.s[d_i, 0, x_i::2, y_i::2] = 1.0
+                        # compute response of diract comb
+                        self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
+                                                        input_field_inxyz=dirac_comb_inxyz,
+                                                        output_field_inxyz=dirac_comb_response_inxyz)
+
+                        diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
+                            dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
+                            1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2]),
+                            1.
+                        )
+
+        elif self.domain_dimension == 3:
+            for d_i in range(self.cell.unknown_shape[0]):
+                for x_i in range(2):
+                    for y_i in range(2):
+                        for z_i in range(2):
+                            dirac_comb_inxyz.s.fill(0)
+                            dirac_comb_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = 1.0
+                            # compute response of diract comb
+                            self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
+                                                            input_field_inxyz=dirac_comb_inxyz,
+                                                            output_field_inxyz=dirac_comb_response_inxyz)
+
+                            diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = np.where(
+                                dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] != 0.,
+                                1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2]),
+                                1.
+                            )
+
+        return diagonal_inxyz
 
     def get_preconditioner_Jacoby_fast(self, material_data_field_ijklqxyz,
                                        gradient_of_u=None,
