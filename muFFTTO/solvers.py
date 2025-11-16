@@ -98,8 +98,8 @@ def conjugate_gradients_mugrid(
 
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
-
-    if rr < tol_sq:
+    stop_crit=rz
+    if stop_crit < tol_sq:
         return x
 
     for iteration in range(maxiter):
@@ -123,8 +123,8 @@ def conjugate_gradients_mugrid(
         # Check convergence
         next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
         next_rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))
-
-        if next_rr < tol_sq:
+        stop_crit=next_rz
+        if stop_crit < tol_sq:
             return x
 
         # Update search direction

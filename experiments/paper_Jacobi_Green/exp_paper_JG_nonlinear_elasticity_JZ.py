@@ -24,8 +24,8 @@ data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
-for preconditioner_type in ['Jacobi_Green', 'Green']:  #
-    for nnn in 2 ** np.array([5,6,7,8]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
+    for nnn in 2 ** np.array([8]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
         number_of_pixels = (3, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
@@ -234,12 +234,11 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
 
         if save_results:
             # save strain fluctuation
-            i=0
+            i = 0
             temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
-
-            results_name = (f'init_K_{i, 0}')
-            to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
+            results_name = (f'init_K_{0, 0}')
+            to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0])
             # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
             save_npy(data_folder_path + results_name + f'.npy', to_save,
                      tuple(discretization.subdomain_locations_no_buffers),
@@ -250,8 +249,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
 
         macro_gradient_inc = np.zeros(shape=(3, 3))
         # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
-        macro_gradient_inc[0, 1] += 0.05 / float(ninc)
-        macro_gradient_inc[1, 0] += 0.05 / float(ninc)
+        macro_gradient_inc[1, 2] += 0.05 / float(ninc)
+        macro_gradient_inc[2, 1] += 0.05 / float(ninc)
         dt = 1. / float(ninc)
 
         # set macroscopic gradient
@@ -314,11 +313,11 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
             #                               rhs_inxyz=rhs_field)
             # evaluate material law
             # stress, K4_ijklqyz = constitutive(total_strain_field)  #
-            print('save_results')
+           # print('save_results')
 
             if save_results:
                 temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
-                i = 0
+                i = 2
                 j = 1
                 # save strain fluctuation
                 print('discretization.nb_of_pixels_global', discretization.nb_of_pixels_global)
@@ -348,8 +347,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
                 # save K4_ijklqyz
-                results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
-                to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
+                results_name = (f'K4_ijklqyz_{0, 0}' + f'_it{iteration_total}')
+                to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
@@ -361,13 +360,17 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
-            print('save_results')
+            # print('save_results')
             En = np.linalg.norm(total_strain_field.s.mean(axis=2))
 
             rhs_t_norm = np.linalg.norm(rhs_field.s)
             # incremental deformation  newton loop
             iiter = 0
-            print('Rhs at new laod step {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
+
+            norm_rhs = discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel()))
+            if discretization.fft.communicator.rank == 0:
+                print('Rhs at new laod step {0:10.2e}'.format(norm_rhs))
+
             # preconditioer = 'Green'
 
             # iterate as long as the iterative update does not vanish
@@ -380,7 +383,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                     # K_ref = discretization.get_system_matrix(I4s)
 
                     K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                        material_data_field_ijklqxyz=K4_ijklqyz)
+                        material_data_field_ijklqxyz=K4_ijklqyz, formulation=formulation)
 
 
                     # GJ_matrix = np.diag(K_diag_alg.flatten()) @ K_ref @ np.diag(K_diag_alg.flatten())
@@ -394,6 +397,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                                                                    output_nodal_field_fnxyz=Px)
 
                         Px.s = K_diag_alg.s * Px.s
+                        discretization.fft.communicate_ghosts(Px)
 
 
                     # if enforce_mean:
@@ -407,7 +411,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                 def K_fun(x, Ax):
                     discretization.apply_system_matrix_mugrid(material_data_field=K4_ijklqyz,
                                                               input_field_inxyz=x,
-                                                              output_field_inxyz=Ax)
+                                                              output_field_inxyz=Ax,
+                                                              formulation=formulation)
                     discretization.fft.communicate_ghosts(Ax)
 
 
@@ -421,6 +426,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                     """
                     Callback function to print the current solution, residual, and search direction.
                     """
+                    #   for d in range(3):
+                    #      x[d] -= np.mean(x[d], axis=(-1, -2, -3), keepdims=True)
+                    # discretization.fft.communicate_ghosts(x)
                     norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
                     norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
                     norms['residual_rr'].append(norm_of_rr)
@@ -439,15 +447,16 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                     b=rhs_field,
                     x=displacement_increment_field,
                     P=M_fun,
-                    tol=1e-6,
-                    maxiter=2000,
+                    tol=1e-5,
+                    maxiter=5000,
                     callback=callback,
                 )
 
                 nb_it_comb = len(norms['residual_rr'])
                 norm_rz = norms['residual_rz'][-1]
                 norm_rr = norms['residual_rr'][-1]
-                print(f'nb iteration CG = {nb_it_comb}')
+                if discretization.fft.communicator.rank == 0:
+                    print(f'nb iteration CG = {nb_it_comb}')
                 sum_CG_its += nb_it_comb
 
                 _info['norm_rr'] = norms['residual_rr']
@@ -534,18 +543,15 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                 # print('=====================')
                 # print('g_norm_stress {}'.format(g_norm_div_stress))
                 # print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
-
-                print('=====================')
                 En = np.linalg.norm(total_strain_field.s)
-                print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
-                    np.linalg.norm(strain_fluc_field.s) / En))
-
-                print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
-                    np.linalg.norm(rhs_field.s) / rhs_t_norm))
-
-                print('Rhs {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
-
-                print('strain_fluc_field {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s)))
+                if discretization.fft.communicator.rank == 0:
+                    print('=====================')
+                    print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
+                        np.linalg.norm(strain_fluc_field.s) / En))
+                    print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
+                        np.linalg.norm(rhs_field.s) / rhs_t_norm))
+                    print('Rhs {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
+                    print('strain_fluc_field {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s)))
 
                 _info['norm_strain_fluc_field'] = np.linalg.norm(strain_fluc_field.s)
                 _info['norm_En'] = En
@@ -569,17 +575,19 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:  #
                              + Y * macro_gradient_inc[1, 1] * inc)
             # displacement in voids should be zero
             # displacement_fluctuation_field.s[:, 0, :, :5] = 0.0
-
-            print("element_type : ", element_type)
-            print("number_of_pixels: ", number_of_pixels)
-            print(f'preconditioner_type: {preconditioner_type}')
-
-            print(f'Total number of CG {sum_CG_its}')
-            print(f'Total number of sum_Newton_its {sum_Newton_its}')
             end_time = time.time()
             elapsed_time = end_time - start_time
-            print("Elapsed time : ", elapsed_time)
-            print("Elapsed time: ", elapsed_time / 60)
+
+            if discretization.fft.communicator.rank == 0:
+                print("element_type : ", element_type)
+                print("number_of_pixels: ", number_of_pixels)
+                print(f'preconditioner_type: {preconditioner_type}')
+
+                print(f'Total number of CG {sum_CG_its}')
+                print(f'Total number of sum_Newton_its {sum_Newton_its}')
+
+                print("Elapsed time : ", elapsed_time)
+                print("Elapsed time: ", elapsed_time / 60)
 
             if save_results:
                 # x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]

@@ -1708,7 +1708,9 @@ class Discretization:
                         # compute response of diract comb
                         self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
                                                         input_field_inxyz=dirac_comb_inxyz,
-                                                        output_field_inxyz=dirac_comb_response_inxyz)
+                                                        output_field_inxyz=dirac_comb_response_inxyz,
+                                                        formulation=formulation
+                                                        )
 
                         diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
                             dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
@@ -1726,7 +1728,8 @@ class Discretization:
                             # compute response of diract comb
                             self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
                                                             input_field_inxyz=dirac_comb_inxyz,
-                                                            output_field_inxyz=dirac_comb_response_inxyz)
+                                                            output_field_inxyz=dirac_comb_response_inxyz,
+                                                            formulation=formulation)
 
                             diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = np.where(
                                 dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] != 0.,
