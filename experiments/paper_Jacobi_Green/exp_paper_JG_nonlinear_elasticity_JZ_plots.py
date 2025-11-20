@@ -21,8 +21,8 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-plot_time_vs_dofs = True
-plot_stress_field = True
+plot_time_vs_dofs = False
+plot_stress_field = False
 plot_data_vs_CG = True
 
 if plot_time_vs_dofs:
@@ -115,12 +115,12 @@ if plot_data_vs_CG:
     rhs_inf_G = []
     rhs_inf_GJ = []
 
-    Nx = 3
-    Ny = 64
-    Nz = 64
-    iterations = np.arange(9)  # numbers of grids points
+    Nx = 32
+    Ny = 32
+    Nz = 32
+    iterations = np.arange(19)  # numbers of grids points
     for iteration_total in iterations:
-        i = 2
+        i = 0
         j = 1
 
         preconditioner_type = 'Green'
@@ -344,14 +344,14 @@ if plot_data_vs_CG:
 
     # max_K = K4_ijklqyz_G[ijkl + (..., 0)].max() / K
     # min_K = K4_ijklqyz_G[ijkl + (..., 0)].min() / K
-    max_K = K4_ijklqyz_G[0,...].max() / K
-    min_K = K4_ijklqyz_G[0,...].min() / K
+    max_K = K4_ijklqyz_G[Nx//2,...].max() / K
+    min_K = K4_ijklqyz_G[Nx//2,...].min() / K
 
-    mid_K = K4_ijklqyz_G[0,...].mean()  / K#K4_init[ (Nx // 2, Ny // 2,  Nz // 2)] ijkl +
+    mid_K = K4_ijklqyz_G[Nx//2,...].mean()  / K#K4_init[ (Nx // 2, Ny // 2,  Nz // 2)] ijkl +
     norm = mpl.colors.TwoSlopeNorm(vmin=min_K, vcenter=mid_K, vmax=max_K)
     cmap_ = mpl.cm.cividis  # mpl.cm.seismic
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[0,...] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[Nx//2,...] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -364,8 +364,8 @@ if plot_data_vs_CG:
     ax_geom_0.set_xticklabels([])
     ax_geom_0.set_yticks([])
     ax_geom_0.set_yticklabels([])
-    ax_geom_0.set_xlim([0, Nz - 1])
-    ax_geom_0.set_ylim([0, Nz - 1])
+    ax_geom_0.set_xlim([0, Nz])
+    ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)
 
 
@@ -389,7 +389,7 @@ if plot_data_vs_CG:
 
     ax_geom_0 = fig.add_subplot(gs[0, 1])
     # ax_geom_0 = fig.add_axes([0.1, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[0,...] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[Nx//2,...] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -402,8 +402,8 @@ if plot_data_vs_CG:
     ax_geom_0.set_xticklabels([])
     ax_geom_0.set_yticks([])
     ax_geom_0.set_yticklabels([])
-    ax_geom_0.set_xlim([0, Nz - 1])
-    ax_geom_0.set_ylim([0, Nz - 1])
+    ax_geom_0.set_xlim([0, Nz])
+    ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)
     # ----------------
 
@@ -415,7 +415,7 @@ if plot_data_vs_CG:
 
     ax_geom_0 = fig.add_subplot(gs[0, 3])
     # ax_geom_0 = fig.add_axes([0.5, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[0,...] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[Nx//2,...] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -428,8 +428,8 @@ if plot_data_vs_CG:
     ax_geom_0.set_xticklabels([])
     ax_geom_0.set_yticks([])
     ax_geom_0.set_yticklabels([])
-    ax_geom_0.set_xlim([0, Nz - 1])
-    ax_geom_0.set_ylim([0, Nz - 1])
+    ax_geom_0.set_xlim([0, Nz])
+    ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)
     # ----------------
     # for iteration_total in 6:
@@ -441,7 +441,7 @@ if plot_data_vs_CG:
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[0, 4])
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[0,...] / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_ijklqyz_G[Nx//2,...] / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -453,9 +453,9 @@ if plot_data_vs_CG:
     ax_geom_0.set_ylabel('Pixel index')
     # ax_geom_0.set_xticks([0, Nx//2, Nx])
 
-    ax_geom_0.set_yticks([1, Nz// 2, Nz])
-    ax_geom_0.set_xlim([1, Nz])
-    ax_geom_0.set_ylim([1, Nz])
+    ax_geom_0.set_yticks([0, Nz// 2, Nz])
+    ax_geom_0.set_xlim([0, Nz])
+    ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)  # Maintain square aspect ratio
     ax_geom_0.yaxis.set_ticks_position('right')
     ax_geom_0.yaxis.set_label_position('right')

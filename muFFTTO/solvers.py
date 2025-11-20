@@ -31,6 +31,8 @@ def conjugate_gradients_mugrid(
         tol: float = 1e-6,
         maxiter: int = 1000,
         callback: callable = None,
+        norm_metric: callable = None,
+        **kwargs
 ):
     """
     Conjugate gradient method for matrix-free solution of the linear problem
@@ -83,7 +85,7 @@ def conjugate_gradients_mugrid(
         sub_division='nodal_points'  # sub-point type
     )
     z = fc.real_field(
-        unique_name="cg-preconditioner_residual",  # name of the field
+        unique_name="cg-preconditioned_residual",  # name of the field
         components_shape=(*x.components_shape,),  # shape of components
         sub_division='nodal_points'  # sub-point type
     )
@@ -93,14 +95,26 @@ def conjugate_gradients_mugrid(
     P(r, z)
     p.s = np.copy(z.s)  # residual
 
-    if callback:
-        callback(0, x.s, r.s, p.s,z.s)
-
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
-    stop_crit=rz
+
+    if norm_metric is not None:
+        Pr = fc.real_field(
+            unique_name="cg-custom_metric_residual",  # name of the field
+            components_shape=(*x.components_shape,),  # shape of components
+            sub_division='nodal_points'  # sub-point type
+        )
+        norm_metric(r, Pr)
+        stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
+
+    elif norm_metric is None:
+        stop_crit = rr
+
     if stop_crit < tol_sq:
         return x
+
+    if callback:
+        callback(0, x.s, r.s, p.s, z.s, stop_crit)
 
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -117,13 +131,19 @@ def conjugate_gradients_mugrid(
 
         P(r, z)
 
-        if callback:
-            callback(iteration + 1, x.s, r.s, p.s,z.s)
-
         # Check convergence
         next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
         next_rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))
-        stop_crit=next_rz
+        if norm_metric is not None:
+            norm_metric(r, Pr)
+            stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
+
+        elif norm_metric is None:
+            stop_crit = next_rr
+
+        if callback:
+            callback(iteration + 1, x.s, r.s, p.s, z.s, stop_crit)
+
         if stop_crit < tol_sq:
             return x
 

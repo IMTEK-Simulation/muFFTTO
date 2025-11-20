@@ -8,10 +8,10 @@ import matplotlib as mpl
 from mpi4py import MPI
 
 import matplotlib.pyplot as plt
-from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
-from PySide2.examples.opengl.contextinfo import colors
+#from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
+#from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
-from sympy.physics.quantum.sho1d import omega
+#from sympy.physics.quantum.sho1d import omega
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -32,7 +32,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-nb_pix_multips = [ 5,6,7,8,9,10,11]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+nb_pix_multips = [ 4,5,6]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 small = np.arange(0., .1, 0.005)
 middle = np.arange(0.1, 0.9, 0.03)
 

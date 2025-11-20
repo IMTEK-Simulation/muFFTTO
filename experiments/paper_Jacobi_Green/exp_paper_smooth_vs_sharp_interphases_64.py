@@ -13,9 +13,6 @@ plt.rcParams["text.usetex"] = True
 
 from muFFTTO import domain
 from muFFTTO import solvers
-from muFFTTO import microstructure_library
-from mpl_toolkits import mplot3d
-import copy
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 
@@ -167,12 +164,6 @@ if compute:
 
         # phase = 1 * np.ones(number_of_pixels)
         inc_contrast = 0.
-
-        # nb_it=[]
-        # nb_it_combi=[]
-        # nb_it_Jacobi=[]
-        # phase_field_origin =# np.abs(phase_field_smooth - 1)
-        # flipped_arr = 1 - phase_field
 
         macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
         rhs_field = discretization.get_unknown_size_field(name='rhs_field')

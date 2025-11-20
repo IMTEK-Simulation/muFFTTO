@@ -24,10 +24,10 @@ data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
-for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
-    for nnn in 2 ** np.array([8]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
+    for nnn in 2 ** np.array([3]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
-        number_of_pixels = (3, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
+        number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
 
         Nx = number_of_pixels[0]
@@ -249,8 +249,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
 
         macro_gradient_inc = np.zeros(shape=(3, 3))
         # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
-        macro_gradient_inc[1, 2] += 0.05 / float(ninc)
-        macro_gradient_inc[2, 1] += 0.05 / float(ninc)
+        macro_gradient_inc[0, 1] += 0.03 / float(ninc)
+        macro_gradient_inc[1, 0] += 0.03 / float(ninc)
         dt = 1. / float(ninc)
 
         # set macroscopic gradient
@@ -313,11 +313,11 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
             #                               rhs_inxyz=rhs_field)
             # evaluate material law
             # stress, K4_ijklqyz = constitutive(total_strain_field)  #
-           # print('save_results')
+            # print('save_results')
 
             if save_results:
                 temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
-                i = 2
+                i = 0
                 j = 1
                 # save strain fluctuation
                 print('discretization.nb_of_pixels_global', discretization.nb_of_pixels_global)
@@ -421,7 +421,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                 norms['residual_rz'] = []
 
 
-                def callback(it, x, r, p, z):
+                def callback(it, x, r, p, z, stop_crit_norm):
                     global norms
                     """
                     Callback function to print the current solution, residual, and search direction.
@@ -435,7 +435,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     norms['residual_rz'].append(norm_of_rz)
 
                     if discretization.fft.communicator.rank == 0:
-                        print(f"{it:5} norm of residual = {norm_of_rr:.5}")
+                        print(f"{it:5} norm of rr = {norm_of_rr:.5}")
+                        print(f"{it:5} norm of rz = {norm_of_rz:.5}")
+                        print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
 
 
                 displacement_increment_field.s.fill(0)
@@ -447,9 +449,10 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     b=rhs_field,
                     x=displacement_increment_field,
                     P=M_fun,
-                    tol=1e-5,
+                    tol=1e-4,
                     maxiter=5000,
                     callback=callback,
+                    norm_metric=M_fun_Green
                 )
 
                 nb_it_comb = len(norms['residual_rr'])
@@ -609,6 +612,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
 
             plot_sol_field = False
             if plot_sol_field:
+                x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]
+                y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :, 0]
                 fig = plt.figure(figsize=(9, 3.0))
                 gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],
                                       height_ratios=[1, 1])
