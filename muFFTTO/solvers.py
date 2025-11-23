@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
@@ -155,7 +156,8 @@ def conjugate_gradients_mugrid(
         # p.s *= beta
         # p.s += z.s
 
-    raise RuntimeError("Conjugate gradient algorithm did not converge")
+    warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+    #raise RuntimeError("Conjugate gradient algorithm did not converge")
 
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',

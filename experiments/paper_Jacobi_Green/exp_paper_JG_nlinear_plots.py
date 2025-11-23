@@ -30,7 +30,7 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-nb_pix_multips = 6
+nb_pix_multips = 10
 
 # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
 nb_it_Green_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
@@ -95,7 +95,7 @@ nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
 
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7]#, 8, 9, 10
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9,10]#, 8, 9, 10
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -318,7 +318,7 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-nb_pix_multips = 6
+nb_pix_multips = 10
 
 # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
 nb_it_Green_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
@@ -386,7 +386,7 @@ nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
 
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7]#, 8, 9, 10
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9,10]#
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -413,7 +413,7 @@ if plot_this:
         gs0 = gs[row, 0].subgridspec(1, 1, wspace=0.1, width_ratios=[1])
         ax = fig.add_subplot(gs0[0, 0])
         # ax.set_aspect('equal')
-        if phase_contrast == 1:
+        if phase_contrast == 0:
             nb_iterations = nb_it_Green_linear_1
         elif phase_contrast == 4:
             nb_iterations = nb_it_Green_linear_4
@@ -436,7 +436,7 @@ if plot_this:
         pcm = ax.pcolormesh(X, Y, nb_iterations, label='PCG: Green + Jacobi', cmap='Reds', norm=divnorm)
 
         # ax.text(0.05, 0.92, f'Total phase contrast $\chi=10^{phase_contrast}$', transform=ax.transAxes)
-        if geometry_ID == 'sine_wave_' and phase_contrast == 2:
+        if geometry_ID == 'sine_wave_' and phase_contrast == 0:
             ax.text(0.05, 0.82, f'Total phase contrast \n' + r'$\chi^{\rm tot}=\infty$', transform=ax.transAxes)
         elif geometry_ID == 'sine_wave_':
             ax.text(0.05, 0.82, f'Total phase contrast \n' + fr' $\chi^{{\rm tot}}=10^{{{phase_contrast}}}$',
@@ -472,7 +472,7 @@ if plot_this:
         gs1 = gs[row, 1].subgridspec(1, 1, wspace=0.1, width_ratios=[5])
         ax = fig.add_subplot(gs1[0, 0])
         #    ax.set_aspect('equal')
-        if phase_contrast == 1:
+        if phase_contrast == 0:
             nb_iterations = nb_it_Jacobi_linear_1
         elif phase_contrast == 4:
             nb_iterations = nb_it_Jacobi_linear_4

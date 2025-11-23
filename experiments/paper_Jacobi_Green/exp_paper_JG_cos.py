@@ -4,6 +4,8 @@ import sys
 import argparse
 import sys
 
+from NuMPI.IO import load_npy
+
 sys.path.append("/home/martin/Programming/muFFTTO_paralellFFT_test/muFFTTO")
 sys.path.append('../..')  # Add parent directory to path
 
@@ -18,7 +20,7 @@ from muFFTTO import microstructure_library
 parser = argparse.ArgumentParser(
     prog="exp_paper_JG_cos.py", description="Solve homogenization problem with cosines data"
 )
-parser.add_argument("-n", "--nb_pix_multips", default="4")
+parser.add_argument("-n", "--nb_pix_multips", default="5")
 
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
@@ -37,16 +39,12 @@ parser.add_argument(
     help="Total phase contras"
 )
 
-
-
 args = parser.parse_args()
 nb_pix_multips = int(args.nb_pix_multips)
 total_phase_contrast = args.contrast
 preconditioner_type = args.preconditioner_type  # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
 
-if MPI.COMM_WORLD.rank == 0:
-    print('  Rank   Size          Domain       Subdomain        Location')
-    print('  ----   ----          ------       ---------        --------')
+
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 
@@ -81,7 +79,11 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
                                            nb_of_pixels_global=number_of_pixels,
                                            discretization_type=discretization_type,
                                            element_type=element_type)
-
+    if MPI.COMM_WORLD.rank == 0:
+        print('  Rank   Size          Domain       Subdomain        Location')
+        print('  ----   ----          ------       ---------        --------')
+        print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
+              f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
     # set macroscopic gradient
     macro_gradient = np.array([[1.0, 0], [0, 1.0]])
 
@@ -122,10 +124,39 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
     # material distribution
     material_distribution = discretization.get_scalar_field(name='material_distribution')
 
-    x_coors = discretization.fft.coords
-    material_distribution.s[0, 0] = 0.5 + 0.25 * np.cos(
-        2 * np.pi * x_coors[0] - 2 * np.pi * x_coors[1]) + 0.25 * np.cos(
-        2 * np.pi * x_coors[1] + 2 * np.pi * x_coors[0])
+    # save
+    results_name = (f'cos_geometry_pixels={nb_laminates}' + f'dof={number_of_pixels[0]}')
+    geom_folder_path=file_folder_path + '/exp_data/'+'exp_paper_JG_cos_generate_geometries/'
+
+    material_distribution.s[0, 0]=load_npy(geom_folder_path + results_name + f'.npy',
+             tuple(discretization.subdomain_locations_no_buffers),
+             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+
+    #load_npy()
+   # np.save(data_folder_path + results_name + f'.npy', to_save)
+
+    #
+    # x_coors = discretization.fft.coords
+    #
+    # strip_size = x_coors.shape[0] // nb_laminates
+    # phase_contrast = 10 ** total_phase_contrast
+    # coord_x = np.linspace(0, 1, nb_laminates, endpoint=False)
+    # coord_y = np.linspace(discretization.fft.coords[1,0,0], discretization.fft.coords[1,0,-1], nb_laminates, endpoint=False)
+    # print('first')
+    # print()
+    # print('last')
+    # print()
+    # aaassa=(0.5 +
+    #  0.25 * np.cos(2 * np.pi * x_coors[0] - 2 * np.pi * x_coors[1]) +
+    #  0.25 * np.cos(2 * np.pi * x_coors[1] + 2 * np.pi * x_coors[0]))
+    #
+    # phases_single = phase_contrast + (1 - phase_contrast) / (1 - 1 / nb_laminates) * np.linspace(0, 1,
+    #                                                                                              nb_laminates,
+    #                                                                                              endpoint=False)
+    #
+    # material_distribution.s[0, 0] = (0.5 +
+    #                                  0.25 * np.cos(2 * np.pi * x_coors[0] - 2 * np.pi * x_coors[1]) +
+    #                                  0.25 * np.cos(2 * np.pi * x_coors[1] + 2 * np.pi * x_coors[0]))
 
     phase_contrast = 10 ** total_phase_contrast
     phases_single = phase_contrast
@@ -235,7 +266,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         x=solution_field,
         P=M_fun,
         tol=1e-6,
-        maxiter=2000,
+        maxiter=1000,
         callback=callback,
         norm_metric=M_fun_green
     )

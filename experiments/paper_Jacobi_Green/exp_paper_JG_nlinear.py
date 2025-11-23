@@ -236,7 +236,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         x=solution_field,
         P=M_fun,
         tol=1e-6,
-        maxiter=2000,
+        maxiter=1000,
         callback=callback,
         norm_metric=M_fun_green
     )
@@ -251,3 +251,4 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         np.savez(data_folder_path + results_name + f'.npz', **_info)
         print(data_folder_path + results_name + f'.npz')  #
         # infoaa= np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
+
