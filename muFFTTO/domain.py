@@ -4,8 +4,6 @@ import numpy as np
 import scipy as sc
 import itertools
 
-from pkg_resources import resource_isdir
-
 from muFFTTO import discretization_library
 
 from NuMPI.Tools import Reduction
@@ -74,7 +72,7 @@ class Discretization:
         self.domain_size = cell.domain_size
         # total number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
-       # my_tuple =
+        # my_tuple =
         # print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
         left_ghosts = [0, ] * self.domain_dimension
         right_ghosts = [0, ] * self.domain_dimension
@@ -124,7 +122,7 @@ class Discretization:
             sub_dom_locations = np.asarray(self.fft.subdomain_locations)
             sub_dom_locations += left_ghosts
             self.subdomain_locations_no_buffers = tuple(sub_dom_locations)
-           # print(f'{MPI.COMM_WORLD.rank:6} - {self.subdomain_locations_no_buffers}')
+            # print(f'{MPI.COMM_WORLD.rank:6} - {self.subdomain_locations_no_buffers}')
 
             sub_dom_locations += left_ghosts
             # compute max nb_max_subdomain_grid_pts for save npy TODO: THIS IS QUICK FIX considering pencil decompositon
@@ -132,7 +130,7 @@ class Discretization:
             self.nb_max_subdomain_grid_pts = np.asarray(self.fft.nb_subdomain_grid_pts)
             self.nb_max_subdomain_grid_pts[-1] = max_size_of_subdomain
 
-            #print(' self.nb_max_subdomain_grid_pts', self.nb_max_subdomain_grid_pts)
+            # print(' self.nb_max_subdomain_grid_pts', self.nb_max_subdomain_grid_pts)
 
         else:
             self.subdomain_locations_no_buffers = self.fft.subdomain_locations
@@ -1301,7 +1299,6 @@ class Discretization:
                       K_20   K_21   K_22]
 
         """
-
         unit_impulse = self.get_unknown_size_field(name='unit_impulse')
         K_impulse = self.get_unknown_size_field(name='K_impulse')
         K_system_matrix = np.zeros([np.prod(unit_impulse.shape), np.prod(unit_impulse.shape)])
@@ -1318,7 +1315,7 @@ class Discretization:
 
         return K_system_matrix
 
-    def get_system_matrix_mugrid(self, material_data_field):
+    def get_system_matrix_mugrid(self, material_data_field,formulation):
         """
         Function that assembly global system matrix K
         - memory hungry process that returns
@@ -1351,7 +1348,8 @@ class Discretization:
             unit_impulse.s[impuls_position] = 1
             self.apply_system_matrix_mugrid(material_data_field=material_data_field,
                                             input_field_inxyz=unit_impulse,
-                                            output_field_inxyz=K_impulse)
+                                            output_field_inxyz=K_impulse,
+                                            formulation=formulation)
 
             K_system_matrix[i] = K_impulse.s.flatten()
             i += 1
@@ -1734,7 +1732,7 @@ class Discretization:
                             diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = np.where(
                                 dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] != 0.,
                                 1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2]),
-                                1.
+                                0.
                             )
 
         return diagonal_inxyz

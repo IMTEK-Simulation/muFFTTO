@@ -24,8 +24,8 @@ data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
-for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
-    for nnn in 2 ** np.array([3]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
+    for nnn in 2 ** np.array([7]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
         number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
@@ -49,18 +49,6 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
         _info['formulation'] = formulation
         _info['preconditioner_type'] = preconditioner_type
 
-        file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
-        if not os.path.exists(file_folder_path):
-            os.makedirs(file_folder_path)
-        data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                            + f'_{preconditioner_type}' + '/')
-        if not os.path.exists(data_folder_path):
-            os.makedirs(data_folder_path)
-        figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                              + f'_{preconditioner_type}' + '/')
-        if not os.path.exists(figure_folder_path):
-            os.makedirs(figure_folder_path)
-
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
 
@@ -68,6 +56,20 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                                                nb_of_pixels_global=number_of_pixels,
                                                discretization_type=discretization_type,
                                                element_type=element_type)
+
+        file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+        data_folder_path = (
+                file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                + f'_{preconditioner_type}' + '/')
+        figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                              + f'_{preconditioner_type}' + '/')
+        if discretization.fft.communicator.rank == 0:
+            if not os.path.exists(file_folder_path):
+                os.makedirs(file_folder_path)
+            if not os.path.exists(data_folder_path):
+                os.makedirs(data_folder_path)
+            if not os.path.exists(figure_folder_path):
+                os.makedirs(figure_folder_path)
 
         _info['nb_of_pixels'] = discretization.nb_of_pixels_global
         _info['domain_size'] = domain_size
@@ -103,6 +105,13 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
         phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                                   microstructure_name=geometry_ID,
                                                                   coordinates=discretization.fft.coords)
+        # TODO delete
+        phase_field.s[0, 0,
+        1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
+        1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
+        :  # 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
+        ] = 0
+
         matrix_mask = phase_field.s[0, 0] == 0
         inc_mask = phase_field.s[0, 0] > 0
 
@@ -249,8 +258,8 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
 
         macro_gradient_inc = np.zeros(shape=(3, 3))
         # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
-        macro_gradient_inc[0, 1] += 0.03 / float(ninc)
-        macro_gradient_inc[1, 0] += 0.03 / float(ninc)
+        macro_gradient_inc[0, 1] += 0.05 / float(ninc)
+        macro_gradient_inc[1, 0] += 0.05 / float(ninc)
         dt = 1. / float(ninc)
 
         # set macroscopic gradient
@@ -302,6 +311,7 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                                                                      div_u_fnxyz=rhs_field,
                                                                      apply_weights=True)
             rhs_field.s *= -1
+
             # print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz shape.  =' f'{rhs_inxyz.s.shape}')
             #       print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz.s[0] =' f'{rhs_inxyz.s[0]}')
             #
@@ -361,13 +371,18 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
             # print('save_results')
-            En = np.linalg.norm(total_strain_field.s.mean(axis=2))
+            # En = np.sqrt(np.linalg.norm(total_strain_field.s.mean(axis=2)))
+            En = np.sqrt(
+                discretization.fft.communicator.sum(np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
 
-            rhs_t_norm = np.linalg.norm(rhs_field.s)
+            # rhs_t_norm = np.linalg.norm(rhs_field.s)
+            rhs_t_norm = np.sqrt(discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+            # print(f'rhs_t_norm {rhs_t_norm}')
+            # print(f'norm_rhs {norm_rhs}')
             # incremental deformation  newton loop
             iiter = 0
 
-            norm_rhs = discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel()))
+            norm_rhs = np.sqrt(discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
             if discretization.fft.communicator.rank == 0:
                 print('Rhs at new laod step {0:10.2e}'.format(norm_rhs))
 
@@ -381,10 +396,14 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                     M_fun = M_fun_Green
                 elif preconditioner_type == 'Jacobi_Green':
                     # K_ref = discretization.get_system_matrix(I4s)
+                    # K_tot=discretization.get_system_matrix_mugrid(material_data_field=K4_ijklqyz, formulation=formulation)
 
                     K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                        material_data_field_ijklqxyz=K4_ijklqyz, formulation=formulation)
+                        material_data_field_ijklqxyz=K4_ijklqyz, formulation=formulation)  # K4_ijklqyz
 
+
+                    # results_name = (f'K4_ijklqyz_full_it0')
+                    # K4_initaa = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
                     # GJ_matrix = np.diag(K_diag_alg.flatten()) @ K_ref @ np.diag(K_diag_alg.flatten())
                     def M_fun_Jacobi(x, Px):
@@ -400,13 +419,16 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                         discretization.fft.communicate_ghosts(Px)
 
 
-                    # if enforce_mean:
-                    # M_fun = lambda x, Px: (y := M_fun_Jacobi(x, Px)) - np.mean(y, axis=(-1, -2, -3), keepdims=True)
-                    # else:
                     M_fun = M_fun_Jacobi
 
-                    # mat_model_pars = {'mat_model': 'power_law_elasticity'}
 
+                def M_fun_none(x, Px):
+                    Px.s = x.s
+
+
+                # M_fun = M_fun_none
+
+                # mat_model_pars = {'mat_model': 'power_law_elasticity'}
 
                 def K_fun(x, Ax):
                     discretization.apply_system_matrix_mugrid(material_data_field=K4_ijklqyz,
@@ -449,15 +471,19 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                     b=rhs_field,
                     x=displacement_increment_field,
                     P=M_fun,
-                    tol=1e-4,
+                    tol=1e-6,
                     maxiter=5000,
                     callback=callback,
                     norm_metric=M_fun_Green
                 )
 
                 nb_it_comb = len(norms['residual_rr'])
-                norm_rz = norms['residual_rz'][-1]
-                norm_rr = norms['residual_rr'][-1]
+                if len(norms['residual_rr']) > 1:
+                    norm_rz = norms['residual_rz'][-1]
+                    norm_rr = norms['residual_rr'][-1]
+                else:
+                    norm_rz = 0
+                    norm_rr = 0
                 if discretization.fft.communicator.rank == 0:
                     print(f'nb iteration CG = {nb_it_comb}')
                 sum_CG_its += nb_it_comb
@@ -525,8 +551,8 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
 
                     # save K4_ijklqyz
-                    results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
-                    to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[i, 0, 0, 0])
+                    results_name = (f'K4_ijklqyz_{0, 0}' + f'_it{iteration_total}')
+                    to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0])
                     # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
@@ -546,29 +572,37 @@ for preconditioner_type in [ 'Jacobi_Green','Green', ]:  #
                 # print('=====================')
                 # print('g_norm_stress {}'.format(g_norm_div_stress))
                 # print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
-                En = np.linalg.norm(total_strain_field.s)
+                # En = np.linalg.norm(total_strain_field.s)
+                En = np.sqrt(discretization.fft.communicator.sum(
+                    np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
+                norm_rhs = np.sqrt(discretization.fft.communicator.sum(
+                    np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+                norm_strain_fluc = np.sqrt(discretization.fft.communicator.sum(
+                    np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
+                _info['norm_strain_fluc_field'] = norm_strain_fluc
+                _info['norm_En'] = En
+                _info['rhs_t_norm'] = rhs_t_norm
+                _info['norm_rhs_field'] = norm_rhs
+
                 if discretization.fft.communicator.rank == 0:
                     print('=====================')
                     print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
-                        np.linalg.norm(strain_fluc_field.s) / En))
+                        norm_strain_fluc / En))
                     print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
-                        np.linalg.norm(rhs_field.s) / rhs_t_norm))
-                    print('Rhs {0:10.2e}'.format(np.linalg.norm(rhs_field.s)))
-                    print('strain_fluc_field {0:10.2e}'.format(np.linalg.norm(strain_fluc_field.s)))
+                        norm_rhs / rhs_t_norm))
+                    print('norm_rhs {0:10.2e}'.format(norm_rhs))
+                    print('strain_fluc_field {0:10.2e}'.format(norm_strain_fluc))
 
-                _info['norm_strain_fluc_field'] = np.linalg.norm(strain_fluc_field.s)
-                _info['norm_En'] = En
-                _info['rhs_t_norm'] = rhs_t_norm
-                _info['norm_rhs_field'] = np.linalg.norm(rhs_field.s)
                 if MPI.COMM_WORLD.rank == 0:
                     np.savez(data_folder_path + f'info_log_it{iteration_total - 1}.npz', **_info)
                     print(data_folder_path + f'info_log_it{iteration_total}.npz')
 
                 # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
                 # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
-                if np.linalg.norm(rhs_field.s) < 1.e-7 and iiter > 0: break
 
-                if iiter == 10:
+                if norm_rhs < 1.e-4 and iiter > 0: break
+
+                if iiter == 100:
                     break
 
             # # linear part of displacement(X-domain_size[0]/2)

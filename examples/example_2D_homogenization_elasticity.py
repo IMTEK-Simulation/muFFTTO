@@ -6,7 +6,7 @@ import sys
 sys.path.append('..')  # Add parent directory to path
 
 from mpi4py import MPI
-from NuMPI.IO import save_npy, load_npy
+#from NuMPI.IO import save_npy, load_npy
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -155,7 +155,7 @@ discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C
 #     preconditioner_Fourier_fnfnqks=preconditioner,
 #     nodal_field_fnxyz=K_diag_alg * x)
 #
-def callback(it, x, r, p):
+def callback(it, x, r, p, z, stop_crit_norm):
     """
     Callback function to print the current solution, residual, and search direction.
     """

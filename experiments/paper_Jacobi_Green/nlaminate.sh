@@ -3,7 +3,7 @@
 NUM_RUNS=10
 
 # List of preconditioner types (strings)
-PRECONDS=("Green_Jacobi")
+PRECONDS=("Green")
 #PRECONDS=("Green" "Jacobi" "Green_Jacobi")
 
 ## List of numeric p values
@@ -25,8 +25,11 @@ PRECONDS=("Green_Jacobi")
 #
 #echo "All runs completed."
 
+
+# List of preconditioner types (strings)
+PRECONDS=( "Green_Jacobi" "Jacobi") #"Green" "Green_Jacobi" "Jacobi"
 # List of numeric p values
-PVALUES=(0 4 )
+PVALUES=(4 ) # 0
 
 for i in $(seq 2 $NUM_RUNS); do
     for prec in "${PRECONDS[@]}"; do
