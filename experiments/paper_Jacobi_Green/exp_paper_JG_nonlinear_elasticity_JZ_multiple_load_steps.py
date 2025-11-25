@@ -25,7 +25,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
 for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
-    for nnn in 2 ** np.array([3]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+    for nnn in 2 ** np.array([8]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
         number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
@@ -40,7 +40,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
         discretization_type = 'finite_element'
         element_type = 'trilinear_hexahedron'  # 'trilinear_hexahedron' #'trilinear_hexahedron_1Q'
         formulation = 'small_strain'
-
+        print(f'preconditioer {preconditioner_type}')
 
         _info['problem_type'] = problem_type
         _info['discretization_type'] = discretization_type
@@ -55,8 +55,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                                                nb_of_pixels_global=number_of_pixels,
                                                discretization_type=discretization_type,
                                                element_type=element_type)
-        if discretization.fft.communicator.rank == 0:
-            print(f'preconditioer {preconditioner_type}')
+
         file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
         data_folder_path = (
                 file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
@@ -87,7 +86,6 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
         I4s = (I4 + I4rt) / 2.
         I4d = (I4s - II / 3.)
 
-
         model_parameters_non_linear = {'K': 2,
                                        'mu': 1,
                                        'sig0': 1.,
@@ -96,7 +94,6 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
 
         model_parameters_linear = {'K': 2,
                                    'mu': 1}
-
 
         _info['model_parameters_non_linear'] = model_parameters_non_linear
         _info['model_parameters_linear'] = model_parameters_linear
@@ -211,7 +208,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                                        phase_xyz=inc_mask,
                                        **model_parameters_non_linear)
 
-           # print()
+            print()
 
 
         def constitutive(strain_ijqxyz,
@@ -292,10 +289,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
 
         # incremental loading
         for inc in range(ninc):
-            if discretization.fft.communicator.rank == 0:
-
-                print(f'Increment {inc}')
-                print(f'==========================================================================')
+            print(f'Increment {inc}')
+            print(f'==========================================================================')
 
             # strain-hardening exponent
             total_strain_field.s[...] += macro_gradient_inc_field.s[...]
@@ -334,7 +329,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                 i = 0
                 j = 1
                 # save strain fluctuation
-               # print('discretization.nb_of_pixels_global', discretization.nb_of_pixels_global)
+                print('discretization.nb_of_pixels_global', discretization.nb_of_pixels_global)
 
                 results_name = (f'strain_fluc_field_{i, j}' + f'_it{iteration_total}')
                 to_save = np.copy(strain_fluc_field.s.mean(axis=2))[i, j]
@@ -461,13 +456,13 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     norms['residual_rz'].append(norm_of_rz)
 
                     if discretization.fft.communicator.rank == 0:
-                        #print(f"{it:5} norm of rr = {norm_of_rr:.5}")
-                        #print(f"{it:5} norm of rz = {norm_of_rz:.5}")
+                        print(f"{it:5} norm of rr = {norm_of_rr:.5}")
+                        print(f"{it:5} norm of rz = {norm_of_rz:.5}")
                         print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
 
 
                 displacement_increment_field.s.fill(0)
-               # print('solvers')
+                print('solvers')
                 solvers.conjugate_gradients_mugrid(
                     comm=discretization.fft.communicator,
                     fc=discretization.field_collection,

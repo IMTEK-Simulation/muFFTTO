@@ -15,7 +15,7 @@ plt.rcParams.update({
 plt.rcParams.update({'font.size': 11})
 plt.rcParams["font.family"] = "Arial"
 
-script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'
+script_name = 'exp_paper_JG_nonlinear_elasticity_JZ_multiple_load_steps' # exp_paper_JG_nonlinear_elasticity_JZ
 folder_name = '../exp_data/'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 
@@ -115,10 +115,11 @@ if plot_data_vs_CG:
     rhs_inf_G = []
     rhs_inf_GJ = []
 
-    Nx = 16
-    Ny = 16#1024
-    Nz = 16#1024
-    iterations = np.arange(11)  # numbers of grids points
+    Nx = 32
+    Ny = 32#1024
+    Nz = 32#1024
+    it_max =9
+    iterations = np.arange(it_max)  # numbers of grids points
     for iteration_total in iterations:
         i = 0
         j = 1
@@ -127,7 +128,7 @@ if plot_data_vs_CG:
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                             + f'_{preconditioner_type}' + '/')
-        if iteration_total < 11:
+        if iteration_total < it_max:
             _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
 
         with open(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
@@ -149,7 +150,7 @@ if plot_data_vs_CG:
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                             + f'_{preconditioner_type}' + '/')
-        if iteration_total < 11:
+        if iteration_total < it_max:
             _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
         stress_GJ = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
         strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
@@ -207,11 +208,11 @@ if plot_data_vs_CG:
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
     # gs_global.legend(loc='best')
     gs_global.set_xlim(-0.05, iterations[-1] + .05)
-    gs_global.set_ylim(0., 800)
+    gs_global.set_ylim(0., 200)
     gs_global.set_xticks(iterations)
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
                        xy=(iterations[3], its_GJ[3]),
-                       xytext=(0.5, 40.),
+                       xytext=(0.5, 400.),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
                                        lw=1,
@@ -294,7 +295,7 @@ if plot_data_vs_CG:
     ax2.semilogy(np.arange(len(norm_rhs_G)), norm_rhs_G, 'k:x',
                  label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}||_{\infty}$')
     ax2.annotate(text=r'Force - $\mathsf{\bf{f}}_{\rm{G}}^{(i)}$',  # \n contrast = 100
-                 xy=(5, norm_rhs_G[5]),
+                 xy=(5, norm_rhs_G[4]),
                  xytext=(6, 3e-7),
                  arrowprops=dict(arrowstyle='->',
                                  color='k',
@@ -413,7 +414,7 @@ if plot_data_vs_CG:
     # iteration_total = 2
     results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-    K4_to_plot_G=K4_xyz_G[...,0]
+    K4_to_plot_G=K4_xyz_G[...,Nz//2]
 
     ax_geom_0 = fig.add_subplot(gs[0, 3])
     # ax_geom_0 = fig.add_axes([0.5, 0.75, 0.2, 0.2])
@@ -435,7 +436,7 @@ if plot_data_vs_CG:
     ax_geom_0.set_box_aspect(1)
     # ----------------
     # for iteration_total in 6:
-    iteration_total = 7
+    iteration_total = 4
     # iteration_total = 2
     results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
