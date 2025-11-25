@@ -15,7 +15,7 @@ plt.rcParams.update({
 plt.rcParams.update({'font.size': 11})
 plt.rcParams["font.family"] = "Arial"
 
-script_name = 'exp_paper_JG_nonlinear_elasticity_JZ_multiple_load_steps' # exp_paper_JG_nonlinear_elasticity_JZ
+script_name = 'exp_paper_JG_nonlinear_elasticity_JZ' # exp_paper_JG_nonlinear_elasticity_JZ
 folder_name = '../exp_data/'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 
@@ -115,10 +115,10 @@ if plot_data_vs_CG:
     rhs_inf_G = []
     rhs_inf_GJ = []
 
-    Nx = 32
-    Ny = 32#1024
-    Nz = 32#1024
-    it_max =9
+    Nx = 128
+    Ny = 128#1024
+    Nz = 128#1024
+    it_max =5
     iterations = np.arange(it_max)  # numbers of grids points
     for iteration_total in iterations:
         i = 0
@@ -128,7 +128,7 @@ if plot_data_vs_CG:
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                             + f'_{preconditioner_type}' + '/')
-        if iteration_total < it_max:
+        if iteration_total < it_max+1:
             _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
 
         with open(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
@@ -150,7 +150,7 @@ if plot_data_vs_CG:
 
         data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                             + f'_{preconditioner_type}' + '/')
-        if iteration_total < it_max:
+        if iteration_total < it_max+1:
             _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
         stress_GJ = np.load(data_folder_path + f'stress_{i, j}' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
         strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field_{i, j}' + f'_it{iteration_total}' + f'.npy',
@@ -208,11 +208,11 @@ if plot_data_vs_CG:
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
     # gs_global.legend(loc='best')
     gs_global.set_xlim(-0.05, iterations[-1] + .05)
-    gs_global.set_ylim(0., 200)
+    gs_global.set_ylim(0., 250)
     gs_global.set_xticks(iterations)
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
-                       xy=(iterations[3], its_GJ[3]),
-                       xytext=(0.5, 400.),
+                       xy=(iterations[2], its_GJ[2]),
+                       xytext=(0.5, 100.),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
                                        lw=1,
@@ -222,7 +222,7 @@ if plot_data_vs_CG:
                        )
     gs_global.annotate(text=f'Green',  # \n contrast = 100
                        xy=(iterations[3], its_G[3]),
-                       xytext=(3, 500.),
+                       xytext=(3, 200.),
                        arrowprops=dict(arrowstyle='->',
                                        color='k',
                                        lw=1,
@@ -436,7 +436,7 @@ if plot_data_vs_CG:
     ax_geom_0.set_box_aspect(1)
     # ----------------
     # for iteration_total in 6:
-    iteration_total = 4
+    iteration_total = 5
     # iteration_total = 2
     results_name = (f'K4_ijklqyz_{i, 0}' + f'_it{iteration_total}')
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)

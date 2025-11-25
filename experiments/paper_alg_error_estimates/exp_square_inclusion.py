@@ -10,8 +10,6 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-# from netCDF4 import Dataset
-
 from NuMPI.IO import save_npy, load_npy
 
 from muFFTTO import domain
@@ -28,7 +26,7 @@ geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
 
-grids_sizes = [3, 4, 5, 6, 7, 8, 9, 10]  # [3, 4, 5, 6, 7, 8, 9]  # [4, 6, 8], 10
+grids_sizes = [3, 4, 5, 6, ]  # [3, 4, 5, 6, 7, 8, 9]  # [4, 6, 8], 10  7, 8, 9, 10
 rhos = [-3, -2, -1, 1, 2, 3]
 
 for anisotropy in [False, True]:  # ,True
@@ -75,41 +73,84 @@ for anisotropy in [False, True]:  # ,True
             A_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
             print("A_eff : ", A_eff)
 
-            material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                  *discretization.nb_of_pixels])))
+            material_data_field_C_0_rho = discretization.get_material_data_size_field_mugrid(
+                name='material_data_field_C_0')
 
-            material_data_field_C_2 = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
-                                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                  *discretization.nb_of_pixels])))
+            material_data_field_C_1 = discretization.get_material_data_size_field_mugrid(name='material_data_field_C_1')
+            material_data_field_C_2 = discretization.get_material_data_size_field_mugrid(name='material_data_field_C_2')
+            material_data_field_C_ref = discretization.get_material_data_size_field_mugrid(
+                name='material_data_field_C_ref')
 
-            material_data_field_C_ref = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
+            material_data_field_C_1.s = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                     *discretization.nb_of_pixels])))
+
+            material_data_field_C_2.s = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
+                                                  np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                    *discretization.nb_of_pixels])))
+
+            material_data_field_C_ref.s = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
+                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                                      *discretization.nb_of_pixels])))
             # material distribution
-            phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                              microstructure_name=geometry_ID,
-                                                              coordinates=discretization.fft.coords)
+            phase_field = discretization.get_scalar_field(name='phase_field')
+
+            phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                                      microstructure_name=geometry_ID,
+                                                                      coordinates=discretization.fft.coords)
+            matrix_mask = phase_field.s[0, 0] > 0
+            inc_mask = phase_field.s[0, 0] == 0
 
             # apply material distribution
-            material_data_field_C_0_rho = material_data_field_C_1[..., :, :] * np.power(phase_field,
-                                                                                        1)
-            material_data_field_C_0_rho += material_data_field_C_2[..., :, :] * np.power(1 - phase_field, 2)
+            # material_data_field_C_0_rho = material_data_field_C_1[..., :, :] * np.power(phase_field,                                                                                        1)
+            # material_data_field_C_0_rho += material_data_field_C_2[..., :, :] * np.power(1 - phase_field, 2)
 
+            material_data_field_C_0_rho.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_1.s[
+                ..., matrix_mask]
+            material_data_field_C_0_rho.s[..., inc_mask] = mat_contrast * material_data_field_C_2.s[..., inc_mask]
             # Set up the equilibrium system
-            macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
+            macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+            discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                           macro_gradient_field_ijqxyz=macro_gradient_field)
 
             # Solve mechanical equilibrium constrain
-            rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+            rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+            discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                                          macro_gradient_field_ijqxyz=macro_gradient_field,
+                                          rhs_inxyz=rhs_field)
 
-            K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
+            #K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
+
+
+            def K_fun(x, Ax):
+
+                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax,
+                                                          formulation='small_strain')
+                discretization.fft.communicate_ghosts(Ax)
+
+
             # M_fun = lambda x: 1 * x
+            #
+            # preconditioner = discretization.get_preconditioner_NEW(
+            #     reference_material_data_field_ijklqxyz=material_data_field_C_ref)
+            # # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
+            #
+            # M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
+            preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_ref)
 
-            preconditioner = discretization.get_preconditioner_NEW(
-                reference_material_data_field_ijklqxyz=material_data_field_C_ref)
-            # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
 
-            M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
+            def M_fun(x, Px):
+                """
+                Function to compute the product of the Preconditioner matrix with a vector.
+                The Preconditioner is represented by the convolution operator.
+                """
+                discretization.fft.communicate_ghosts(x)
+                discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                           input_nodal_field_fnxyz=x,
+                                                           output_nodal_field_fnxyz=Px)
+
 
             temperatute_field_precise, norms_precise = solvers.PCG(Afun=K_fun,
                                                                    B=rhs,
@@ -128,6 +169,7 @@ for anisotropy in [False, True]:  # ,True
 
             error_in_Aeff_hk = []
             Aeff_hk = []
+
 
             def my_callback(x_k):
                 # compute homogenized stress field corresponding to displacement

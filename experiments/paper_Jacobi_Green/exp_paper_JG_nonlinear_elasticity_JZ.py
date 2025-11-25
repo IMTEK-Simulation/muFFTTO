@@ -25,7 +25,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 enforce_mean = False
 for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
-    for nnn in 2 ** np.array([3]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+    for nnn in 2 ** np.array([6]):  # [32, ]:,7,8,9  #  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
         number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
@@ -33,7 +33,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
         Ny = number_of_pixels[1]
         Nz = number_of_pixels[2]
 
-        save_results = True
+        save_results = False
         _info = {}
 
         problem_type = 'elasticity'
@@ -344,6 +344,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD,
                          **temp_max_size_)
+                del to_save
 
                 # save total  strain
                 results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
@@ -352,6 +353,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                del to_save
 
                 # save stress
                 results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
@@ -360,6 +362,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                del to_save
                 # save K4_ijklqyz
                 results_name = (f'K4_ijklqyz_{0, 0}' + f'_it{iteration_total}')
                 to_save = np.copy(K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0])
@@ -367,13 +370,14 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
-
+                del to_save
                 results_name = (f'rhs_field_{i}' + f'_it{iteration_total}')
                 to_save = np.copy(rhs_field.s.mean(axis=1)[i])
                 # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
                 save_npy(data_folder_path + results_name + f'.npy', to_save,
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                del to_save
             # print('save_results')
             # En = np.sqrt(np.linalg.norm(total_strain_field.s.mean(axis=2)))
             En = np.sqrt(
@@ -533,6 +537,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                    del to_save
 
                     # save strain fluctuation
                     results_name = (f'strain_fluc_field_{i, j}' + f'_it{iteration_total}')
@@ -540,6 +545,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                    del to_save
 
                     # save total  strain
                     results_name = (f'total_strain_field_{i, j}' + f'_it{iteration_total}')
@@ -547,12 +553,15 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                    del to_save
+
                     # save stress
                     results_name = (f'stress_{i, j}' + f'_it{iteration_total}')
                     to_save = np.copy(stress_field.s.mean(axis=2)[i, j])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                    del to_save
 
                     # save K4_ijklqyz
                     results_name = (f'K4_ijklqyz_{0, 0}' + f'_it{iteration_total}')
@@ -561,13 +570,14 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
+                    del to_save
 
                     results_name = (f'rhs_field_{i}' + f'_it{iteration_total}')
                     to_save = np.copy(rhs_field.s.mean(axis=1)[i])
                     save_npy(data_folder_path + results_name + f'.npy', to_save,
                              tuple(discretization.subdomain_locations_no_buffers),
                              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, **temp_max_size_)
-
+                    del to_save
                 # rhs *= -1
 
                 # g_norm_div_stress = np.sum(rhs_field * M_fun_Green(rhs_field))
