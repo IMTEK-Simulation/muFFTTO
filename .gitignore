@@ -12,3 +12,21 @@ dist
 *.nc
 
 experiments/figures/
+
+experiments/exp_data/
+
+*.npy
+
+*.png
+
+*.npz
+
+*.pdf
+
+*.gif
+
+*.mp4
+
+*.zip
+
+*.iml

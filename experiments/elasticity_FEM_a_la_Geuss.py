@@ -10,7 +10,7 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-6, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-6, callback=callback)
     return x, status, num_iters
 
 
@@ -149,7 +149,7 @@ for i in range(reshaped_matrices.shape[-1]):
 # Reshape the result back to the original (n_u_dofs, n_u_dofs, N_x, N_y) shape
 M_diag_ijxy = reshaped_matrices.reshape(n_u_dofs, n_u_dofs, N_x, N_y)
 # Preconditioner function
-M_fun_I = lambda x: ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape)))).reshape(-1)
+M_fun_I = lambda x: np.real(ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape))))).reshape(-1)
 
 ###### Solver ######
 u_sol_I, status, num_iters = solve_sparse(
@@ -161,7 +161,7 @@ print('Number of steps = {}'.format(num_iters))
 
 du_sol_ijqxy = get_gradient(u_ixy=u_sol_I.reshape(displacement_shape))
 aux_ijqxy = du_sol_ijqxy + macro_grad_ij[:, :, np.newaxis, np.newaxis, np.newaxis]
-print('Homogenised properties PCG C_11 = {}'.format(
+print('Homogenised properties displacement based PCG C_11 = {}'.format(
     np.inner(ddot42(mat_data_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
 print('END PCG')
 
@@ -175,6 +175,6 @@ print('Number of steps = {}'.format(num_iters))
 du_sol_plain_ijqxy = get_gradient(u_ixy=u_sol_plain_I.reshape(displacement_shape))
 
 aux_plain_ijqxy = du_sol_plain_ijqxy + E_ijqxy
-print('Homogenised properties CG C_11 = {}'.format(
+print('Homogenised properties displacement based CG C_11 = {}'.format(
     np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
 print('END CG')

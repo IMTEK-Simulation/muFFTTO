@@ -10,7 +10,7 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-6, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-6, callback=callback)
     return x, status, num_iters
 
 
@@ -231,7 +231,7 @@ for i in range(reshaped_matrices.shape[-1]):
 # Reshape the result back to the original (n_u_dofs, n_u_dofs, *N) shape
 M_diag_ijxy = reshaped_matrices.reshape(n_u_dofs, n_u_dofs, *N)
 # Preconditioner function
-M_fun_I = lambda x: ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape)))).reshape(-1)
+M_fun_I = lambda x: np.real(ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape)))).reshape(-1))
 
 ###### Solver ######
 u_sol_I, status, num_iters = solve_sparse(

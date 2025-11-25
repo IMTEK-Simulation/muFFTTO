@@ -12,7 +12,7 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-6, maxiter=1000, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-6, maxiter=1000, callback=callback)
     return x, status, num_iters
 
 
@@ -21,7 +21,7 @@ def solve_sparse(A, b, M=None):
 nb_quad_points_per_pixel = 8
 # PARAMETERS ##############################################################
 ndim = 3  # number of dimensions (works for 2D and 3D)
-N_x = N_y = N_z = 32  # number of voxels (assumed equal for all directions)
+N_x = N_y = N_z = 16  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y, N_z)  # number of voxels
 
 del_x, del_y, del_z = 1, 1, 1  # pixel size / grid spacing
@@ -69,8 +69,7 @@ coord_helper = np.zeros(2)
 coord_helper[0] = -1. / (np.sqrt(3))
 coord_helper[1] = +1. / (np.sqrt(3))
 
-# quadrature points    # TODO This hold for prototypical element      !!!
-# TODO MAKE clear how to generate B matrices
+# quadrature points
 quad_points_coord[:, 0] = [coord_helper[0], coord_helper[0], coord_helper[0]]
 quad_points_coord[:, 1] = [coord_helper[1], coord_helper[0], coord_helper[0]]
 quad_points_coord[:, 2] = [coord_helper[0], coord_helper[1], coord_helper[0]]
@@ -142,32 +141,8 @@ B_dqijk = np.einsum('dt,tqijk->dqijk', inv_jacobian, B_dqijk)
 
 B_direct_dqij = B_dqijk
 
-
-# recompute quad points coordinates
-# @formatter:off
-
-
-
-# B_gradient_dqc = np.zeros([ndim, nb_quad_points_per_pixel, 4])
-#
-# # @formatter:off   B(dim,number of nodal values,quad point ,element)
-# B_gradient_dqc[:, 0, :] = [[-1 / del_x,       0, 1 / del_x,          0],
-#                            [-1 / del_y,        1 / del_y, 0,        0]] # first quad point
-# B_gradient_dqc[:, 1, :] = [[0,          - 1 / del_x, 0, 1 / del_x],
-#                             [0, 0, - 1 / del_y,          1 / del_y]] # second quad point
-#
-# B_direct_dqij = B_gradient_dqc.reshape(ndim,
-#                                        nb_quad_points_per_pixel,
-#                                        *ndim * (2,))
-
-# TODO do nice/clear explanation with transforms and jacobians
-# @formatter:on
-# quadrature_weights = np.zeros([nb_quad_points_per_pixel])
-# quadrature_weights[0] = del_x * del_y / 2
-# quadrature_weights[1] = del_x * del_y / 2
-
-
-def D(u_ixy, grad_u_ijqxy=None):
+####### Gradient operator #############
+def B(u_ixy, grad_u_ijqxy=None):
     # apply gradient operator
     if grad_u_ijqxy is None:
         grad_u_ijqxy = np.zeros([1, ndim, nb_quad_points_per_pixel, *N])
@@ -180,8 +155,8 @@ def D(u_ixy, grad_u_ijqxy=None):
                                   np.roll(u_ixy, -1 * pixel_node, axis=tuple(range(1, ndim + 1))))
     return grad_u_ijqxy
 
-
-def D_t(flux_ijqxyz, div_flux_ixy=None):
+####### Gradient transposed operator  (Divergence) #############
+def B_t(flux_ijqxyz, div_flux_ixy=None):
     if div_flux_ixy is None:  # if div_u_fnxyz is not specified, determine the size
         div_flux_ixy = np.zeros([1, *N])
 
@@ -225,8 +200,6 @@ E_jqxy = np.einsum('j,qxy...->jqxy...', macro_grad_j,
                    np.ones([nb_quad_points_per_pixel, *N]))  # set macroscopic gradient loading
 E_ijqxy = E_jqxy[np.newaxis, ...]  # f for elasticity
 
-# right-hand side
-
 # Preconditioner IN FOURIER SPACE #############################################
 ref_mat_data_ij = np.eye(ndim)
 # apply quadrature weights
@@ -238,7 +211,7 @@ for d in range(n_u_dofs):
     unit_impuls_ixy[d, 0, 0, 0] = 1
     # M_diag_ixy[:, d, 0, 0, 0] = 1
     # response of the system to unit impulses
-    M_diag_ixy[:, d, ...] = D_t(dot21(A=ref_mat_data_ij, v=D(u_ixy=unit_impuls_ixy)))
+    M_diag_ixy[:, d, ...] = B_t(dot21(A=ref_mat_data_ij, v=B(u_ixy=unit_impuls_ixy)))
 
 # Unit impulses in Fourier space --- diagonal block of size [n_u_dofs,n_u_dofs]
 M_diag_ixy = np.real(fft(x=M_diag_ixy))  # imaginary part is zero
@@ -246,17 +219,16 @@ M_diag_ixy = np.real(fft(x=M_diag_ixy))  # imaginary part is zero
 M_diag_ixy[M_diag_ixy != 0] = 1 / M_diag_ixy[M_diag_ixy != 0]
 # Preconditioner function
 M_fun_I = lambda x: ifft(M_diag_ixy * fft(x=x.reshape(temp_shape))).real # .reshape(-1)
-# Projections
-# System matrix function
-# K_fun_I = lambda x: dot21(mat_data_ijqxy, x.reshape(grad_shape)).reshape(-1)
-# System matrix function
-K_fun_I = lambda x: D_t(dot21(mat_data_ijqxy, D(u_ixy=x.reshape(temp_shape)))) # .reshape(-1)
 
-gamma_0 = lambda x: D(M_fun_I(D_t(dot21(mat_data_ijqxy, x.reshape(grad_shape))))[0]).reshape(-1)
+# System matrix function
+K_fun_I = lambda x: B_t(dot21(mat_data_ijqxy, B(u_ixy=x.reshape(temp_shape)))) # .reshape(-1)
+
+# Projection operator with material data evaluation: Gamma_0 *A(gradient)
+gamma_0 = lambda x: B(M_fun_I(B_t(dot21(mat_data_ijqxy, x.reshape(grad_shape))))[0]).reshape(-1)
 
 # right hand side vectors
 b_grad_I = -gamma_0(E_ijqxy)
-b_disp_I = -D_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
+b_disp_I = -B_t(dot21(mat_data_ijqxy, E_ijqxy)).reshape(-1)  # right-hand side
 
 # Calculate the start time
 start = time.time()
@@ -266,7 +238,7 @@ u_sol_vec, status, num_iters = solve_sparse(
     b=b_disp_I,
     M=sp.LinearOperator(shape=(ndof, ndof), matvec=M_fun_I, dtype='float'))
 
-print('Number of steps = {}'.format(num_iters))
+print('Number of steps  Displacement-Based = {}'.format(num_iters))
 # Calculate the end time and time taken
 end = time.time()
 length = end - start
@@ -274,9 +246,9 @@ length = end - start
 print("It took", length, "seconds!")
 
 
-du_sol_ijqxy = D(u_ixy=u_sol_vec.reshape(temp_shape))
+du_sol_ijqxy = B(u_ixy=u_sol_vec.reshape(temp_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
-print('homogenised properties preconditioned A11 = {}'.format(
+print('homogenised properties Displacement-Based A11 = {}'.format(
     np.inner(dot21(mat_data_ijqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
 print('END PCG')
 
@@ -297,7 +269,7 @@ print("It took", length, "seconds!")
 # du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(temp_shape))
 
 aux_plain_ijqxy = du_sol_plain_I.reshape(grad_shape) + E_ijqxy
-print('homogenised properties Strain based A11 = {}'.format(
+print('homogenised properties Strain-Based A11 = {}'.format(
     np.inner(dot21(mat_data_ijqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
 print('END CG')
 

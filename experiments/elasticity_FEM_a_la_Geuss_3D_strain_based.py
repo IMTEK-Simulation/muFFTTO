@@ -20,7 +20,7 @@ nb_quad_points_per_pixel = 8
 
 # PARAMETERS ##############################################################
 ndim = 3  # number of dimensions (works for 2D and 3D)
-N_x = N_y = N_z = 128  # number of voxels (assumed equal for all directions)
+N_x = N_y = N_z = 33  # number of voxels (assumed equal for all directions)
 N = (N_x, N_y, N_z)  # number of voxels
 
 del_x, del_y, del_z = 1, 1, 1  # pixel size / grid spacing
@@ -230,7 +230,7 @@ for i in range(reshaped_matrices.shape[-1]):
 # Reshape the result back to the original (n_u_dofs, n_u_dofs, *N) shape
 M_diag_ijxy = reshaped_matrices.reshape(n_u_dofs, n_u_dofs, *N)
 # Preconditioner function
-M_fun_I = lambda x: ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape)))).reshape(-1)
+M_fun_I = lambda x:  np.real(ifft(dot21(M_diag_ijxy, fft(x=x.reshape(displacement_shape)))).reshape(-1))
 
 # right hand side vectors
 gamma_0 = lambda x: D(
@@ -254,8 +254,8 @@ print("It took", length, "seconds!")
 
 du_sol_ijqxy = D(u_ixy=u_sol_I.reshape(displacement_shape))
 aux_ijqxy = du_sol_ijqxy + E_ijqxy
-print('Homogenised properties PCG C_11 = {}'.format(
-    np.inner(ddot42(mat_data_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol))
+C_11=    np.inner(ddot42(mat_data_ijklqxy, aux_ijqxy).reshape(-1), aux_ijqxy.reshape(-1)) / domain_vol
+print('Homogenised properties PCG C_11 = {}'.format(C_11))
 print('END PCG')
 
 # Calculate the start time
@@ -274,6 +274,10 @@ print("It took", length, "seconds!")
 # du_sol_plain_ijqxy = D(u_ixy=u_sol_plain_I.reshape(displacement_shape))
 
 aux_plain_ijqxy = du_sol_plain_I.reshape(grad_shape) + E_ijqxy
-print('Homogenised properties Strain based  C_11 = {}'.format(
-    np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol))
+
+C_11_SB=np.inner(ddot42(mat_data_ijklqxy, aux_plain_ijqxy).reshape(-1), aux_plain_ijqxy.reshape(-1)) / domain_vol
+print('Homogenised properties Strain based  C_11 = {}'.format(C_11_SB))
+
+print('Diff properties Strain based  C_11 = {}'.format(C_11_SB - C_11))
+
 print('END CG')

@@ -10,12 +10,12 @@ def solve_sparse(A, b, M=None):
         nonlocal num_iters
         num_iters += 1
 
-    x, status = sp.cg(A, b, M=M, tol=1e-6,maxiter=1000, callback=callback)
+    x, status = sp.cg(A, b, M=M, atol=1e-6,maxiter=1000, callback=callback)
     return x, status, num_iters
 
 # PARAMETERS ##############################################################
 ndim = 2  # number of dimensions (works for 2D and 3D)
-N = ndim * (1023,)  # number of voxels (assumed equal for all directions)
+N = ndim * (48,)  # number of voxels (assumed equal for all directions)
 
 # auxiliary values
 prodN = np.prod(np.array(N))  # number of grid points
@@ -32,7 +32,7 @@ phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
 
 A = np.einsum('ij,...->ij...', np.eye(ndim), phase)  # material coefficients
 
-E = np.zeros(vec_shape);
+E = np.zeros(vec_shape)
 E[0] = 1.  # set macroscopic loading
 
 # PROJECTION IN FOURIER SPACE #############################################

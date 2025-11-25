@@ -4,13 +4,23 @@ import matplotlib.pyplot as plt
 
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+
 from muFFTTO import geometries_indre_joedicke
 
 
 def get_geometry(nb_voxels,
                  microstructure_name='random_distribution',
-                 parameter=None):
-    if not microstructure_name in ['random_distribution',
+                 coordinates=None,
+                 parameter=None,
+                 contrast=None,
+                 **kwargs):
+    if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
+                                   'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
+                                   'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles',
+                                   '2_circles',
+                                   'symmetric_linear', 'hashin_inclusion_2D',
+                                   'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
+                                   'laminate', 'laminate2', 'laminate_log',
                                    'geometry_I_1_3D', 'geometry_I_2_3D', 'geometry_I_3_3D', 'geometry_I_4_3D',
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
@@ -33,8 +43,278 @@ def get_geometry(nb_voxels,
 
     match microstructure_name:
         case 'random_distribution':
-
+            seed = kwargs['seed']
+            np.random.seed(seed)
             phase_field = np.random.rand(*nb_voxels)
+
+        case 'square_inclusion':
+
+            phase_field = np.ones(nb_voxels)
+            if len(nb_voxels) == 2:
+                phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
+                                           np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+            elif len(nb_voxels) ==3:
+                phase_field[np.logical_and(np.logical_and(coordinates[0] >= 0.25, coordinates[0] < 0.75),
+                                       np.logical_and(np.logical_and(coordinates[1] < 0.75, coordinates[2] < 0.75),
+                                                      np.logical_and(coordinates[1] >= 0.25,
+                                                                     coordinates[2] >= 0.25)))] = 0
+
+        case 'hashin_inclusion_2D':
+            r1 = kwargs['rad_1']
+            r2 = kwargs['rad_2']
+
+            phase_field = np.ones(nb_voxels)
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
+                                       np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+
+        case 'n_squares':
+
+            phase_field = np.ones(nb_voxels)
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.75, coordinates[1] < 0.75),
+                                       np.logical_and(coordinates[0] >= 0.25, coordinates[1] >= 0.25))] = 0
+        case 'circles':
+            phase_field = np.ones(nb_voxels)
+            x_lim = coordinates[0][-1, -1]
+            y_lim = coordinates[1][-1, -1]
+            # Define circle parameters (center coordinates and radius)
+            circles = [
+                (x_lim / 4, y_lim / 4, y_lim / 8),  # Circle 1
+                (x_lim / 4, 3 * y_lim / 4, y_lim / 8),  # Circle 2
+                (3 * x_lim / 4, 3 * y_lim / 4, y_lim / 8),  # Circle 3
+                (3 * x_lim / 4, y_lim / 4, y_lim / 8)  # Circle 4
+            ]
+            # Apply circle masks
+            for cx, cy, r in circles:
+                mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
+                phase_field[mask] = 0  # Set pixels inside the circle to 1
+        case '2_circles':
+            phase_field = np.ones(nb_voxels)
+            x_lim = coordinates[0][-1, -1]
+            y_lim = coordinates[1][-1, -1]
+            # Define circle parameters (center coordinates and radius)
+            circles = [
+                (x_lim / 6, 3 * y_lim / 4, y_lim / 10),  # Circle 1
+                (3 * x_lim / 6, 4 * y_lim / 6, y_lim / 10),  # Circle 2
+                (5 * x_lim / 6, 3 * y_lim / 4, y_lim / 10),
+            ]
+            # Apply circle masks
+            for cx, cy, r in circles:
+                mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
+                phase_field[mask] = 0  # Set pixels inside the circle to 1
+
+        case 'laminate':
+
+            phase_field = np.ones(nb_voxels)
+            phase_field[coordinates[0] < 0.5] = 0
+        case 'laminate2':
+
+            phase_field = np.zeros(nb_voxels)
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.linspace(contrast, 1, parameter)
+
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
+
+            # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            print()
+        case 'n_laminate':
+
+            phase_field = np.zeros(nb_voxels)
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.linspace(0, 1, parameter)
+
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
+
+        case 'right_cluster_x3':
+
+            phase_field = 1 - (1 - coordinates[0]) ** 3
+        case 'left_cluster_x3':
+
+            phase_field = (1 - coordinates[0]) ** 3
+
+        case 'laminate_log':
+
+            phase_field = np.zeros(nb_voxels) + np.power(10., contrast)
+            # division=1/parameter
+            # divisions=np.arange(0, 1, 1 / parameter)
+            # divisionss= np.linspace(0, 1, parameter, endpoint = False)
+
+            # divisions2 = np.arange(0, 1, 1 /( parameter-1))
+            phases = np.logspace(contrast, 0, parameter)
+
+            # positions = np.arange(0, 1+1 / parameter, 1 / parameter)
+            positions = np.linspace(0, 1, parameter + 1)
+            for i in np.arange(phases.size - 1):
+                # section=divisions[i]
+                # phase_field[coordinates[0] >= section] = divisions2[i]
+                phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
+
+            # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
+            print()
+        case 'square_inclusion_equal_volfrac':
+
+            phase_field = np.ones(nb_voxels)
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
+        case 'circle_inclusion':
+            phase_field = np.ones(nb_voxels)
+            if nb_voxels.size == 1:
+                phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2))) < 0.2] = 0
+            elif nb_voxels.size == 2 and nb_voxels[1] == 1:
+                phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2))) < 0.2] = 0
+            elif nb_voxels.size == 2:
+                phase_field[(np.sqrt(np.power(coordinates[0] - 0.5, 2) + np.power(coordinates[1] - 0.5, 2))) < 0.2] = 0
+            elif nb_voxels.size == 3:
+                phase_field[
+                    np.power(coordinates[0] - 0.5, 2) +
+                    np.power(coordinates[1] - 0.5, 2) +
+                    np.power(coordinates[2] - 0.5, 2) < 0.1] = 0
+
+        case 'circle_inclusions':
+            nb_circles = kwargs['nb_circles']
+            r_0 = kwargs['r_0']
+            vol_frac = kwargs['vol_frac']
+            r_n = r_0 / nb_circles
+            random_density = kwargs['random_density']
+            random_centers = kwargs['random_centers']
+
+            inclusion_box_size = 1 / nb_circles
+            perturb_of_centers = inclusion_box_size / 2 - r_n
+
+            phase_field = np.zeros(nb_voxels)
+            dim = np.size(nb_voxels)
+            # number of circles in one direction
+            if dim == 2:
+                nb_circles_i = np.asarray(nb_circles, dtype=int)
+
+                center = np.linspace(0, 1, nb_circles_i, endpoint=False)
+                if nb_circles == 1:
+                    center += 1 / 2
+                else:
+                    center += (center[1] - center[0]) / 2
+                centers_x, centers_y = np.meshgrid(center, center)
+
+                # Iterate over the results
+                densities = np.random.permutation(np.arange(1, 1 + nb_circles ** dim))
+                counter = 0
+                for i in range(centers_x.shape[0]):
+                    for j in range(centers_y.shape[1]):
+
+                        center = np.array([centers_x[i, j], centers_y[i, j]])
+                        if random_centers:
+                            center += (perturb_of_centers * 0.99) * np.random.uniform(-1, 1)
+                        r_center = np.zeros_like(coordinates)
+                        for d in np.arange(dim):
+                            r_center[d] = coordinates[d, ...] - center[d]
+
+                        squares = 0
+                        squares += sum(r_center[d] ** 2 for d in range(dim))
+                        distances = np.sqrt(squares)
+                        if random_density:
+                            # Create an array from 1 to 10
+
+                            # Shuffle the array randomly
+
+                            # phase_field[distances < r_n] = np.random.random()
+                            phase_field[distances < r_n] = densities[counter]
+                        else:
+                            phase_field[distances < r_n] = 1
+                        counter += 1
+            elif dim == 3:
+                raise (NotImplementedError)
+
+        case 'abs_val':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = np.abs(coordinates[0] - 0.5) + np.abs(coordinates[1] - 0.5)
+            elif nb_voxels.size == 3:
+                np.abs(coordinates[0] - 0.5) + np.abs(coordinates[1] - 0.5) + np.abs(coordinates[2] - 0.5)
+
+        case 'sine_wave_rapid':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.25 * np.cos(30 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                    10 * 2 * np.pi * coordinates[1])
+            elif nb_voxels.size == 3:
+                phase_field = np.sin(coordinates)
+        case 'sine_wave':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                    3 * 2 * np.pi * coordinates[1])
+            elif nb_voxels.size == 3:
+                phase_field = 0.5 + 0.25 * np.cos(3 * 2 * np.pi * coordinates[0]) + 0.25 * np.cos(
+                    3 * 2 * np.pi * coordinates[1]) + 0.25 * np.cos(
+                    3 * 2 * np.pi * coordinates[2])
+        case 'sine_wave_':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]) + 0.25 * np.cos(
+                    2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0])
+            elif nb_voxels.size == 3:
+                phase_field = (0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 2 * np.pi * coordinates[2]) +
+                               0.25 * np.cos(
+                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 2 * np.pi * coordinates[2]))
+
+        case 'sine_wave_inv':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = 0.5 - 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1]) - 0.25 * np.cos(
+                    2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0])
+            elif nb_voxels.size == 3:
+                phase_field = (0.5 + 0.25 * np.cos(
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 2 * np.pi * coordinates[2]) +
+                               0.25 * np.cos(
+                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 2 * np.pi * coordinates[2]))
+        case 'tanh':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = np.tanh((coordinates[0] - 0.5) / 0.3 * (coordinates[1] - 0.5) / 0.3)
+            elif nb_voxels.size == 3:
+                phase_field = np.sin(coordinates)
+        case 'linear':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = coordinates[0]
+            elif nb_voxels.size == 3:
+                phase_field = coordinates[0]
+        case 'bilinear':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+                phase_field = coordinates[0] * coordinates[1]
+            elif nb_voxels.size == 3:
+                phase_field = coordinates[0] * coordinates[1] * coordinates[2]
+
+        case 'symmetric_linear':
+            phase_field = np.zeros(nb_voxels)
+            if nb_voxels.size == 2:
+
+                phase_field = coordinates[0]
+                phase_field[nb_voxels[0] // 2:] = np.flipud(phase_field[:nb_voxels[0] // 2])
+
+
+            elif nb_voxels.size == 3:
+                raise "Not IMPLEMENTED"
         case 'geometry_I_1_3D':
             check_dimension(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
             check_equal_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name)
@@ -130,7 +410,6 @@ def get_geometry(nb_voxels,
             # check_number_of_voxels(nb_voxels=nb_voxels, microstructure_name=microstructure_name, min_nb_voxels=20)
 
             phase_field = Metamaterial_4(*nb_voxels)
-
 
         case 'geometry_III_4_3D':
             # Define a  chiral metamaterial.
@@ -881,27 +1160,34 @@ def check_dimension(nb_voxels, microstructure_name):
 
 
 if __name__ == '__main__':
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Display the image
+    plt.imshow(image, cmap='gray')
+    plt.axis('off')
+    plt.show()
+
     # plot  geometry
     geometry_ID = 'geometry_III_5_3D'
     N = 60
     nb_of_pixels = np.asarray(3 * (N,), dtype=int)
-    #nb_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
+    # nb_of_pixels = np.asarray( (N,N,1.8*N), dtype=int)
 
     phase_field = get_geometry(nb_voxels=nb_of_pixels,
                                microstructure_name=geometry_ID)
 
     fig, ax = visualize_voxels(phase_field_xyz=phase_field)
     ax.set_title(geometry_ID)
-    save_plot=True
+    save_plot = True
     if save_plot:
         src = '/home/martin/Programming/muFFTTO/experiments/figures/'  # source folder\
         fig_data_name = f'muFFTTO_{geometry_ID}_N{N}'
 
         fname = src + fig_data_name + '_geometry{}'.format('.pdf')
         print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
-        plt.savefig(fname, dpi=1000, pad_inches= 0.02, bbox_inches='tight',
+        plt.savefig(fname, dpi=1000, pad_inches=0.02, bbox_inches='tight',
                     facecolor='auto', edgecolor='auto')
         print('END plot ')
 
     plt.show()
-
