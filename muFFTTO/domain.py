@@ -9,10 +9,8 @@ from muFFTTO import discretization_library
 from NuMPI.Tools import Reduction
 
 from mpi4py import MPI
-import muGrid
 from muGrid import ConvolutionOperator
-from muGrid import Communicator
-from muGrid import FileIONetCDF, OpenMode
+from _muGrid import Field
 from muFFT import FFT
 import muFFT
 
@@ -1686,7 +1684,8 @@ class Discretization:
         K_diag_inv_sym = K_diag ** (-1 / 2)
         return K_diag_inv_sym
 
-    def get_preconditioner_Jacobi_mugrid(self, material_data_field_ijklqxyz,
+    def get_preconditioner_Jacobi_mugrid(self, material_data_field_ijklqxyz: Field = None,
+                                         constitutive: callable = None,
                                          formulation=None):
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
@@ -1705,11 +1704,18 @@ class Discretization:
                         dirac_comb_inxyz.s.fill(0)
                         dirac_comb_inxyz.s[d_i, 0, x_i::2, y_i::2] = 1.0
                         # compute response of diract comb
-                        self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
-                                                        input_field_inxyz=dirac_comb_inxyz,
-                                                        output_field_inxyz=dirac_comb_response_inxyz,
-                                                        formulation=formulation
-                                                        )
+                        if material_data_field_ijklqxyz is not None:
+                            self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
+                                                            input_field_inxyz=dirac_comb_inxyz,
+                                                            output_field_inxyz=dirac_comb_response_inxyz,
+                                                            formulation=formulation
+                                                            )
+                        elif constitutive is not None:
+                            self.apply_system_matrix_mugrid_explicit_stress(constitutive=constitutive,
+                                                                            input_field_inxyz=dirac_comb_inxyz,
+                                                                            output_field_inxyz=dirac_comb_response_inxyz,
+                                                                            formulation=formulation
+                                                                            )
 
                         diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
                             dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
@@ -2104,6 +2110,56 @@ class Discretization:
 
         self.apply_material_data_mugrid(material_data=material_data_field,
                                         gradient_field=gradient_ijqxyz)
+
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
+        # MPI.COMM_WORLD.Barrier()
+        self.fft.communicate_ghosts(gradient_ijqxyz)
+        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                       div_u_fnxyz=output_field_inxyz,
+                                                       apply_weights=True)
+
+    def apply_system_matrix_mugrid_explicit_stress(self,
+                                                   constitutive: callable,
+                                                   input_field_inxyz: Field,
+                                                   output_field_inxyz: Field,
+                                                   formulation=None,
+                                                   **kwargs):
+        # : muGrid.RealField | None < _muGrid.RealField
+        # < class '_muGrid.RealField'>
+        # the ouput array is numpy array for compatibility with solvers
+
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=')  # f'{displacement_field}')
+        # chcek if the field is nump. If yes, make a muGrid array of it
+        if isinstance(input_field_inxyz, np.ndarray):
+            raise ("apply_system_matrix_mugrid does not supprot ndarray")
+
+        self.fft.communicate_ghosts(input_field_inxyz)
+        # allocate temporary fields
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
+
+        if np.all(formulation == 'small_strain'):
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
+            # print('3.02 = \n   core {}'.format(MPI.COMM_WORLD.rank))
+            # raise ("NOT YET  does not support small_strain")
+
+            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
+                                                            grad_u_ijqxyz=gradient_ijqxyz)
+
+        else:
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:formulation=' f'{formulation}')
+            # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:displacement_field=' f'{displacement_field}')
+            # print('3.03 = \n   core {}'.format(MPI.COMM_WORLD.rank))
+            self.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz,
+                                                grad_u_ijqxyz=gradient_ijqxyz)
+
+        # MPI.COMM_WORLD.Barrier()
+
+        # print('apply_quadrature_weights = \n   core {}'.format(MPI.COMM_WORLD.rank))
+        # print('3.1 = \n   core {}'.format(MPI.COMM_WORLD.rank))
+        # material_data_field = self.apply_quadrature_weights(material_data_field) #
+        # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
+        # compute stress/flux field
+        constitutive(gradient_ijqxyz, gradient_ijqxyz)
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
         # MPI.COMM_WORLD.Barrier()
