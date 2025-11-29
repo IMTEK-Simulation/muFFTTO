@@ -184,7 +184,6 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
                                 strain_dev_ijqxyz.s[..., phase_xyz])
     strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
 
-
     stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
                                        + 2. / 3. * sig0 / (eps0 ** n) *
                                        (strain_eq_qx ** (n - 1.)) * strain_dev_ijqxyz.s[..., phase_xyz])
@@ -197,7 +196,7 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
                                 strain_dev_ijqxyz.s[..., phase_xyz])
 
     K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qx ** (n - 3.)
-            + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
+                                           + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
 
     # threshold = 1e-15
     # mask = (np.abs(strain_eq_qxyz) > threshold).astype(float)
@@ -262,7 +261,7 @@ if save_results:
     # K4_0_to_save.s[0,0] = K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0]#.s[0,0]
     # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
     save_npy(fn=data_folder_path + results_name + f'.npy',
-             data=K4_ijklqyz.s[0,0,0,0].mean(axis=0),
+             data=K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
              subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
              nb_grid_pts=tuple(discretization.nb_of_pixels_global),
              components_are_leading=True,
@@ -340,7 +339,7 @@ for inc in range(ninc):
 
         # save K4_ijklqyz
         results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0,0,0,0].mean(axis=0),
+        save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
@@ -405,8 +404,7 @@ for inc in range(ninc):
             Px.s = x.s
 
 
-       # M_fun = M_fun_none
-
+        # M_fun = M_fun_none
 
         def K_fun(x, Ax):
             discretization.apply_system_matrix_mugrid(material_data_field=K4_ijklqyz,
@@ -517,7 +515,7 @@ for inc in range(ninc):
 
             # save K4_ijklqyz
             results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0,0,0,0].mean(axis=0),
+            save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
@@ -545,7 +543,7 @@ for inc in range(ninc):
         _info['norm_En'] = En
         _info['rhs_t_norm'] = rhs_t_norm
         _info['norm_rhs_field'] = norm_rhs
-        _info['newton_stop_crit'] = norm_rhs #/ En
+        _info['newton_stop_crit'] = norm_rhs  # / En
 
         if discretization.fft.communicator.rank == 0:
             print('=====================')
@@ -565,9 +563,9 @@ for inc in range(ninc):
         # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
         # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
 
-        if norm_rhs  < 1.e-5 and iiter > 0: break
+        if norm_rhs < 1.e-5 and iiter > 0: break
 
-        if iiter == 20:
+        if iiter == 40:
             break
 
     # # linear part of displacement(X-domain_size[0]/2)

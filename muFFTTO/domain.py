@@ -87,8 +87,7 @@ class Discretization:
                        )
 
         # self.fft.create_plan(1)
-        print('self.fft.nb_domain_grid_pts', self.fft.nb_domain_grid_pts)
-        print('self.fft.nb_subdomain_grid_pts', self.fft.nb_subdomain_grid_pts)
+
         # self.fft.communicator.max(self.fft.nb_subdomain_grid_pts)
         # comm.Allreduce(
         #     np.array(nb_subdomain_grid_pts, order="C"),
@@ -108,7 +107,8 @@ class Discretization:
         # number of pixels/voxels of a subdomain for MPI
         print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(self.fft.nb_domain_grid_pts):>15} '
               f'{str(self.fft.nb_subdomain_grid_pts):>15} {str(self.fft.subdomain_locations):>15}')
-
+        # print('self.fft.nb_domain_grid_pts', self.fft.nb_domain_grid_pts)
+        # print('self.fft.nb_subdomain_grid_pts', self.fft.nb_subdomain_grid_pts)
         # MPI.COMM_WORLD.Barrier()
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
@@ -337,8 +337,18 @@ class Discretization:
         # print('fft.fft(u)= {} \n   core {}'.format(fft.fft(u), MPI.COMM_WORLD.rank))
         #
         # print('np.exp(1j * phase) = {} \n   core {}'.format(np.exp(1j * phase), MPI.COMM_WORLD.rank))
+        f_field_inqrs = self.fft.fourier_space_field(
+            unique_name='f_field_phase_roll_temp',  # name of the field
+            shape=(u_inxyz.shape[0],))
+        fft.fft(u_inxyz, f_field_inqrs)
+        f_field_inqrs.s *= np.exp(1j * phase)
+        return_field_inxyz = self.fft.real_space_field(
+            unique_name='field_phase_roll_temp',  # name of the field
+            shape=(u_inxyz.shape[0],))
 
-        return (fft.ifft(np.exp(1j * phase) * fft.fft(u_inxyz)) * fft.normalisation).reshape(u_inxyz.shape)
+        fft.ifft(f_field_inqrs, return_field_inxyz)
+
+        return return_field_inxyz.s * fft.normalisation
 
         # MPI.COMM_WORLD.Barrier()
 

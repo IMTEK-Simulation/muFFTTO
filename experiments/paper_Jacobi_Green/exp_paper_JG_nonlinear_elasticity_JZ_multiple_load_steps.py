@@ -272,7 +272,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green', ]:  #
 
 
         #
-        # M_fun_Green = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
+        # M_fu_Green = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
         #                                                                 nodal_field_fnxyz=x)
 
         def M_fun_Green(x, Px):

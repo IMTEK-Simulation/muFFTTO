@@ -104,9 +104,9 @@ print('macro_gradients = \n {}'.format(macro_gradients))
 macro_gradient_fields = []
 for load_case in np.arange(nb_load_cases):
     macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name=f'macro_gradient_field_{load_case}')
-
-    macro_gradient_fields.append(discretization.get_macro_gradient_field(macro_gradient_ij=macro_gradients[load_case],
-                                                                         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz))
+    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
+                                                   macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+    macro_gradient_fields.append(macro_gradient_field_ijqxyz)
 
     stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
     print('init_stress for load case {} = \n {}'.format(load_case, stress))
@@ -217,7 +217,7 @@ for ration in [-0.5]:
                                                                  quad_field_fqnxyz=None,
                                                                  quad_points_coords_iq=None)[0]
 
-                material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field(
+                material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
                     name='material_data_field_C_0_rho_ijklqxyz_in_objective')
 
                 # material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
@@ -328,7 +328,7 @@ for ration in [-0.5]:
                             target_energy=target_energy[load_case]))
 
                         s_energy_and_adjoint_load_cases[
-                            load_case],adjoint_field_load_case[
+                            load_case], adjoint_field_load_case[
                             load_case], adjoint_energies[
                             load_case] = topology_optimization.sensitivity_elastic_energy_and_adjoint_FE_NEW(
                             discretization=discretization,
@@ -440,23 +440,26 @@ if __name__ == '__main__':
 
     # # material distribution
     def apply_filter(phase):
-        f_field = discretization.fft.fft(phase)
+        f_field = discretization.fft.fourier_space_field(
+            unique_name='f_field_phase_for_filter',  # name of the field
+            shape=(1,))
+        discretization.fft.fft(phase, f_field)
         # f_field[0, 0, np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
         #                              np.abs(discretization.fft.fftfreq[1]) > 0.25)] = 0
-        f_field[0, 0, np.logical_or(discretization.fft.ifftfreq[0] > 8,
-                                    discretization.fft.ifftfreq[1] > 8)] = 0
+        f_field.s[0, 0, np.logical_or(discretization.fft.ifftfreq[0] > 8,
+                                      discretization.fft.ifftfreq[1] > 8)] = 0
         # f_field[0, 0, 12:, 24:] = 0
-        phase.s = discretization.fft.ifft(f_field) * discretization.fft.normalisation
+        discretization.fft.ifft(f_field, phase)
+        phase.s *= discretization.fft.normalisation
         phase.s[phase.s > 1] = 1
         phase.s[phase.s < 0] = 0
         # min_ = discretization.mpi_reduction.min(phase)
         # max_ = discretization.mpi_reduction.max(phase)
         # phase = (phase + np.abs(min_)) / (max_ + np.abs(min_))
-        return phase
 
 
     # phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
-    phase_field_0 = apply_filter(phase_field_0)
+    apply_filter(phase_field_0)
     phase_field_00 = np.copy(phase_field_0)
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
 
@@ -486,9 +489,9 @@ if __name__ == '__main__':
         plt.colorbar()
 
         plt.show()
-    phase_field_0 = phase_field_0.s.ravel()
+    #phase_field_0 = phase_field_0.s.ravel()
     print('Init objective function FE  = {}'.format(
-        objective_function_multiple_load_cases(phase_field_00)[0]))
+        objective_function_multiple_load_cases(phase_field_0.s.ravel())[0]))
 
     if run_lbfg:
 

@@ -14,10 +14,8 @@ from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
-
-
 parser = argparse.ArgumentParser(
-    prog="exp_paper_JG_nonlinear_elasticity_JZ.py",
+    prog="exp_paper_JG_nonlinear_elasticity_JZ_no_tangent.py",
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
@@ -30,7 +28,6 @@ parser.add_argument(
     default="Green",
     help="Type of preconditioner to use"
 )
-
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 
@@ -46,14 +43,11 @@ save_results = True
 _info = {}
 start_time = time.time()
 
-
 number_of_pixels = (nnn, nnn, nnn)
 domain_size = [1, 1, 1]
 Nx = number_of_pixels[0]
 Ny = number_of_pixels[1]
 Nz = number_of_pixels[2]
-
-
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -109,7 +103,7 @@ model_parameters_non_linear = {'K': 2,
                                'mu': 1.0,
                                'sig0': 0.5,
                                'eps0': 0.1,
-                               'n': 3.5}
+                               'n': 10.}
 
 model_parameters_linear = {'K': 2,
                            'mu': 1}
@@ -127,7 +121,7 @@ phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretizati
 phase_field.s[0, 0,
 1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
 1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
- :# 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
+:  # 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
 ] = 0
 
 matrix_mask = phase_field.s[0, 0] == 0
@@ -138,7 +132,6 @@ inc_mask = phase_field.s[0, 0] > 0
 # linear elasticity
 # -----------------
 def linear_elastic_q_points(strain_ijqxyz,
-                            tangent_ijklqxyz,
                             stress_ijqxyz,
                             phase_xyz,
                             **kwargs):
@@ -149,18 +142,16 @@ def linear_elastic_q_points(strain_ijqxyz,
 
     # elastic stiffness tensor, and stress response
     # C4 = K * II_qxyz + 2. * mu * I4d_qxyz
-    tangent_ijklqxyz.s[..., phase_xyz] = (K * II + 2. * mu * I4d)[..., None, None]
-    stress_ijqxyz.s[..., phase_xyz] = np.einsum('ijklqx...,lkqx...  ->ijqx...  ',
-                                                tangent_ijklqxyz.s[..., phase_xyz],
+    tangent_ijkl = K * II + 2. * mu * I4d
+    stress_ijqxyz.s[..., phase_xyz] = np.einsum('ijkl,lkqx...  ->ijqx...  ',
+                                                tangent_ijkl,
                                                 strain_ijqxyz.s[..., phase_xyz])
-    # sig = ddot42(C4, strain)
 
 
 # print()
 
 ###
 def nonlinear_elastic_q_points(strain_ijqxyz,
-                               tangent_ijklqxyz,
                                stress_ijqxyz,
                                phase_xyz,
                                **kwargs):
@@ -199,43 +190,35 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
     #         strain_eq_qxyz != 0.).astype(float)
 
     # K4_d = discretization.get_material_data_size_field(name='alg_tangent')
-    strain_dev_dyad = np.einsum('ijqx...,klqx...->ijklqx...', strain_dev_ijqxyz.s[..., phase_xyz],
-                                strain_dev_ijqxyz.s[..., phase_xyz])
-
-    K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qx ** (
-            n - 3.) + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
-
-    # threshold = 1e-15
-    # mask = (np.abs(strain_eq_qxyz) > threshold).astype(float)
-
-    tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
-    # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
+    # strain_dev_dyad = np.einsum('ijqx...,klqx...->ijklqx...', strain_dev_ijqxyz.s[..., phase_xyz],
+    #                             strain_dev_ijqxyz.s[..., phase_xyz])
+    #
+    # K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qx ** (
+    #         n - 3.) + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
+    #
+    #
+    # tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
 
 
-def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
+def constitutive_q_points(strain_ijqxyz, stress_ijqxyz):
     #            phase_field = np.zeros([*number_of_pixels])
     global matrix_mask, inc_mask
     linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
-                            tangent_ijklqxyz=tangent_ijklqxyz,
                             stress_ijqxyz=stress_ijqxyz,
                             phase_xyz=matrix_mask,
                             **model_parameters_linear)
 
     nonlinear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
-                               tangent_ijklqxyz=tangent_ijklqxyz,
                                stress_ijqxyz=stress_ijqxyz,
                                phase_xyz=inc_mask,
                                **model_parameters_non_linear)
 
-
+    print()
 # print()
 
 def constitutive(strain_ijqxyz,
-                 sig_ijqxyz,
-                 K4_ijklqxyz):
-
+                 sig_ijqxyz):
     constitutive_q_points(strain_ijqxyz=strain_ijqxyz,
-                          tangent_ijklqxyz=K4_ijklqxyz,
                           stress_ijqxyz=sig_ijqxyz)
 
 
@@ -249,27 +232,27 @@ total_strain_field = discretization.get_displacement_gradient_sized_field(name='
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
 stress_field = discretization.get_displacement_gradient_sized_field(name='stress_field')
-K4_ijklqyz = discretization.get_material_data_size_field_mugrid(name='K4_ijklqxyz')
-#K4_0_to_save = discretization.get_scalar_field(name='K4_tosave')
+# K4_ijklqyz = discretization.get_material_data_size_field_mugrid(name='K4_ijklqxyz')
+# K4_0_to_save = discretization.get_scalar_field(name='K4_tosave')
 
 x = np.linspace(start=0, stop=domain_size[0], num=number_of_pixels[0])
 y = np.linspace(start=0, stop=domain_size[1], num=number_of_pixels[1])
 X, Y = np.meshgrid(x, y, indexing='ij')
 
 # evaluate material law
-constitutive(total_strain_field, stress_field, K4_ijklqyz)
+constitutive(total_strain_field, stress_field)
 
 if save_results:
     # save strain fluctuation
     i = 0
     temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
-    results_name = (f'init_K')
-    #4_0_to_save.s[...]=0
-    #K4_0_to_save.s[0,0] = K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0]#.s[0,0]
+    results_name = (f'init_stress')
+    # 4_0_to_save.s[...]=0
+    # K4_0_to_save.s[0,0] = K4_ijklqyz.s.mean(axis=4)[0, 0, 0, 0]#.s[0,0]
     # np.save(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2))
     save_npy(fn=data_folder_path + results_name + f'.npy',
-             data= K4_ijklqyz.s.mean(axis=4),
+             data=stress_field.s.mean(axis=2),
              subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
              nb_grid_pts=tuple(discretization.nb_of_pixels_global),
              components_are_leading=True,
@@ -315,7 +298,7 @@ for inc in range(ninc):
     total_strain_field.s[...] += macro_gradient_inc_field.s[...]
 
     # evaluate material law
-    constitutive(total_strain_field, stress_field, K4_ijklqyz)
+    constitutive(total_strain_field, stress_field)
 
     # assembly rhs
     discretization.fft.communicate_ghosts(stress_field)
@@ -346,10 +329,10 @@ for inc in range(ninc):
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         # save K4_ijklqyz
-        results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4),
-                 tuple(discretization.subdomain_locations_no_buffers),
-                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        # results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+        # save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4),
+        #          tuple(discretization.subdomain_locations_no_buffers),
+        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         results_name = (f'rhs_field' + f'_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
@@ -385,7 +368,7 @@ for inc in range(ninc):
             # K_tot=discretization.get_system_matrix_mugrid(material_data_field=K4_ijklqyz, formulation=formulation)
 
             K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                material_data_field_ijklqxyz=K4_ijklqyz, formulation=formulation)  # K4_ijklqyz
+                constitutive=constitutive, formulation=formulation)  # K4_ijklqyz
 
 
             # results_name = (f'K4_ijklqyz_full_it0')
@@ -412,13 +395,12 @@ for inc in range(ninc):
             Px.s = x.s
 
 
-        # M_fun = M_fun_none
-
+        M_fun = M_fun_none
         def K_fun(x, Ax):
-            discretization.apply_system_matrix_mugrid(material_data_field=K4_ijklqyz,
-                                                      input_field_inxyz=x,
-                                                      output_field_inxyz=Ax,
-                                                      formulation=formulation)
+            discretization.apply_system_matrix_mugrid_explicit_stress(constitutive=constitutive,
+                                                                      input_field_inxyz=x,
+                                                                      output_field_inxyz=Ax,
+                                                                      formulation=formulation)
             discretization.fft.communicate_ghosts(Ax)
 
 
@@ -489,7 +471,7 @@ for inc in range(ninc):
         total_strain_field.s += strain_fluc_field.s
         # displacement_fluctuation_field.s += displacement_increment_field.s
         # evaluate material law
-        constitutive(total_strain_field, stress_field, K4_ijklqyz)
+        constitutive(total_strain_field, stress_field )
 
         # Recompute right hand side
         discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
@@ -522,10 +504,10 @@ for inc in range(ninc):
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save K4_ijklqyz
-            results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            # results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s.mean(axis=4),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             results_name = (f'rhs_field' + f'_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),

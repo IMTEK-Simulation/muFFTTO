@@ -36,7 +36,6 @@ src = '../figures/'  # source folder\
 # microstructure name
 # name = 'lbfg_muFFTTO_elasticity_exp_paper_JG_2D_elasticity_TO_N64_E_target_0.15_Poisson_-0.50_Poisson0_0.29_w5.00_eta0.02_mac_1.0_p2_prec=Green_bounds=False_FE_NuMPI6_nb_load_cases_3_e_obj_False_random_True'
 # iteration = 1200
-
 name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
 iteration = 8740
 phase_field = np.load(os.path.expanduser(data_folder_path + name + f'_it{8740}.npy'), allow_pickle=True)

@@ -372,14 +372,14 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
 
     rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(phase_field_1nxyz.s[0, 0],
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          [-1, 0], axis=(0, 1)),
                                                                      # (2, -1)
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          [0, -1], axis=(0, 1)),
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
     # print('rho_squared= \n'          ' {} '.format(rho_squared)) #
@@ -401,15 +401,15 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                    np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
     #                                            axis=(0, 1)))) * Jacobian_det
 
-    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz.s[0, 0],
+    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz.s[0, 0] ,
                                                                  discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz.s[0, 0], [-1, 0],
+                                                                                     phase_field_1nxyz, [-1, 0],
                                                                                      axis=(0, 1)),
                                                                  discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz.s[0, 0], [0, -1],
+                                                                                     phase_field_1nxyz, [0, -1],
                                                                                      axis=(0, 1)),
                                                                  discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz.s[0, 0],
+                                                                                     phase_field_1nxyz,
                                                                                      -1 * np.array([1, 1]),
                                                                                      axis=(0, 1)))) * Jacobian_det
     # print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
@@ -441,15 +441,15 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
 
     rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(phase_field_1nxyz.s[0, 0],
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          [-1, 0],
                                                                                          axis=(0, 1)),
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          [0, -1],
                                                                                          axis=(0, 1)),
                                                                      discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz.s[0, 0],
+                                                                                         phase_field_1nxyz,
                                                                                          -1 * np.array([1, 1]),
                                                                                          axis=(0, 1)))) * Jacobian_det
 

@@ -195,7 +195,18 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
 
             my_domain.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
 
-            return
+            N_at_quad_points_qijk = np.zeros(
+                [my_domain.nb_quad_points_per_pixel, *my_domain.domain_dimension * (2,)])
+            for quad_point_idx in range(my_domain.nb_quad_points_per_pixel):
+                quad_point_coords = my_domain.quad_points_coord_parametric[:, quad_point_idx]
+                # iteration over all voxel corners
+                for pixel_node in np.ndindex(*np.ones(my_domain.domain_dimension, dtype=int) * 2):
+                    N_at_quad_points_qijk[(quad_point_idx, *pixel_node)] = my_domain.N_basis_interpolator_array[
+                        pixel_node](
+                        *quad_point_coords)
+
+            my_domain.N_at_quad_points_qijk = N_at_quad_points_qijk
+
         case 'linear_triangles_tilled':
             if my_domain.domain_dimension != 2:
                 raise ValueError('Element_type {} is implemented only in 2D'.format(element_type))

@@ -1,6 +1,6 @@
 #! /bin/bash
 
-NUM_RUNS=4
+NUM_RUNS=5
 
 # List of preconditioner types (strings)
 PRECONDS=("Green"   "Green_Jacobi")
