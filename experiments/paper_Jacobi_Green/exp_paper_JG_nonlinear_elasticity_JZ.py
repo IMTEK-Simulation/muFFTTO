@@ -19,8 +19,8 @@ parser = argparse.ArgumentParser(
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
-parser.add_argument("-n", "--nb_pixel", default="64")
-
+parser.add_argument("-n", "--nb_pixel", default="32")
+parser.add_argument("-exp", "--exponent_elastic", default="10")
 parser.add_argument(
     "-p", "--preconditioner_type",
     type=str,
@@ -30,14 +30,16 @@ parser.add_argument(
 )
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
+args = parser.parse_args()
+nnn = int(args.nb_pixel)
+n_exp = int(args.exponent_elastic)
+preconditioner_type = args.preconditioner_type
 
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-args = parser.parse_args()
-nnn = int(args.nb_pixel)
-preconditioner_type = args.preconditioner_type
+
 
 save_results = True
 _info = {}
@@ -103,7 +105,7 @@ model_parameters_non_linear = {'K': 2,
                                'mu': 1.0,
                                'sig0': 0.5,
                                'eps0': 0.1,
-                               'n': 10.0}
+                               'n': n_exp}
 
 model_parameters_linear = {'K': 2,
                            'mu': 1}
@@ -121,7 +123,7 @@ phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretizati
 phase_field.s[0, 0,
 1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
 1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
-:  # 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
+1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
 ] = 0
 
 matrix_mask = phase_field.s[0, 0] == 0

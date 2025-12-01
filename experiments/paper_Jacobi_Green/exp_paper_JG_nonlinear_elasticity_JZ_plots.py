@@ -116,10 +116,10 @@ if plot_data_vs_CG:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx =   2**8
+    Nx =   2**5
     Ny =  Nx
     Nz =  Nx
-    it_max = 8
+    it_max = 10
     iterations = np.arange(it_max)  # numbers of grids points
     for iteration_total in iterations:
 

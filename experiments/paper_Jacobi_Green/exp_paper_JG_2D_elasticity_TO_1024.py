@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser(
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
-parser.add_argument("-n", "--nb_pixel", default="64")
+parser.add_argument("-n", "--nb_pixel", default="512")
 parser.add_argument("-it", "--iteration", default="1")
 
 parser.add_argument(
@@ -45,7 +45,7 @@ args = parser.parse_args()
 
 n_pix = int(args.nb_pixel)
 number_of_pixels = (n_pix, n_pix)  # (1024, 1024)
-iteration=args.iteration
+iteration = args.iteration
 preconditioner_type = args.preconditioner_type
 
 problem_type = 'elasticity'
@@ -61,7 +61,8 @@ compute_results = True
 
 if compute_results:
 
-    geometries_data_folder_path = '/home/martin/exp_data/'
+    # geometries_data_folder_path = '/home/martin/exp_data/'
+    geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/exp_data/'
 
     domain_size = [1, 1]
     # preconditioner_type = 'Jacobi'  # "Green", "Jacobi", "Green_Jacobi"
@@ -84,18 +85,26 @@ if compute_results:
                                                      mu=G_0,
                                                      kind='linear')
 
-    #print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_0)))
+    # print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_0)))
 
     phase_field = discretization.get_scalar_field(name='material_phase_field')
+    if number_of_pixels[0] == 64:
+        name = 'exp_2D_elasticity_TO_indre_3exp_N64_Et_0.15_Pt_-0.5_P0_0.2_w40.0_eta0.01_p2_mpi6_nlc_4_e_True'
+    elif number_of_pixels[0] == 128:
+        name = 'exp_2D_elasticity_TO_indre_3exp_N128_Et_0.15_Pt_-0.5_P0_0.35_w40.0_eta0.01_p2_mpi10_nlc_4_e_True'
 
-    # name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
-    name = 'exp_2D_elasticity_TO_indre_3exp_N64_Et_0.15_Pt_-0.5_P0_0.2_w40.0_eta0.01_p2_mpi6_nlc_4_e_True'
+    elif number_of_pixels[0] == 512:
+        name = 'exp_2D_elasticity_TO_indre_3exp_N512_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi80_nlc_3_e_False'
+
+    elif number_of_pixels[0] == 1024:
+        name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
+
     macro_gradient_inc_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
     material_data_field = discretization.get_material_data_size_field_mugrid(name='mat_Data')
 
     rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
-    #for iteration in np.arange(1, 1200):
+    # for iteration in np.arange(1, 1200):
 
     _info = {}
     # phase_field.s[0, 0] = np.load_npy(os.path.expanduser(data_folder_path + name + f'_it{2229}.npy'), allow_pickle=True)
@@ -106,7 +115,6 @@ if compute_results:
 
     phase_field.s[0, 0] = phase_field.s[0, 0] ** 2
 
-    # material_data_field.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
     #                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
     #                                                     *discretization.nb_of_pixels])))
     material_data_field.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
@@ -255,13 +263,16 @@ if plot_results:
     nb_iterations_J = []
     nb_iterations_GJ = []
     for iteration in np.arange(1, 10):
-        info_log_final_G = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Green_it_{iteration}.npz', allow_pickle=True)
+        info_log_final_G = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Green_it_{iteration}.npz',
+                                   allow_pickle=True)
         nb_iterations_G.append(len(info_log_final_G.f.norm_rr))
 
-        info_log_final_J = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Jacobi_it_{iteration}.npz', allow_pickle=True)
+        info_log_final_J = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Jacobi_it_{iteration}.npz',
+                                   allow_pickle=True)
         nb_iterations_J.append(len(info_log_final_J.f.norm_rr))
 
-        info_log_final_GJ = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Green_Jacobi_it_{iteration}.npz', allow_pickle=True)
+        info_log_final_GJ = np.load(data_folder_path + f'_info_N_{number_of_pixels[0]}_Green_Jacobi_it_{iteration}.npz',
+                                    allow_pickle=True)
         nb_iterations_GJ.append(len(info_log_final_GJ.f.norm_rr))
 
         print()
@@ -280,11 +291,14 @@ if plot_results:
     ax_iterations = fig.add_subplot(gs[1:, :])
     ax_iterations.text(-0.1, 1.0, rf'\textbf{{(b)}}', transform=ax_iterations.transAxes)
 
-    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_G.shape[0]), nb_iterations_G, "g", label='Green N=64', linewidth=1)
-    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_J.shape[0]), nb_iterations_J, "b", label='Jacobi N=64', linewidth=1)
-   # ax_iterations.plot(nb_iterations_J, "b", label='Jacobi N=64', linewidth=1)
+    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_G.shape[0]), nb_iterations_G, "g", label='Green N=64',
+                       linewidth=1)
+    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_J.shape[0]), nb_iterations_J, "b", label='Jacobi N=64',
+                       linewidth=1)
+    # ax_iterations.plot(nb_iterations_J, "b", label='Jacobi N=64', linewidth=1)
 
-    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_GJ.shape[0]), nb_iterations_GJ, "k", label='Green-Jacobi  N=64', linewidth=2)
+    ax_iterations.plot(np.linspace(1, 1000, nb_iterations_GJ.shape[0]), nb_iterations_GJ, "k",
+                       label='Green-Jacobi  N=64', linewidth=2)
     #
     # ax_iterations.plot(np.linspace(1, 1000, dgo_32.shape[0]), dgo_32, "g", label='Green N=32', linewidth=1,
     #                    linestyle=':')
