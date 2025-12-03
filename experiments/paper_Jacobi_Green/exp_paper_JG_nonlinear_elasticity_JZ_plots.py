@@ -119,74 +119,82 @@ if plot_data_vs_CG:
     Nx =   2**5
     Ny =  Nx
     Nz =  Nx
-    it_max = 10
+    it_max = 5
+    n_exponents=np.array([3,5,7,8,10])
     iterations = np.arange(it_max)  # numbers of grids points
-    for iteration_total in iterations:
 
-        preconditioner_type = 'Green'
+    its_G = np.zeros([it_max,len(n_exponents)])
+    its_GJ = np.zeros([it_max,len(n_exponents)])
 
-        data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                            + f'_{preconditioner_type}' + '/')
-        if iteration_total < it_max :
-            _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
+    for j in np.arange(len(n_exponents)):
+        n_exp =n_exponents[j]
+        for iteration_total in iterations:
 
-        with open(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
-            magic = f.read(6)
-            print(f"Magic number: {magic}")
+            preconditioner_type = 'Green'
 
-        # strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
-        #                         allow_pickle=True)
-        # strain_total_G = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
-        #                          allow_pickle=True)
-        # stress_G = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy',
-        #                    allow_pickle=True)  # , allow_pickle=True
+            data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                                + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max :
+                _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz', allow_pickle=True)
 
-        # rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+            with open(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
+                magic = f.read(6)
+                print(f"Magic number: {magic}")
 
-        its_G.append(_info_final_G.f.nb_it_comb)
-        norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
-        norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
-        info_log_final_G = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+            # strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+            #                         allow_pickle=True)
+            # strain_total_G = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+            #                          allow_pickle=True)
+            # stress_G = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy',
+            #                    allow_pickle=True)  # , allow_pickle=True
+
+            # rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+
+            its_G[iteration_total,j]=_info_final_G.f.nb_it_comb
+            norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
+            norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
+            info_log_final_G = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
 
-        preconditioner_type = 'Green_Jacobi'
+            preconditioner_type = 'Green_Jacobi'
 
-        data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                            + f'_{preconditioner_type}' + '/')
-        if iteration_total < it_max :
-            _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
-        # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
-        # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
-        #                          allow_pickle=True)
-        # strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
-        #                           allow_pickle=True)
-        # rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+            data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                                + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max :
+                _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz', allow_pickle=True)
+            # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+            # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+            #                          allow_pickle=True)
+            # strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+            #                           allow_pickle=True)
+            # rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
-        its_GJ.append(_info_final_GJ.f.nb_it_comb)
-        norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
-        norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
-        #diff_stress = stress_G - stress_GJ
-       # stress_diff_norm.append(
-      #      np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
-        print(_info_final_G.f.norm_rr[0])
 
-        #diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
-        # strain_fluc_norm.append(
-        #     np.linalg.norm(diff_strain_fluc.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
-        print(_info_final_GJ.f.norm_rr[0])
-        #diff_strain_total = strain_total_G - strain_total_GJ
-        #strain_total_norm.append(
-        #    np.linalg.norm(diff_strain_total.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+            its_GJ[iteration_total, j] =_info_final_GJ.f.nb_it_comb
+            norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
+            norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
+            #diff_stress = stress_G - stress_GJ
+           # stress_diff_norm.append(
+          #      np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
+            print(_info_final_G.f.norm_rr[0])
 
-        #diff_rhs = rhs_field_G - rhs_field_GJ
-        #diff_rhs_norm.append(
-        #    np.linalg.norm(diff_rhs.ravel()))
-        # rhs_inf_G.append(
-        #     np.linalg.norm(rhs_field_G.ravel(), ord=np.inf))
-        # rhs_inf_GJ.append(
-        #     np.linalg.norm(rhs_field_GJ.ravel(), ord=np.inf))
+            #diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
+            # strain_fluc_norm.append(
+            #     np.linalg.norm(diff_strain_fluc.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+            print(_info_final_GJ.f.norm_rr[0])
+            #diff_strain_total = strain_total_G - strain_total_GJ
+            #strain_total_norm.append(
+            #    np.linalg.norm(diff_strain_total.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
 
-        info_log_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+            #diff_rhs = rhs_field_G - rhs_field_GJ
+            #diff_rhs_norm.append(
+            #    np.linalg.norm(diff_rhs.ravel()))
+            # rhs_inf_G.append(
+            #     np.linalg.norm(rhs_field_G.ravel(), ord=np.inf))
+            # rhs_inf_GJ.append(
+            #     np.linalg.norm(rhs_field_GJ.ravel(), ord=np.inf))
+
+            info_log_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
     # del strain_fluc_G, strain_total_G, stress_G, rhs_field_G
     # del strain_fluc_GJ, strain_total_GJ, stress_GJ, rhs_field_GJ
@@ -213,14 +221,24 @@ if plot_data_vs_CG:
 
     gs_global = fig.add_subplot(gs10[0, 0])
 
-    gs_global.plot(iterations, its_G, 'g-', marker='x', label='Green')
-    gs_global.plot(iterations, its_GJ, 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    gs_global.plot(iterations, its_G[:,1], 'g-', marker='x', label='Green')
+    gs_global.plot(iterations, its_GJ[:,1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+
+    gs_global.plot(iterations, its_G[:,-2], 'g-', marker='x', label='Green')
+    gs_global.plot(iterations, its_GJ[:,-2], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+
+    gs_global.plot(iterations, its_G[:,-1], 'g-', marker='x', label='Green')
+    gs_global.plot(iterations, its_GJ[:,-1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+
     gs_global.set_xlabel(r'Newton iteration -  $i$')
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
     # gs_global.legend(loc='best')
     gs_global.set_xlim(-0.05, iterations[-1] + .05)
     gs_global.set_ylim(0., 300)
     gs_global.set_xticks(iterations)
+
+    plt.show()
+    quit()
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
                        xy=(iterations[2], its_GJ[2]),
                        xytext=(0.5, 100.),

@@ -153,7 +153,7 @@ plt.rcParams.update({'font.size': 11})
 plt.rcParams["font.family"] = "Arial"
 
 gs = fig.add_gridspec(3, 5, width_ratios=[3, 3, 3,3, 0.2]
-                      , height_ratios=[1, 1.7,0.7], hspace=0.1)
+                      , height_ratios=[1, 1.7,0.7], hspace=0.12)
 ax_iterations = fig.add_subplot(gs[1, :])
 ax_iterations.text(-0.12, 1.0, rf'\textbf{{(b)}}', transform=ax_iterations.transAxes)
 ax_iterations.plot(np.linspace(1, max_it, nb_iterations_G.shape[0]), nb_iterations_G, "g", label='Green N=1024',
@@ -170,7 +170,7 @@ ax_iterations.plot(np.linspace(1, max_it, nb_iterations_J_512.shape[0]), nb_iter
 ax_iterations.plot(np.linspace(1, max_it, nb_iterations_GJ_512.shape[0]), nb_iterations_GJ_512, "k", label='Green-Jacobi  N=512',
                    linewidth=1, linestyle='-.')
 
-ax_iterations.set_xlim(1, 1000)
+ax_iterations.set_xlim(1, max_it)
 #ax_iterations.set_xticks([1, max_it])
 ax_iterations.set_xticks([])
 
@@ -189,7 +189,7 @@ ax_iterations.set_yticklabels([0,1000,2500,5000,7500,10000])
 ax_iterations.set_ylabel(r"$\#$ PCG iterations")
 ax_iterations.annotate(text=r'Green-Jacobi - $\mathcal{T}$' + f'$_{{{512}}}$',
                        xy=(240, nb_iterations_GJ_512[240]),
-                       xytext=(260., 2000.6),
+                       xytext=(320., 2400.6),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
                                        lw=1,
@@ -197,7 +197,7 @@ ax_iterations.annotate(text=r'Green-Jacobi - $\mathcal{T}$' + f'$_{{{512}}}$',
                        color='Black'
                        )
 ax_iterations.annotate(text=r'Green-Jacobi - $\mathcal{T}$' + f'$_{{{1024}}}$',
-                       xy=(600, nb_iterations_GJ[600]),
+                       xy=(650, nb_iterations_GJ[650]),
                        xytext=(650., 2000.6),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
@@ -236,7 +236,7 @@ ax_iterations.annotate(text=r'Green - $\mathcal{T}$' + f'$_{{{512}}}$',
                        )
 ax_iterations.annotate(text=r'Green - $\mathcal{T}$' + f'$_{{{1024}}}$',
                        xy=(700, nb_iterations_G[700]),
-                       xytext=(750., 6000.),
+                       xytext=(650., 9000.),
                        arrowprops=dict(arrowstyle='->',
                                        color='Green',
                                        lw=1,
@@ -253,16 +253,16 @@ ax_iterations.annotate(text=r'Green - $\mathcal{T}$' + f'$_{{{1024}}}$',
 #                    linewidth=1)
 # ax_iterations.plot(nb_iterations_J, "b", label='Jacobi N=64', linewidth=1)
 ax_phase_min=fig.add_subplot(gs[2:, :])
-ax_phase_min.plot(np.linspace(1, max_it, contrast.shape[0]), contrast, "red", label='contrast   ',
+ax_phase_min.plot(np.linspace(1, max_it, min_phase.shape[0]), min_phase, "red", label='contrast   ',
                    linewidth=1)
 ax_phase_min.plot(np.linspace(1, max_it, contrast_512.shape[0]), contrast_512, "red", label='contrast   ',
                    linewidth=1, linestyle='-.')
 ax_phase_min.set_yscale('log')
-ax_phase_min.set_ylim([1e-16 , 1])
-ax_phase_min.set_ylabel(r"Total phase contrast")
-ax_phase_min.annotate(text=r'Phase contrast - $\mathcal{T}$' + f'$_{{{1024}}}$',
+ax_phase_min.set_ylim([1e-15 , 1])
+ax_phase_min.set_ylabel(r"$\min(\rho_k)$")
+ax_phase_min.annotate(text=r'$\mathcal{T}$' + f'$_{{{1024}}}$',
                        xy=(220, contrast[220]),
-                       xytext=(300., 0.0001),
+                       xytext=(320., 0.0001),
                        arrowprops=dict(arrowstyle='->',
                                        color='Red',
                                        lw=1,
@@ -278,9 +278,19 @@ ax_phase_min.annotate(text=r'$\mathcal{T}$' + f'$_{{{512}}}$',
                                        ls='-.'),
                        color='Red'
                        )
-ax_phase_min.set_xlim(1, 1000)
-ax_phase_min.set_xticks([1, max_it])
-ax_phase_min.set_xticklabels([f'Start', f'Converged'])
+
+ax_phase_min.text(-0.12, 1.0, rf'\textbf{{(c)}}', transform=ax_phase_min.transAxes)
+
+
+init = 100
+a2_cut = 200
+
+middle = 300
+end = max_it-20
+
+ax_phase_min.set_xlim(1, max_it)
+ax_phase_min.set_xticks([1, init,a2_cut,middle, max_it])
+ax_phase_min.set_xticklabels([0, init,a2_cut,middle,max_it])#[f'Start', init,a2_cut,middle,f'Converged']
 ax_phase_min.set_xlabel(r"$k$-th iteration of L-BFGS optimization process")
 
 ax_phase_min.set_yticks(ticks=[1e-15,1e-10,1e-5,1])
@@ -289,22 +299,17 @@ ax_phase_min.set_yticklabels([f'$10^{{{-15}}}$',f'$10^{{{-10}}}$',f'$10^{{{-5}}}
 # plot upper geometruies
 name = 'exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False'
 
-init = 200
-a2_cut = 300
-
-middle = 500
-end = max_it-20
 nb_tiles = 1
 
 ax_iterations.axvline(x=init, color='grey', linestyle='--', linewidth=1, label='x=init')
 ax_iterations.axvline(x=a2_cut, color='grey', linestyle='--', linewidth=1, label='x=a2_cut')
 ax_iterations.axvline(x=middle, color='grey', linestyle='--', linewidth=1, label='x=middle')
-ax_iterations.axvline(x=end, color='grey', linestyle='--', linewidth=1, label='x=end')
+#ax_iterations.axvline(x=end, color='grey', linestyle='--', linewidth=1, label='x=end')
 
 ax_phase_min.axvline(x=init, color='grey', linestyle='--', linewidth=1, label='x=init')
 ax_phase_min.axvline(x=a2_cut, color='grey', linestyle='--', linewidth=1, label='x=a2_cut')
 ax_phase_min.axvline(x=middle, color='grey', linestyle='--', linewidth=1, label='x=middle')        
-ax_phase_min.axvline(x=end, color='grey', linestyle='--', linewidth=1, label='x=end')
+#ax_phase_min.axvline(x=end, color='grey', linestyle='--', linewidth=1, label='x=end')
 
 geometries_data_folder_path = '/home/martin/exp_data/'
 xopt_init = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'_it{init}.npy') )
@@ -318,7 +323,7 @@ minn=(xopt_init ** 2).min()
 pcm = ax_init.pcolormesh(np.tile(xopt_init ** 2, (nb_tiles, nb_tiles)),
                          cmap=cmap_, linewidth=0,
                          rasterized=True, norm=divnorm)
-ax_init.set_title(f'Density' + r'$\rho$'+f'$_{{{init}}}$' , wrap=True)
+ax_init.set_title(  r'$\rho$'+f'$_{{{init}}}$' , wrap=True)
 # ax_init.set_ylabel(r'Density $\rho$')
 ax_init.set_aspect('equal', 'box')
 ax_init.set_xlim([0, 1024])
@@ -336,7 +341,7 @@ xopt_init = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'_
 pcm = ax_a2_cut.pcolormesh(np.tile(xopt_init ** 2, (nb_tiles, nb_tiles)),
                          cmap=cmap_, linewidth=0,
                          rasterized=True, norm=divnorm)
-ax_a2_cut.set_title(f'Density' + r'$\rho$'+f'$_{{{a2_cut}}}$' , wrap=True)
+ax_a2_cut.set_title(  r'$\rho$'+f'$_{{{a2_cut}}}$' , wrap=True)
 # ax_init.set_ylabel(r'Density $\rho$')
 ax_a2_cut.set_aspect('equal', 'box')
 ax_a2_cut.set_xlim([0, 1024])
@@ -355,7 +360,7 @@ minn=(xopt_middle ** 2).min()
 ax_middle.pcolormesh(np.tile(xopt_middle ** 2, (nb_tiles, nb_tiles)),
                      cmap=cmap_, norm=divnorm, linewidth=0,
                      rasterized=True)
-ax_middle.set_title(f'Density' +  r'$\rho$'+f'$_{{{middle}}}$' , wrap=True)
+ax_middle.set_title(   r'$\rho$'+f'$_{{{middle}}}$' , wrap=True)
 ax_middle.set_aspect('equal', 'box')
 ax_middle.set_xlim([0, 1024])
 ax_middle.set_xticks([])
@@ -374,7 +379,7 @@ pcm = ax_end.pcolormesh(np.tile(xopt_end ** 2, (nb_tiles, nb_tiles)),
                         cmap=cmap_, norm=divnorm, linewidth=0,
                         rasterized=True)
 minn=(xopt_end ** 2).min()
-ax_end.set_title(f'Converged \n density' + r'$\rho_{{\rm opt}}$'  , wrap=True)
+ax_end.set_title(  r'$\rho^{{\rm opt}}_{\rm{converged}}$'  , wrap=True)
 ax_end.set_aspect('equal', 'box')
 ax_end.set_xlim([0, 1024])
 ax_end.set_xticks([])
@@ -388,13 +393,7 @@ cbar.ax.yaxis.tick_right()
 cbar.set_ticks(ticks=[1e-15, 0.5, 1])
 cbar.set_ticklabels([f'$10^{{{-15}}}$', 0.5, 1])
 
-#
-# ax_iterations.plot(np.linspace(1, 1000, dgo_32.shape[0]), dgo_32, "g", label='Green N=32', linewidth=1,
-#                    linestyle=':')
-# ax_iterations.plot(np.linspace(1, 1000, jacoby_32.shape[0]), jacoby_32, "b", label='Jacobi N=32', linewidth=1,
-#                    linestyle=':')
-# ax_iterations.plot(np.linspace(1, 1000, combi_32.shape[0]), combi_32, "k", label='Jacobi - Green N=32', linewidth=2,
-# linestyle=':')
-#ax_iterations.set_yscale('log')
-# ax_iterations.set_xscale('log')
+fname = figure_folder_path + 'exp_paper_JG_2D_elasticity_TO_1024' + '{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
 plt.show()

@@ -321,31 +321,31 @@ for inc in range(ninc):
     if save_results:
         temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
-        results_name = (f'strain_fluc_field' + f'_it{iteration_total}')
+        results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD,
                  )
 
         # save total  strain
-        results_name = (f'total_strain_field' + f'_it{iteration_total}')
+        results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         # save stress
-        results_name = (f'stress' + f'_it{iteration_total}')
+        results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         # save K4_ijklqyz
-        results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+        results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
-        results_name = (f'rhs_field' + f'_it{iteration_total}')
+        results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, )
@@ -492,36 +492,36 @@ for inc in range(ninc):
         rhs_field.s *= -1
 
         if save_results:
-            results_name = (f'displacement_increment_field' + f'_it{iteration_total}')
+            results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save strain fluctuation
-            results_name = (f'strain_fluc_field' + f'_it{iteration_total}')
+            results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save total  strain
-            results_name = (f'total_strain_field' + f'_it{iteration_total}')
+            results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save stress
-            results_name = (f'stress' + f'_it{iteration_total}')
+            results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save K4_ijklqyz
-            results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+            results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
-            results_name = (f'rhs_field' + f'_it{iteration_total}')
+            results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
@@ -559,8 +559,8 @@ for inc in range(ninc):
             print('newton_stop_crit {0:10.2e}'.format(_info['newton_stop_crit']))
 
         if MPI.COMM_WORLD.rank == 0:
-            np.savez(data_folder_path + f'info_log_it{iteration_total - 1}.npz', **_info)
-            print(data_folder_path + f'info_log_it{iteration_total}.npz')
+            np.savez(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total - 1}.npz', **_info)
+            print(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz')
 
         # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
         # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
@@ -606,8 +606,8 @@ for inc in range(ninc):
         _info['sum_CG_its'] = sum_CG_its
         _info['elapsed_time'] = elapsed_time
         if MPI.COMM_WORLD.rank == 0:
-            np.savez(data_folder_path + f'info_log_final.npz', **_info)
-            print(data_folder_path + f'info_log_final.npz')
+            np.savez(data_folder_path + f'info_log_final_exp_{n_exp}.npz', **_info)
+            print(data_folder_path + f'info_log_final_exp_{n_exp}.npz')
 
     plot_sol_field = False
     if plot_sol_field:
