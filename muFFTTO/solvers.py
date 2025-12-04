@@ -156,7 +156,10 @@ def conjugate_gradients_mugrid(
         # p.s *= beta
         # p.s += z.s
 
-    warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+    if comm.rank == 0:
+        warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+    return x
+
 
 def conjugate_gradients_mugrid_experimental(
         comm: Communicator,
@@ -293,6 +296,7 @@ def conjugate_gradients_mugrid_experimental(
         # p.s += z.s
 
     warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',
         callback=None, **kwargs):

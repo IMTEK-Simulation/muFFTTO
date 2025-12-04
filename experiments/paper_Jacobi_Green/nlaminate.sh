@@ -1,21 +1,21 @@
 #! /bin/bash
 
-NUM_RUNS=10
+NUM_RUNS=13
 
 # List of preconditioner types (strings)
-PRECONDS=("Green")
-PRECONDS=("Green" "Jacobi" "Green_Jacobi")
+#PRECONDS=("Green")# "Jacobi"
+PRECONDS=("Green" "Green_Jacobi")
 
 # List of numeric p values
-PVALUES=(1 4 )
+PVALUES=(1 )
 
-for i in $(seq 2 $NUM_RUNS); do
+for i in $(seq 10 $NUM_RUNS); do
     for prec in "${PRECONDS[@]}"; do
         for pv in "${PVALUES[@]}"; do
             if [ $i -gt 7 ]; then
-                NP=12
+                NP=1
             else
-                NP=4
+                NP=1
             fi
             echo "Run $i with preconditioner $prec, rho=$pv, using -np $NP..."
             mpirun -np $NP python ./exp_paper_JG_nlinear.py -n $i -p "$prec" -rho "$pv"

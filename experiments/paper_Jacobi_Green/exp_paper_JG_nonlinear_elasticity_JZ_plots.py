@@ -21,7 +21,7 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-plot_time_vs_dofs = True
+plot_time_vs_dofs = False
 plot_stress_field = False
 plot_data_vs_CG = True
 
@@ -224,13 +224,11 @@ if plot_data_vs_CG:
     norm_rhs_t_G = np.concatenate((np.array(np.atleast_1d(_info_final_G.f.rhs_t_norm)), np.array(norm_rhs_G)))
     norm_rhs_t_GJ = np.concatenate((np.array(np.atleast_1d(_info_final_GJ.f.rhs_t_norm)), np.array(norm_rhs_GJ)))
 
-    fig = plt.figure(figsize=(8.3, 5.0))
-    gs = fig.add_gridspec(2, 5, hspace=0.1, wspace=0.1, width_ratios=[0.05, 1, 1, 1, 1],
-                          height_ratios=[1, 1.5])
+    fig = plt.figure(figsize=(8.3, 4.0))
+    gs = fig.add_gridspec(2, 5, hspace=0.2, wspace=0.1, width_ratios=[ 1, 1,1, 1,0.05],
+                          height_ratios=[1, 1. ])
 
-    gs10 = mpl.gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1, :], wspace=0.04)
-
-    gs_global = fig.add_subplot(gs10[0, 0])
+    gs_global = fig.add_subplot(gs[:, 0])
 
     gs_global.plot(iterations, its_G[:, 0], 'g-', marker='x', label='Green')
     gs_global.plot(iterations, its_GJ[:, 0], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
@@ -268,104 +266,28 @@ if plot_data_vs_CG:
                        fontsize=11,
                        color='k',
                        )
-    gs_global.text(0.02, 0.93, rf'\textbf{{(b.1)}}', transform=gs_global.transAxes)
+    gs_global.text(0.02, 0.93, rf'\textbf{{(a)}}', transform=gs_global.transAxes)
 
     # gs_global.set_ylim(0, 800)
 
     # Right y-axis
-    ax2 = fig.add_subplot(gs10[0, 1])
-
-    ax2.semilogy(np.arange(len(norm_newrton_stop_GJ)), norm_newrton_stop_GJ, 'g:', marker='o', markerfacecolor='none',
-                 label=r'$norm_newrton_stop_GJ$')
-    ax2.semilogy(np.arange(len(norm_newrton_stop_G)), norm_newrton_stop_G, 'g:', marker='o', markerfacecolor='none',
-                 label=r'$norm_newrton_stop_GJ$')
-
-    # ax2.semilogy(np.arange(len(stress_diff_norm[1:])) + 1, stress_diff_norm[1:], 'b->',
-    #              label=r'$||(\mathsf{\bf{\sigma}}_{\rm{G}}^{(i)}- \mathsf{\bf{\sigma}}_{\rm{GJ}}^{(i)})||_{\infty}$')
-    # ax2.annotate(text=r'Stress - $(\mathsf{\bf{\sigma}}_{\rm{G}}^{(i)}- \mathsf{\bf{\sigma}}_{\rm{GJ}}^{(i)})$',
-    #              # \n contrast = 100
-    #              xy=(2, stress_diff_norm[2]),
-    #              xytext=(2, 1e-2),
-    #              arrowprops=dict(arrowstyle='->',
-    #                              color='k',
-    #                              lw=1,
-    #                              ls='-'),
-    #              fontsize=11,
-    #              color='k',
-    #              )
-
-    # ax2.semilogy(np.arange(len(strain_fluc_norm[1:])) + 1, strain_fluc_norm[1:], 'r-|',
-    #              label=r'$||  \nabla \mathsf{\bf{\tilde{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{\tilde{u}}}_{\rm{GJ}} ^{(i)}||_{\infty}$')
-    # ax2.annotate(
-    #     text=r'Strain - $(\nabla \mathsf{\bf{\tilde{u}}}_{\rm{G}} ^{(i)}- \nabla \mathsf{\bf{\tilde{u}}}_{\rm{GJ}} ^{(i)})$',
-    #     # \n contrast = 100
-    #     xy=(4, strain_fluc_norm[1]),
-    #     xytext=(3.7, 5e-4),
-    #     arrowprops=dict(arrowstyle='->',
-    #                     color='k',
-    #                     lw=1,
-    #                     ls='-'),
-    #     fontsize=11,
-    #     color='k',
-    # )
+    # ax2 = fig.add_subplot(gs10[0, 1])
     #
-    # ax2.semilogy(np.arange(len(diff_rhs_norm[1:])) + 1, diff_rhs_norm[1:], '-x', color='brown',
-    #              label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)} - \mathsf{\bf{f}}_{\rm{GJ}}^{(i)} ||_{\infty}$')
-    # ax2.annotate(text=r'Force - $(\mathsf{\bf{f}}_{\rm{G}}^{(i)} - \mathsf{\bf{f}}_{\rm{GJ}}^{(i)})$',
-    #              # \n contrast = 100
-    #              xy=(4, diff_rhs_norm[1]),
-    #              xytext=(0.2, 3e-8),
-    #              arrowprops=dict(arrowstyle='->',
-    #                              color='k',
-    #                              lw=1,
-    #                              ls='-'),
-    #              fontsize=11,
-    #              color='k',
-    #              )
-    #
-    # ax2.semilogy(np.arange(len(norm_rhs_GJ)), norm_rhs_GJ, 'g:', marker='o', markerfacecolor='none',
-    #              label=r'$|| \mathsf{\bf{f}}_{\rm{GJ}}^{(i)}||_{\infty}$')
-    # ax2.annotate(text=r'Force - $\mathsf{\bf{f}}_{\rm{GJ}}^{(i)}$',  # \n contrast = 100
-    #              xy=(4, rhs_inf_GJ[1]),
-    #              xytext=(0.2, 5e-7),
-    #              arrowprops=dict(arrowstyle='->',
-    #                              color='k',
-    #                              lw=1,
-    #                              ls='-'),
-    #              fontsize=11,
-    #              color='k',
-    #              )
-
-    # ax2.semilogy(np.arange(len(norm_rhs_G)), norm_rhs_G, 'k:x',
-    #              label=r'$|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}||_{\infty}$')
-    # ax2.annotate(text=r'Force - $\mathsf{\bf{f}}_{\rm{G}}^{(i)}$',  # \n contrast = 100
-    #              xy=(5, norm_rhs_G[1]),
-    #              xytext=(6, 3e-7),
-    #              arrowprops=dict(arrowstyle='->',
-    #                              color='k',
-    #                              lw=1,
-    #                              ls='-'),
-    #              fontsize=11,
-    #              color='k',
-    #              )
-
-    # ax2.semilogy(np.arange(len(norm_rhs_G)), abs(norm_rhs_G-norm_rhs_GJ), 'g:x',
-    #              label=r'Green - $|| \mathsf{\bf{f}}_{\rm{G}}^{(i)}-\mathsf{\bf{f}}_{\rm{GJ}}^{(i)}||$')
-    # ax2.semilogy(np.arange(len(norm_rhs_G)), abs(norm_rhs_G - norm_rhs_GJ), 'g:x', label='error ')
-
-    # ax2.set_ylabel('Norm of error', color='r')
-
-    ax2.set_ylim([1e-10, 1e-1])
-    ax2.set_yticks([1e-10, 1e-7, 1e-4, 1e-1])
-    ax2.set_yticklabels([r'$10^{-10}$', r'$10^{-7}$', r'$10^{-4}$', r'$10^{-1}$'])
-    ax2.yaxis.set_ticks_position('right')  # move ticks to right
-    ax2.yaxis.set_label_position('right')  # move label to right
-    ax2.set_xlabel(r'Newton iteration - $i$')
-    ax2.set_ylabel(r'$||{X} ||_{\infty}$')
-    # ax2.legend(loc='best')
-    ax2.set_xlim(-0.05, iterations[-1] + .05)
-    ax2.set_xticks(iterations)
-    ax2.text(0.02, 0.92, rf'\textbf{{(b.2)}}', transform=ax2.transAxes)
+    # ax2.semilogy(np.arange(len(norm_newrton_stop_GJ)), norm_newrton_stop_GJ, 'g:', marker='o', markerfacecolor='none',
+    #              label=r'$norm_newrton_stop_GJ$')
+    # ax2.semilogy(np.arange(len(norm_newrton_stop_G)), norm_newrton_stop_G, 'g:', marker='o', markerfacecolor='none',
+    #              label=r'$norm_newrton_stop_GJ$')
+    # ax2.set_ylim([1e-10, 1e-1])
+    # ax2.set_yticks([1e-10, 1e-7, 1e-4, 1e-1])
+    # ax2.set_yticklabels([r'$10^{-10}$', r'$10^{-7}$', r'$10^{-4}$', r'$10^{-1}$'])
+    # ax2.yaxis.set_ticks_position('right')  # move ticks to right
+    # ax2.yaxis.set_label_position('right')  # move label to right
+    # ax2.set_xlabel(r'Newton iteration - $i$')
+    # ax2.set_ylabel(r'$||{X} ||_{\infty}$')
+    # # ax2.legend(loc='best')
+    # ax2.set_xlim(-0.05, iterations[-1] + .05)
+    # ax2.set_xticks(iterations)
+    # ax2.text(0.02, 0.92, rf'\textbf{{(b.2)}}', transform=ax2.transAxes)
 
     # plot mat data 0 Newton iteration
     ijkl = (0, 0, 0, 0)
@@ -406,7 +328,7 @@ if plot_data_vs_CG:
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
     #ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.2)}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.2)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -420,14 +342,14 @@ if plot_data_vs_CG:
     # ----------------
     # colobar is based on the first iteration
     # ax_cbar = fig.add_axes([0.8, 0.22, 0.02, 0.2])
-    ax_cbar = fig.add_subplot(gs[0, 0])
+    ax_cbar = fig.add_subplot(gs[0, 4])
 
     cbar = plt.colorbar(pcm, location='left', cax=ax_cbar)
     cbar.set_ticks(ticks=[min_K, mid_K, max_K])
     cbar.set_ticklabels([f'{min_K:.0f}', f'{mid_K:.0f}', f'{max_K:.0f}'])
     ax_cbar.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
-    cbar.ax.yaxis.set_ticks_position('left')  # move ticks to right
-    cbar.ax.yaxis.set_label_position('left')  # move label to right
+    cbar.ax.yaxis.set_ticks_position('right')  # move ticks to right
+    cbar.ax.yaxis.set_label_position('right')  # move label to right
     ax_cbar.set_ylabel(r'$\mathrm{C}_{11}/\mathrm{K}$')
     # ----------------
     iteration_total = 0
@@ -444,7 +366,7 @@ if plot_data_vs_CG:
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
     ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.1)}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.1)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -474,7 +396,7 @@ if plot_data_vs_CG:
     ax_geom_0.set_title(fr'$i={iteration_total}$')
     #ax_geom_0.text(0.30, 0.5, r'$N_{z}=128$', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{3})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{3})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -493,7 +415,7 @@ if plot_data_vs_CG:
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
-    ax_geom_0 = fig.add_subplot(gs[0, 4])
+    ax_geom_0 = fig.add_subplot(gs[1, 1])
 
     pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
                                cmap=cmap_, norm=norm,
@@ -504,7 +426,62 @@ if plot_data_vs_CG:
     ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
     ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{4})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{4})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.set_xticks([])
+    ax_geom_0.set_xticklabels([])
+    ax_geom_0.set_yticks([])
+    ax_geom_0.set_yticklabels([])
+    # ax_geom_0.set_xlim([0, Nz])
+    # ax_geom_0.set_ylim([0, Nz])
+    ax_geom_0.set_box_aspect(1)
+
+    iteration_total = 4
+    # iteration_total = 2
+    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
+    ax_geom_0 = fig.add_subplot(gs[1, 2])
+
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+                               cmap=cmap_, norm=norm,
+                               linewidth=0,
+                               rasterized=True)
+    ax_geom_0.set_aspect('equal')
+    ax_geom_0.set_title(fr'$i={iteration_total}$')
+    ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
+
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{5})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.set_aspect('equal')
+    ax_geom_0.set_xticks([])
+    ax_geom_0.set_xticklabels([])
+    ax_geom_0.set_yticks([])
+    ax_geom_0.set_yticklabels([])
+    # ax_geom_0.set_xlim([0, Nz])
+    # ax_geom_0.set_ylim([0, Nz])
+    ax_geom_0.set_box_aspect(1)
+
+    iteration_total = 5
+    # iteration_total = 2
+    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
+    ax_geom_0 = fig.add_subplot(gs[1, 3])
+
+    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+                               cmap=cmap_, norm=norm,
+                               linewidth=0,
+                               rasterized=True)
+    ax_geom_0.set_aspect('equal')
+    ax_geom_0.set_title(fr'$i={iteration_total}$')
+    ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
+
+    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{6})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_xticks([])
     ax_geom_0.set_ylabel('Pixel index')
@@ -516,6 +493,10 @@ if plot_data_vs_CG:
     ax_geom_0.set_box_aspect(1)  # Maintain square aspect ratio
     ax_geom_0.yaxis.set_ticks_position('right')
     ax_geom_0.yaxis.set_label_position('right')
+
+
+
+
 
     # axis for cross sections
     add_stress_plot = False

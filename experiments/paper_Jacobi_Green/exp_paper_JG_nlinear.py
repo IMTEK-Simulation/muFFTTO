@@ -68,7 +68,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 # Variables to be set up
-for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
+for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 1
     nb_laminates = 2 ** nb_laminates_power
     #
     number_of_pixels = (2 ** nb_pix_multips, 2 ** nb_pix_multips)
@@ -80,9 +80,6 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
                                            nb_of_pixels_global=number_of_pixels,
                                            discretization_type=discretization_type,
                                            element_type=element_type)
-
-    # set macroscopic gradient
-    macro_gradient = np.array([[1.0, 0], [0, 1.0]])
 
     # create material data field
     K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -124,15 +121,15 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
 
     # save
     results_name = (f'linear_geometry_pixels={nb_laminates}' + f'dof={number_of_pixels[0]}')
-    geom_folder_path=file_folder_path + '/exp_data/'+'exp_paper_JG_nlinear_generate_geometries/'
+    geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nlinear_generate_geometries/'
 
-    phase_field.s[0, 0]=load_npy(geom_folder_path + results_name + f'.npy',
-             tuple(discretization.subdomain_locations_no_buffers),
-             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+    phase_field.s[0, 0] = load_npy(geom_folder_path + results_name + f'.npy',
+                                   tuple(discretization.subdomain_locations_no_buffers),
+                                   tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
     discretization.scale_field_mugrid(phase_field,
-                               min_val=1 ,
-                               max_val=10**total_phase_contrast)
+                                      min_val=1,
+                                      max_val=10 ** total_phase_contrast)
 
     #
     #
@@ -177,13 +174,11 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         # discretization.fft.communicate_ghosts(Ax)
 
 
+    start_time = time.time()
+
     # Set up preconditioners
     # Green
     preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
-
-    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-        material_data_field_ijklqxyz=material_data_field_C_0,
-        formulation=formulation)
 
 
     def M_fun_green(x, Px):
@@ -197,23 +192,28 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
                                                    output_nodal_field_fnxyz=Px)
 
 
-    def M_fun_Green_Jacobi(x, Px):
-        discretization.fft.communicate_ghosts(x)
-        x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
-
-        x_jacobi_temp.s = K_diag_alg.s * x.s
-        discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                   input_nodal_field_fnxyz=x_jacobi_temp,
-                                                   output_nodal_field_fnxyz=Px)
-
-        Px.s = K_diag_alg.s * Px.s
-        discretization.fft.communicate_ghosts(Px)
+    if preconditioner_type == 'Green_Jacobi' or preconditioner_type == 'Jacobi':
+        K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            formulation=formulation)
 
 
-    def M_fun_Jacobi(x, Px):
-        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
-        discretization.fft.communicate_ghosts(Px)
+        def M_fun_Green_Jacobi(x, Px):
+            discretization.fft.communicate_ghosts(x)
+            x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
+            x_jacobi_temp.s = K_diag_alg.s * x.s
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                       input_nodal_field_fnxyz=x_jacobi_temp,
+                                                       output_nodal_field_fnxyz=Px)
+
+            Px.s = K_diag_alg.s * Px.s
+            discretization.fft.communicate_ghosts(Px)
+
+
+        def M_fun_Jacobi(x, Px):
+            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            discretization.fft.communicate_ghosts(Px)
 
     if preconditioner_type == 'Green':
         M_fun = M_fun_green
@@ -255,17 +255,21 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         tol=1e-5,
         maxiter=1000,
         callback=callback,
-       # norm_metric=M_fun_green
+        # norm_metric=M_fun_green
     )
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
     if discretization.fft.communicator.rank == 0:
+        print("Elapsed time: ", elapsed_time)
         nb_steps = len(norms['residual_rr'])
         print(f'nb steps = {nb_steps} ')
         _info = {}
         _info['nb_steps'] = nb_steps
+        _info['elapsed_time'] = elapsed_time
         results_name = (
                 f'nb_nodes_{number_of_pixels[0]}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
 
         np.savez(data_folder_path + results_name + f'.npz', **_info)
         print(data_folder_path + results_name + f'.npz')  #
         # infoaa= np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
-

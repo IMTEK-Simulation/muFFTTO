@@ -40,8 +40,8 @@ formulation = 'small_strain'
 domain_size = [1, 1]
 # Variables to be set up
 
-
-for nb_pixels_power in np.arange(2, 10 + 1):
+max_size=12
+for nb_pixels_power in np.arange(2, max_size + 1):
     nb_laminates = 2 ** nb_pixels_power
 
     #
@@ -79,7 +79,7 @@ for nb_pixels_power in np.arange(2, 10 + 1):
     to_save = np.copy(geometry)
     np.save(data_folder_path + results_name + f'.npy', to_save)
 
-    for nb_of_disc_points in np.arange(nb_pixels_power, 10):
+    for nb_of_disc_points in np.arange(nb_pixels_power, max_size):
         dof = 2 ** (nb_of_disc_points + 1)
         geometry = np.repeat(np.repeat(geometry, 2, axis=0), 2, axis=1)
         print('dof', dof)

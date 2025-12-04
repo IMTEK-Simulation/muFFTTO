@@ -30,7 +30,8 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-nb_pix_multips = 10
+
+nb_pix_multips = 11
 
 # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
 nb_it_Green_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
@@ -39,6 +40,9 @@ nb_it_Jacobi_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
 nb_it_Jacobi_linear_4 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
 nb_it_Green_Jacobi_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
 nb_it_Green_Jacobi_linear_4 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_G_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_J_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_GJ_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
 
 for j in np.arange(2, nb_pix_multips + 1):
     number_of_pixels = 2 ** j
@@ -53,6 +57,124 @@ for j in np.arange(2, nb_pix_multips + 1):
                 f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
         info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
         nb_it_Green_linear_1[i - 2, j - 2] = info.f.nb_steps
+        try:
+            time_G_1[i - 2, j - 2] = info.f.elapsed_time
+        except AttributeError:
+            time_G_1[i - 2, j - 2] = 0
+
+
+        # total_phase_contrast = 1
+        # preconditioner_type = 'Jacobi'
+        # results_name = (
+        #         f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
+        # info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
+        # try:
+        #     time_J_1[i - 2, j - 2] = info.f.elapsed_time
+        # except AttributeError:
+        #     time_J_1[i - 2, j - 2] = 0
+
+        #nb_it_Jacobi_linear_1[i - 2, j - 2] = info.f.nb_steps
+
+        total_phase_contrast = 1
+        preconditioner_type = 'Green_Jacobi'
+        results_name = (
+                f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
+        info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
+
+        nb_it_Green_Jacobi_linear_1[i - 2, j - 2] = info.f.nb_steps
+        try:
+            time_GJ_1[i - 2, j - 2] = info.f.elapsed_time
+        except AttributeError:
+            time_GJ_1[i - 2, j - 2] = 0
+
+
+nb_it_Green_linear_1 = np.transpose(nb_it_Green_linear_1)
+nb_it_Green_linear_4 = np.transpose(nb_it_Green_linear_4)
+nb_it_Jacobi_linear_1 = np.transpose(nb_it_Jacobi_linear_1)
+nb_it_Jacobi_linear_4 = np.transpose(nb_it_Jacobi_linear_4)
+nb_it_Green_Jacobi_linear_1 = np.transpose(nb_it_Green_Jacobi_linear_1)
+nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
+plot_time = True
+if plot_time:
+    nb_pixels = 4
+    Ns = 2 ** np.arange(nb_pixels, 12)
+    time_G_1 = np.transpose(time_G_1)
+    time_GJ_1 = np.transpose(time_GJ_1)
+
+    fig = plt.figure(figsize=(9, 4.50))
+    gs = fig.add_gridspec(1, 1, hspace=0.5, wspace=0.5, width_ratios=[1],
+                          height_ratios=[1])
+    nb_dofs = 2 * Ns ** 2
+    line1, = plt.loglog(nb_dofs, time_G_1[2:, 0], '-x', color='Green', label='Green')
+    line2, = plt.loglog(nb_dofs, time_GJ_1[2:, 0], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    line3, = plt.loglog(nb_dofs, nb_dofs * np.log(nb_dofs) / (nb_dofs[0] * np.log(nb_dofs[0])) * time_G_1[0, 0], ':',
+                        label=r'Quasilinear - $ \mathcal{O} (N_{\mathrm{N}} \log  N_{\mathrm{N}}$)')
+    # plt.loglog(nb_dofs, nb_dofs / (nb_dofs[0]) * time_G[0], '--', label='linear')
+
+    line4, = plt.loglog(nb_dofs, (time_G_1 / nb_it_Green_linear_1)[2:, 0], 'g--x', label='Green')
+    line5, = plt.loglog(nb_dofs, (time_GJ_1 / nb_it_Green_Jacobi_linear_1)[2:, 0], 'k--', marker='o',
+                        markerfacecolor='none', label='Green-Jacobi')
+    # plt.loglog(nb_dofs,
+    #            nb_dofs* np.log(nb_dofs) / (nb_dofs[0]  * np.log(nb_dofs)) * time_G[0] / its_G[0], ':',
+    #            label='N log N')
+    line6, = plt.loglog(nb_dofs, nb_dofs /1e6, '--',
+                        label=r'Linear - $\mathcal{O} (N_{\mathrm{N}})$')
+    plt.loglog(np.linspace(1e1, 1e8), 1e-4 * np.linspace(1e1, 1e8), 'k-', linewidth=0.9)
+
+    plt.xlabel(r' $\#$ of degrees of freedom (DOFs) - $d N_{\mathrm{N}}$')
+    plt.ylabel('Time (s)')
+    plt.gca().set_xlim([nb_dofs[0], nb_dofs[-1]])
+    plt.gca().set_xticks([1e3, 1e4, 1e5, 1e6, 1e7])
+    plt.gca().set_ylim([1e-4, 1e4])
+
+    # plt.gca().set_xticks(iterations)
+
+    legend1 = plt.legend(handles=[line1, line2, line3], loc='upper left', title='Wall-clock time')
+
+    plt.gca().add_artist(legend1)  # Add the first legend manually
+
+    # Second legend (bottom right)
+    plt.legend(handles=[line4, line5, line6], loc='lower right', title='Wall-clock time / $\#$ of PCG iterations')
+
+    fig.tight_layout()
+    fname = f'time_scaling' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
+
+    plt.show()
+    quit()
+
+
+nb_pix_multips = 10
+
+# 'Jacobi'  # 'Green'  # 'Green_Jacobi'
+nb_it_Green_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+nb_it_Green_linear_4 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+nb_it_Jacobi_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+nb_it_Jacobi_linear_4 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+nb_it_Green_Jacobi_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+nb_it_Green_Jacobi_linear_4 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_G_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_J_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+time_GJ_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
+
+for j in np.arange(2, nb_pix_multips + 1):
+    number_of_pixels = 2 ** j
+    # print('j=', j)
+    for i in np.arange(2, j + 1):
+        # print('i=', i)
+        nb_laminates = 2 ** i
+
+        total_phase_contrast = 1
+        preconditioner_type = 'Green'
+        results_name = (
+                f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
+        info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
+        nb_it_Green_linear_1[i - 2, j - 2] = info.f.nb_steps
+        try:
+            time_G_1[i - 2, j - 2] = info.f.elapsed_time
+        except AttributeError:
+            time_G_1[i - 2, j - 2] = 0
 
         total_phase_contrast = 4
         results_name = (
@@ -65,6 +187,10 @@ for j in np.arange(2, nb_pix_multips + 1):
         results_name = (
                 f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
         info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
+        try:
+            time_J_1[i - 2, j - 2] = info.f.elapsed_time
+        except AttributeError:
+            time_J_1[i - 2, j - 2] = 0
 
         nb_it_Jacobi_linear_1[i - 2, j - 2] = info.f.nb_steps
         total_phase_contrast = 4
@@ -80,6 +206,11 @@ for j in np.arange(2, nb_pix_multips + 1):
         info = np.load(data_folder_path + results_name + f'.npz', allow_pickle=True)
 
         nb_it_Green_Jacobi_linear_1[i - 2, j - 2] = info.f.nb_steps
+        try:
+            time_GJ_1[i - 2, j - 2] = info.f.elapsed_time
+        except AttributeError:
+            time_GJ_1[i - 2, j - 2] = 0
+
         total_phase_contrast = 4
         results_name = (
                 f'nb_nodes_{number_of_pixels}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
@@ -92,10 +223,9 @@ nb_it_Jacobi_linear_1 = np.transpose(nb_it_Jacobi_linear_1)
 nb_it_Jacobi_linear_4 = np.transpose(nb_it_Jacobi_linear_4)
 nb_it_Green_Jacobi_linear_1 = np.transpose(nb_it_Green_Jacobi_linear_1)
 nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
-
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9,10]#, 8, 9, 10
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]  # , 8, 9, 10
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -305,13 +435,11 @@ if plot_this:
 
         row += 1
 
-    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('nlaminate',  phase_contrast, '.pdf')
+    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('nlaminate', phase_contrast, '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
 
 plt.show()
-
-
 
 script_name = 'exp_paper_JG_cos'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
@@ -381,12 +509,9 @@ nb_it_Jacobi_linear_4 = np.transpose(nb_it_Jacobi_linear_4)
 nb_it_Green_Jacobi_linear_1 = np.transpose(nb_it_Green_Jacobi_linear_1)
 nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
 
-
-
-
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9,10]#
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]  #
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -595,7 +720,7 @@ if plot_this:
 
         row += 1
 
-    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('cos',  phase_contrast, '.pdf')
+    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('cos', phase_contrast, '.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
 

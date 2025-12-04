@@ -107,14 +107,8 @@ model_parameters_non_linear = {'K': 2,
                                'eps0': 0.1,
                                'n': n_exp}
 
-model_parameters_non_linear = {'K': 2,
-                               'mu': 1.0,
-                               'sig0': 0.5,
-                               'eps0': 0.1,
-                               'n': n_exp}
-
-# model_parameters_linear = {'K': 2,
-#                            'mu': 1}
+model_parameters_linear = {'K': 2,
+                           'mu': 1}
 
 _info['model_parameters_non_linear'] = model_parameters_non_linear
 _info['model_parameters_linear'] = model_parameters_linear
@@ -498,39 +492,39 @@ for inc in range(ninc):
         rhs_field.s *= -1
 
         if save_results:
-            # results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            #
-            # # save strain fluctuation
-            # results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            #
-            # # save total  strain
-            # results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            #
-            # # save stress
-            # results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            # save strain fluctuation
+            results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            # save total  strain
+            results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            # save stress
+            results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save K4_ijklqyz
             results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            #
-            # results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # rhs *= -1
 
