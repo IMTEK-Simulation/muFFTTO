@@ -50,8 +50,8 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-plot = False
-compute = True
+plot = True
+compute = False
 enforce_mean = False
 if compute:
 
@@ -347,29 +347,29 @@ if plot:
 
     # plt.rcParams.update({'font.size': 14})
     # ratios = np.array([2, 5, 8])
-    ratios = np.array([2, 3, 4])  # 5, 8, 12, 15, 15
+    ratios = np.array([2,    4, 8, 12,  ])  # 5, 8, 12, 15, 15
     # fig = plt.figure(figsize=(11.5, 6))
     fig = plt.figure(figsize=(8.3, 5.0))
 
     # gs = fig.add_gridspec(1, 3)
-    gs_global = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.2)
+    gs_global = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.1)
 
-    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.2)  # 0.1, 1, 4
+    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.3)  # 0.1, 1, 4
     gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.07, 1], hspace=0.2, wspace=0.7)  # 0.1, 1, 4
 
     ax_cbar = fig.add_subplot(gs_geom[:, 0])
-    lines = ['-', '-.', '--', ':', 'dotted']
+    lines = ['-', '-.', '--', ':', 'dotted', '--', ':', ]
     row = 0
     for sharp in [False, True]:
         ax_error = fig.add_subplot(gs_error[row, 0])
-        ax_error.text(-0.12, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_error.transAxes)
+        ax_error.text(0.00, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_error.transAxes)
 
         ax_geom = fig.add_subplot(gs_geom[row, 1])
 
         if row == 0:
-            ax_geom.text(-0.2, 1.22, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_geom.transAxes)
+            ax_geom.text(-0.5, 1.05, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_error.transAxes)
         elif row == 1:
-            ax_geom.text(-0.2, 1.21, rf'\textbf{{(a.{row + 1})}}  ', transform=ax_geom.transAxes)
+            ax_geom.text(-0.5, 1.05, rf'\textbf{{(a.{row + 1})}}  ', transform=ax_error.transAxes)
 
         divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
         cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
@@ -419,8 +419,8 @@ if plot:
             # ax_1.semilogy(convergence,  label=f'estim {kappa}', color='k', linestyle=lines[i])
             # ax_geom.set_xticks([])
             # ax_geom.set_xticks([])
-            relative_error_G = norm_G / norm_G[0]
-            relative_error_GJ = norm_GJ / norm_GJ[0]
+            relative_error_G = norm_G #/ norm_G[0]
+            relative_error_GJ = norm_GJ # norm_GJ[0]
             ax_error.loglog(np.arange(len(norm_G)), relative_error_G, label=fr'$\kappa=10^{{{-ratios[i]}}}$',
                             color='g', linestyle=lines[i], lw=2)
             #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
@@ -435,37 +435,41 @@ if plot:
             if sharp:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
 
-            ax_error.set_ylabel('Relative norm of residual')  # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
+            ax_error.set_ylabel('Norm of residual - '+  fr'$||\mathbf{{r}}_{{k}}||_{{\mathbf{{G}}}}$')   # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
             # ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
-            # ax_error.set_ylim([1e-6, 1e2])  # norm_rz[i][0]]/lb)
+            ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
             ax_error.set_xlim([1, 1e4])
             # ax_error.set_xscale('linear')
-            ax_error.set_yticks([1e-6, 1e-2, 1e2])
-            ax_error.set_yticklabels([fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{2}}}$'])
+            ax_error.set_yticks([1e-10,1e-6, 1e-2, 1e1])
+            ax_error.set_yticklabels([fr'$10^{{{-10}}}$',fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{1}}}$'])
 
             if sharp:
 
-                arrows_G = [5, 10, 15]  # anotation arrows
-                text_G = np.array([[1.2, 1e-2],  # anotation Text position
-                                   [1.6, 1e-4],
-                                   [2.0, 2e-6]])
+                arrows_G = [5, 10, 14,17]  # anotation arrows
+                text_G = np.array([[1.2, 1e-5],  # anotation Text position
+                                   [1.6, 7e-8],
+                                   [35.0, 3e-8],
+                                   [40.0, 2e-10]])
 
-                arrows_GJ = [300, 600, 1000]  # anotation arrows
-                text_GJ = np.array([[30, 1e-2],  # anotation Text position
-                                    [40, 1e-4],
-                                    [80, 3e-6]])
+                arrows_GJ = [300, 600, 1000,1700]  # anotation arrows
+                text_GJ = np.array([[30, 1e-4],  # anotation Text position
+                                    [1400, 5e-2],
+                                    [1600, 1e-4],
+                                    [1700, 1e-7]])
             else:
-                arrows_G = [11, 200, 1000]
-                text_G = np.array([[500, 1e-0],
-                                   [1000, 1e-2],
-                                   [2000, 8e-5]])
+                arrows_G = [15, 200, 5000,8000]
+                text_G = np.array([[2, 5e-7],
+                                   [3, 1e-9],
+                                   [500, 2e-10],
+                                   [2100, 1e-7]])
 
-                arrows_GJ = [15, 60, 110]
-                text_GJ = np.array([[1.2, 1e-2],
-                                    [1.6, 2e-4],
-                                    [2.0, 3e-6]])
+                arrows_GJ = [20, 60, 200,300]
+                text_GJ = np.array([[1.2, 1e-4],
+                                    [150.6, 5e-2],
+                                    [350.0, 3e-4],
+                                    [1500.0, 1e-5]])
             # if sharp:
             #
             #     arrows_G = [5, 10, 15]  # anotation arrows
@@ -488,28 +492,28 @@ if plot:
             #                         [1.25, 3e-8],
             #                         [1.5, 1e-9]])
 
-            # ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
-            #                   xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
-            #                   xytext=(text_GJ[i, 0], text_GJ[i, 1]),
-            #                   arrowprops=dict(arrowstyle='->',
-            #                                   color='black',
-            #                                   lw=1,
-            #                                   ls=lines[i]),
-            #                   fontsize=9,
-            #                   color='black'
-            #                   )
-            # ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
-            #                   xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
-            #                   xytext=(text_G[i, 0], text_G[i, 1]),
-            #                   arrowprops=dict(arrowstyle='->',
-            #                                   color='green',
-            #                                   lw=1,
-            #                                   ls=lines[i]),
-            #                   fontsize=9,
-            #                   color='green'
-            #                   )
-            # ax_error.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
-
+            ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
+                              xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
+                              xytext=(text_GJ[i, 0], text_GJ[i, 1]),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='black',
+                                              lw=1,
+                                              ls=lines[i]),
+                              fontsize=9,
+                              color='black'
+                              )
+            ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
+                              xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
+                              xytext=(text_G[i, 0], text_G[i, 1]),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='green',
+                                              lw=1,
+                                              ls=lines[i]),
+                              fontsize=9,
+                              color='green'
+                              )
+            ax_error.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+            ax_error.yaxis.set_label_position('right')
         cbar = plt.colorbar(pcm, location='left', cax=ax_cbar)
         cbar.ax.yaxis.tick_left()
         # cbar.set_ticks(ticks=[1e-4,1e-2, 1])
