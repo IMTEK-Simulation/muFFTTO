@@ -11,12 +11,13 @@ from mpi4py import MPI
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mpi4py import MPI
-from NuMPI.IO import save_npy, load_npy
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
+if MPI.COMM_WORLD.rank == 0:
+    print('  Rank   Size          Domain       Subdomain        Location')
+    print('  ----   ----          ------       ---------        --------')
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 
@@ -31,7 +32,6 @@ if not os.path.exists(figure_folder_path):
     os.makedirs(figure_folder_path)
 src = '../figures/'
 
-# GENERATE GEOMETRIES
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
@@ -39,6 +39,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 # Variables to be set up
+
 
 for nb_pixels_power in np.arange(2, 10 + 1):
     nb_laminates = 2 ** nb_pixels_power
@@ -53,31 +54,42 @@ for nb_pixels_power in np.arange(2, 10 + 1):
                                            nb_of_pixels_global=number_of_pixels,
                                            discretization_type=discretization_type,
                                            element_type=element_type)
-    # geometry= discretization.get_scalar_field(name='geometry')
-    x_coors = discretization.fft.coords
-    geometry = (0.5 +
-                0.25 * np.cos(2 * np.pi * x_coors[0] - 2 * np.pi * x_coors[1]) +
-                0.25 * np.cos(2 * np.pi * x_coors[1] + 2 * np.pi * x_coors[0]))
 
-    # save stress
-    temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
-    results_name = (f'cos_geometry_pixels={nb_laminates}' + f'dof={nb_laminates}')
+    # material distribution
+    material_distribution = discretization.get_scalar_field(name='material_distribution')
+
+    # x_coors = discretization.fft.coords[0]
+    #
+    # strip_size = x_coors.shape[0] // nb_laminates
+    # phase_contrast = 10 ** 2
+    # phases_single = phase_contrast + (1 - phase_contrast) / (1 - 1 / nb_laminates) * np.linspace(0, 1,
+    #                                                                                              nb_laminates,
+    #                                                                                              endpoint=False)
+    # # print('phases_single = \n {}'.format(phases_single))
+    #
+    # # Repeat each element strip_size times
+    # phases_repeated = np.repeat(phases_single, strip_size)
+
+    steps_one_d = np.linspace(1, 2, nb_laminates, endpoint=True)
+
+    # print('phases_repeated = \n {}'.format(phases_repeated))
+    geometry = np.tile(steps_one_d[:, np.newaxis], (1, material_distribution.s.shape[-1]))
+
+    results_name = (f'linear_geometry_pixels={nb_laminates}' + f'dof={nb_laminates}')
     to_save = np.copy(geometry)
     np.save(data_folder_path + results_name + f'.npy', to_save)
 
-    for nb_of_disc_points in np.arange(nb_pixels_power, 10 ):
-        dof = 2 ** (nb_of_disc_points+1)
+    for nb_of_disc_points in np.arange(nb_pixels_power, 10):
+        dof = 2 ** (nb_of_disc_points + 1)
         geometry = np.repeat(np.repeat(geometry, 2, axis=0), 2, axis=1)
         print('dof', dof)
         print('size geometry', geometry.shape)
 
         # save
-        results_name = (f'cos_geometry_pixels={nb_laminates}' + f'dof={dof}')
+        results_name = (f'linear_geometry_pixels={nb_laminates}' + f'dof={dof}')
         to_save = np.copy(geometry)
         np.save(data_folder_path + results_name + f'.npy', to_save)
 
         plt.figure()
         plt.imshow(geometry)
         plt.show()
-
-quit()

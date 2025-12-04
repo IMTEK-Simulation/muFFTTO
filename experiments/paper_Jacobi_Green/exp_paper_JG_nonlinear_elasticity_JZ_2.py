@@ -15,7 +15,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 parser = argparse.ArgumentParser(
-    prog="exp_paper_JG_nonlinear_elasticity_JZ.py",
+    prog="exp_paper_JG_nonlinear_elasticity_JZ_2.py",
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
@@ -38,8 +38,6 @@ preconditioner_type = args.preconditioner_type
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
-
-
 
 save_results = True
 _info = {}
@@ -101,23 +99,23 @@ II = np.einsum('ij...  ,kl...  ->ijkl...', i, i)
 I4s = (I4 + I4rt) / 2.
 I4d = (I4s - II / 3.)
 
-model_parameters_non_linear = {'K': 2,
-                               'mu': 1.0,
-                               'sig0': 0.5,
-                               'eps0': 0.1,
-                               'n': n_exp}
+model_parameters_non_linear_matrix = {'K': 2,
+                                      'mu': 1.0,
+                                      'sig0': 0.5,
+                                      'eps0': 0.1,
+                                      'n': n_exp}
 
-model_parameters_non_linear = {'K': 2,
-                               'mu': 1.0,
-                               'sig0': 0.5,
-                               'eps0': 0.1,
-                               'n': n_exp}
+model_parameters_non_linear_inc = {'K': 200,
+                                   'mu': 100.0,
+                                   'sig0': 0.5,
+                                   'eps0': 0.1,
+                                   'n': n_exp}
 
 # model_parameters_linear = {'K': 2,
 #                            'mu': 1}
 
-_info['model_parameters_non_linear'] = model_parameters_non_linear
-_info['model_parameters_linear'] = model_parameters_linear
+_info['model_parameters_matrix'] = model_parameters_non_linear_matrix
+_info['model_parameters_inclusion'] = model_parameters_non_linear_inc
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 
@@ -132,8 +130,8 @@ phase_field.s[0, 0,
 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
 ] = 0
 
-matrix_mask = phase_field.s[0, 0] == 0
-inc_mask = phase_field.s[0, 0] > 0
+inc_mask = phase_field.s[0, 0] == 0
+matrix_mask = phase_field.s[0, 0] > 0
 
 
 # phase_field[:26, :, :] = 1.
@@ -216,17 +214,23 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
 def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
     #            phase_field = np.zeros([*number_of_pixels])
     global matrix_mask, inc_mask
-    linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
-                            tangent_ijklqxyz=tangent_ijklqxyz,
-                            stress_ijqxyz=stress_ijqxyz,
-                            phase_xyz=matrix_mask,
-                            **model_parameters_linear)
+    # linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
+    #                         tangent_ijklqxyz=tangent_ijklqxyz,
+    #                         stress_ijqxyz=stress_ijqxyz,
+    #                         phase_xyz=matrix_mask,
+    #                         **model_parameters_linear)
 
     nonlinear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
                                tangent_ijklqxyz=tangent_ijklqxyz,
                                stress_ijqxyz=stress_ijqxyz,
                                phase_xyz=inc_mask,
-                               **model_parameters_non_linear)
+                               **model_parameters_non_linear_inc)
+
+    nonlinear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
+                               tangent_ijklqxyz=tangent_ijklqxyz,
+                               stress_ijqxyz=stress_ijqxyz,
+                               phase_xyz=matrix_mask,
+                               **model_parameters_non_linear_matrix)
 
 
 # print()
@@ -280,7 +284,7 @@ ninc = 1
 _info['ninc'] = ninc
 
 macro_gradient_inc = np.zeros(shape=(3, 3))
-# macro_gradient_inc[0, 0] += 0.05 / float(ninc)
+macro_gradient_inc[0, 0] += 0.05 / float(ninc)
 macro_gradient_inc[0, 1] += 0.05 / float(ninc)
 macro_gradient_inc[1, 0] += 0.05 / float(ninc)
 dt = 1. / float(ninc)

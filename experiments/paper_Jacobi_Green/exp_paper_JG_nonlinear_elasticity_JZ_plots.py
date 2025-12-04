@@ -21,7 +21,7 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-plot_time_vs_dofs = False
+plot_time_vs_dofs = True
 plot_stress_field = False
 plot_data_vs_CG = True
 
@@ -31,7 +31,7 @@ if plot_time_vs_dofs:
     time_GJ = []
     its_G = []
     its_GJ = []
-    Ns = 2 ** np.array([3, 4, 5 ,6])  # 4, 5,6,7,8  # numbers of grids points
+    Ns = 2 ** np.array([3, 4, 5, 6])  # 4, 5,6,7,8  # numbers of grids points
     for N in Ns:
         Nx = N
         Ny = N
@@ -116,26 +116,32 @@ if plot_data_vs_CG:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx =   2**5
-    Ny =  Nx
-    Nz =  Nx
-    it_max = 5
-    n_exponents=np.array([3,5,7,8,10])
+    Nx = 2 ** 8
+    Ny = Nx
+    Nz = Nx
+    it_max = 10
+    n_exponents = np.array([10])
     iterations = np.arange(it_max)  # numbers of grids points
 
-    its_G = np.zeros([it_max,len(n_exponents)])
-    its_GJ = np.zeros([it_max,len(n_exponents)])
+    its_G = np.zeros([it_max, len(n_exponents)])
+    its_GJ = np.zeros([it_max, len(n_exponents)])
 
     for j in np.arange(len(n_exponents)):
-        n_exp =n_exponents[j]
+        n_exp = n_exponents[j]
         for iteration_total in iterations:
 
             preconditioner_type = 'Green'
 
-            data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                                + f'_{preconditioner_type}' + '/')
-            if iteration_total < it_max :
-                _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz', allow_pickle=True)
+            data_folder_path = (
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max:
+                if Nx == 256:
+                    _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
+
+                else:
+                    _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                            allow_pickle=True)
 
             with open(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
                 magic = f.read(6)
@@ -150,18 +156,24 @@ if plot_data_vs_CG:
 
             # rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
-            its_G[iteration_total,j]=_info_final_G.f.nb_it_comb
+            its_G[iteration_total, j] = _info_final_G.f.nb_it_comb
             norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
             norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
             info_log_final_G = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
 
-
             preconditioner_type = 'Green_Jacobi'
 
-            data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                                + f'_{preconditioner_type}' + '/')
-            if iteration_total < it_max :
-                _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz', allow_pickle=True)
+            data_folder_path = (
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max:
+                if Nx == 256:
+                    _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
+                                             allow_pickle=True)
+
+                else:
+                    _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                             allow_pickle=True)
             # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
             # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
             #                          allow_pickle=True)
@@ -169,25 +181,24 @@ if plot_data_vs_CG:
             #                           allow_pickle=True)
             # rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
 
-
-            its_GJ[iteration_total, j] =_info_final_GJ.f.nb_it_comb
+            its_GJ[iteration_total, j] = _info_final_GJ.f.nb_it_comb
             norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
             norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
-            #diff_stress = stress_G - stress_GJ
-           # stress_diff_norm.append(
-          #      np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
+            # diff_stress = stress_G - stress_GJ
+            # stress_diff_norm.append(
+            #      np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
             print(_info_final_G.f.norm_rr[0])
 
-            #diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
+            # diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
             # strain_fluc_norm.append(
             #     np.linalg.norm(diff_strain_fluc.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
             print(_info_final_GJ.f.norm_rr[0])
-            #diff_strain_total = strain_total_G - strain_total_GJ
-            #strain_total_norm.append(
+            # diff_strain_total = strain_total_G - strain_total_GJ
+            # strain_total_norm.append(
             #    np.linalg.norm(diff_strain_total.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
 
-            #diff_rhs = rhs_field_G - rhs_field_GJ
-            #diff_rhs_norm.append(
+            # diff_rhs = rhs_field_G - rhs_field_GJ
+            # diff_rhs_norm.append(
             #    np.linalg.norm(diff_rhs.ravel()))
             # rhs_inf_G.append(
             #     np.linalg.norm(rhs_field_G.ravel(), ord=np.inf))
@@ -205,10 +216,10 @@ if plot_data_vs_CG:
     its_G = np.array(its_G)
     its_GJ = np.array(its_GJ)
     strain_0_norm = np.array(np.atleast_1d(_info_final_GJ.f.norm_En))
-    #stress_diff_norm = np.array(stress_diff_norm)
-    #strain_fluc_norm = np.array(strain_fluc_norm)
-    #strain_total_norm = np.array(strain_total_norm)
-    #diff_rhs_norm = np.array(diff_rhs_norm)
+    # stress_diff_norm = np.array(stress_diff_norm)
+    # strain_fluc_norm = np.array(strain_fluc_norm)
+    # strain_total_norm = np.array(strain_total_norm)
+    # diff_rhs_norm = np.array(diff_rhs_norm)
 
     norm_rhs_t_G = np.concatenate((np.array(np.atleast_1d(_info_final_G.f.rhs_t_norm)), np.array(norm_rhs_G)))
     norm_rhs_t_GJ = np.concatenate((np.array(np.atleast_1d(_info_final_GJ.f.rhs_t_norm)), np.array(norm_rhs_GJ)))
@@ -221,14 +232,14 @@ if plot_data_vs_CG:
 
     gs_global = fig.add_subplot(gs10[0, 0])
 
-    gs_global.plot(iterations, its_G[:,1], 'g-', marker='x', label='Green')
-    gs_global.plot(iterations, its_GJ[:,1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    gs_global.plot(iterations, its_G[:, 0], 'g-', marker='x', label='Green')
+    gs_global.plot(iterations, its_GJ[:, 0], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
 
-    gs_global.plot(iterations, its_G[:,-2], 'g-', marker='x', label='Green')
-    gs_global.plot(iterations, its_GJ[:,-2], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
-
-    gs_global.plot(iterations, its_G[:,-1], 'g-', marker='x', label='Green')
-    gs_global.plot(iterations, its_GJ[:,-1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    # gs_global.plot(iterations, its_G[:, -2], 'g-', marker='x', label='Green')
+    # gs_global.plot(iterations, its_GJ[:, -2], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    #
+    # gs_global.plot(iterations, its_G[:, -1], 'g-', marker='x', label='Green')
+    # gs_global.plot(iterations, its_GJ[:, -1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
 
     gs_global.set_xlabel(r'Newton iteration -  $i$')
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
@@ -237,8 +248,6 @@ if plot_data_vs_CG:
     gs_global.set_ylim(0., 300)
     gs_global.set_xticks(iterations)
 
-    plt.show()
-    quit()
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
                        xy=(iterations[2], its_GJ[2]),
                        xytext=(0.5, 100.),
@@ -381,8 +390,8 @@ if plot_data_vs_CG:
 
     # max_K = K4_ijklqyz_G[ijkl + (..., 0)].max() / K
     # min_K = K4_ijklqyz_G[ijkl + (..., 0)].min() / K
-    cut_to_plot =  Nz//2-1
-    K4_to_plot_G = K4_xyz_G[ ..., cut_to_plot]# K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    cut_to_plot = Nz // 2 - 1
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     max_K = K4_to_plot_G.max() / K
     min_K = K4_to_plot_G.min() / K
 
@@ -396,7 +405,7 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
+    #ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
     ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.2)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
@@ -425,7 +434,7 @@ if plot_data_vs_CG:
     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
-    K4_to_plot_G = K4_xyz_G[ ..., cut_to_plot]# K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     ax_geom_0 = fig.add_subplot(gs[0, 1])
     # ax_geom_0 = fig.add_axes([0.1, 0.75, 0.2, 0.2])
     pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
@@ -453,7 +462,7 @@ if plot_data_vs_CG:
     del K4_xyz_G
     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
-    K4_to_plot_G =K4_xyz_G[ ..., cut_to_plot]#  K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
 
     ax_geom_0 = fig.add_subplot(gs[0, 3])
     # ax_geom_0 = fig.add_axes([0.5, 0.75, 0.2, 0.2])
@@ -463,7 +472,7 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, 0.5, r'$N_{z}=128$', transform=ax_geom_0.transAxes)
+    #ax_geom_0.text(0.30, 0.5, r'$N_{z}=128$', transform=ax_geom_0.transAxes)
 
     ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{3})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
@@ -482,7 +491,7 @@ if plot_data_vs_CG:
     results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
-    K4_to_plot_G = K4_xyz_G[ ..., cut_to_plot]# K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[0, 4])
 
@@ -494,9 +503,6 @@ if plot_data_vs_CG:
     ax_geom_0.set_title(fr'$i={iteration_total}$')
     ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
     ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
-
-
-
 
     ax_geom_0.text(-0., 1.1, rf'\textbf{{(a.{4})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')

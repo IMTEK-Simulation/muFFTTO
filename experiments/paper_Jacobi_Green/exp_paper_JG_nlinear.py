@@ -9,6 +9,8 @@ sys.path.append('../..')  # Add parent directory to path
 
 from mpi4py import MPI
 import numpy as np
+from NuMPI.IO import load_npy
+
 import matplotlib.pyplot as plt
 
 from muFFTTO import domain
@@ -117,26 +119,41 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
     material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
     # material distribution
-    material_distribution = discretization.get_scalar_field(name='material_distribution')
 
-    x_coors = discretization.fft.coords[0]
+    phase_field = discretization.get_scalar_field(name='phase_field')
 
-    strip_size = x_coors.shape[0] // nb_laminates
-    phase_contrast = 10 ** total_phase_contrast
-    phases_single = phase_contrast + (1 - phase_contrast) / (1 - 1 / nb_laminates) * np.linspace(0, 1,
-                                                                                                 nb_laminates,
-                                                                                                 endpoint=False)
-    # print('phases_single = \n {}'.format(phases_single))
+    # save
+    results_name = (f'linear_geometry_pixels={nb_laminates}' + f'dof={number_of_pixels[0]}')
+    geom_folder_path=file_folder_path + '/exp_data/'+'exp_paper_JG_nlinear_generate_geometries/'
 
-    # Repeat each element strip_size times
-    phases_repeated = np.repeat(phases_single, strip_size)
-    # print('phases_repeated = \n {}'.format(phases_repeated))
-    material_distribution.s[0, 0] = np.tile(phases_repeated[:, np.newaxis], (1, material_distribution.s.shape[-1]))
+    phase_field.s[0, 0]=load_npy(geom_folder_path + results_name + f'.npy',
+             tuple(discretization.subdomain_locations_no_buffers),
+             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+
+    discretization.scale_field_mugrid(phase_field,
+                               min_val=1 ,
+                               max_val=10**total_phase_contrast)
+
+    #
+    #
+    # x_coors = discretization.fft.coords[0]
+    #
+    # strip_size = x_coors.shape[0] // nb_laminates
+    # phase_contrast = 10 ** total_phase_contrast
+    # phases_single = phase_contrast + (1 - phase_contrast) / (1 - 1 / nb_laminates) * np.linspace(0, 1,
+    #                                                                                              nb_laminates,
+    #                                                                                              endpoint=False)
+    # # print('phases_single = \n {}'.format(phases_single))
+    #
+    # # Repeat each element strip_size times
+    # phases_repeated = np.repeat(phases_single, strip_size)
+    # # print('phases_repeated = \n {}'.format(phases_repeated))
+    # material_distribution.s[0, 0] = np.tile(phases_repeated[:, np.newaxis], (1, material_distribution.s.shape[-1]))
 
     # print('MPI.COMM_WORLD.rank', MPI.COMM_WORLD.rank)
     # extended = np.broadcast_to(material_distribution.s[0,0] , material_data_field_C_0.s[0,0,0,0].shape)
     material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                          np.broadcast_to(material_distribution.s[0, 0],
+                                          np.broadcast_to(phase_field.s[0, 0],
                                                           material_data_field_C_0.s[0, 0, 0, 0].shape))
 
     # set macroscopic gradient
@@ -235,10 +252,10 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         b=rhs_field,
         x=solution_field,
         P=M_fun,
-        tol=1e-6,
+        tol=1e-5,
         maxiter=1000,
         callback=callback,
-        norm_metric=M_fun_green
+       # norm_metric=M_fun_green
     )
     if discretization.fft.communicator.rank == 0:
         nb_steps = len(norms['residual_rr'])

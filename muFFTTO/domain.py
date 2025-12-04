@@ -105,7 +105,7 @@ class Discretization:
 
         # self.fft.register_real_space_field()
         # number of pixels/voxels of a subdomain for MPI
-        #print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(self.fft.nb_domain_grid_pts):>15} '
+        # print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(self.fft.nb_domain_grid_pts):>15} '
         #      f'{str(self.fft.nb_subdomain_grid_pts):>15} {str(self.fft.subdomain_locations):>15}')
         # print('self.fft.nb_domain_grid_pts', self.fft.nb_domain_grid_pts)
         # print('self.fft.nb_subdomain_grid_pts', self.fft.nb_subdomain_grid_pts)
@@ -189,7 +189,7 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
             self.conv_op = ConvolutionOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
-            #self.interpolation_op = ConvolutionOperator(point_of_origin, self.N_at_quad_points_qnijk)
+            # self.interpolation_op = ConvolutionOperator(point_of_origin, self.N_at_quad_points_qnijk)
 
             #
             # # self.fft.initialise_field_collections()
@@ -2240,7 +2240,7 @@ class Discretization:
         # np.zeros([dim, self.nb_quad_per_pixel, *self.nb_of_pixels])
         return self.fft.real_space_field(
             unique_name=name,  # name of the field
-            shape=(1,1),  # shape of components
+            shape=(1, 1),  # shape of components
             sub_division='quad_points'  # sub-point type
         )
 
@@ -2384,6 +2384,14 @@ class Discretization:
         integral_fq = self.mpi_reduction.sum(quad_field_fqnxyz, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         # TODO: what kidn of sum I need here?
         return np.sum(quad_field_fqnxyz)
+
+    def scale_field_mugrid(self, field, min_val, max_val):
+        """Scales a 2D random field to be within [min_val, max_val]."""
+        field_min = self.mpi_reduction.min(field.s)
+        field_max = self.mpi_reduction.max(field.s)
+        field.s = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
+        field.s *= (max_val - min_val)
+        field.s += min_val
 
 
 def compute_Voigt_notation_4order(C_ijkl):
