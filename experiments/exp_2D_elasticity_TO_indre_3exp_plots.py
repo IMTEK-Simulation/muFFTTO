@@ -6,15 +6,23 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from imteksimcs.matplotlib.label_lines import label_lines
 
-mpl.rcParams['font.family'] = 'sans-serif'
-mpl.rcParams['font.sans-serif'] = ['Arial']
-mpl.rcParams['font.serif'] = ['Arial']
-mpl.rcParams['font.cursive'] = ['Arial']
-mpl.rcParams['font.size'] = '10'
-mpl.rcParams['legend.fontsize'] = '10'
-mpl.rcParams['xtick.labelsize'] = '9'
-mpl.rcParams['ytick.labelsize'] = '9'
-mpl.rcParams['svg.fonttype'] = 'none'
+# mpl.rcParams['font.family'] = 'sans-serif'
+# mpl.rcParams['font.sans-serif'] = ['Arial']
+# mpl.rcParams['font.serif'] = ['Arial']
+# mpl.rcParams['font.cursive'] = ['Arial']
+# mpl.rcParams['font.size'] = '10'
+# mpl.rcParams['legend.fontsize'] = '10'
+# mpl.rcParams['xtick.labelsize'] = '9'
+# mpl.rcParams['ytick.labelsize'] = '9'
+# mpl.rcParams['svg.fonttype'] = 'none'
+
+plt.rcParams["text.usetex"] = True
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 14})
+plt.rcParams["font.family"] = "Arial"
 
 from muFFTTO import domain
 from muFFTTO import topology_optimization
@@ -65,7 +73,8 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
         if plot_figs:
-            phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+
+
 
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
@@ -73,10 +82,11 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                                    nb_of_pixels_global=(N, N),
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
+            phase_field = discretization.get_scalar_field(name='phase_field')
+            phase_field.s[0,0] = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+
             f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                 phase_field_1nxyz=np.expand_dims(
-                                                                                     np.expand_dims(phase_field,
-                                                                                                    axis=0), axis=0),
+                                                                                 phase_field_1nxyz=phase_field,
                                                                                  eta=eta_mult,
                                                                                  double_well_depth=1)
 
@@ -88,7 +98,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             fig, ax = plt.subplots(1, 4, figsize=(16, 4))
             # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
 
-            contour = ax[3].contourf(np.tile(phase_field, (3, 3)), cmap='viridis', vmin=0, vmax=1)
+            contour = ax[3].contourf(np.tile(phase_field.s[0,0], (3, 3)), cmap='viridis', vmin=0, vmax=1)
 
             # Colorbar
             divider = make_axes_locatable(ax[3])
@@ -187,7 +197,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     # ax5.text(-0.11, 0.97, '(g)', transform=ax7.transAxes)
     #for i in range(4):
         #ax5.vlines(x=10**(-1+i), ymin=0, ymax=N * 4, colors='black', linestyles='-', linewidth=0.5)
-    letter_offset=-0.18
+    letter_offset=-0.25
     for upper_ax in np.arange(5):
         weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
         if upper_ax == 0:
@@ -203,7 +213,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                         lw=1,
                                         ls='-')
                         )
-            ax5.text(letter_offset, 0.97, '(a)', transform=ax1.transAxes)#
+            ax5.text(letter_offset, 0.90, '(a)', transform=ax1.transAxes)#
         elif upper_ax == 1:
             ax1 = fig.add_axes([0.245, 0.26, 0.25, 0.25])
 
@@ -217,7 +227,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                         lw=1,
                                         ls='-')
                         )
-            ax5.text(letter_offset, 0.97, '(b)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.90, '(b)', transform=ax1.transAxes)
         elif upper_ax == 2:
             ax1 = fig.add_axes([0.4, 0.13, 0.25, 0.25])
             roll_x = 20
@@ -230,7 +240,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 0.97, '(c)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.90, '(c)', transform=ax1.transAxes)
         elif upper_ax == 3:
             ax1 = fig.add_axes([0.525, 0.45, 0.25, 0.25])
             roll_x = 10
@@ -243,7 +253,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 0.97, '(d)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.90, '(d)', transform=ax1.transAxes)
         elif upper_ax == 4:
             ax1 = fig.add_axes([0.7, 0.34, 0.25, 0.25])
             roll_x = 0
@@ -256,7 +266,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 0.97, '(e)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.90, '(e)', transform=ax1.transAxes)
         name = (
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{weight:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
         phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)

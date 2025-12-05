@@ -874,11 +874,11 @@ class DiscretizationTestCase(unittest.TestCase):
 
         global material_data_field
         domain_size = [2, 3]
-        for problem_type in ['elasticity', 'conductivity'
+        for problem_type in ['elasticity','conductivity',
                              ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
-            number_of_pixels = (3, 4)
+            number_of_pixels = (4, 6)
             discretization_type = 'finite_element'
 
             for element_type in ['linear_triangles', 'bilinear_rectangle']:

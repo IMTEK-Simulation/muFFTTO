@@ -1173,6 +1173,7 @@ class Discretization:
                     displacement_field=unit_impulse_inxyz,
                     formulation=formulation)
 
+                aaa= self.fft.fft(preconditioner_diagonals_fnfnxyz[impulse_position] )
                 MPI.COMM_WORLD.Barrier()
 
                 # print('4 = \n   core {}'.format(MPI.COMM_WORLD.rank))
@@ -1189,7 +1190,7 @@ class Discretization:
                 shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
             )  #
             preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-
+            MPI.COMM_WORLD.Barrier()
             # preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_ininxyz)
 
             # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
@@ -1200,7 +1201,7 @@ class Discretization:
             # compute inverse of diagonals
             # zero_indices = np.all(array == 0, axis=0)
             # print('rank' f'{MPI.COMM_WORLD.rank:6} preconditioner_diagonals_fnfnqks_NEW=' f'{preconditioner_diagonals_fnfnqks_NEW}')
-            MPI.COMM_WORLD.Barrier()
+
 
             # print('5 = \n   core {}'.format(MPI.COMM_WORLD.rank))
             original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape

@@ -21,9 +21,9 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-plot_time_vs_dofs = True
-plot_stress_field = False
-plot_data_vs_CG = False
+plot_time_vs_dofs = False
+plot_stress_field = True
+plot_data_vs_CG = True
 
 if plot_time_vs_dofs:
     # print time vs DOFS
@@ -114,8 +114,8 @@ if plot_data_vs_CG:
     rhs_inf_G = []
     rhs_inf_GJ = []
 
-    Nx = Ny = 512
-    Nz = 1  # Nx
+    Nx = Ny = 32
+    Nz = 32  # Nx
     iterations = np.arange(9)  # numbers of grids points
     for iteration_total in iterations:
         preconditioner_type = 'Green'

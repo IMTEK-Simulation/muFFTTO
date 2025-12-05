@@ -13,8 +13,16 @@ cols = 25  # or whatever size you want
 
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
+plt.rcParams["text.usetex"] = True
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 14})
+plt.rcParams["font.family"] = "Arial"
+
 ### ----- Define the hexagonal grid ----- ###
-def make_parallelograms(displ ):
+def make_parallelograms(displ):
     parallelograms = []
     nx = displ.shape[1] - 1  # number of squares in x direction
     ny = displ.shape[2] - 1  # number of squares in y direction
@@ -29,8 +37,9 @@ def make_parallelograms(displ ):
                                axis=1).T
             parallelogram = Polygon(corners)
             parallelograms.append(parallelogram)
-            #parallelograms.set_edgecolor('face')
-    return PatchCollection(parallelograms, cmap='gray_r', linewidth=0, edgecolor='None' , antialiased=False, alpha=1.0 )
+            # parallelograms.set_edgecolor('face')
+    return PatchCollection(parallelograms, cmap='gray_r', linewidth=0, edgecolor='None', antialiased=False, alpha=1.0)
+
 
 # Create a random 2D array with 0 and 1
 # The probabilities can be adjusted to get a different distribution of bubbles (0) and matrix (1)
@@ -48,12 +57,12 @@ f_pfs = []
 # weights = np.concatenate(
 #             [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1),np.arange(3, 10, 2), np.arange(10, 110, 10)])
 # #weights = np.concatenate(
- #           [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1),np.arange(3, 10, 2), np.arange(10, 20, 10)])
-#weights = np.concatenate([np.arange(0.1, 1., 1)])
-#weights = np.concatenate([np.arange(0.1, 1., 1)])
+#           [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1),np.arange(3, 10, 2), np.arange(10, 20, 10)])
+# weights = np.concatenate([np.arange(0.1, 1., 1)])
+# weights = np.concatenate([np.arange(0.1, 1., 1)])
 # weights = np.arange(1, 2., 1)
 weights = np.concatenate(
-            [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1),np.arange(3, 10, 2), np.arange(10,110, 10)])
+    [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 10)])
 
 for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9 ]:
     poison_target = ration
@@ -78,10 +87,9 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             # name = (
             #     f'{optimizer}_muFFTTO_elasticity_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
             name = (
-            f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+                f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
         if plot_figs:
-            phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
 
             my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                               problem_type=problem_type)
@@ -89,10 +97,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                                    nb_of_pixels_global=(N, N),
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
+
+            phase_field = discretization.get_scalar_field(name='phase_field')
+            phase_field.s[0, 0] = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+
             f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                 phase_field_1nxyz=np.expand_dims(
-                                                                                     np.expand_dims(phase_field,
-                                                                                                    axis=0), axis=0),
+                                                                                 phase_field_1nxyz=phase_field,
                                                                                  eta=eta_mult,
                                                                                  double_well_depth=1)
 
@@ -104,7 +114,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             fig, ax = plt.subplots(1, 4, figsize=(16, 4))
             # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
 
-            contour = ax[3].contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
+            contour = ax[3].contourf(np.tile(phase_field.s[0,0], (3, 3)), cmap='jet', vmin=0, vmax=1)
 
             # Colorbar
             divider = make_axes_locatable(ax[3])
@@ -155,13 +165,10 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             ax[2].text(-0.3, -0., f' diff in C_ij = \n{xopt.f.target_C_ijkl - xopt.f.homogenized_C_ijkl},')
             fname = src + f'{w_mult:.2f}' + fig_data_name + '{}'.format('.png')
             print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
-            #plt.savefig(fname, bbox_inches='tight')
-            #plt.show()
+            # plt.savefig(fname, bbox_inches='tight')
+            # plt.show()
             f_sigmas.append(np.sum(f_sigma))
             f_pfs.append(f_phase_field)
-
-
-
 
     nb_grid_pts = (N, N)  # metadata[0:2].astype(int)
     Lx, Ly = (1, np.sqrt(3) / 2)  # metadata[2:4]
@@ -182,28 +189,27 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     ymin = np.amin(displ_y)
     ymax = np.amax(displ_y)
 
-
-    fig = plt.figure(figsize=(11,4.5))
+    fig = plt.figure(figsize=(11, 4.5))
     gs = fig.add_gridspec(3, 4)
     ax5 = fig.add_subplot(gs[:, :])
 
     # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2,marker='|', label=r'stress difference -  $f_{\sigma}$')
-    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1,marker='|', label=r'phase field - $f_{\rho}$')
+    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2, marker='|', label=r'stress difference -  $f_{\sigma}$')
+    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1, marker='|', label=r'phase field - $f_{\rho}$')
 
-    #ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
+    # ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
     # ax.set_aspect('equal')
     ax5.set_xlabel(r'Weight $w$')
     ax5.set_xlim(0.1, 100)
     ax5.set_ylim(1e-4, 1e1)
     ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
-                        xy=(0.6, f_sigmas[np.where(weights == 0.6)[0][0]]),
-                        xytext=(1.0, 5.),
-                        arrowprops=dict(arrowstyle='->',
-                                        color='red',
-                                        lw=1,
-                                        ls='-')
-                        )
+                 xy=(0.6, f_sigmas[np.where(weights == 0.6)[0][0]]),
+                 xytext=(1.0, 5.),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='red',
+                                 lw=1,
+                                 ls='-')
+                 )
     ax5.annotate(r'Phase field - $f_{\rho}$',
                  xy=(50., f_pfs[np.where(weights == 50.0)[0][0]]),
                  xytext=(20., 5.),
@@ -213,7 +219,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                  ls='-')
                  )
 
-    letter_offset=0
+    letter_offset = -0.22
 
     for upper_ax in np.arange(5):
         weight = np.array([0.2, 1, 10, 30, 90])[upper_ax]
@@ -230,7 +236,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 1.05, '(a)', transform=ax1.transAxes)#
+            ax5.text(letter_offset, 0.9, '(a)', transform=ax1.transAxes)  #
 
         elif upper_ax == 1:
             ax1 = fig.add_axes([0.245, 0.23, 0.25, 0.25])
@@ -244,7 +250,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 1.05, '(b)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.9, '(b)', transform=ax1.transAxes)
 
         elif upper_ax == 2:
             ax1 = fig.add_axes([0.4, 0.12, 0.25, 0.25])
@@ -258,7 +264,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 1.05, '(c)', transform=ax1.transAxes)
+            ax5.text(letter_offset, 0.9, '(c)', transform=ax1.transAxes)
 
         elif upper_ax == 3:
             ax1 = fig.add_axes([0.525, 0.44, 0.25, 0.25])
@@ -272,7 +278,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(-.18, 0.97, '(d)', transform=ax1.transAxes)
+            ax5.text(-.22, 0.9, '(d)', transform=ax1.transAxes)
 
         elif upper_ax == 4:
             ax1 = fig.add_axes([0.69, 0.35, 0.25, 0.25])
@@ -286,8 +292,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          lw=1,
                                          ls='-')
                          )
-            ax5.text(letter_offset, 1.05, '(e)', transform=ax1.transAxes)
-
+            ax5.text(letter_offset, 0.9, '(e)', transform=ax1.transAxes)
 
         name = (
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{weight:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
@@ -315,15 +320,16 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                 ax1.add_collection(parall)
 
         cell_points_x, cell_points_y = np.mgrid[:nb_cells[0] + 2 * nb_additional_cells + 1,
-                                       :nb_cells[1] + 1]
+        :nb_cells[1] + 1]
         cell_points_x = cell_points_x * Lx - nb_additional_cells * Lx
-        cell_points_x = cell_points_x + np.linspace(0, nb_cells[1] * (ny - 1) * hx / 2, nb_cells[1] + 1, endpoint='False')
+        cell_points_x = cell_points_x + np.linspace(0, nb_cells[1] * (ny - 1) * hx / 2, nb_cells[1] + 1,
+                                                    endpoint='False')
         cell_points_y = cell_points_y * Ly
         cell_points = np.stack((cell_points_x, cell_points_y))
         parall = make_parallelograms(cell_points)
         parall.set_edgecolor('white')
         parall.set_linestyle('--')
-        #parall.set_alpha(1.0)  # Set alpha to fully opaque
+        # parall.set_alpha(1.0)  # Set alpha to fully opaque
 
         parall.set_linewidth(0.1)
         parall.set_facecolor('none')
@@ -336,7 +342,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         ax1.set_aspect('equal')
         # ax1.set_xlabel(f'w={weight:.1f}'.rstrip('0').rstrip('.'))
         # ax1.xaxis.set_label_position('bottom')
-        #ax1.set_ylabel(r'Position y')
+        # ax1.set_ylabel(r'Position y')
         ax1.set_yticklabels([])
         ax1.set_xticklabels([])
 
@@ -347,13 +353,10 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     #                     ticks=np.arange(0, 1.2, 0.2))
     # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
 
-
-    fname = src +  'exp2_hexa{}'.format('.pdf')
+    fname = src + 'exp2_hexa{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     plt.show()
-
-
 
     quit()
     if plot_movie:

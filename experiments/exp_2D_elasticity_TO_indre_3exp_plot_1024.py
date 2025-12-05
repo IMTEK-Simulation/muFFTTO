@@ -192,7 +192,7 @@ ax.yaxis.set_ticks_position('none')
 # plt.clim(0, 1)
 # Add a colorbar
 # Colorbar
-ax.text(-0.17, 0.97, '(a)', transform=ax.transAxes)
+#ax.text(-0.17, 0.97, '(a)', transform=ax.transAxes)
 #
 # divider = make_axes_locatable(ax)
 # ax_cb = divider.new_horizontal(size="5%", pad=0.05)

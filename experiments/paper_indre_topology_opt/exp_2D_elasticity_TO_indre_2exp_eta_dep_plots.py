@@ -10,7 +10,13 @@ from muFFTTO import topology_optimization
 # Define the dimensions of the 2D array
 rows = 25  # or whatever size you want
 cols = 25  # or whatever size you want
-
+plt.rcParams["text.usetex"] = True
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 14})
+plt.rcParams["font.family"] = "Arial"
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 ### ----- Define the hexagonal grid ----- ###
@@ -79,7 +85,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
             if plot_figs:
-                phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
+                # phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
 
                 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                                   problem_type=problem_type)
@@ -87,10 +93,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                                        nb_of_pixels_global=(N, N),
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
+
+                phase_field = discretization.get_scalar_field(name='phase_field')
+                phase_field.s[0, 0] = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+
                 f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                     phase_field_1nxyz=np.expand_dims(
-                                                                                         np.expand_dims(phase_field,
-                                                                                                        axis=0), axis=0),
+                                                                                     phase_field_1nxyz= phase_field ,
                                                                                      eta=eta_mult,
                                                                                      double_well_depth=1)
 

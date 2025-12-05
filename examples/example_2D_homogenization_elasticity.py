@@ -14,7 +14,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (16, 16)
+number_of_pixels = (64, 64)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -89,8 +89,9 @@ phase_field_at_quad_poits_1qnxyz = \
 # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
 # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
 # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
-material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * np.power(
-    phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+# material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * np.power(
+#     phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+material_data_field_C_0.s = material_data_field_C_0.s[..., :, :, :] * phase_field.s[0, 0]
 
 # Set up right hand side
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
@@ -106,7 +107,6 @@ rhs = discretization.get_rhs(material_data_field_ijklqxyz=material_data_field_C_
 
 K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0, x,
                                                      formulation='small_strain')
-# M_fun = lambda x: 1 * x
 # K= discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
 
 preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=elastic_C_1)
@@ -123,6 +123,8 @@ M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
     preconditioner_Fourier_fnfnqks=preconditioner,
     nodal_field_fnxyz=K_diag_alg * x)
 #
+M_fun = lambda x: 1 * x
+
 
 solution_field = discretization.get_unknown_size_field(name='solution')
 

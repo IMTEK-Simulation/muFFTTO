@@ -7,6 +7,14 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from muFFTTO import domain
 from muFFTTO import topology_optimization
 
+plt.rcParams["text.usetex"] = True
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX
+    # "font.family": "helvetica",  # Use a serif font
+})
+plt.rcParams.update({'font.size': 14})
+plt.rcParams["font.family"] = "Arial"
+
 # Define the dimensions of the 2D array
 rows = 25  # or whatever size you want
 cols = 25  # or whatever size you want
@@ -79,7 +87,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
             if plot_figs:
-                phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+                #
 
                 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                                   problem_type=problem_type)
@@ -87,10 +95,11 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                                        nb_of_pixels_global=(N, N),
                                                        discretization_type=discretization_type,
                                                        element_type=element_type)
+                phase_field = discretization.get_scalar_field(name='phase_field')
+                phase_field.s[0, 0] = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+
                 f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                     phase_field_1nxyz=np.expand_dims(
-                                                                                         np.expand_dims(phase_field,
-                                                                                                        axis=0), axis=0),
+                                                                                     phase_field_1nxyz= phase_field ,
                                                                                      eta=eta_mult,
                                                                                      double_well_depth=1)
 
@@ -115,7 +124,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                 roll_x = 0
                 roll_y = -25
                 #phase_field=phase_field**2
-                phase_field = np.roll(phase_field, roll_y, axis=0)
+                phase_field = np.roll(phase_field.s[0,0], roll_y, axis=0)
                 phase_field = np.roll(phase_field, roll_x, axis=1)
                 contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)), cmap='jet', vmin=0, vmax=1)
 
@@ -156,9 +165,9 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                 print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
                 # plt.savefig(fname, bbox_inches='tight')
 
-                #plt.show()
-                #f_sigmas.append(np.sum(f_sigma))
-                #f_pfs.append(f_phase_field)
+                # plt.show()
+                # f_sigmas.append(np.sum(f_sigma))
+                # f_pfs.append(f_phase_field)
 
     fig = plt.figure(figsize=(11, 4.5))
     gs = fig.add_gridspec(2, 5, width_ratios=[0.1,1,1, 1, 1])
@@ -185,7 +194,14 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          color=colors[i],
                                          lw=1,
                                          ls='-'),
-                         color=colors[i]
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
+
                          )
             ax0.text(letter_offset, 1.05, '(b)', transform=ax1.transAxes)
         if i == 1:
@@ -199,7 +215,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                      color=colors[i],
                                      lw=1,
                                      ls='-'),
-                     color=colors[i]
+                     color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
                      )
             ax0.text(letter_offset, 1.05, '(c)', transform=ax1.transAxes)
 
@@ -214,7 +236,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                      color=colors[i],
                                      lw=1,
                                      ls='-'),
-                     color=colors[i]
+                     color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
                      )
             ax0.text(letter_offset, 1.05, '(d)', transform=ax1.transAxes)
 
@@ -229,7 +257,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                          color= colors[i],
                                          lw=1,
                                          ls='-'),
-                         color=colors[i]
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
                          )
             ax0.text(letter_offset, 1.05, '(e)', transform=ax1.transAxes)
 

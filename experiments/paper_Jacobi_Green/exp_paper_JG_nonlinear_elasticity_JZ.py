@@ -17,8 +17,8 @@ script_name = os.path.splitext(os.path.basename(__file__))[0]
 folder_name = '../exp_data/'
 
 enforce_mean = False
-for preconditioner_type in ['Jacobi_Green', 'Green']:
-    for nnn in [100,]:#2 ** np.array([ 7 ]):  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
+for preconditioner_type in ['Jacobi_Green', 'Green', ]:
+    for nnn in [32, ]:  # 2 ** np.array([ 7 ]):  # 3, 4, 5, 6, 7, 8, 9 5, 6, 7, 8, 95, 6, 7, 8, 9
         start_time = time.time()
         number_of_pixels = (nnn, nnn, nnn)  # (128, 128, 1)  # (32, 32, 1) # (64, 64, 1)  # (128, 128, 1) #
         domain_size = [1, 1, 1]
@@ -81,8 +81,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
         # II_qxyz = np.broadcast_to(II[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
         #                           (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
         #
-        # I4d_qxyz = np.broadcast_to(I4d[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
-        #                            (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
+        I4s_qxyz = np.broadcast_to(I4s[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis],
+                                   (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 
         model_parameters_non_linear = {'K': 2,
                                        'mu': 1,
@@ -273,6 +273,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 # save K4_ijklqyz
                 results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
                 np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz.mean(axis=4))
+                results_name = (f'K4_ijklqyz_full' + f'_it{iteration_total}')
+                np.save(data_folder_path + results_name + f'.npy', K4_ijklqyz)
 
                 results_name = (f'rhs_field' + f'_it{iteration_total}')
                 np.save(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=2))
@@ -294,9 +296,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     # K_ref = discretization.get_system_matrix(I4s)
 
                     K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                        material_data_field_ijklqxyz=K4_ijklqyz)
+                        material_data_field_ijklqxyz=K4_ijklqyz)#K4_ijklqyz
                     # GJ_matrix = np.diag(K_diag_alg.flatten()) @ K_ref @ np.diag(K_diag_alg.flatten())
-
+                    #K_tot=discretization.get_system_matrix(material_data_field=K4_ijklqyz)
                     M_fun_GJ = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                         preconditioner_Fourier_fnfnqks=preconditioner,
                         nodal_field_fnxyz=K_diag_alg * x)
@@ -311,6 +313,8 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                     displacement_field=x,
                     formulation='small_strain')
 
+                #M_fun = lambda x: 1 * x
+
 
                 def my_callback(x_0):
                     print('mean_x0 {}'.format(x_0.mean()))
@@ -322,7 +326,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                                                                     x0=displacement_increment_field.s,
                                                                     P=M_fun,
                                                                     steps=int(10000),
-                                                                    toler=1e-14,
+                                                                    toler=1e-12,
                                                                     norm_type='rr',
                                                                     # callback=my_callback
                                                                     )
@@ -406,9 +410,9 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
 
                 # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
                 # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
-                if np.linalg.norm(rhs_field.s)  < 1.e-7 and iiter > 0: break
+                if np.linalg.norm(rhs_field.s) < 1.e-7 and iiter > 0: break
 
-                if iiter == 100:
+                if iiter == 10:
                     break
 
             # # linear part of displacement(X-domain_size[0]/2)
@@ -448,7 +452,7 @@ for preconditioner_type in ['Jacobi_Green', 'Green']:
                 np.savez(data_folder_path + f'info_log_final.npz', **_info)
                 print(data_folder_path + f'info_log_final.npz')
 
-            plot_sol_field = False
+            plot_sol_field = True
             if plot_sol_field:
                 fig = plt.figure(figsize=(9, 3.0))
                 gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],
