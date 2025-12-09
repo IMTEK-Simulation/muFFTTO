@@ -86,6 +86,7 @@ if plot_N32:
     nb_it_GJ = np.asarray(nb_it_GJ)
     grad_norm = np.asarray(grad_norm)
     grad_max = np.asarray(grad_max)
+
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'olive', 'brown', 'purple']
     linestyles = [':', '-.', '--', (0, (3, 1, 1, 1))]
 

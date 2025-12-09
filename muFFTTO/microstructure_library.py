@@ -124,7 +124,7 @@ def get_geometry(nb_voxels,
                 phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
 
             # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
-            print()
+            #print()
         case 'n_laminate':
 
             phase_field = np.zeros(nb_voxels)
@@ -167,7 +167,7 @@ def get_geometry(nb_voxels,
                 phase_field[coordinates[0] >= positions[i + 1]] = phases[i + 1]
 
             # phase_field[coordinates[0] >= divisions[-1]] = positions[-1]
-            print()
+            #print()
         case 'square_inclusion_equal_volfrac':
 
             phase_field = np.ones(nb_voxels)

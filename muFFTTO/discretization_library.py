@@ -206,7 +206,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                         *quad_point_coords)
 
             my_domain.N_at_quad_points_qnijk = np.expand_dims(np.expand_dims(N_at_quad_points_qijk, axis=1), axis=0)
-            print()
+            #print()
 
         case 'linear_triangles_tilled':
             if my_domain.domain_dimension != 2:
