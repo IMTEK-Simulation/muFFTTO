@@ -133,8 +133,8 @@ if plot_data_vs_CG:
             preconditioner_type = 'Green'
 
             data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                        + f'_{preconditioner_type}' + '/')
+                    file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                    + f'_{preconditioner_type}' + '/')
             if iteration_total < it_max:
                 if Nx == 256:
                     _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
@@ -164,8 +164,8 @@ if plot_data_vs_CG:
             preconditioner_type = 'Green_Jacobi'
 
             data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
-                        + f'_{preconditioner_type}' + '/')
+                    file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                    + f'_{preconditioner_type}' + '/')
             if iteration_total < it_max:
                 if Nx == 256:
                     _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
@@ -225,8 +225,8 @@ if plot_data_vs_CG:
     norm_rhs_t_GJ = np.concatenate((np.array(np.atleast_1d(_info_final_GJ.f.rhs_t_norm)), np.array(norm_rhs_GJ)))
 
     fig = plt.figure(figsize=(8.3, 4.0))
-    gs = fig.add_gridspec(2, 5, hspace=0.2, wspace=0.1, width_ratios=[ 1, 1,1, 1,0.05],
-                          height_ratios=[1, 1. ])
+    gs = fig.add_gridspec(2, 5, hspace=0.2, wspace=0.1, width_ratios=[1, 1, 1, 1, 0.05],
+                          height_ratios=[1, 1.])
 
     gs_global = fig.add_subplot(gs[:, 0])
 
@@ -248,7 +248,7 @@ if plot_data_vs_CG:
 
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
                        xy=(iterations[2], its_GJ[2]),
-                       xytext=(0.5, 100.),
+                       xytext=(3., 100.),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
                                        lw=1,
@@ -266,7 +266,8 @@ if plot_data_vs_CG:
                        fontsize=11,
                        color='k',
                        )
-    gs_global.text(0.02, 0.93, rf'\textbf{{(a)}}', transform=gs_global.transAxes)
+    gs_global.text(0.15,  0.95, r'$ \approx  50 \times 10^{6}$ DOFs ',
+                   transform=gs_global.transAxes)
 
     # gs_global.set_ylim(0, 800)
 
@@ -327,9 +328,11 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    #ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.2)}}', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.2)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
+
+    gs_global.text(-2.3, 1.05, rf'\textbf{{(a)}}', transform=ax_geom_0.transAxes)
 
     ax_geom_0.set_xticks([])
     ax_geom_0.set_xticklabels([])
@@ -365,8 +368,8 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, 0.5, r'$N_{z}$=128', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.1)}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(0.32, 0.5, r'$N_{z}$=256', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.1)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -394,9 +397,9 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    #ax_geom_0.text(0.30, 0.5, r'$N_{z}=128$', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(0.30, 0.5, r'$N_{z}=128$', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{3})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.{3})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
     ax_geom_0.set_xticks([])
@@ -423,12 +426,12 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
+    #ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{4})}}', transform=ax_geom_0.transAxes)
-    ax_geom_0.set_xticks([])
-    ax_geom_0.set_xticklabels([])
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.{4})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.set_xticks([1, Nz // 2, Nz])
+
     ax_geom_0.set_yticks([])
     ax_geom_0.set_yticklabels([])
     # ax_geom_0.set_xlim([0, Nz])
@@ -450,13 +453,13 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
+    #ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{5})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.{5})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
-    ax_geom_0.set_xticks([])
-    ax_geom_0.set_xticklabels([])
+    ax_geom_0.set_xticks([1, Nz // 2, Nz])
+
     ax_geom_0.set_yticks([])
     ax_geom_0.set_yticklabels([])
     # ax_geom_0.set_xlim([0, Nz])
@@ -478,25 +481,22 @@ if plot_data_vs_CG:
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
-    ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
+    #ax_geom_0.text(0.32, -0.5, r'$3 \cdot 256^{3}$ DOFs', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(0.2, -0.3, r'$ \approx  50 \times 10^{6}DOFs $', transform=ax_geom_0.transAxes)
 
-    ax_geom_0.text(-0., 1.1, rf'\textbf{{(b.{6})}}', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.{6})}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_xticks([])
     ax_geom_0.set_ylabel('Pixel index')
     # ax_geom_0.set_xticks([0, Nx//2, Nx])
 
-    ax_geom_0.set_yticks([0, Nz // 2, Nz])
+    ax_geom_0.set_yticks([1, Nz // 2, Nz])
+    ax_geom_0.set_xticks([1, Nz // 2, Nz])
     #    ax_geom_0.set_xlim([0, Nz])
     #  ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)  # Maintain square aspect ratio
     ax_geom_0.yaxis.set_ticks_position('right')
     ax_geom_0.yaxis.set_label_position('right')
-
-
-
-
 
     # axis for cross sections
     add_stress_plot = False

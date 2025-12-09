@@ -1583,11 +1583,14 @@ class Discretization:
 
     def get_preconditioner_Jacobi_mugrid(self, material_data_field_ijklqxyz: Field = None,
                                          constitutive: callable = None,
-                                         formulation=None):
+                                         formulation=None,
+                                         **kwargs):
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
         # diagonals_in_Fourier_space [f,n,f,n][0,0,0]  # all DOFs in first pixel
+
+        threshold = kwargs.get('zero_threshold', 1.)
 
         # print('unit_impulse_fnxyz.shape = {}'.format(unit_impulse_fnxyz.shape))
         diagonal_inxyz = self.get_unknown_size_field(name='jacobi_diagonal_inxyz')
@@ -1617,7 +1620,7 @@ class Discretization:
                         diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
                             dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
                             1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2]),
-                            1.
+                            threshold
                         )
 
         elif self.domain_dimension == 3:
@@ -1636,7 +1639,7 @@ class Discretization:
                             diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = np.where(
                                 dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] != 0.,
                                 1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2]),
-                                1.
+                                threshold
                             )
 
         return diagonal_inxyz

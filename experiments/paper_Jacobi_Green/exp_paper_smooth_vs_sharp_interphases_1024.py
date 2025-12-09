@@ -21,6 +21,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 if not os.path.exists(data_folder_path):
     os.makedirs(data_folder_path)
 
+
 if not os.path.exists(figure_folder_path):
     os.makedirs(figure_folder_path)
 
@@ -36,10 +37,13 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument("-r", "--ratio", default="1")
 parser.add_argument("-cg_tol", "--cg_tol_exponent", default="1")
+parser.add_argument("-jz", "--jacobi_zero", default="1")
+
 args = parser.parse_args()
 
 ratio = int(args.ratio)
 cg_tol_exponent = int(args.cg_tol_exponent)
+jacobi_zero = int(args.jacobi_zero)
 
 
 def scale_field_mugrid(field, min_val, max_val):
@@ -63,9 +67,9 @@ def scale_field_log(field, min_val, max_val):
 
 
 plot = False
-plot_cg_tol_vs_error = True
+plot_cg_tol_vs_error = False
 
-compute = False
+compute = True
 enforce_mean = False
 if compute:
     tol_cg = 10 ** (-cg_tol_exponent)
@@ -115,8 +119,8 @@ if compute:
         _info = {}
         # material distribution
         name = 'microstructure_1024'
-        #geometries_data_folder_path = ''
-        geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
+        geometries_data_folder_path = ''
+        #geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
         phase_field = discretization.get_scalar_field(name='phase_field')
 
         phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
@@ -164,9 +168,12 @@ if compute:
         preconditioner = discretization.get_preconditioner_Green_mugrid(
             reference_material_data_ijkl=elastic_C_1)
 
+        _jacobi_setup = {}
+        _jacobi_setup['zero_threshold'] = jacobi_zero
         K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho,
-            formulation=formulation)
+            formulation=formulation,
+            **_jacobi_setup)
 
 
         def M_fun_green(x, Px):
@@ -598,7 +605,6 @@ if plot_cg_tol_vs_error:
     import matplotlib.pyplot as plt
     import matplotlib as mpl
 
-    plt.rcParams["text.usetex"] = True
     plt.rcParams.update({
         "text.usetex": True,  # Use LaTeX
         # "font.family": "helvetica",  # Use a serif font
@@ -610,60 +616,25 @@ if plot_cg_tol_vs_error:
     # ratios = np.array([2, 5, 8])
     ratio = 5  # 5, 8, 12, 15, 15
     # fig = plt.figure(figsize=(11.5, 6))
-    fig = plt.figure(figsize=(8.3, 5.0))
+    fig = plt.figure(figsize=(4.0, 4.0))
 
     # gs = fig.add_gridspec(1, 3)
-    gs_global = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.1)
+    gs_error = fig.add_gridspec(1, 1, width_ratios=[1], wspace=0.1)
 
-    gs_error = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.3)  # 0.1, 1, 4
-    gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.07, 1], hspace=0.2, wspace=0.7)  # 0.1, 1, 4
+    # gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.07, 1], hspace=0.2, wspace=0.7)  # 0.1, 1, 4
 
-    ax_cbar = fig.add_subplot(gs_geom[:, 0])
     lines = ['-', '-.', '--', ':', 'dotted', '--', ':', ]
     row = 0
+    ax_error = fig.add_subplot(gs_error[0])
+    ax_error.text(-0.22, 0.99, rf'\textbf{{(b}})  ', transform=ax_error.transAxes)
     for sharp in [False, True]:
-        ax_error = fig.add_subplot(gs_error[row, 0])
-        ax_error.text(0.00, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_error.transAxes)
 
-        ax_geom = fig.add_subplot(gs_geom[row, 1])
-
-        if row == 0:
-            ax_geom.text(-0.5, 1.05, rf'\textbf{{(a.{row + 1}) }} ', transform=ax_error.transAxes)
-        elif row == 1:
-            ax_geom.text(-0.5, 1.05, rf'\textbf{{(a.{row + 1})}}  ', transform=ax_error.transAxes)
-
-        divnorm = mpl.colors.Normalize(vmin=1e-8, vmax=1)
-        cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
-
-        results_name = (f'phase_field' + f'N1024_{ratio}_sharp_{sharp}')
-        phase_field = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-
-        phase_field_max = np.max(phase_field)
-        if sharp:
-            phase_field[phase_field < 0.5] = 1 / 10 ** ratio  # phase_field_min#
-            phase_field[phase_field > 0.49] = phase_field_max  # 1
-
-        # np.unravel_index(phase_field_origin.argmin(), phase_field_origin.shape)
-        pcm = ax_geom.pcolormesh(np.tile(phase_field, (1, 1)),
-                                 cmap=cmap_, linewidth=0,
-                                 rasterized=True, norm=divnorm)
-
-        ax_geom.set_xticks([1, 512, 1024])
-        ax_geom.set_yticks([1, 512, 1024])
-        # ax_geom.axis('equal' )
-        ax_geom.set_aspect('equal', 'box')
-        if sharp:
-            ax_geom.set_xlabel('pixel index')
-        if sharp:
-            ax_geom.set_title(r'$\rho_{\rm sharp}$', wrap=True)  # Density
-        else:
-            ax_geom.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
         norm_strain_error = []
         norm_disp_error = []
-        norm_disp_error_zero_mean=[]
+        norm_disp_error_zero_mean = []
         norm_strain_G = []
         norm_disp_G = []
-        max_tol=11
+        max_tol = 11
         for i in np.arange(1, max_tol, step=1):
             results_name = f'N1024_{ratio}_sharp_{sharp}_tol_{i}'
             _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
@@ -674,29 +645,101 @@ if plot_cg_tol_vs_error:
             norm_disp_error.append(_info['norm_disp_error'])
             norm_disp_error_zero_mean.append(_info['norm_disp_error_zero_mean'])
 
-        tolerances = np.logspace(-1, -max_tol+1, max_tol-1)
-        norm_strain_error = np.array(norm_strain_error)
+        tolerances = np.logspace(-1, -max_tol + 1, max_tol - 1)
+
         norm_strain_G = np.array(norm_strain_G)
         norm_disp_G = np.array(norm_disp_G)
 
+        norm_strain_error = np.array(norm_strain_error)
+        norm_disp_error_zero_mean = np.array(norm_disp_error_zero_mean)
         norm_disp_error = np.array(norm_disp_error)
 
-        ax_error.loglog(tolerances, norm_disp_error / norm_disp_G, label=fr'$\kappa=10^{{{-2}}}$',
-                        color='g', linestyle=lines[0], lw=2)
+        rel_norm_disp_error = norm_disp_error / norm_disp_G
+        rel_norm_disp_error_zero_mean = norm_disp_error_zero_mean / norm_disp_G
+        rel_norm_strain_error = norm_strain_error / norm_strain_G
+
+        ax_error.loglog(tolerances, rel_norm_disp_error, label=fr'$\kappa=10^{{{-2}}}$',
+                        color='c', linestyle=lines[row], lw=1)
         #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
-        ax_error.loglog(tolerances, norm_strain_error / norm_strain_G, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
-                        color='black', linestyle=lines[1], lw=2)
-        ax_error.loglog(tolerances, norm_disp_error_zero_mean / norm_strain_G, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
-                        color='red', linestyle=lines[1], lw=2)
-        print()
-        ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
-        ax_error.set_xlim([1e-11, 1e-1])
-        # ax_error.set_xscale('linear')
-        # ax_error.set_yticks([1e-10, 1e-6, 1e-2, 1e1])
-        # ax_error.set_yticklabels([fr'$10^{{{-10}}}$', fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{1}}}$'])
+        ax_error.loglog(tolerances, rel_norm_strain_error, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
+                        color='m', linestyle=lines[row], lw=1)
+        ax_error.loglog(tolerances, rel_norm_disp_error_zero_mean, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
+                        color='y', linestyle=lines[row], lw=1)
+
+        # annotation text
+        if row == 0:
+            ax_error.annotate(text=fr'Displacement $\tilde{{\mathbf{{u}}}}$' + f'\n smooth',
+                              xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
+                              xytext=(1e-9, 3e-1),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='c',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='c'
+                              )
+            ax_error.annotate(text=f' Zero-mean  \n displacement ' + fr'$\tilde{{\mathbf{{u}}}}$' + f'\n smooth',
+                              xy=(1e-5, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-5)]),
+                              xytext=(1e-4, 1e-6),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='y',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='y'
+                              )
+            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n smooth',
+                              xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
+                              xytext=(5e-9, 5e-5),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='m',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='m'
+                              )
+        elif row == 1:
+            ax_error.annotate(text=fr'Displacement $\tilde{{\mathbf{{u}}}}$' + f'\n sharp',
+                              xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
+                              xytext=(1e-9, 1e-3),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='c',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='c'
+                              )
+            ax_error.annotate(text=f' Zero-mean  \n displacement  ' + fr'$\tilde{{\mathbf{{u}}}}$' + f'\n sharp',
+                              xy=(1e-6, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-6)]),
+                              xytext=(1e-6, 1e-9),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='y',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='y'
+                              )
+            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n sharp',
+                              xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
+                              xytext=(3e-10, 5e-6),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='m',
+                                              lw=1,
+                                              ls=lines[0]),
+                              fontsize=9,
+                              color='m'
+                              )
         row += 1
+    ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
+    ax_error.set_xlim([1e-10, 1e-1])
+    ax_error.set_xticks([10 ** i for i in range(-10, 0, 2)])
+    ax_error.set_xticklabels([fr'$10^{{{i}}}$' for i in range(-10, 0, 2)])
+
+    ax_error.set_xlabel(fr'PCG tolerance - $\eta^{{\mathrm{{CG}}}}$')
+    ax_error.set_ylabel(fr'$||X^{{\mathrm{{G}}}}-X^{{\mathrm{{GJ}}}}|| / ||X^{{\mathrm{{G}}}}|| $')
+
     fig.tight_layout()
-    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot' + '{}'.format('.pdf')
+    fname = f'exp_paper_JG_sharp_vs_smoot_error' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(figure_folder_path + fname, bbox_inches='tight')
     plt.show()

@@ -38,11 +38,20 @@ parser.add_argument(
     default=4,
     help="Total phase contras"
 )
+parser.add_argument(
+    "-norm", "--res_norm",
+    type=str,
+    choices=["norm_rr", "norm_rGr"],
+    default='norm_rr',
+    help="Norm of residual")
+
 
 args = parser.parse_args()
 nb_pix_multips = int(args.nb_pix_multips)
 total_phase_contrast = args.contrast
 preconditioner_type = args.preconditioner_type  # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
+norm_ = args.res_norm
+
 
 if MPI.COMM_WORLD.rank == 0:
     print('  Rank   Size          Domain       Subdomain        Location')
@@ -94,17 +103,6 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
     I4rt = np.einsum('ik,jl', ii, ii)
     I4s = (I4 + I4rt) / 2.
 
-    # create material data field
-    K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
-
-    # identity tensor                                               [single tensor]
-    ii = np.eye(2)
-    # identity tensors                                            [grid of tensors]
-    I = ii
-    I4 = np.einsum('il,jk', ii, ii)
-    I4rt = np.einsum('ik,jl', ii, ii)
-    I4s = (I4 + I4rt) / 2.
-
     elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
@@ -131,24 +129,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
                                       min_val=1,
                                       max_val=10 ** total_phase_contrast)
 
-    #
-    #
-    # x_coors = discretization.fft.coords[0]
-    #
-    # strip_size = x_coors.shape[0] // nb_laminates
-    # phase_contrast = 10 ** total_phase_contrast
-    # phases_single = phase_contrast + (1 - phase_contrast) / (1 - 1 / nb_laminates) * np.linspace(0, 1,
-    #                                                                                              nb_laminates,
-    #                                                                                              endpoint=False)
-    # # print('phases_single = \n {}'.format(phases_single))
-    #
-    # # Repeat each element strip_size times
-    # phases_repeated = np.repeat(phases_single, strip_size)
-    # # print('phases_repeated = \n {}'.format(phases_repeated))
-    # material_distribution.s[0, 0] = np.tile(phases_repeated[:, np.newaxis], (1, material_distribution.s.shape[-1]))
 
-    # print('MPI.COMM_WORLD.rank', MPI.COMM_WORLD.rank)
-    # extended = np.broadcast_to(material_distribution.s[0,0] , material_data_field_C_0.s[0,0,0,0].shape)
     material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.broadcast_to(phase_field.s[0, 0],
                                                           material_data_field_C_0.s[0, 0, 0, 0].shape))
@@ -215,6 +196,9 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
             Px.s = K_diag_alg.s * K_diag_alg.s * x.s
             discretization.fft.communicate_ghosts(Px)
 
+    def M_fun_do_nothing(x, Px):
+        Px.s = 1 * x.s
+
     if preconditioner_type == 'Green':
         M_fun = M_fun_green
     elif preconditioner_type == 'Green_Jacobi':
@@ -244,7 +228,14 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
         # print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
 
 
+    if norm_ == 'norm_rr':
+        res_norm = M_fun_do_nothing
+    elif norm_ == 'norm_rGr':
+        res_norm = M_fun_green
+
+    start_time_pure_iter = time.time()
     solution_field = discretization.get_unknown_size_field(name='solution')
+    solution_field.s.fill(0)
     solvers.conjugate_gradients_mugrid(
         comm=discretization.fft.communicator,
         fc=discretization.field_collection,
@@ -255,8 +246,11 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
         tol=1e-5,
         maxiter=1000,
         callback=callback,
-        # norm_metric=M_fun_green
+        norm_metric=res_norm
     )
+    end_time_pure_iter = time.time()
+    elapsed_time_pure_iter = end_time_pure_iter-start_time_pure_iter
+
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -267,8 +261,10 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
         _info = {}
         _info['nb_steps'] = nb_steps
         _info['elapsed_time'] = elapsed_time
+        _info['elapsed_time_CG'] = elapsed_time_pure_iter
+
         results_name = (
-                f'nb_nodes_{number_of_pixels[0]}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
+                f'nb_nodes_{number_of_pixels[0]}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}'+ f'{norm_}')
 
         np.savez(data_folder_path + results_name + f'.npz', **_info)
         print(data_folder_path + results_name + f'.npz')  #

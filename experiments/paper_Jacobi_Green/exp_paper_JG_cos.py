@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(
     prog="exp_paper_JG_cos.py", description="Solve homogenization problem with cosines data"
 )
 parser.add_argument("-n", "--nb_pix_multips", default="5")
+parser.add_argument("-jz", "--jacobi_zero", default="1")
 
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
@@ -38,12 +39,19 @@ parser.add_argument(
     default=4,
     help="Total phase contras"
 )
+parser.add_argument(
+    "-nor", "--res_norm",
+    type=str,
+    choices=["norm_rr", "norm_rGr"],
+    default='norm_rr',
+    help="Norm of residual")
 
 args = parser.parse_args()
 nb_pix_multips = int(args.nb_pix_multips)
 total_phase_contrast = args.contrast
 preconditioner_type = args.preconditioner_type  # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
-
+norm_ = args.res_norm
+jacobi_zero = args.jacobi_zero
 
 MPI.COMM_WORLD.Barrier()  # Barrier so header is printed first
 script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -100,17 +108,6 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
     I4rt = np.einsum('ik,jl', ii, ii)
     I4s = (I4 + I4rt) / 2.
 
-    # create material data field
-    K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
-
-    # identity tensor                                               [single tensor]
-    ii = np.eye(2)
-    # identity tensors                                            [grid of tensors]
-    I = ii
-    I4 = np.einsum('il,jk', ii, ii)
-    I4rt = np.einsum('ik,jl', ii, ii)
-    I4s = (I4 + I4rt) / 2.
-
     elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
@@ -126,14 +123,14 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
 
     # save
     results_name = (f'cos_geometry_pixels={nb_laminates}' + f'dof={number_of_pixels[0]}')
-    geom_folder_path=file_folder_path + '/exp_data/'+'exp_paper_JG_cos_generate_geometries/'
+    geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_cos_generate_geometries/'
 
-    material_distribution.s[0, 0]=load_npy(geom_folder_path + results_name + f'.npy',
-             tuple(discretization.subdomain_locations_no_buffers),
-             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+    material_distribution.s[0, 0] = load_npy(geom_folder_path + results_name + f'.npy',
+                                             tuple(discretization.subdomain_locations_no_buffers),
+                                             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
-    #load_npy()
-   # np.save(data_folder_path + results_name + f'.npy', to_save)
+    # load_npy()
+    # np.save(data_folder_path + results_name + f'.npy', to_save)
 
     #
     # x_coors = discretization.fft.coords
@@ -163,7 +160,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
     if total_phase_contrast == 0:
         pass
     else:
-        material_distribution.s[0, 0,] += 1 / 10 ** total_phase_contrast
+        material_distribution.s[0, 0] += 1 / 10 ** total_phase_contrast
 
     material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.broadcast_to(material_distribution.s[0, 0],
@@ -190,13 +187,17 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         # discretization.fft.communicate_ghosts(Ax)
 
 
+    start_time = time.time()
     # Set up preconditioners
     # Green
     preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
 
+    _jacobi_setup = {}
+    _jacobi_setup['zero_threshold'] = jacobi_zero
     K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
-        formulation=formulation)
+        formulation=formulation,
+        **_jacobi_setup)
 
 
     def M_fun_green(x, Px):
@@ -228,6 +229,10 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         discretization.fft.communicate_ghosts(Px)
 
 
+    def M_fun_do_nothing(x, Px):
+        Px.s = 1 * x.s
+
+
     if preconditioner_type == 'Green':
         M_fun = M_fun_green
     elif preconditioner_type == 'Green_Jacobi':
@@ -257,7 +262,13 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         # print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
 
 
+    if norm_ == 'norm_rr':
+        res_norm = M_fun_do_nothing
+    elif norm_ == 'norm_rGr':
+        res_norm = M_fun_green
+    start_time_pure_iter = time.time()
     solution_field = discretization.get_unknown_size_field(name='solution')
+    solution_field.s.fill(0)
     solvers.conjugate_gradients_mugrid(
         comm=discretization.fft.communicator,
         fc=discretization.field_collection,
@@ -265,18 +276,26 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         b=rhs_field,
         x=solution_field,
         P=M_fun,
-        tol=1e-6,
+        tol=1e-5,
         maxiter=1000,
         callback=callback,
-        norm_metric=M_fun_green
+        norm_metric=res_norm
     )
+    end_time_pure_iter = time.time()
+    elapsed_time_pure_iter = end_time_pure_iter - start_time_pure_iter
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     if discretization.fft.communicator.rank == 0:
         nb_steps = len(norms['residual_rr'])
         print(f'nb steps = {nb_steps} ')
         _info = {}
         _info['nb_steps'] = nb_steps
+        _info['elapsed_time'] = elapsed_time
+        _info['elapsed_time_CG'] = elapsed_time_pure_iter
+
         results_name = (
-                f'nb_nodes_{number_of_pixels[0]}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}')
+                f'nb_nodes_{number_of_pixels[0]}_' + f'nb_pixels_{nb_laminates}_' + f'contrast_{total_phase_contrast}_' + f'prec_{preconditioner_type}' + f'{norm_}')
 
         np.savez(data_folder_path + results_name + f'.npz', **_info)
         print(data_folder_path + results_name + f'.npz')  #
