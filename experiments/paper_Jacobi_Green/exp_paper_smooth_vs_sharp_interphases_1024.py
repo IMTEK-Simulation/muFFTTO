@@ -66,10 +66,10 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-plot = False
+plot = True
 plot_cg_tol_vs_error = False
 
-compute = True
+compute = False
 enforce_mean = False
 if compute:
     tol_cg = 10 ** (-cg_tol_exponent)
@@ -414,7 +414,7 @@ if plot:
         "text.usetex": True,  # Use LaTeX
         # "font.family": "helvetica",  # Use a serif font
     })
-    plt.rcParams.update({'font.size': 11})
+    plt.rcParams.update({'font.size': 13})
     plt.rcParams["font.family"] = "Arial"
 
     # plt.rcParams.update({'font.size': 14})
@@ -473,10 +473,15 @@ if plot:
         for i in np.arange(ratios.size, step=1):
             results_name = f'N1024_{ratios[i]}_sharp_{sharp}'
             _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
-
-            norm_G = _info['norms_G_rr']
-            norm_GJ = _info['norms_GJ_rr']
-            norm_J = _info['norms_J_rr']
+            norm_='rr'
+            if norm_ =='rGr':
+                norm_G = _info['norms_G_rGr']
+                norm_GJ = _info['norms_GJ_rGr']
+                norm_J = _info['norms_J_rGr']
+            elif norm_ == 'rr':
+                norm_G = _info['norms_G_rr']
+                norm_GJ = _info['norms_GJ_rr']
+                norm_J = _info['norms_J_rr']
             kappa = 10 ** ratios[i]
 
             k = np.arange(max([len(norm_GJ), len(norm_G)]))
@@ -506,9 +511,13 @@ if plot:
             # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
             if sharp:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
-
-            ax_error.set_ylabel(
-                'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||_{{\mathbf{{G}}}}$')  # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
+            if norm_ =='rGr':
+                ax_error.set_ylabel(
+                    'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||^{2}_{{\mathbf{{G}}}}$')
+            elif norm_ == 'rr':
+                ax_error.set_ylabel(
+                    'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||^{2} $')
+                # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
             # ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
@@ -519,30 +528,58 @@ if plot:
             ax_error.set_yticklabels([fr'$10^{{{-10}}}$', fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{1}}}$'])
 
             if sharp:
+                if norm_ == 'rGr':
+                    arrows_G = [5, 10, 14, 17]  # anotation arrows
+                    text_G = np.array([[1.2, 1e-5],  # anotation Text position
+                                       [1.6, 7e-8],
+                                       [35.0, 3e-8],
+                                       [40.0, 2e-10]])
 
-                arrows_G = [5, 10, 14, 17]  # anotation arrows
-                text_G = np.array([[1.2, 1e-5],  # anotation Text position
-                                   [1.6, 7e-8],
-                                   [35.0, 3e-8],
-                                   [40.0, 2e-10]])
+                    arrows_GJ = [300, 600, 1000, 1700]  # anotation arrows
+                    text_GJ = np.array([[30, 1e-4],  # anotation Text position
+                                        [1400, 5e-2],
+                                        [1550, 1e-4],
+                                        [1600, 1e-7]])
+                elif norm_ == 'rr':
+                    arrows_G = [5, 10, 14, 17]  # anotation arrows
+                    text_G = np.array([[1.2, 1e-6],  # anotation Text position
+                                       [1.6, 7e-10],
+                                       [35.0, 3e-7],
+                                       [40.0, 3e-10]])
 
-                arrows_GJ = [300, 600, 1000, 1700]  # anotation arrows
-                text_GJ = np.array([[30, 1e-4],  # anotation Text position
-                                    [1400, 5e-2],
-                                    [1600, 1e-4],
-                                    [1700, 1e-7]])
+                    arrows_GJ = [300, 600, 1000, 1700]  # anotation arrows
+                    text_GJ = np.array([[30, 1e-4],  # anotation Text position
+                                        [1400, 5e-2],
+                                        [1550, 1e-4],
+                                        [1600, 1e-7]])
             else:
-                arrows_G = [15, 200, 5000, 8000]
-                text_G = np.array([[2, 5e-7],
-                                   [3, 1e-9],
-                                   [500, 2e-10],
-                                   [2100, 1e-7]])
+                if norm_ == 'rGr':
 
-                arrows_GJ = [20, 60, 200, 300]
-                text_GJ = np.array([[1.2, 1e-4],
-                                    [150.6, 5e-2],
-                                    [350.0, 3e-4],
-                                    [1500.0, 1e-5]])
+                    arrows_G = [15, 200, 5000, 8000]
+                    text_G = np.array([[2, 5e-7],
+                                       [3, 1e-9],
+                                       [500, 2e-10],
+                                       [2100, 1e-7]])
+
+                    arrows_GJ = [20, 60, 200, 300]
+                    text_GJ = np.array([[1.2, 1e-4],
+                                        [150.6, 5e-2],
+                                        [350.0, 3e-4],
+                                        [1500.0, 1e-5]])
+                elif norm_ == 'rr':
+
+                    arrows_G = [20,60 , 5000, 8000]
+                    text_G = np.array([[2, 5e-7],
+                                       [150.6, 5e-2],
+                                       [500, 2e-10],
+                                       [2100, 1e-7]])
+
+                    arrows_GJ = [20,100 , 200, 300]
+                    text_GJ = np.array([[10.2, 3e-2],
+                                        [3, 1e-9]
+                                        ,
+                                        [350.0, 3e-4],
+                                        [1500.0, 1e-5]])
             # if sharp:
             #
             #     arrows_G = [5, 10, 15]  # anotation arrows
@@ -572,7 +609,7 @@ if plot:
                                               color='black',
                                               lw=1,
                                               ls=lines[i]),
-                              fontsize=9,
+                              fontsize=10,
                               color='black'
                               )
             ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
@@ -582,7 +619,7 @@ if plot:
                                               color='green',
                                               lw=1,
                                               ls=lines[i]),
-                              fontsize=9,
+                              fontsize=10,
                               color='green'
                               )
             ax_error.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
@@ -596,7 +633,7 @@ if plot:
         row += 1
 
     fig.tight_layout()
-    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot' + '{}'.format('.pdf')
+    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot_norm_{norm_}' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(figure_folder_path + fname, bbox_inches='tight')
     plt.show()

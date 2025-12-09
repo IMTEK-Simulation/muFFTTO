@@ -199,7 +199,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 #     plt.show()
 #     quit()
 
-nb_pix_multips = 8
+nb_pix_multips = 10
 norm_='norm_rr'
 
 # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
@@ -280,7 +280,7 @@ nb_it_Green_Jacobi_linear_1 = np.transpose(nb_it_Green_Jacobi_linear_1)
 nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8]  # , 8, 9, 10
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]  # , 8, 9, 10
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -490,7 +490,7 @@ if plot_this:
 
         row += 1
 
-    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('nlaminate', phase_contrast, '.pdf')
+    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}_norm_{}{}'.format('nlaminate', phase_contrast, norm_,'.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
 
@@ -501,7 +501,7 @@ file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directo
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-nb_pix_multips = 7
+nb_pix_multips = 10
 
 # 'Jacobi'  # 'Green'  # 'Green_Jacobi'
 nb_it_Green_linear_1 = np.zeros([nb_pix_multips - 1, nb_pix_multips - 1])
@@ -566,7 +566,7 @@ nb_it_Green_Jacobi_linear_4 = np.transpose(nb_it_Green_Jacobi_linear_4)
 
 plot_this = True
 if plot_this:
-    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8,]  # 9, 10
+    nb_pix_multips = [2, 3, 4, 5, 6, 7, 8, 9, 10]  #
     Nx = (np.asarray(nb_pix_multips))
     X, Y = np.meshgrid(Nx, Nx, indexing='ij')
     #
@@ -775,7 +775,7 @@ if plot_this:
 
         row += 1
 
-    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}{}'.format('cos', phase_contrast, '.pdf')
+    fname = figure_folder_path + 'JG_exp4_GRID_DEP_nb_its_geom_{}_rho_{}_norm_{}{}'.format('cos', phase_contrast, norm_,'.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
 

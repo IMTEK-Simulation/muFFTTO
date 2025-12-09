@@ -8,7 +8,7 @@ plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
     # "font.family": "helvetica",  # Use a serif font
 })
-plt.rcParams.update({'font.size': 11})
+plt.rcParams.update({'font.size': 13})
 plt.rcParams["font.family"] = "Arial"
 
 script_name_save = 'exp_paper_JG_intro_circle'
@@ -148,9 +148,9 @@ if plot_N32:
     #              label='Green-Jacobi ', linewidth=3)
     ax_grad.plot(filter_ids, grad_max_inf[:nb_of_filters], 'purple', linestyle='-', markevery=1,
                  label='Green-Jacobi ', linewidth=3)
-    ax_grad.set_ylim([0, 256])
-    ax_grad.set_yticks([0, 128, 256])
-    ax_grad.set_yticklabels([0, 128, 256])
+    ax_grad.set_ylim([1, 256])
+    ax_grad.set_yticks([  128, 256])
+    ax_grad.set_yticklabels([  128, 256])
     ax_grad.set_xlim([-20, nb_of_filters])
     ax_grad.set_xticks([])
     ax_grad.set_xticklabels([])
