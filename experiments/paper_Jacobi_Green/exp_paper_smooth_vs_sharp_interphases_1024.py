@@ -21,7 +21,6 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 if not os.path.exists(data_folder_path):
     os.makedirs(data_folder_path)
 
-
 if not os.path.exists(figure_folder_path):
     os.makedirs(figure_folder_path)
 
@@ -36,7 +35,7 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("-r", "--ratio", default="1")
-parser.add_argument("-cg_tol", "--cg_tol_exponent", default="1")
+parser.add_argument("-cg_tol", "--cg_tol_exponent", default="5")
 parser.add_argument("-jz", "--jacobi_zero", default="1")
 
 args = parser.parse_args()
@@ -66,9 +65,11 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-plot = True
+plot = False  # plot rediduals
 plot_cg_tol_vs_error = False
+plot_solution_differences = True
 
+store_fields = True
 compute = False
 enforce_mean = False
 if compute:
@@ -120,7 +121,7 @@ if compute:
         # material distribution
         name = 'microstructure_1024'
         geometries_data_folder_path = ''
-        #geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
+        geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
         phase_field = discretization.get_scalar_field(name='phase_field')
 
         phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
@@ -276,6 +277,16 @@ if compute:
 
         _info['norm_disp_G'] = norm_disp_G
         _info['norm_strain_G'] = norm_strain_G
+        if store_fields:
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'solution_field_G')
+            save_npy(data_folder_path + results_name + f'.npy', np.copy(solution_field_G.s),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'solution_gradient_field_G')
+            save_npy(data_folder_path + results_name + f'.npy', solution_gradient_field_G.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         _info['norms_J_rr'] = []
         _info['norms_J_rz'] = []
@@ -341,6 +352,10 @@ if compute:
             _info['norms_GJ_rz'].append(norm_of_rz)
             _info['norms_GJ_rGr'].append(stop_crit_norm)
 
+            if discretization.fft.communicator.rank == 0:
+                print(len(_info['norms_GJ_rr']))
+                print(norm_of_rr)
+
 
         solution_field_GJ = discretization.get_unknown_size_field(name='solution__GJ')
         solution_field_GJ.s.fill(0)
@@ -392,6 +407,16 @@ if compute:
         norm_strain_error = np.sqrt(discretization.fft.communicator.sum(
             np.dot(solution_gradient_field_GJ.s.ravel() - solution_gradient_field_G.s.ravel(),
                    solution_gradient_field_GJ.s.ravel() - solution_gradient_field_G.s.ravel())))
+        if store_fields:
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'solution_field_GJ_zero_mean')
+            save_npy(data_folder_path + results_name + f'.npy', np.copy(solution_field_GJ_zero_mean.s),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'solution_gradient_field_GJ')
+            save_npy(data_folder_path + results_name + f'.npy', solution_gradient_field_GJ.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         _info['norm_strain_error'] = norm_strain_error
         _info['norm_disp_error'] = norm_disp_error
@@ -404,6 +429,278 @@ if compute:
             results_name = f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}'
             np.savez(data_folder_path + results_name + f'_log.npz', **_info)
             print(data_folder_path + results_name + f'_log.npz')
+
+if plot_solution_differences:
+    import matplotlib.pyplot as plt
+    import matplotlib as mpl
+
+    plt.rcParams["text.usetex"] = True
+    plt.rcParams.update({
+        "text.usetex": True,  # Use LaTeX
+        # "font.family": "helvetica",  # Use a serif font
+    })
+    plt.rcParams.update({'font.size': 13})
+    plt.rcParams["font.family"] = "Arial"
+
+    # plt.rcParams.update({'font.size': 14})
+    # ratios = np.array([2, 5, 8])
+    ratio = 5  # 5, 8, 12, 15, 15
+    norm_ = 'rr'
+    # fig = plt.figure(figsize=(11.5, 6))
+    fig = plt.figure(figsize=(8.3, 5.0))
+
+    # gs = fig.add_gridspec(1, 3)
+    gs_global = fig.add_gridspec(1, 2, width_ratios=[0.03, 3.7], wspace=0.2)
+
+    gs_twodplots = gs_global[1].subgridspec(1, 3, width_ratios=[1,1,1.7],  wspace=0.13 )  # 0.1, 1, 4
+
+    gs_disp = gs_twodplots[0].subgridspec(2, 1, width_ratios=[1], hspace=0.1, )  # 0.1, 1, 4
+
+    gs_grad = gs_twodplots[1].subgridspec(2, 1, width_ratios=[1], hspace=0.1)  # 0.1, 1, 4
+
+    ax_cbar = fig.add_subplot(gs_global[:, 0])
+
+    lines = ['-', '-.', '--', ':', 'dotted', '--', ':', ]
+    row = 0
+    max_disp = 0
+    min_disp = 1
+    max_grad= 0
+    min_grad= 1
+
+    for sharp in [False, True]:
+
+        ax_disp = fig.add_subplot(gs_disp[row, 0])
+        if row ==0:
+            ax_disp.text(
+                0.5, 1.3, f'Displacement  '+fr' $  \tilde{{\mathbf{{u}} }}_{{1}} $',
+                #+fr' $| \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$',
+                fontsize=13,
+                color="k",
+                ha="center", va="center",
+               # bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.5"),
+                transform=ax_disp.transAxes
+            )
+        ax_disp.text(0.00, 1.05, rf'\textbf{{(a.{row + 1}}})  ', transform=ax_disp.transAxes)
+
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_field_G')
+        solution_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_field_GJ_zero_mean')
+        solution_field_GJ_zero_mean = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
+
+        max_disp = np.max([np.abs((solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0])).max(), max_disp])
+        min_disp = np.min([np.abs((solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0])).min(), min_disp])
+
+        divnorm = mpl.colors.LogNorm(vmin=1e-9, vmax=1e-3)
+        #cmap_ = mpl.cm.Reds  # mpl.cm.seismic #mpl.cm.Greys
+        cmap_ = mpl.colors.LinearSegmentedColormap.from_list("white_red", ["white", "red"])
+        pcm = ax_disp.pcolormesh(np.abs(solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0]),
+                                 cmap=cmap_, linewidth=0,
+                                 rasterized=True, norm=divnorm)
+
+        ax_disp.set_yticks([1, 512, 1024])
+        if row == 0:
+            ax_disp.set_xticks([])
+        else:
+            ax_disp.set_xticks([1, 512, 1024])
+        # ax_geom.axis('equal' )
+        ax_disp.set_aspect('equal', 'box')
+        if sharp:
+            ax_disp.set_xlabel('pixel index')
+        if sharp:
+            ax_disp.set_title(r'$\rho_{\rm sharp}$', wrap=True)  # Density
+
+        else:
+            ax_disp.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
+
+        cbar = plt.colorbar(pcm, location='left', cax=ax_cbar)
+        cbar.minorticks_off()
+        cbar.ax.yaxis.tick_left()
+        cbar.set_ticks(ticks=[  1e-9, 1e-7,    1e-5,1e-3])
+        cbar.set_ticklabels([   fr'$10^{{{-9}}}$', fr'$10^{{{-7}}}$', fr'$10^{{{-5}}}$', fr'$10^{{{-3}}}$',])
+        # Add a label to the colorbar
+        cbar.set_label(r"Relative error")
+        #cbar.ax.yaxis.set_major_formatter(mpl.ticker.LogFormatterMathtext())
+        # cbar.set_ticks(ticks=[1e-8, 0.5, 1])
+        # cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
+
+        # GRADIENTS
+        ax_grad = fig.add_subplot(gs_grad[row, 0])
+        if row == 0:
+            ax_grad.text(
+                0.5, 1.3,
+                f'Strain  ' + fr' $\nabla_{{\rm{{s}}}}  \tilde{{\mathbf{{u}} }}_{{1}} $',
+                #fr' $|\nabla_{{\rm{{s}}}}  \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$'
+                fontsize=13,
+                color="k",
+                ha="center", va="center",
+                # bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.5"),
+                transform=ax_grad.transAxes
+            )
+        ax_grad.text(0.00, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_grad.transAxes)
+
+        #divnorm = mpl.colors.LogNorm(vmin=1e-12, vmax=1e-0)
+        #cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
+
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_gradient_field_G')
+        solution_gradient_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_gradient_field_GJ')
+        solution_gradient_field_GJ = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
+
+        max_grad = np.max([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])).max(), max_grad])
+        min_grad = np.min([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])).min(), min_grad])
+
+        pcm = ax_grad.pcolormesh(np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])),
+                                 cmap=cmap_, linewidth=0,
+                                 rasterized=True, norm=divnorm)
+
+        #ax_grad.set_xticks([1, 512, 1024])
+        ax_grad.set_yticks([])
+        if row == 0:
+            ax_grad.set_xticks([])
+        else:
+            ax_grad.set_xticks([1, 512, 1024])
+        #ax_grad.set_yticks([1, 512, 1024])
+        # ax_geom.axis('equal' )
+        ax_grad.set_aspect('equal', 'box')
+        if sharp:
+            ax_grad.set_xlabel('pixel index')
+        if sharp:
+            ax_grad.set_title(r'$\rho_{\rm sharp}$', wrap=True)  # Density
+        else:
+            ax_grad.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
+
+
+
+
+        row += 1
+# RIGHT ERROR # RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR
+    #  gs_disp = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.3, )
+    gs_error = gs_twodplots[-1].subgridspec(1, 1, width_ratios=[1], wspace=0.1)
+    ratio = 5
+    # gs_geom = gs_global[0].subgridspec(2, 2, width_ratios=[0.07, 1], hspace=0.2, wspace=0.7)  # 0.1, 1, 4
+
+    lines = ['-', '-.', '--', ':', 'dotted', '--', ':', ]
+    row = 0
+    ax_error = fig.add_subplot(gs_error[0])
+    ax_error.text(-0. , 1.03, rf'\textbf{{(c}})  ', transform=ax_error.transAxes)
+    for sharp in [False, True]:
+
+        norm_strain_error = []
+        norm_disp_error = []
+        norm_disp_error_zero_mean = []
+        norm_strain_G = []
+        norm_disp_G = []
+        max_tol = 11
+        for i in np.arange(1, max_tol, step=1):
+            results_name = f'N1024_{ratio}_sharp_{sharp}_tol_{i}'
+            _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
+            norm_strain_G.append(_info['norm_strain_G'])
+            norm_disp_G.append(_info['norm_disp_G'])
+
+            norm_strain_error.append(_info['norm_strain_error'])
+            norm_disp_error.append(_info['norm_disp_error'])
+            norm_disp_error_zero_mean.append(_info['norm_disp_error_zero_mean'])
+
+        tolerances = np.logspace(-1, -max_tol + 1, max_tol - 1)
+
+        norm_strain_G = np.array(norm_strain_G)
+        norm_disp_G = np.array(norm_disp_G)
+
+        norm_strain_error = np.array(norm_strain_error)
+        norm_disp_error_zero_mean = np.array(norm_disp_error_zero_mean)
+        norm_disp_error = np.array(norm_disp_error)
+
+        rel_norm_disp_error = norm_disp_error / norm_disp_G
+        rel_norm_disp_error_zero_mean = norm_disp_error_zero_mean / norm_disp_G
+        rel_norm_strain_error = norm_strain_error / norm_strain_G
+
+        ax_error.loglog(tolerances, rel_norm_disp_error, label=fr'$\kappa=10^{{{-2}}}$',
+                        color='c', linestyle=lines[row], lw=1)
+        #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
+        ax_error.loglog(tolerances, rel_norm_strain_error, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
+                        color='m', linestyle=lines[row], lw=1)
+        ax_error.loglog(tolerances, rel_norm_disp_error_zero_mean, label=r'$JG \kappa=10^' + f'{{{-2}}}$',
+                        color='y', linestyle=lines[row], lw=1)
+
+        # annotation text
+        if row == 0:
+            ax_error.annotate(text=fr' $\tilde{{\mathbf{{u}}}}$' + f' - '+r'$\rho_{\mathrm{smooth}}$',
+                              xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
+                              xytext=(1e-9, 3e-1),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='c',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='c'
+                              )
+            ax_error.annotate(text=f' Zero-mean  ' + f'\n'+ fr'$\tilde{{\mathbf{{u}}}}$' + f' - ' +r'$\rho_{\mathrm{smooth}}$',
+                              xy=(1e-5, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-5)]),
+                              xytext=(1e-5, 4e-8),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='y',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='y'
+                              )
+            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$'+ f'\n'+r'$\rho_{\mathrm{smooth}}$',
+                              xy=(1e-7, rel_norm_strain_error[np.where(tolerances == 1e-7)]),
+                              xytext=(2e-9, 1e-4),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='m',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='m'
+                              )
+        elif row == 1:
+            ax_error.annotate(text=fr'  $\tilde{{\mathbf{{u}}}}$'  + f' - ' +r'$\rho_{\mathrm{sharp}}$',
+                              xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
+                              xytext=(4e-10, 4e-3),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='c',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='c'
+                              )
+            ax_error.annotate(text=f' Zero-mean   ' + f'\n'+ fr'$\tilde{{\mathbf{{u}}}}$' + f' - '+r'$\rho_{\mathrm{sharp}}$',
+                              xy=(1e-6, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-6)]),
+                              xytext=(1e-7, 2e-10),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='y',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='y'
+                              )
+            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n'+r'$\rho_{\mathrm{sharp}}$',
+                              xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
+                              xytext=(2e-10, 3e-6),
+                              arrowprops=dict(arrowstyle='->',
+                                              color='m',
+                                              lw=1,
+                                              ls=lines[row]),
+                              fontsize=13,
+                              color='m'
+                              )
+        row += 1
+    ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
+    ax_error.set_xlim([1e-10, 1e-1])
+    ax_error.set_xticks([10 ** i for i in range(-10, 0, 2)])
+    ax_error.set_xticklabels([fr'$10^{{{i}}}$' for i in range(-10, 0, 2)])
+    ax_error.yaxis.tick_right()  # ticks on right side
+    ax_error.yaxis.set_label_position('right')  # label on right side
+    ax_error.set_xlabel(fr'PCG tolerance - $\eta^{{\mathrm{{CG}}}}$')
+    ax_error.set_ylabel(fr'Relative error norm')
+    #ax_error.set_ylabel(fr'$||X^{{\mathrm{{G}}}}-X^{{\mathrm{{GJ}}}}|| / ||X^{{\mathrm{{G}}}}|| $')
+
+    fig.tight_layout()
+    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot_norm_{norm_}_soldiffs' + '{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(figure_folder_path + fname, bbox_inches='tight')
+    plt.show()
 
 if plot:
     import matplotlib.pyplot as plt
@@ -473,8 +770,8 @@ if plot:
         for i in np.arange(ratios.size, step=1):
             results_name = f'N1024_{ratios[i]}_sharp_{sharp}'
             _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
-            norm_='rr'
-            if norm_ =='rGr':
+            norm_ = 'rr'
+            if norm_ == 'rGr':
                 norm_G = _info['norms_G_rGr']
                 norm_GJ = _info['norms_GJ_rGr']
                 norm_J = _info['norms_J_rGr']
@@ -511,7 +808,7 @@ if plot:
             # ax_1.plot(ratios, nb_pix_multips[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
             if sharp:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
-            if norm_ =='rGr':
+            if norm_ == 'rGr':
                 ax_error.set_ylabel(
                     'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||^{2}_{{\mathbf{{G}}}}$')
             elif norm_ == 'rr':
@@ -568,16 +865,16 @@ if plot:
                                         [1500.0, 1e-5]])
                 elif norm_ == 'rr':
 
-                    arrows_G = [20,60 , 5000, 8000]
+                    arrows_G = [20, 60, 5000, 8000]
                     text_G = np.array([[2, 5e-7],
                                        [150.6, 5e-2],
                                        [500, 2e-10],
                                        [2100, 1e-7]])
 
-                    arrows_GJ = [20,100 , 200, 300]
+                    arrows_GJ = [20, 100, 200, 300]
                     text_GJ = np.array([[10.2, 3e-2],
                                         [3, 1e-9]
-                                        ,
+                                           ,
                                         [350.0, 3e-4],
                                         [1500.0, 1e-5]])
             # if sharp:
@@ -646,7 +943,7 @@ if plot_cg_tol_vs_error:
         "text.usetex": True,  # Use LaTeX
         # "font.family": "helvetica",  # Use a serif font
     })
-    plt.rcParams.update({'font.size': 11})
+    plt.rcParams.update({'font.size': 13})
     plt.rcParams["font.family"] = "Arial"
 
     # plt.rcParams.update({'font.size': 14})
@@ -711,59 +1008,59 @@ if plot_cg_tol_vs_error:
                               arrowprops=dict(arrowstyle='->',
                                               color='c',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='c'
                               )
             ax_error.annotate(text=f' Zero-mean  \n displacement ' + fr'$\tilde{{\mathbf{{u}}}}$' + f'\n smooth',
                               xy=(1e-5, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-5)]),
-                              xytext=(1e-4, 1e-6),
+                              xytext=(1e-5, 4e-8),
                               arrowprops=dict(arrowstyle='->',
                                               color='y',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='y'
                               )
             ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n smooth',
                               xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
-                              xytext=(5e-9, 5e-5),
+                              xytext=(2e-9, 3e-5),
                               arrowprops=dict(arrowstyle='->',
                                               color='m',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='m'
                               )
         elif row == 1:
             ax_error.annotate(text=fr'Displacement $\tilde{{\mathbf{{u}}}}$' + f'\n sharp',
                               xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
-                              xytext=(1e-9, 1e-3),
+                              xytext=(4e-10, 1e-3),
                               arrowprops=dict(arrowstyle='->',
                                               color='c',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='c'
                               )
             ax_error.annotate(text=f' Zero-mean  \n displacement  ' + fr'$\tilde{{\mathbf{{u}}}}$' + f'\n sharp',
                               xy=(1e-6, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-6)]),
-                              xytext=(1e-6, 1e-9),
+                              xytext=(1e-7, 2e-10),
                               arrowprops=dict(arrowstyle='->',
                                               color='y',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='y'
                               )
             ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n sharp',
                               xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
-                              xytext=(3e-10, 5e-6),
+                              xytext=(2e-10, 3e-6),
                               arrowprops=dict(arrowstyle='->',
                                               color='m',
                                               lw=1,
-                                              ls=lines[0]),
-                              fontsize=9,
+                                              ls=lines[row]),
+                              fontsize=13,
                               color='m'
                               )
         row += 1
