@@ -1683,20 +1683,30 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
     # compute strain field from to displacement and macro gradient
-    strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdapwpf')
-    discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
-                                                              grad_u_ijqxyz=strain_ijqxyz)
-    strain_ijqxyz.s = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    # strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdapwpf')
+    # discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
+    #                                                           grad_u_ijqxyz=strain_ijqxyz)
+    # strain_ijqxyz.s = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    #
+    # # compute stress field
+    # # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
+    # strain_ijqxyz.s = np.einsum('ijkl...,lk...->ij...',
+    #                             dmaterial_data_field_drho_ijklqxyz.s,
+    #                             strain_ijqxyz.s)
+    stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='stress_ijqxyz_local_at_pdapwpf')
 
-    # compute stress field
-    # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
-    strain_ijqxyz.s = np.einsum('ijkl...,lk...->ij...',
-                                dmaterial_data_field_drho_ijklqxyz.s,
-                                strain_ijqxyz.s)
+    discretization.get_stress_field_mugrid(
+        material_data_field_ijklqxyz=dmaterial_data_field_drho_ijklqxyz,
+        displacement_field_inxyz=displacement_field_fnxyz,
+        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        output_stress_field_ijqxyz=stress_ijqxyz,
+        formulation='small_strain')
+
+
 
     # local_stress=np.einsum('ijkl,lk->ij',material_data_field_ijklqxyz[...,0,0,0] , strain_ijqxyz[...,0,0,0])
     # apply quadrature weights
-    discretization.apply_quadrature_weights_on_gradient_field_mugrid(strain_ijqxyz)
+    #discretization.apply_quadrature_weights_on_gradient_field_mugrid(strain_ijqxyz)
 
     # gradient of adjoint_field
     adjoint_field_gradient_ijqxyz = discretization.get_displacement_gradient_sized_field(
@@ -1705,39 +1715,47 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
                                                               grad_u_ijqxyz=adjoint_field_gradient_ijqxyz, )
     # TODO: should this be symmetric gradient?
     # ddot22 = lambda A2, B2:  np.einsum('ijqxyz  ,jiqxyz  ->qxyz    ', A2, B2)
-    double_contraction_stress_qxyz = np.einsum('ij...,ij...->...',
-                                               adjoint_field_gradient_ijqxyz.s,
-                                               strain_ijqxyz.s)  # this is stress, It just cupy the same name
+    double_contraction_stress_qxyz = discretization.get_quad_field_scalar(name='double_contraction_stress_qxyz')
+    double_contraction_stress_qxyz.s[0, 0] = np.einsum('ij...,ij...->...',
+                                                       adjoint_field_gradient_ijqxyz.s,
+                                                       stress_ijqxyz.s)  # this is stress, It just cupy the same name
 
     # nodal_field_u_nxyz=discretization.get_scalar_field(name='nodal_field_u_nxyz')
     # nodal_field_u_nxyz = np.zeros(phase_field_1nxyz.shape)
     output_field_inxyz.s.fill(0)
-    N_at_quad_points_qnijk = discretization.N_at_quad_points_qnijk[0]
-    for pixel_node in np.ndindex(
-            *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
-        pixel_node = np.asarray(pixel_node)
-        if discretization.domain_dimension == 2:
-            # N_at_quad_points_qnijk
-            div_fnxyz_pixel_node = np.einsum('qn,qxy->nxy',
-                                             N_at_quad_points_qnijk[(..., *pixel_node)],
-                                             double_contraction_stress_qxyz)
+    discretization.fft.communicate_ghosts(double_contraction_stress_qxyz)
 
-            # output_field_inxyz.s += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node,
-            #                                             axis=(0, 1))
-            output_field_inxyz.s += np.roll(div_fnxyz_pixel_node, 1 * pixel_node,
-                                            axis=(0, 1))
+    discretization.apply_N_transposed_operator_mugrid(
+        quad_field_ijqxyz=double_contraction_stress_qxyz,
+        nodal_field_inxyz=output_field_inxyz,
+        apply_weights=True )
 
-        elif discretization.domain_dimension == 3:
-
-            div_fnxyz_pixel_node = np.einsum('dqn,dqxyz->nxyz',
-                                             N_at_quad_points_qnijk[(..., *pixel_node)],
-                                             double_contraction_stress_qxyz)
-
-            # output_field_inxyz.s += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node,
-            #                                             axis=(0, 1, 2))
-            output_field_inxyz.s += np.roll(div_fnxyz_pixel_node, 1 * pixel_node,
-                                            axis=(0, 1, 2))
-            warnings.warn('Gradient transposed is not tested for 3D.')
+    # N_at_quad_points_qnijk = discretization.N_at_quad_points_qnijk[0]
+    # for pixel_node in np.ndindex(
+    #         *np.ones([discretization.domain_dimension], dtype=int) * 2):  # iteration over all voxel corners
+    #     pixel_node = np.asarray(pixel_node)
+    #     if discretization.domain_dimension == 2:
+    #         # N_at_quad_points_qnijk
+    #         div_fnxyz_pixel_node = np.einsum('qn,qxy->nxy',
+    #                                          N_at_quad_points_qnijk[(..., *pixel_node)],
+    #                                          double_contraction_stress_qxyz)
+    #
+    #         # output_field_inxyz.s += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node,
+    #         #                                             axis=(0, 1))
+    #         output_field_inxyz.s += np.roll(div_fnxyz_pixel_node, 1 * pixel_node,
+    #                                         axis=(0, 1))
+    #
+    #     elif discretization.domain_dimension == 3:
+    #
+    #         div_fnxyz_pixel_node = np.einsum('dqn,dqxyz->nxyz',
+    #                                          N_at_quad_points_qnijk[(..., *pixel_node)],
+    #                                          double_contraction_stress_qxyz)
+    #
+    #         # output_field_inxyz.s += discretization.roll(discretization.fft, div_fnxyz_pixel_node, 1 * pixel_node,
+    #         #                                             axis=(0, 1, 2))
+    #         output_field_inxyz.s += np.roll(div_fnxyz_pixel_node, 1 * pixel_node,
+    #                                         axis=(0, 1, 2))
+    #         warnings.warn('Gradient transposed is not tested for 3D.')
 
     return output_field_inxyz
 
