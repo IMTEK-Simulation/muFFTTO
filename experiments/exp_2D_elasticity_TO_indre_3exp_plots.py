@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from imteksimcs.matplotlib.label_lines import label_lines
+#from mpl_toolkits.axes_grid1 import make_axes_locatable
+#from imteksimcs.matplotlib.label_lines import label_lines
 
 # mpl.rcParams['font.family'] = 'sans-serif'
 # mpl.rcParams['font.sans-serif'] = ['Arial']
@@ -41,6 +41,8 @@ problem_type = 'elasticity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' #linear_triangles_tilled
 formulation = 'small_strain'
+
+zener_ratios = []
 
 f_sigmas = []
 f_pfs = []
@@ -92,31 +94,33 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
             xopt = np.load('exp_data/' + name + f'xopt_log.npz', allow_pickle=True)
 
+            Cij=xopt.f.homogenized_C_ijkl
+            zener_ratios.append(2*Cij[2,2]/(Cij[0,0]-Cij[0,1]))
             src = './figures/'  # source folder\
             fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-            fig, ax = plt.subplots(1, 4, figsize=(16, 4))
-            # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
-
-            contour = ax[3].contourf(np.tile(phase_field.s[0,0], (3, 3)), cmap='viridis', vmin=0, vmax=1)
-
-            # Colorbar
-            divider = make_axes_locatable(ax[3])
-
-            ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-            fig.add_axes(ax_cb)
-
-            # cbar = fig.colorbar(contour, cax=ax_cb)
-
-            cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-                                ticks=np.arange(0, 1.2, 0.2))
-            cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-
-            ax[3].set_aspect('equal')
-            ax[3].set_xlabel(r'Position x')
-            ax[3].set_ylabel(r'Position y')
-            ax[3].set_yticklabels([])
-            ax[3].set_xticklabels([])
+            # fig, ax = plt.subplots(1, 4, figsize=(16, 4))
+            # # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
+            #
+            # contour = ax[3].contourf(np.tile(phase_field.s[0,0], (3, 3)), cmap='viridis', vmin=0, vmax=1)
+            #
+            # # Colorbar
+            # divider = make_axes_locatable(ax[3])
+            #
+            # ax_cb = divider.new_horizontal(size="5%", pad=0.05)
+            # fig.add_axes(ax_cb)
+            #
+            # # cbar = fig.colorbar(contour, cax=ax_cb)
+            #
+            # cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
+            #                     ticks=np.arange(0, 1.2, 0.2))
+            # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
+            #
+            # ax[3].set_aspect('equal')
+            # ax[3].set_xlabel(r'Position x')
+            # ax[3].set_ylabel(r'Position y')
+            # ax[3].set_yticklabels([])
+            # ax[3].set_xticklabels([])
             # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
             #            plt.clim(0, 1)
             # plt.colorbar()
@@ -135,24 +139,42 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                 stress_difference_ij.append(target_stresses[lc] - homo_stresses[lc])
 
                 f_sigma.append(np.sum(stress_difference_ij[lc] ** 2) / np.sum(target_stresses[lc] ** 2))
-                ax[lc].set_axis_off()
-                np.set_printoptions(suppress=True, precision=5)
-                ax[lc].text(-0.3, 0.5, f'target =\n {target_stresses[lc]}\n,'
-                                       f' optimized =\n {homo_stresses[lc]}\n,'
-                                       f' stress_difference_ij = \n{stress_difference_ij[lc]}\n,'
-                                       f' f_sigma = {f_sigma[lc]:.5f}\n,')
-            ax[0].text(-0.3, 0.3, f' f_sigma tot = \n{np.sum(f_sigma):.5f}\n,')
-            ax[1].text(-0.3, 0.3, f' f_sigma tot = \n{f_phase_field:.5f}\n,')
-
-            ax[0].text(-0.3, -0., f' homogenized_C_ij = \n{xopt.f.homogenized_C_ijkl}\n,')
-            ax[1].text(-0.3, -0., f' target_C_ij = \n{xopt.f.target_C_ijkl}\n,')
-            ax[2].text(-0.3, -0., f' diff in C_ij = \n{xopt.f.target_C_ijkl - xopt.f.homogenized_C_ijkl},')
+            #     ax[lc].set_axis_off()
+            #     np.set_printoptions(suppress=True, precision=5)
+            #     ax[lc].text(-0.3, 0.5, f'target =\n {target_stresses[lc]}\n,'
+            #                            f' optimized =\n {homo_stresses[lc]}\n,'
+            #                            f' stress_difference_ij = \n{stress_difference_ij[lc]}\n,'
+            #                            f' f_sigma = {f_sigma[lc]:.5f}\n,')
+            # ax[0].text(-0.3, 0.3, f' f_sigma tot = \n{np.sum(f_sigma):.5f}\n,')
+            # ax[1].text(-0.3, 0.3, f' f_sigma tot = \n{f_phase_field:.5f}\n,')
+            #
+            # ax[0].text(-0.3, -0., f' homogenized_C_ij = \n{xopt.f.homogenized_C_ijkl}\n,')
+            # ax[1].text(-0.3, -0., f' target_C_ij = \n{xopt.f.target_C_ijkl}\n,')
+            # ax[2].text(-0.3, -0., f' diff in C_ij = \n{xopt.f.target_C_ijkl - xopt.f.homogenized_C_ijkl},')
             fname = src + f'{w_mult:.2f}' + fig_data_name + '{}'.format('.png')
             #print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
             #plt.savefig(fname, bbox_inches='tight')
             #plt.show()
             f_sigmas.append(np.sum(f_sigma))
             f_pfs.append(f_phase_field)
+
+    # fig = plt.figure(figsize=(11, 4.5))
+    #
+    # gs = fig.add_gridspec(3, 4)
+    # ax5 = fig.add_subplot(gs[:, :])
+    #
+    # # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    # ax5.semilogx(weights, zener_ratios, '-', color='r', linewidth=2, marker='|', label=r'stress difference -  $f_{\sigma}$')
+    # #ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1, marker='|', label=r'phase field - $f_{\rho}$')
+    # # ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
+    #
+    # # ax.set_aspect('equal')
+    # ax5.set_xlabel(r'Weight $a$')
+    # #ax5.set_xlim(0.1, 100)
+    # ax5.set_ylim(0.5, 1.5)
+    # ax5.set_title('Rectangular gird')
+    #
+    # plt.show()
 
 
     fig = plt.figure(figsize=(11,4.5))
@@ -167,7 +189,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     #ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
 
     # ax.set_aspect('equal')
-    ax5.set_xlabel(r'Weight $w$')
+    ax5.set_xlabel(r'Weight $a$')
     ax5.set_xlim(0.1, 100)
     ax5.set_ylim(1e-4,1e1 )
     #label_lines(ax5.get_lines(), xvals=(0.20, 50.0), rotations=(0, 0))
@@ -188,15 +210,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                  ls='-')
                  )
     # Enumerate
-    #
-    # ax5.text(-0.29, 0.97, '(b)', transform=ax2.transAxes)
-    # ax5.text(-0.28, 0.97, '(c)', transform=ax3.transAxes)
-    # ax5.text(-0.55, 0.97, '(d)', transform=ax4.transAxes)
-    # ax5.text(-0.29, 0.97, '(e)', transform=ax5.transAxes)
-    # ax5.text(-0.28, 0.97, '(f)', transform=ax6.transAxes)
-    # ax5.text(-0.11, 0.97, '(g)', transform=ax7.transAxes)
-    #for i in range(4):
-        #ax5.vlines(x=10**(-1+i), ymin=0, ymax=N * 4, colors='black', linestyles='-', linewidth=0.5)
+
     letter_offset=-0.25
     for upper_ax in np.arange(5):
         weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
@@ -276,7 +290,6 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
         phase_opt = np.roll(phase_opt,roll_y , axis=0)
         phase_opt = np.roll(phase_opt, roll_x, axis=1)
-        #phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
         # create repeatable cells
         nb_cells = [3, 3]
         nb_additional_cells = 2
@@ -285,9 +298,6 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         ax1.xaxis.set_ticks_position('none')
         ax1.yaxis.set_ticks_position('none')
         ax1.set_aspect('equal')
-        #ax1.set_xlim(xmin, nb_cells[0])
-        #ax1.set_ylim(ymin, nb_cells[1] * +ymax)
-        # plot solution in tilled grid
         contour = ax1.contourf(np.tile(phase_opt, (3, 3)), cmap='gray_r', vmin=0, vmax=1)
         for i in range(3):
             ax1.hlines(y=i*N , xmin=0, xmax=N * 3, colors='white', linestyles='--', linewidth=0.3)
@@ -295,116 +305,180 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
         ax1.set_xlim(0, N * 3-1)
         ax1.set_ylim(0, N * 3-1)
-        # cell_points_x, cell_points_y = np.mgrid[:nb_cells[0] + 2 * nb_additional_cells + 1,
-        #                                :nb_cells[1] + 1]
-        # cell_points_x = cell_points_x * Lx - nb_additional_cells * Lx
-        # cell_points_x = cell_points_x + np.linspace(0, nb_cells[1] * (ny - 1) * hx / 2, nb_cells[1] + 1,
-        #                                             endpoint='False')
-        # cell_points_y = cell_points_y * Ly
-        # cell_points = np.stack((cell_points_x, cell_points_y))
-        # parall = make_parallelograms(cell_points)
-        # parall.set_edgecolor('black')
-        # parall.set_linewidth(0.5)
-        # parall.set_facecolor('none')
 
-        #tpc = ax1.add_collection(parall)
 
         ax1.set_aspect('equal')
-        #ax1.set_xlabel(f'w={weight:.1f}'.rstrip('0').rstrip('.'))
-        #ax1.xaxis.set_label_position('bottom')
-        # ax1.set_ylabel(r'Position y')
         ax1.set_yticklabels([])
         ax1.set_xticklabels([])
 
 
 
-    # ax1 = fig.add_axes([0.09, 0.4, 0.25, 0.25])
-    # #ax1 = fig.add_subplot(gs[0, 0])
-    # name = (
-    #     f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{0.20:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-    # phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
-    # phase_field = np.roll(phase_field, -5, axis=0)
-    # phase_field = np.roll(phase_field, 13, axis=1)
-    # contour = ax1.contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
-    # # Colorbar
-    # # divider = make_axes_locatable(ax1)
-    # # ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-    # # fig.add_axes(ax_cb)
-    # # cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-    # #                     ticks=np.arange(0, 1.2, 0.2))
-    # # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-    # ax1.set_aspect('equal')
-    # ax1.set_xlabel(r'w=0.2')
-    # ax1.xaxis.set_label_position('bottom')
-    # #ax1.set_ylabel(r'Position y')
-    # ax1.set_yticklabels([])
-    # ax1.set_xticklabels([])
-    #
-    # #ax2 = fig.add_subplot(gs[0, 1])
-    # ax2 = fig.add_axes([0.26, 0.25, 0.25, 0.25], zorder=10)
-    # name = (
-    #     f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{1.0:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-    # phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
-    # contour = ax2.contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
-    # # Colorbar
-    # #divider = make_axes_locatable(ax2)
-    # #ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-    # #fig.add_axes(ax_cb)
-    # # cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-    # #                     ticks=np.arange(0, 1.2, 0.2))
-    # #cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-    # ax2.set_aspect('equal')
-    # ax2.set_xlabel(r'w=1.0')
-    # ax2.xaxis.set_label_position('bottom')
-    # #ax2.set_ylabel(r'Position y')
-    # ax2.set_yticklabels([])
-    # ax2.set_xticklabels([])
-    #
-    # #ax3 = fig.add_subplot(gs[0, 2])
-    # ax3 = fig.add_axes([0.51, 0.53, 0.25, 0.25], zorder=10)
-    # name = (
-    #     f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{10.0:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-    # phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
-    # contour = ax3.contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
-    # # Colorbar
-    # # divider = make_axes_locatable(ax3)
-    # # ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-    # # fig.add_axes(ax_cb)
-    # # cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-    # #                     ticks=np.arange(0, 1.2, 0.2))
-    # # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-    # ax3.set_aspect('equal')
-    # ax3.set_xlabel(r'w=10')
-    # ax3.xaxis.set_label_position('bottom')
-    # #ax2.set_ylabel(r'Position y')
-    # ax3.set_yticklabels([])
-    # ax3.set_xticklabels([])
-    #
-    # #ax4 = fig.add_subplot(gs[0, 3])
-    # ax4 = fig.add_axes([0.7, 0.3, 0.25, 0.25], zorder=10)
-    # name = (
-    #     f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{70.0:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-    # phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
-    # contour = ax4.contourf(np.tile(phase_field, (3, 3)), cmap='jet', vmin=0, vmax=1)
-    # # Colorbar
-    # # divider = make_axes_locatable(ax4)
-    # # ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-    # # fig.add_axes(ax_cb)
-    # # cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-    # #                     ticks=np.arange(0, 1.2, 0.2))
-    # # cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-    # ax4.set_aspect('equal')
-    # ax4.set_xlabel(r'w=70')
-    # ax4.xaxis.set_label_position('bottom')
-    # # ax2.set_ylabel(r'Position y')
-    # ax4.set_yticklabels([])
-    # ax4.set_xticklabels([])
-
-
     fname = src + 'exp2_rectangle{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
-    #plt.show()
+    plt.show()
+
+    fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
+
+    gs = fig.add_gridspec(4, 4, hspace=0.1)  # increase rows from 3 → 4
+    ax5 = fig.add_subplot(gs[0:3, :])   # keep original plot spanning first 3 rows
+
+    # --- original plot ---
+    ax5.loglog(weights, f_sigmas, '-', color='r', linewidth=2,marker='|', label=r'stress difference -  $f_{\sigma}$')
+    ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1,marker='|', label=r'phase field - $f_{\rho}$')
+    #ax5.set_xlabel(r'Weight $a$')
+    ax5.set_xlim(0.1, 100)
+    ax5.set_ylim(1e-4,1e1 )
+    ax5.set_xticklabels([])
+
+    ax5.annotate('Stress difference - ' + r'$f_{\sigma}$', fontname='Arial', color='red',
+                 xy=(0.6, f_sigmas[np.where(weights == 0.6)[0][0]]),
+                 xytext=(1.0, 5.),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='red',
+                                 lw=1,
+                                 ls='-')
+                 )
+    ax5.annotate(r'Phase field - $f_{\rho}$', fontname='Arial',
+                 xy=(50., f_pfs[np.where(weights == 50.0)[0][0]]),
+                 xytext=(20., 5.),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='black',
+                                 lw=1,
+                                 ls='-')
+                 )
+    ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
+
+
+
+    letter_offset = -0.15
+    for upper_ax in np.arange(5):
+        weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
+        if upper_ax == 0:
+            # ax1 = fig.add_subplot(gs[0, upper_ax])
+            ax1 = fig.add_axes([0.12, 0.49, 0.2, 0.2], transform=ax5.transAxes)
+            roll_x = 5
+            roll_y = -20
+            ax5.annotate('',
+                         xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                         xytext=(0.23, 0.1),
+                         arrowprops=dict(arrowstyle='->',
+                                         color='black',
+                                         lw=1,
+                                         ls='-')
+                         )
+            ax5.text(letter_offset, 0.90, r'$\textbf{{A}}$', transform=ax1.transAxes)  #
+        elif upper_ax == 1:
+            ax1 = fig.add_axes([0.27, 0.4, 0.2, 0.2], transform=ax5.transAxes)
+
+            roll_x = -2
+            roll_y = -19
+            ax5.annotate('',
+                         xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                         xytext=(0.8, 0.01),
+                         arrowprops=dict(arrowstyle='->',
+                                         color='black',
+                                         lw=1,
+                                         ls='-')
+                         )
+            ax5.text(letter_offset, 0.90, r'$\textbf{{B}}$', transform=ax1.transAxes)
+        elif upper_ax == 2:
+            ax1 = fig.add_axes([0.43, 0.32, 0.2, 0.2], transform=ax5.transAxes)
+            roll_x = 20
+            roll_y = 10
+            ax5.annotate('',
+                         xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                         xytext=(5., 5e-4),
+                         arrowprops=dict(arrowstyle='->',
+                                         color='black',
+                                         lw=1,
+                                         ls='-')
+                         )
+            ax5.text(letter_offset, 0.90, r'$\textbf{{C}}$', transform=ax1.transAxes)
+        elif upper_ax == 3:
+            ax1 = fig.add_axes([0.525, 0.55, 0.2, 0.2], transform=ax5.transAxes)
+            roll_x = 10
+            roll_y = 0
+            ax5.annotate('',
+                         xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                         xytext=(10., 5e-1),
+                         arrowprops=dict(arrowstyle='->',
+                                         color='black',
+                                         lw=1,
+                                         ls='-')
+                         )
+            ax5.text(letter_offset, 0.90, r'$\textbf{{D}}$', transform=ax1.transAxes)
+        elif upper_ax == 4:
+            ax1 = fig.add_axes([0.7, 0.53, 0.2, 0.2], transform=ax5.transAxes)
+            roll_x = 0
+            roll_y = 0
+            ax5.annotate('',
+                         xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
+                         xytext=(50., 1e-2),
+                         arrowprops=dict(arrowstyle='->',
+                                         color='black',
+                                         lw=1,
+                                         ls='-')
+                         )
+            ax5.text(letter_offset, 0.90, r'$\textbf{{E}}$', transform=ax1.transAxes)
+        name = (
+            f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{weight:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+        phase_field = np.load('exp_data/' + name + f'.npy', allow_pickle=True)
+        # plotting part
+        # center the inclusion
+        phase_opt = phase_field
+
+        phase_opt = np.roll(phase_opt, roll_y, axis=0)
+        phase_opt = np.roll(phase_opt, roll_x, axis=1)
+        # create repeatable cells
+        nb_cells = [3, 3]
+        nb_additional_cells = 2
+        ax1.set_yticklabels([])
+        ax1.set_xticklabels([])
+        ax1.xaxis.set_ticks_position('none')
+        ax1.yaxis.set_ticks_position('none')
+        ax1.set_aspect('equal')
+        contour = ax1.contourf(np.tile(phase_opt, (3, 3)), cmap='gray_r', vmin=0, vmax=1)
+        for i in range(3):
+            ax1.hlines(y=i * N, xmin=0, xmax=N * 3, colors='white', linestyles='--', linewidth=0.3)
+            ax1.vlines(x=i * N, ymin=0, ymax=N * 3, colors='white', linestyles='--', linewidth=0.3)
+
+        ax1.set_xlim(0, N * 3 - 1)
+        ax1.set_ylim(0, N * 3 - 1)
+
+        ax1.set_aspect('equal')
+        ax1.set_yticklabels([])
+        ax1.set_xticklabels([])
+
+    # --- new subplot underneath ---
+    ax6 = fig.add_subplot(gs[3, :])  # bottom row
+    ax6.semilogx(weights, zener_ratios, '-', color='b', linewidth=2, marker='|', label=r'Zener ratio')
+    ax6.set_xlabel(r'Weight $a$')
+    #ax6.set_ylabel(r'$a_r$')
+    #ax6.legend(loc='best')
+   # ax6.grid(True, which="both", ls="--", linewidth=0.5)
+    #ax6.grid(axis='y', which="both", visible=False)  # remove y-grid
+    ax6.set_xlim(0.1, 100)
+    ax6.set_ylim(0.6, 1.2)
+    ax6.annotate(r'Zener ratio', color='b',
+                 xy=(1., zener_ratios[np.where(weights == 1.0)[0][0]]),
+                 xytext=(0.5, 0.9),
+                 arrowprops=dict(arrowstyle='->',
+                                 color='b',
+                                 lw=1,
+                                 ls='-')
+                 )
+    ax6.text(0.01, 0.82, r'$\textbf{{(b)}}$', transform=ax6.transAxes)
+
+    # save/show
+    fname = src + 'exp2_rectangle_zener{}'.format('.pdf')
+    print(('create figure: {}'.format(fname)))
+    plt.savefig(fname, bbox_inches='tight')
+    plt.show()
+
+
+
+
     quit()
     if plot_movie:
         if random_initial_geometry:

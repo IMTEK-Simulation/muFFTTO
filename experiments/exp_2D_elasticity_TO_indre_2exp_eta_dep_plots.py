@@ -317,6 +317,9 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         #ax1.vlines(x=32, ymin=0, ymax=N, colors='black', linestyles='--', linewidth=1.)
 
         ax0.plot(np.diag(phase_field),color=colors[i], linestyle=linestyles[i])
+
+
+
     #ax0.grid(axis='x')
     number_of_runs = range(1, N)  # use your actual number_of_runs
     ax0.set_xticks(number_of_runs, minor=False)
@@ -331,7 +334,18 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         #ax0.set_aspect('equal')
     #ax1.set_ylabel(r'Position y')
     ax1.yaxis.set_label_position("right")
-
+    # Annotate distance with arrow
+    ax0.annotate(
+        "", xy=(0.2658, 1.05), xytext=(0.352, 1.05),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle='<->', color='black')
+    )
+    ax0.text(
+        0.31, 1.12, "5h",
+        ha="center", va="center",
+        #bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="black"),
+        transform=ax0.transAxes
+    )
     fname = src + 'exp1_rectangles{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
