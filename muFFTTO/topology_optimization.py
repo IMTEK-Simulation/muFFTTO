@@ -1702,11 +1702,9 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
         output_stress_field_ijqxyz=stress_ijqxyz,
         formulation='small_strain')
 
-
-
     # local_stress=np.einsum('ijkl,lk->ij',material_data_field_ijklqxyz[...,0,0,0] , strain_ijqxyz[...,0,0,0])
     # apply quadrature weights
-    #discretization.apply_quadrature_weights_on_gradient_field_mugrid(strain_ijqxyz)
+    # discretization.apply_quadrature_weights_on_gradient_field_mugrid(strain_ijqxyz)
 
     # gradient of adjoint_field
     adjoint_field_gradient_ijqxyz = discretization.get_displacement_gradient_sized_field(
@@ -1728,7 +1726,7 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     discretization.apply_N_transposed_operator_mugrid(
         quad_field_ijqxyz=double_contraction_stress_qxyz,
         nodal_field_inxyz=output_field_inxyz,
-        apply_weights=True )
+        apply_weights=True)
 
     # N_at_quad_points_qnijk = discretization.N_at_quad_points_qnijk[0]
     # for pixel_node in np.ndindex(
@@ -2327,15 +2325,18 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
 
     # -----    stress difference potential ----- #
     # Gradient of material data with respect to phase field
-    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
-        nodal_field_fnxyz=phase_field_1nxyz,
-        quad_field_fqnxyz=None,
-        quad_points_coords_iq=None)
+    phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
+        name='phase_field_at_quad_poits_1qxyzsensitivity_with_adjoint_problem_FE_NEW')
+    discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
+    # phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
+    #     nodal_field_fnxyz=phase_field_1nxyz,
+    #     quad_field_fqnxyz=None,
+    #     quad_points_coords_iq=None)
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_with_adjoint_problem_FE_NEW')
     material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
     # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] *
     # np.power(p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
 
