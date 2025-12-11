@@ -967,7 +967,8 @@ class Discretization:
         # Reductor_numpi = Reduction(MPI.COMM_WORLD)
         homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-        print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress_ij =' f'{homogenized_stress_ij}')
+        if MPI.COMM_WORLD.rank == 0:
+            print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress_ij =' f'{homogenized_stress_ij}')
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_stress_field_mugrid(self,
