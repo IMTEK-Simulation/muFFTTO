@@ -189,8 +189,10 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
             self.conv_op = ConvolutionOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
-            # self.interpolation_op = ConvolutionOperator(point_of_origin, self.N_at_quad_points_qnijk)
-
+            try:
+                self.interpolation_op = ConvolutionOperator(point_of_origin, self.N_at_quad_points_qnijk)
+            except:
+                print(f'self.interpolation_op does not exist ')
             #
             # # self.fft.initialise_field_collections()
             # print(self.field_collection.get_nb_sub_pts('quad_points'))
@@ -967,6 +969,51 @@ class Discretization:
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress_ij =' f'{homogenized_stress_ij}')
         return homogenized_stress_ij / self.cell.domain_volume
+
+    def get_stress_field_mugrid(self,
+                                material_data_field_ijklqxyz,
+                                displacement_field_inxyz,
+                                macro_gradient_field_ijqxyz,
+                                output_stress_field_ijqxyz,
+                                formulation=None):
+        """
+         Function that computes stress field (or flux)
+            sigma  = C:(E+grad(u_fluctiation))
+         Parameters
+         ----------
+         material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - quadrature point field - q is a quadrature point index
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+
+         displacement_field_inxyz:
+            - nodal point field - displacement or temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         stress_ij: nd array of stress of flux field
+                    - stress= C * (macro_grad + micro_grad))
+                    :param output_field_ijqxyz:
+         """
+
+        if formulation == 'small_strain':
+            # output_field_ijqxyz is strain field
+            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_inxyz,
+                                                            grad_u_ijqxyz=output_stress_field_ijqxyz)
+        else:
+            # output_field_ijqxyz is strain field
+            self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
+                                                grad_u_ijqxyz=output_stress_field_ijqxyz)
+
+        output_stress_field_ijqxyz.s = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        # output_stress_field_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, output_stress_field_ijqxyz)
+        output_stress_field_ijqxyz.s = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
+                                                 output_stress_field_ijqxyz.s)
 
     def get_stress_field(self,
                          material_data_field_ijklqxyz,
@@ -2147,6 +2194,18 @@ class Discretization:
         # Reductor_numpi = Reduction(MPI.COMM_WORLD)
         # TODO change this to muGRID
         integral = self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+
+        return integral
+
+    def integrate_over_cell_mugrid(self, stress_field):
+        # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
+
+        stress_field.s = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
+        #
+        # integral = np.einsum('fdqxy...->fd', stress_field)
+        # Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        # TODO change this to muGRID
+        integral = self.mpi_reduction.sum(stress_field.s, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
 
         return integral
 

@@ -56,18 +56,29 @@ elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  kind='linear')
 print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
-material_data_field_C_0 = discretization.get_material_data_size_field(name='elastic_tensor')
+material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
 material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 print('3 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 # Set up preconditioner
-preconditioner_fnfnqks = discretization.get_preconditioner_NEW(reference_material_data_ijkl=elastic_C_0)
+preconditioner_fnfnqks = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0)
 
-M_fun = lambda x: discretization.apply_preconditioner_NEW(
-    preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-    nodal_field_fnxyz=x)
+
+# M_fun = lambda x: discretization.apply_preconditioner_NEW(
+#     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+#     nodal_field_fnxyz=x)
+def M_fun(x, Px):
+    """
+    Function to compute the product of the Preconditioner matrix with a vector.
+    The Preconditioner is represented by the convolution operator.
+    """
+    discretization.fft.communicate_ghosts(x)
+    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                                               input_nodal_field_fnxyz=x,
+                                               output_nodal_field_fnxyz=Px)
+
 
 # set up load cases
 nb_load_cases = 3
@@ -80,8 +91,8 @@ macro_gradients[2] = np.array([[.0, 0.5],
                                [0.5, .0]])
 
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
-# left_macro_gradients[0] = np.array([[.0, .0],
-#                                     [.0, 1.0]])
+left_macro_gradients[0] = np.array([[.0, .0],
+                                    [.0, 1.0]])
 left_macro_gradients[1] = np.array([[1.0, .0],
                                     [.0, .0]])
 left_macro_gradients[2] = np.array([[.0, .5],
@@ -95,7 +106,7 @@ print('macro_gradients = \n {}'.format(macro_gradients))
 macro_gradient_fields_list = []
 for load_case in np.arange(nb_load_cases):
     macro_gradient_fields_list.append(discretization.get_gradient_size_field(name=f'macro_gradient_field_{load_case}'))
-    macro_gradient_fields_list[-1] = discretization.get_macro_gradient_field(
+    discretization.get_macro_gradient_field_mugrid(
         macro_gradient_ij=macro_gradients[load_case],
         macro_gradient_field_ijqxyz=macro_gradient_fields_list[-1])
     # macro_gradient_fields.append( discretization.get_macro_gradient_field(macro_gradients[load_case]))
@@ -175,11 +186,12 @@ print('eta =  {}'.format(eta))
 def objective_function_multiple_load_cases(phase_field_1nxyz):
     # print('Objective function:')
     # reshape the field
-    phase_field_1nxyz = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
+    phase_field_inxyz = discretization.get_scalar_field(name='phase_field_inxyz_ofmlc')
+    phase_field_inxyz.s = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
 
     # objective function phase field terms
     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                         phase_field_1nxyz=phase_field_1nxyz,
+                                                                         phase_field_1nxyz=phase_field_inxyz,
                                                                          eta=eta,
                                                                          double_well_depth=double_well_depth_test)
     #  sensitivity phase field terms
@@ -353,17 +365,23 @@ if __name__ == '__main__':
 
     # TODO CREATE random field from the same frequenciess all the same time
     def apply_filter(phase):
-        f_field = discretization.fft.fft(phase)
-        f_field[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
-                                     np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
-        phase = discretization.fft.ifft(f_field) * discretization.fft.normalisation
-        phase[phase > 1] = 1
-        phase[phase < 0] = 0
-        return phase
+        f_field = discretization.fft.fourier_space_field(
+            unique_name='apply_filter_TO',  # name of the field
+            shape=(1,))
 
+        # f_field = discretization.fft.fft(phase)
+
+        discretization.fft.fft(phase, f_field)
+
+        f_field.s[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
+                                       np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
+        discretization.fft.ifft(f_field, phase)
+        phase.s *= discretization.fft.normalisation
+        phase.s[phase.s > 1] = 1
+        phase.s[phase.s < 0] = 0
 
     # phase = np.random.random(discretization.get_scalar_sized_field().shape)
-    phase_field_0.s = apply_filter(phase_field_0.s)
+    apply_filter(phase_field_0)
 
     if MPI.COMM_WORLD.size == 1:
         print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f'')
@@ -375,15 +393,15 @@ if __name__ == '__main__':
 
         plt.show()
 
-    #phase_field_00 = np.copy(phase_field_0.s)
+    # phase_field_00 = np.copy(phase_field_0.s)
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
 
     test_init_phase_field = discretization.get_scalar_field(name='test_init_phase_field')
-    test_init_phase_field.s = phase_field_0
+    test_init_phase_field.s = phase_field_0.s
     print('Init objective function FE  = {}'.format(
-        objective_function_multiple_load_cases(test_init_phase_field.s)[0]))
+        objective_function_multiple_load_cases(test_init_phase_field.s.reshape(-1))[0]))
     # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))
-    phase_field_0 = phase_field_0.s.reshape(-1)  # b
+    #phase_field_0 =   # b
 
     if run_lbfg:
 
@@ -414,7 +432,7 @@ if __name__ == '__main__':
 
 
         xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
-                                          x=phase_field_0,
+                                          x=phase_field_0.s.reshape(-1),
                                           jac=True,
                                           maxcor=20,
                                           gtol=1e-5,

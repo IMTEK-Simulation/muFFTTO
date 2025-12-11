@@ -142,6 +142,9 @@ if plot_time_table:
     time_per_iteration_CG_J_1 = time_CG_J_1 / nb_it_Jacobi_linear_1
     time_per_iteration_CG_GJ_1 = time_CG_GJ_1 / nb_it_Green_Jacobi_linear_1
 
+    assembly_time_G=time_G_1-time_CG_G_1
+    assembly_time_J = time_J_1 - time_CG_J_1
+    assembly_time_GJ = time_GJ_1 - time_CG_GJ_1
     relative_tpi_J = time_per_iteration_J_1 / time_per_iteration_G_1
     relative_tpi_GJ = time_per_iteration_GJ_1 / time_per_iteration_G_1
 
