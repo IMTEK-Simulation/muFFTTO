@@ -1562,6 +1562,8 @@ def adjoint_potential(discretization,
     # stress_field_ijqxyz.s = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz.s)
     force_field_inxyz = discretization.get_displacement_sized_field(
         name='force_field_inxyz_in_adjoint_potential_temporary')
+    discretization.fft.communicate_ghosts(stress_field_ijqxyz)
+
     # force_field_inxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
     discretization.conv_op.transpose(quadrature_point_field=stress_field_ijqxyz,
                                      nodal_field=force_field_inxyz,

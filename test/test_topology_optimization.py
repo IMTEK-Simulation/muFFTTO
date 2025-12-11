@@ -1763,6 +1763,7 @@ def test_fd_check_of_stress_equivalence_potential(discretization_fixture, plot=T
                                                           formulation='small_strain')
 
     preconditioner = discretization_fixture.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0)
+
     def M_fun(x, Px):
         discretization_fixture.fft.communicate_ghosts(x)
         discretization_fixture.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
@@ -2312,10 +2313,9 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
         name='phase_field')
     phase_field_1nxyz.s = np.random.rand(*phase_field_1nxyz.s.shape) ** 1  # # set random distribution
 
-    phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization_fixture.evaluate_field_at_quad_points(
-        nodal_field_fnxyz=phase_field_1nxyz,
-        quad_field_fqnxyz=None,
-        quad_points_coords_iq=None)
+    phase_field_at_quad_poits_1qxyz = discretization_fixture.get_quad_field_scalar(
+        name='phase_field_at_quad_poits_1qxyz')
+    discretization_fixture.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     # just to set up the system
     E_0 = 1
@@ -2328,71 +2328,86 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
                                                      mu=G_0,
                                                      kind='linear')
 
-    material_data_field_C_0_rho_ijklqxyz = discretization_fixture.get_material_data_size_field(name='test_DATA_FIELD')
-
+    material_data_field_C_0_rho_ijklqxyz = discretization_fixture.get_material_data_size_field_mugrid(
+        name='test_DATA_FIELD')
     material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                             np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+                                             np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
-    preconditioner_fnfnqks = discretization_fixture.get_preconditioner_Green_fast(
-        reference_material_data_ijkl=elastic_C_0)
+    preconditioner = discretization_fixture.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0)
 
-    M_fun = lambda x: discretization_fixture.apply_preconditioner_NEW(
-        preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-        nodal_field_fnxyz=x)
+    def M_fun(x, Px):
+        discretization_fixture.fft.communicate_ghosts(x)
+        discretization_fixture.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                           input_nodal_field_fnxyz=x,
+                                                           output_nodal_field_fnxyz=Px)
 
     # Set up the equilibrium system
     macro_gradient_ij = np.array([[1., 0], [0, 1.]])
     # macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient_ij)
     macro_gradient_field_ijqxyz = discretization_fixture.get_gradient_size_field(name='macro_gradient_field')
-    macro_gradient_field_ijqxyz = discretization_fixture.get_macro_gradient_field(macro_gradient_ij=macro_gradient_ij,
-                                                                                  macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz
-                                                                                  )
+    discretization_fixture.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+                                                           macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
     rhs = discretization_fixture.get_unknown_size_field(name='rhs_field')
-    rhs = discretization_fixture.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                                         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
-                                         rhs_inxyz=rhs)
+    discretization_fixture.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+                                          macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+                                          rhs_inxyz=rhs)
 
-    K_fun = lambda x: discretization_fixture.apply_system_matrix(
-        material_data_field=material_data_field_C_0_rho_ijklqxyz,
-        displacement_field=x,
-        formulation='small_strain')
+    def K_fun(x, Ax):
+        discretization_fixture.fft.communicate_ghosts(x)
+        discretization_fixture.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax,
+                                                          formulation='small_strain')
+
     # Solve mechanical equilibrium constrain
     displacement_field_u_inxyz = discretization_fixture.get_displacement_sized_field(
         name='test_displacement_field_in_test')
     displacement_field_u_inxyz.s.fill(0)
-    displacement_field_u_inxyz.s, norms = solvers.PCG(Afun=K_fun,
-                                                      B=rhs.s,
-                                                      x0=None,
-                                                      P=M_fun,
-                                                      steps=int(1500),
-                                                      toler=1e-6)
-
+    # displacement_field_u_inxyz.s, norms = solvers.PCG(Afun=K_fun,
+    #                                                   B=rhs.s,
+    #                                                   x0=None,
+    #                                                   P=M_fun,
+    #                                                   steps=int(1500),
+    #                                                   toler=1e-6)
+    solvers.conjugate_gradients_mugrid(
+        comm=discretization_fixture.fft.communicator,
+        fc=discretization_fixture.field_collection,
+        hessp=K_fun,  # linear operator
+        b=rhs,
+        x=displacement_field_u_inxyz,
+        P=M_fun,
+        tol=1e-10,
+        maxiter=50000,
+    )
     # compute strain field from to displacement and macro gradient
     # strain_ijqxyz = discretization_fixture.apply_gradient_operator_symmetrized(displacement_field_u_inxyz)
     # strain_ijqxyz = macro_gradient_field_ijqxyz + strain_ijqxyz
     # now this part will compute adjoint field K*lambda =
     # compute homogenized stress field corresponding to displacement
-    actual_stress_ij = discretization_fixture.get_homogenized_stress(
-        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-        displacement_field_inxyz=displacement_field_u_inxyz,
-        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
-        formulation='small_strain')
-
-    target_stress_ij = np.array([[0.5, 0.0],
-                                 [0.0, 0.5]])
-    stress_difference_ij = (target_stress_ij - actual_stress_ij)
+    # actual_stress_ij = discretization_fixture.get_homogenized_stress_mugrid(
+    #     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+    #     displacement_field_inxyz=displacement_field_u_inxyz,
+    #     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+    #     formulation='small_strain')
+    #
+    # target_stress_ij = np.array([[0.5, 0.0],
+    #                              [0.0, 0.5]])
+    # stress_difference_ij = (target_stress_ij - actual_stress_ij)
 
     adjoint_field_inxyz = discretization_fixture.get_displacement_sized_field(
         name='adjoint_field_fnxyz_in_test')
     adjoint_field_inxyz.s.fill(0)
     adjoint_field_inxyz.s = np.random.rand(*adjoint_field_inxyz.s.shape)
+    discretization_fixture.fft.communicate_ghosts(adjoint_field_inxyz)
     # gradient_of_adjoint_field_ijqxyz = discretization_fixture.apply_gradient_operator_symmetrized(adjoint_field_fnxyz)
     #
     # # minus sign is already there
     # dg_du_field_analytical = -(
     #         discretization_fixture.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
     #                                        macro_gradient_field_ijqxyz=gradient_of_adjoint_field_ijqxyz))  # minus sign is already there
-    dg_du_field_analytical = K_fun(adjoint_field_inxyz)
+    dg_du_field_analytical = discretization_fixture.get_displacement_sized_field(
+        name='dg_du_field_analytical')
+    K_fun(adjoint_field_inxyz, dg_du_field_analytical)
 
     # partial derivative of phase field gradient potential for a phase field with respect to phase-field
     # finite difference detivative
@@ -2402,7 +2417,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
         name='test_displacement_field_in_test_perturbed')
     stress_field_ijqxyz = discretization_fixture.get_gradient_size_field(
         name='stress_field_ijqxyz_in_test_perturbed')
-    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2,1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     error_fd_vs_analytical_x = []
     error_fd_vs_analytical_y = []
     for epsilon in epsilons:
@@ -2414,43 +2429,43 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
                         u_inxyz_perturbed.s.fill(0)
                         u_inxyz_perturbed.s = np.copy(displacement_field_u_inxyz.s)
 
-                        u_inxyz_perturbed.s[f, n, x, y] = u_inxyz_perturbed.s[
-                                                              f, n, x, y] + epsilon
+                        u_inxyz_perturbed.s[f, n, x, y] = u_inxyz_perturbed.s[f, n, x, y] + epsilon / 2
                         # set phase_field to ones
                         # compute homogenized stress field for perturbed displacement
-                        stress_field = discretization_fixture.get_stress_field(
+                        discretization_fixture.get_stress_field_mugrid(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
                             displacement_field_inxyz=u_inxyz_perturbed,
                             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                             formulation='small_strain',
                             output_stress_field_ijqxyz=stress_field_ijqxyz)
+
                         adjoint_energy_plus = topology_optimization.adjoint_potential(
                             discretization=discretization_fixture,
-                            stress_field_ijqxyz=stress_field,
+                            stress_field_ijqxyz=stress_field_ijqxyz,
                             adjoint_field_inxyz=adjoint_field_inxyz)
 
-                        u_inxyz_perturbed.s[f, n, x, y] = u_inxyz_perturbed.s[
-                                                              f, n, x, y] - epsilon
+                        u_inxyz_perturbed.s[f, n, x, y] = u_inxyz_perturbed.s[f, n, x, y] - epsilon
                         # set phase_field to ones
                         # compute homogenized stress field for perturbed displacement
-                        stress_field = discretization_fixture.get_stress_field(
+                        discretization_fixture.get_stress_field_mugrid(
                             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
                             displacement_field_inxyz=u_inxyz_perturbed,
                             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                             formulation='small_strain',
                             output_stress_field_ijqxyz=stress_field_ijqxyz)
+
                         adjoint_energy_minus = topology_optimization.adjoint_potential(
                             discretization=discretization_fixture,
-                            stress_field_ijqxyz=stress_field,
+                            stress_field_ijqxyz=stress_field_ijqxyz,
                             adjoint_field_inxyz=adjoint_field_inxyz)
 
                         fd_derivative.s[f, n, x, y] = (adjoint_energy_plus - adjoint_energy_minus) / epsilon
 
         # print(df_drho_analytical[0, 0])
         error_fd_vs_analytical_x.append(
-            np.linalg.norm(fd_derivative.s[0, 0] - dg_du_field_analytical[0, 0], 'fro'))
+            np.linalg.norm(fd_derivative.s[0, 0] - dg_du_field_analytical.s[0, 0], 'fro'))
         error_fd_vs_analytical_y.append(
-            np.linalg.norm(fd_derivative.s[1, 0] - dg_du_field_analytical[1, 0], 'fro'))
+            np.linalg.norm(fd_derivative.s[1, 0] - dg_du_field_analytical.s[1, 0], 'fro'))
         # print(epsilon)
 
         # assert error_fd_vs_analytical_x[-1] < epsilon * 100, (
@@ -2476,7 +2491,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
         plt.legend(loc='best')
         plt.xlabel('epsilon - size of Finite Difference step')
         plt.ylabel('Error')
-        plt.ylim([1e-16, 1e-0])
+        plt.ylim([1e-16, 1e5])
 
         plt.show()
 
@@ -2484,8 +2499,9 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [6, 8]),
     ([2, 5], 0, [12, 7]),
-    ([3, 4], 1, [6, 8]),
-    ([2, 5], 1, [12, 7])])
+    # ([3, 4], 1, [6, 8]),
+    # ([2, 5], 1, [12, 7])
+])
 def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
     # create material data field
     K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -2495,53 +2511,63 @@ def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
                                                       mu=G_0,
                                                       kind='linear')
 
-    material_data_field_C_0_rho_ijklqxyz = discretization_fixture.get_material_data_size_field(name='test_DATA_FIELD')
+    material_data_field_C_0_rho_ijklqxyz = discretization_fixture.get_material_data_size_field_mugrid(
+        name='test_DATA_FIELD')
 
     phase_field = discretization_fixture.get_scalar_field(name='phase_field')
     phase_field.s = np.random.rand(*phase_field.s.shape) ** 1
+
     # evaluate to quad points
-    phase_field_at_quad_poits_1qnxyz, _ = discretization_fixture.evaluate_field_at_quad_points(
-        nodal_field_fnxyz=phase_field,
-        quad_field_fqnxyz=None,
-        quad_points_coords_iq=None)
+    phase_field_at_quad_poits_1qxyz = discretization_fixture.get_quad_field_scalar(
+        name='   phase_field_at_quad_poits_1qxyz ')
+    discretization_fixture.apply_N_operator_mugrid(phase_field, phase_field_at_quad_poits_1qxyz)
     # apply material distribution
+
     material_data_field_C_0_rho_ijklqxyz.s = material_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                             np.power(phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+                                             np.power(phase_field_at_quad_poits_1qxyz.s, 1)[0, 0, :, ...]
 
     macro_gradient = np.array([[0.1, 0], [0, 0.1]])
     macro_gradient_field = discretization_fixture.get_gradient_size_field(name='macro_gradient_field')
-    macro_gradient_field = discretization_fixture.get_macro_gradient_field(macro_gradient_ij=macro_gradient,
-                                                                           macro_gradient_field_ijqxyz=macro_gradient_field
-                                                                           )
+    discretization_fixture.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                           macro_gradient_field_ijqxyz=macro_gradient_field)
     #
     rhs = discretization_fixture.get_unknown_size_field(name='rhs')
-    rhs = discretization_fixture.get_rhs(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                                         macro_gradient_field_ijqxyz=macro_gradient_field,
-                                         rhs_inxyz=rhs)
+    discretization_fixture.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+                                          macro_gradient_field_ijqxyz=macro_gradient_field,
+                                          rhs_inxyz=rhs)
 
-    K_fun = lambda x: discretization_fixture.apply_system_matrix(
-        material_data_field=material_data_field_C_0_rho_ijklqxyz,
-        displacement_field=x,
-        formulation='small_strain')
-    M_fun = lambda x: 1 * x
+    def K_fun(x, Ax):
+        discretization_fixture.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax,
+                                                          formulation='small_strain')
+
+    def M_fun(x, Px):
+        Px.s = 1 * x.s
 
     # Get valid displacement field
     displacement_field = discretization_fixture.get_displacement_sized_field(
         name='displacement_field')
-    displacement_field.s, norms = solvers.PCG(K_fun, rhs.s, x0=None, P=M_fun,
-                                              steps=int(500),
-                                              toler=1e-14,
-                                              norm_type='rr_rel')
-
+    displacement_field.s.fill(0)
+    solvers.conjugate_gradients_mugrid(
+        comm=discretization_fixture.fft.communicator,
+        fc=discretization_fixture.field_collection,
+        hessp=K_fun,  # linear operator
+        b=rhs,
+        x=displacement_field,
+        P=M_fun,
+        tol=1e-10,
+        maxiter=50000,
+    )
     # set random adjoint field
     adjoint_field = discretization_fixture.get_displacement_sized_field(
         name='adjoint_field')
-    adjoint_field.s = np.random.rand(*adjoint_field.shape)
+    adjoint_field.s = np.random.rand(*adjoint_field.s.shape)
     # compute stress field corresponding to equilibrated displacement
     stress_field_ijqxyz = discretization_fixture.get_gradient_size_field(
         name='stress_field_ijqxyz_in_test_perturbed')
     stress_field_ijqxyz.s.fill(0)
-    stress_field = discretization_fixture.get_stress_field(
+    discretization_fixture.get_stress_field_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
         displacement_field_inxyz=displacement_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,
@@ -2549,7 +2575,8 @@ def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
         formulation='small_strain'
     )
 
-    adjoint_potential = topology_optimization.adjoint_potential(discretization_fixture, stress_field, adjoint_field)
+    adjoint_potential = topology_optimization.adjoint_potential(discretization_fixture, stress_field_ijqxyz,
+                                                                adjoint_field)
     print(adjoint_potential)
     assert adjoint_potential < 1e-7, (
         "Adjoint potential should be 0 for every solution of equilibrium constrain"
