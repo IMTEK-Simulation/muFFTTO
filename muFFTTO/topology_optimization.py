@@ -76,11 +76,13 @@ def objective_function_phase_field(discretization,
     #     f_dw=compute_double_well_potential_Gauss_quad(discretization=discretization,
     #                                                 phase_field_1nxyz=phase_field_1nxyz)
 
+    print(f'rank = {MPI.COMM_WORLD.rank}' + 'f_dw= '          ' {} '.format(f_dw))
     if disp and MPI.COMM_WORLD.rank == 0:
         print('f_dw= '          ' {} '.format(f_dw))  # good in MPI
         print('f_dw / eta= '          ' {} '.format(f_dw / eta))  # good in MPI
     # phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
     # f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
+
     f_rho_grad = compute_gradient_of_phase_field_potential(discretization=discretization,
                                                            phase_field_1nxyz=phase_field_1nxyz)
     if disp and MPI.COMM_WORLD.rank == 0:
@@ -920,10 +922,16 @@ def compute_gradient_of_phase_field_potential(discretization, phase_field_1nxyz)
         name='compute_gradient_of_phase_field_potential')
     phase_field_gradient_ijqxyz.s.fill(0)
 
+    discretization.fft.communicate_ghosts(phase_field_1nxyz)
     discretization.apply_gradient_operator_mugrid(u_inxyz=phase_field_1nxyz,
                                                   grad_u_ijqxyz=phase_field_gradient_ijqxyz)
-    f_rho_grad = discretization.mpi_reduction.sum(
+
+
+    # this is without mpi. Integrate already has mpi sum
+    f_rho_grad = np.sum(
         discretization.integrate_over_cell(phase_field_gradient_ijqxyz.s ** 2))
+    # print(f'rank = {MPI.COMM_WORLD.rank}' + 'f_rho_grad= {} '.format(
+    #     f_rho_grad))
     return f_rho_grad
 
 
@@ -2376,10 +2384,11 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
     # sum of all parts of df_drho
     df_drho = weight * dstress_drho + (dgradrho_drho.s * eta + double_well_depth * ddw_drho.s / eta)
 
+    stress_difference_ij = target_stress_ij - actual_stress_ij
     # Adjoint problem
     stress_difference_ijqxyz = discretization.get_gradient_size_field(
         name='stress_difference_ijqxyz_in_sensitivity_with_adjoint_problem')
-    stress_difference_ij = target_stress_ij - actual_stress_ij
+
     # stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
     #     (...,) + (np.newaxis,) * (stress_difference_ijqxyz.s.ndim - 2)]
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=stress_difference_ij,
@@ -2415,7 +2424,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
         b=df_du_field,
         x=adjoint_field_inxyz,
         P=preconditioner_fun,
-        tol=1e-5,
+        tol=1e-10,
         maxiter=int(10000),
         callback=callback_adjoint,
         # norm_metric=res_norm
@@ -2426,7 +2435,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
         norm_rz = norms_cg_adjoint['residual_rr'][-1]
         print(' nb_ steps CG adjoint =' f'{nb_it_comb}, residual_rz = {norm_rz}')
 
-    dadjoin_drho = discretization.get_scalar_field(name='dadjoin_drho')
+    dadjoin_drho = discretization.get_scalar_field(name='dadjoin_drho_in_sensitivity_stress_and_adjoint_FE_NEW')
     dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
         discretization=discretization,
         base_material_data_ijkl=base_material_data_ijkl,
@@ -2437,7 +2446,8 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
         output_field_inxyz=dadjoin_drho,
         p=p)
 
-    stress_field_ijqxyz = discretization.get_gradient_size_field(name='stress_field_ijqxyz_in_sensitivityFENEW')
+    stress_field_ijqxyz = discretization.get_gradient_size_field(
+        name='stress_field_ijqxyz_in_sensitivity_stress_and_adjoint_FE_NEW')
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
         displacement_field_inxyz=displacement_field_inxyz,
@@ -2482,7 +2492,12 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
                                           system_matrix_fun,
                                           formulation,
                                           p,
-                                          weight, disp=True):
+                                          weight, disp=False,
+                                          **kwargs):
+    try:
+        cg_tol = kwargs['cg_tol']
+    except:
+        cg_tol = 1e-7
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -2497,7 +2512,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # Output:
     #        df_drho_fnxyz [1,n,x,y,z]
     # -- -- -- -- -- -- -- -- -- -- --
-
+    info_adjoint_ = {}
     # -----    stress difference potential ----- #
     # Gradient of material data with respect to phase field
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -2589,16 +2604,16 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         b=df_du_field,
         x=adjoint_field_inxyz,
         P=preconditioner_fun,
-        tol=1e-5,
+        tol=cg_tol,
         maxiter=int(10000),
         callback=callback_adjoint,
         # norm_metric=res_norm
     )
-
+    nb_it = len(norms_cg_adjoint['residual_rr'])
+    info_adjoint_['num_iteration_adjoint'] = nb_it
+    info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if disp and MPI.COMM_WORLD.rank == 0:
-        nb_it_comb = len(norms_cg_adjoint['residual_rr'])
-        norm_rz = norms_cg_adjoint['residual_rz'][-1]
-        print(' nb_ steps CG adjoint =' f'{nb_it_comb}, residual_rz = {norm_rz}')
+        print(f' nb_ steps CG adjoint ={nb_it}' + f'residual_rz = {0}'.format(info_adjoint_['residual_rz']))
 
     dadjoin_drho = discretization.get_scalar_field(name='dadjoin_drho_in_sensitivity_stress_and_adjoint_FE_NEW')
     dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
@@ -2625,8 +2640,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         stress_field_ijqxyz=stress_field_ijqxyz,
         adjoint_field_inxyz=adjoint_field_inxyz)
 
-    return weight * dstress_drho + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy
-    # return dstress_drho + dadjoin_drho, adjoint_field_fnxyz, adjoint_energy
+    return weight * dstress_drho + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy, info_adjoint_
 
 
 def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,

@@ -66,6 +66,8 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     discretization_type = 'finite_element'
     element_type = 'linear_triangles'  # discretization_fixture.element_type  # 'bilinear_rectangle'##'linear_triangles' #
     formulation = 'small_strain'
+    preconditioner_type = 'Green_Jacobi'
+
     domain_size = [1, 1]
     number_of_pixels = discretization_fixture.nb_of_pixels
 
@@ -91,13 +93,6 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
                                                           K=K_0,
                                                           mu=G_0,
                                                           kind='linear')
-
-    material_data_field_C_0_ijklqxyz = discretization.get_material_data_size_field_mugrid(name='base_material')
-
-    material_data_field_C_0_ijklqxyz.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0_ijkl,
-                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                     *discretization.nb_of_pixels])))
-
     stress = np.einsum('ijkl,lk->ij', elastic_C_0_ijkl, macro_gradient)
 
     # create target material data
@@ -107,15 +102,12 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     poison_target = 1 / 3  # lambda = -10
     G_target_auxet = (1 / 4) * E_0  # 23   25
     E_target = 2 * G_target_auxet * (1 + poison_target)
-
     K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
-
     elastic_C_target_ijkl = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                                K=K_targer,
                                                                mu=G_target,
                                                                kind='linear')
-    # # target_stress = np.array([[0.0, 0.05],
-    # #                           [0.05, 0.0]])
+
     target_stress_ij = np.einsum('ijkl,lk->ij', elastic_C_target_ijkl, macro_gradient)
     print('target_stress = \n {}'.format(target_stress_ij))
     # Set up the equilibrium system
@@ -124,9 +116,10 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
                                                    macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz
                                                    )
+
     # M_fun = lambda x: 1 * x
     preconditioner_Green = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0_ijkl)
-
+    #
     def M_fun(x, Px):
         """
         Function to compute the product of the Preconditioner matrix with a vector.
@@ -137,50 +130,75 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
                                                    input_nodal_field_fnxyz=x,
                                                    output_nodal_field_fnxyz=Px)
 
+
+
     p = 2
     w = 3  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
     eta = 0.02
-
+    cg_setup= {'cg_tol': 1e-9 }
     def my_objective_function(phase_field_1nxyz_flat):
         # print('Objective function:')
         # reshape the field
         phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-        phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *number_of_pixels])
+        phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+
+        # Phase field  in quadrature points
+        phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
+            name='phase_field_at_quads_in_objective_function_multiple_load_cases')
+        discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
         # Material data in quadrature points
-        phase_field_at_quad_poits_1qxyz = discretization_fixture.get_quad_field_scalar(
-            name='phase_field_at_quad_poits_1qxyz')
-        discretization_fixture.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
-        # Todo: numpy array
-        # phase_field_at_quad_points_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
-        #     nodal_field_fnxyz=phase_field_1nxyz,
-        #     quad_field_fqnxyz=None,
-        #     quad_points_coords_iq=None)
-        #
         material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-            name='data_field_in_objective')
-        # material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-        #                                          np.power(phase_field_at_quad_points_1qnxyz, p)[0, :, 0, ...]
+            name='material_data_field_C_0_rho_ijklqxyz_in_objective')
         material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                    np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+                                                 np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+
+        f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
+                                                                             phase_field_1nxyz=phase_field_1nxyz,
+                                                                             eta=eta,
+                                                                             double_well_depth=1)
+        #  sensitivity phase field terms
+        s_phase_field = topology_optimization.sensitivity_phase_field_term_FE_NEW(discretization=discretization,
+                                                                                  base_material_data_ijkl=elastic_C_0_ijkl,
+                                                                                  phase_field_1nxyz=phase_field_1nxyz,
+                                                                                  p=p,
+                                                                                  eta=eta,
+                                                                                  double_well_depth=1)
+
+        if preconditioner_type == 'Green_Jacobi':
+            K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+                material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+
+            def M_fun_Green_Jacobi(x, Px):
+                discretization.fft.communicate_ghosts(x)
+                x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
+
+                x_jacobi_temp.s = K_diag_alg.s * x.s
+                discretization.apply_preconditioner_mugrid(
+                    preconditioner_Fourier_fnfnqks=preconditioner_Green,
+                    input_nodal_field_fnxyz=x_jacobi_temp,
+                    output_nodal_field_fnxyz=Px)
+
+                Px.s = K_diag_alg.s * Px.s
+                discretization.fft.communicate_ghosts(Px)
+
+            M_fun = M_fun_Green_Jacobi
+
+
 
         # Solve mechanical equilibrium constrain
-        rhs_inxyz = discretization.get_unknown_size_field(name='rhs_field')
-        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                                      macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
-                                      rhs_inxyz=rhs_inxyz)
-
         def K_fun(x, Ax):
             discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
                                                       input_field_inxyz=x,
                                                       output_field_inxyz=Ax,
                                                       formulation='small_strain')
 
-        # K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-        #     material_data_field_ijklqxyz=material_data_field_C_0_rho)
-        # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-        #     preconditioner_Fourier_fnfnqks=preconditioner,
-        #     nodal_field_fnxyz=K_diag_alg * x)
+        # mechanical equilibrium rhs
+        rhs_inxyz = discretization.get_unknown_size_field(name='rhs_field')
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+                                      macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+                                      rhs_inxyz=rhs_inxyz)
+
         displacement_field = discretization.get_unknown_size_field(name='displacement_field_')
         displacement_field.s.fill(0)
 
@@ -191,18 +209,11 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
             b=rhs_inxyz,
             x=displacement_field,
             P=M_fun,
-            tol=1e-5,
-            maxiter=1000,
+            tol=cg_setup['cg_tol'],
+            maxiter=10000,
             # callback=callback,
             # norm_metric=res_norm
         )
-        # displacement_field.s, norms = solvers.PCG(Afun=K_fun, B=rhs_inxyz,
-        #                                           x0=None, P=M_fun,
-        #                                           steps=int(1500),
-        #                                           toler=1e-15,
-        #                                           norm_type='rr_rel'
-        #                                           )
-
         # compute homogenized stress field corresponding t
         homogenized_stress = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
@@ -211,22 +222,42 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
             formulation='small_strain')
         # print('homogenized stress = \n'          ' {} '.format(homogenized_stress))
 
-        f_sigma, f_rho = topology_optimization.objective_function_small_strain_testing(
-            discretization=discretization,
+        # f_sigma, f_rho = topology_optimization.objective_function_small_strain_testing(
+        #     discretization=discretization,
+        #     actual_stress_ij=homogenized_stress,
+        #     target_stress_ij=target_stress_ij,
+        #     phase_field_1nxyz=phase_field_1nxyz,
+        #     eta=eta,
+        #     w=w)
+        f_sigma =topology_optimization.compute_stress_equivalence_potential(
             actual_stress_ij=homogenized_stress,
-            target_stress_ij=target_stress_ij,
-            phase_field_1nxyz=phase_field_1nxyz,
-            eta=eta,
-            w=w)
-
+            target_stress_ij=target_stress_ij)
         # print('objective_function= \n'' {} '.format(objective_function))
-        objective_function = w * f_sigma + f_rho
+
 
         # print('Sensitivity_analytical')
-        sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
+        adjoint_field = discretization.get_unknown_size_field(name='adjoint_field')
+        adjoint_field.s.fill(0)
+        # sensitivity_analytical, sensitivity_parts = topology_optimization.sensitivity_with_adjoint_problem_FE_NEW(
+        #     discretization=discretization,
+        #     base_material_data_ijkl=elastic_C_0_ijkl,
+        #     displacement_field_inxyz=displacement_field,
+        #     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+        #     phase_field_1nxyz=phase_field_1nxyz,
+        #     target_stress_ij=target_stress_ij,
+        #     actual_stress_ij=homogenized_stress,
+        #     preconditioner_fun=M_fun,
+        #     system_matrix_fun=K_fun,
+        #     formulation='small_strain',
+        #     p=p,
+        #     eta=eta,
+        #     weight=w)
+
+        sensitivity_analytical, adjoint_field, adjoint_energies, info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
             discretization=discretization,
             base_material_data_ijkl=elastic_C_0_ijkl,
             displacement_field_inxyz=displacement_field,
+            adjoint_field_inxyz=adjoint_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             phase_field_1nxyz=phase_field_1nxyz,
             target_stress_ij=target_stress_ij,
@@ -235,30 +266,33 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
             system_matrix_fun=K_fun,
             formulation='small_strain',
             p=p,
-            eta=eta,
-            weight=w)
+            weight=w,
+            disp=True,
+            **cg_setup)
 
-        objective_function += sensitivity_parts['adjoint_energy']
+        sensitivity_analytical += s_phase_field
+
+        objective_function = w * f_sigma + f_phase_field
+        objective_function += adjoint_energies
         # print(f'objective_function= {objective_function}')
-        print('adjoint_energy={}'.format(sensitivity_parts))
+        # print('adjoint_energy={}'.format(sensitivity_parts))
 
-        return objective_function, f_sigma, f_rho, sensitivity_analytical, sensitivity_parts
+        return objective_function, f_sigma, f_phase_field, sensitivity_analytical,  # sensitivity_parts
 
     np.random.seed(1)
-    phase_field_0 = discretization.get_scalar_field(name='phase_field_0')
-    phase_field_0.s = np.random.rand(*phase_field_0.s.shape) ** 1
-    phase_field_0.s +=5
+    phase_field = discretization.get_scalar_field(name='phase_field_0')
+    phase_field.s = np.random.rand(*phase_field.s.shape) ** 1
+    # phase_field_0.s += 5
     # save a copy of the original phase field
     phase_field_0_fixed = discretization.get_scalar_field(name='phase_field_0_fixed')
-
-    phase_field_0_fixed.s = np.copy(phase_field_0.s)
+    phase_field_0_fixed.s = np.copy(phase_field.s)
     # flatten the array --- just nick
     # phase_field_0_flat = phase_field_0.s.ravel()  # TODO: check if this is copy or not
-    analytical_sensitivity, sensitivity_parts = my_objective_function(phase_field_0.s.ravel())[-2:]
+    _, _, _, analytical_sensitivity = my_objective_function(phase_field.s.ravel())
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
-    print(sensitivity_parts)
+    # print(sensitivity_parts)
 
-    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  # 1e6, 1e5, 1e4, 1e3, 1e2, 1e1,
+    epsilons = [ 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  # 1e6, 1e5, 1e4, 1e3, 1e2, 1e1,
 
     fd_sensitivity = discretization_fixture.get_scalar_field(name='fd_sensitivity')
     fd_sensitivity_drho_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
@@ -275,16 +309,16 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
-                phase_field = np.copy(phase_field_0_fixed.s)
+                phase_field.s = np.copy(phase_field_0_fixed.s)
                 #
-                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] + epsilon / fd_scheme
+                phase_field.s[0, 0, x, y] = phase_field.s[0, 0, x, y] + epsilon / fd_scheme
 
-                of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _, _ = my_objective_function(phase_field.ravel())
+                of_plus_eps, f_sigma_plus_eps, f_rho_plus_eps, _ = my_objective_function(phase_field.s.ravel())
 
-                phase_field[0, 0, x, y] = phase_field[0, 0, x, y] - epsilon
+                phase_field.s[0, 0, x, y] = phase_field.s[0, 0, x, y] - epsilon
                 # phase_field_0 = phase_field.reshape(-1)
 
-                of_minu_eps, f_sigma_minu_eps, f_rho_minu_eps, _, _ = my_objective_function(phase_field.ravel())
+                of_minu_eps, f_sigma_minu_eps, f_rho_minu_eps, _ = my_objective_function(phase_field.s.ravel())
 
                 fd_sensitivity.s[0, 0, x, y] = (of_plus_eps - of_minu_eps) / (epsilon)
                 fd_sensitivity_drho_dro.s[0, 0, x, y] = (f_rho_plus_eps - f_rho_minu_eps) / (epsilon)
@@ -306,8 +340,8 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     print(norm_fd_sensitivity_df_dro)
     print(norm_fd_sensitivity_dsigma_dro)
     print(error_fd_vs_analytical)
-    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 2)
-    lin_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 1)
+    quad_fit_of_error = np.multiply(error_fd_vs_analytical[0], np.asarray(epsilons) ** 2)
+    lin_fit_of_error = np.multiply(error_fd_vs_analytical[0], np.asarray(epsilons) ** 1)
     if plot:
         import matplotlib.pyplot as plt
         plt.figure()
@@ -319,9 +353,10 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         #            label=r' error_fd_vs_analytical'.format())
         plt.loglog(epsilons, quad_fit_of_error,
                    label=r' quad_fit_of_error'.format())
-        plt.loglog(epsilons, lin_fit_of_error,
-                   label=r' lin_fit_of_error'.format())
+        # plt.loglog(epsilons, lin_fit_of_error,
+        #            label=r' lin_fit_of_error'.format())
         plt.legend(loc='best')
+        plt.title('CG tol = {}'.format(cg_setup['cg_tol']))
         plt.ylim([1e-10, 1e6])
         #   ax.legend()
         # assert error_fd_vs_analytical[-1] < epsilon * 1e2, (
@@ -516,7 +551,7 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
     # analitical_sensitivity = analitical_sensitivity.reshape([1, 1, *number_of_pixels])
     # print(sensitivity_parts)
 
-    epsilons = [ 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
+    epsilons = [1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]  #
     fd_sensitivity = discretization_fixture.get_scalar_field(name='fd_sensitivity')
     fd_sensitivity_drho_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_drho_dro')
     fd_sensitivity_dsigma_dro = discretization_fixture.get_scalar_field(name='fd_sensitivity_dsigma_dro')

@@ -967,8 +967,8 @@ class Discretization:
         # Reductor_numpi = Reduction(MPI.COMM_WORLD)
         homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-        if MPI.COMM_WORLD.rank == 0:
-            print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress_ij =' f'{homogenized_stress_ij}')
+       #s if MPI.COMM_WORLD.rank == 0:
+            #print('rank' f'{MPI.COMM_WORLD.rank:6} homogenized_stress_ij =' f'{homogenized_stress_ij}')
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_stress_field_mugrid(self,
@@ -2191,11 +2191,12 @@ class Discretization:
 
         stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
         #
-        # integral = np.einsum('fdqxy...->fd', stress_field)
-        # Reductor_numpi = Reduction(MPI.COMM_WORLD)
+        # print(f'rank = {MPI.COMM_WORLD.rank}' + 'stress_field= {} '.format(
+        #     stress_field))
         # TODO change this to muGRID
         integral = self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-
+        # print(f'rank = {MPI.COMM_WORLD.rank}' + 'integral= {} '.format(
+        #     integral))
         return integral
 
     def integrate_over_cell_mugrid(self, stress_field):
