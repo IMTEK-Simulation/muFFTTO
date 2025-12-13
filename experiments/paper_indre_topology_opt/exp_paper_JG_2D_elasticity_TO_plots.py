@@ -16,15 +16,42 @@ plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
     "font.family": "helvetica",  # Use a serif font
 })
-# Define the dimensions of the 2D array
-rows = 25  # or whatever size you want
-cols = 25  # or whatever size you want
 
-# Create a random 2D array with 0 and 1
-# The probabilities can be adjusted to get a different distribution of bubbles (0) and matrix (1)
-array = np.random.choice([0, 1], size=(rows, cols), p=[0.5, 0.5])  # equal probability for 0 and 1
-plot_figs = True
-plot_movie = True
+
+N = 32  # , 64, 128
+plt.figure(figsize=[8, 6])
+max_it = 70
+# x_coords_def = x_coords + imposed_disp_ixy + total_displacement_fluctuation_ixy
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+nbit_per_lbfgs_mech_G = []
+nbit_per_lbfgs_adjoint_G = []
+nbit_per_lbfgs_mech_GJ = []
+nbit_per_lbfgs_adjoint_GJ = []
+
+script_name = 'exp_paper_JG_2D_elasticity_TO' + f'_N_{N}/'
+preconditioner_type = 'Green_Jacobi'
+file_name = f'_log.npz'
+
+# _info_log_GJ = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name,
+#                        allow_pickle=True)
+
+plt.figure()
+for i in np.arange(max_it):
+
+    preconditioner_type = 'Green_Jacobi'
+    file_name = f'iteration{i}'
+    phase_field_it = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name + '.npy',
+                           allow_pickle=True)
+
+    plt.contourf(phase_field_it, cmap=mpl.cm.Greys)
+    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+    plt.clim(0, 1)
+    plt.title(f'Phase field {i}')
+    plt.colorbar()
+    plt.show()
+
+
 Ns = [16, 32, 64, 128]  # , 64, 128
 plt.figure(figsize=[8, 6])
 max_it = 300
@@ -114,34 +141,3 @@ plt.show()
 
 
 
-N = 16  # , 64, 128
-plt.figure(figsize=[8, 6])
-max_it = 200
-# x_coords_def = x_coords + imposed_disp_ixy + total_displacement_fluctuation_ixy
-fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-nbit_per_lbfgs_mech_G = []
-nbit_per_lbfgs_adjoint_G = []
-nbit_per_lbfgs_mech_GJ = []
-nbit_per_lbfgs_adjoint_GJ = []
-
-script_name = 'exp_paper_JG_2D_elasticity_TO' + f'_N_{N}/'
-preconditioner_type = 'Green_Jacobi'
-file_name = f'_log.npz'
-
-_info_log_GJ = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name,
-                       allow_pickle=True)
-
-plt.figure()
-for i in np.arange(max_it):
-
-    preconditioner_type = 'Green_Jacobi'
-    file_name = f'iteration{i}'
-    phase_field_it = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name + '.npy',
-                           allow_pickle=True)
-
-    plt.contourf(phase_field_it, cmap=mpl.cm.Greys)
-    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-    plt.clim(0, 1)
-    plt.colorbar()
-    plt.show()

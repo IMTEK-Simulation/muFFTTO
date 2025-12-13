@@ -145,7 +145,7 @@ def M_fun(x, Px):
 p = 2
 w = 3  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
 eta = 0.02
-cg_setup = {'cg_tol': 1e-4}
+cg_setup = {'cg_tol': 1e-6}
 
 def my_objective_function(phase_field_1nxyz_flat):
     # print('Objective function:')
@@ -268,7 +268,7 @@ def my_objective_function(phase_field_1nxyz_flat):
 
     print(f'rank = {MPI.COMM_WORLD.rank}' + 's_stress_and_adjoint= \n'          ' {} '.format(s_stress_and_adjoint.s))
 
-    quit()
+
 
 
     sensitivity_analytical = discretization.get_scalar_field(name='sensitivity_analytical')
@@ -279,6 +279,7 @@ def my_objective_function(phase_field_1nxyz_flat):
     objective_function += adjoint_energies
     # print(f'objective_function= {objective_function}')
     # print('adjoint_energy={}'.format(sensitivity_parts))
+    print(f'rank = {MPI.COMM_WORLD.rank} ' + 'sensitivity_analytical= \n'          ' {} '.format(sensitivity_analytical.s))
 
     return objective_function, f_sigma, f_phase_field, sensitivity_analytical,  # sensitivity_parts
 

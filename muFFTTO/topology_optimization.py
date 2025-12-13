@@ -1,8 +1,10 @@
 import warnings
+import gc
 
 import numpy as np
 import scipy as sc
 import time
+
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -76,7 +78,7 @@ def objective_function_phase_field(discretization,
     #     f_dw=compute_double_well_potential_Gauss_quad(discretization=discretization,
     #                                                 phase_field_1nxyz=phase_field_1nxyz)
 
-    print(f'rank = {MPI.COMM_WORLD.rank}' + 'f_dw= '          ' {} '.format(f_dw))
+    # print(f'rank = {MPI.COMM_WORLD.rank}' + 'f_dw= '          ' {} '.format(f_dw))
     if disp and MPI.COMM_WORLD.rank == 0:
         print('f_dw= '          ' {} '.format(f_dw))  # good in MPI
         print('f_dw / eta= '          ' {} '.format(f_dw / eta))  # good in MPI
@@ -354,12 +356,22 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     Jacobian_matrix = np.diag(discretization.pixel_size)
     Jacobian_det = np.linalg.det(
         Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
+    discretization.fft.communicate_ghosts(phase_field_1nxyz)
 
     # # TODO [ask Lars] is the array copied or is it just "view" on array?
-    # rho_00=phase_field_1nxyz[0, 0]
-    # rho_01=np.roll(phase_field_1nxyz[0, 0], -1, axis=(0))
-    # rho_10=np.roll(phase_field_1nxyz[0, 0], -1, axis=(1))
-    # rho_11=np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]))
+    rho_00 = discretization.get_scalar_field(name='rho_00')
+    rho_10 = discretization.get_scalar_field(name='rho_10')
+    rho_01 = discretization.get_scalar_field(name='rho_01')
+    rho_11 = discretization.get_scalar_field(name='rho_11')
+
+    rho_00.s[0, 0] = phase_field_1nxyz.sg[0, 0][..., 1:-1]
+    rho_10.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))[..., 1:-1]
+    # rho_m10 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))
+    rho_01.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))[..., 1:-1]
+    # rho_0m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))
+    # rho_m11 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))
+    # rho_1m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))
+    rho_11.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, -1]), axis=(0, 1))[..., 1:-1]
 
     rho_squared_pixel = lambda rho0, rho1, rho2, rho3: (1 / 12) * (rho0 ** 2 + rho1 ** 2 + rho2 ** 2) \
                                                        + (2 / 24) * (rho0 * rho1 + rho0 * rho2 + rho2 * rho1) \
@@ -372,18 +384,10 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                        np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
     #                                                axis=(0, 1)))) * Jacobian_det
 
-    rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(phase_field_1nxyz.s[0, 0],
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         [-1, 0], axis=(0, 1)),
-                                                                     # (2, -1)
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         [0, -1], axis=(0, 1)),
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         -1 * np.array([1, 1]),
-                                                                                         axis=(0, 1)))) * Jacobian_det
+    rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(rho_00.s[0, 0],
+                                                                     rho_10.s[0, 0],
+                                                                     rho_01.s[0, 0],
+                                                                     rho_11.s[0, 0])) * Jacobian_det
     # print('rho_squared= \n'          ' {} '.format(rho_squared)) #
 
     rho_qubed_pixel = lambda rho0, rho1, rho2, rho3: (1 / 20) * (rho0 ** 3 + rho1 ** 3 + rho2 ** 3) \
@@ -403,17 +407,10 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                    np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
     #                                            axis=(0, 1)))) * Jacobian_det
 
-    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(phase_field_1nxyz.s[0, 0],
-                                                                 discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz, [-1, 0],
-                                                                                     axis=(0, 1)),
-                                                                 discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz, [0, -1],
-                                                                                     axis=(0, 1)),
-                                                                 discretization.roll(discretization.fft,
-                                                                                     phase_field_1nxyz,
-                                                                                     -1 * np.array([1, 1]),
-                                                                                     axis=(0, 1)))) * Jacobian_det
+    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(rho_00.s[0, 0],
+                                                                 rho_10.s[0, 0],
+                                                                 rho_01.s[0, 0],
+                                                                 rho_11.s[0, 0])) * Jacobian_det
     # print('rho_qubed= \n'          ' {} '.format(rho_qubed))  #
     rho_quartic_pixel = lambda rho0, rho1, rho2, rho3: (1 / 30) * (rho0 ** 4 + rho1 ** 4 + rho2 ** 4) \
                                                        + (4 / 120) * (rho0 ** 3 * rho1 + rho0 ** 3 * rho2 \
@@ -441,19 +438,10 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     #                                        np.roll(phase_field_1nxyz[0, 0], -1 * np.array([1, 1]),
     #                                                axis=(0, 1)))) * Jacobian_det
 
-    rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(phase_field_1nxyz.s[0, 0],
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         [-1, 0],
-                                                                                         axis=(0, 1)),
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         [0, -1],
-                                                                                         axis=(0, 1)),
-                                                                     discretization.roll(discretization.fft,
-                                                                                         phase_field_1nxyz,
-                                                                                         -1 * np.array([1, 1]),
-                                                                                         axis=(0, 1)))) * Jacobian_det
+    rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(rho_00.s[0, 0],
+                                                                     rho_10.s[0, 0],
+                                                                     rho_01.s[0, 0],
+                                                                     rho_11.s[0, 0])) * Jacobian_det
 
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     integral = rho_squared - 2 * rho_qubed + rho_quartic
@@ -653,14 +641,22 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
     # communicate ghost before rolling
     discretization.fft.communicate_ghosts(phase_field_1nxyz)
 
+    rho_00 = discretization.get_scalar_field(name='rho_00')
+    rho_10 = discretization.get_scalar_field(name='rho_10')
+    rho_m10 = discretization.get_scalar_field(name='rho_m10')
+    rho_01 = discretization.get_scalar_field(name='rho_01')
+    rho_0m1 = discretization.get_scalar_field(name='rho_0m1')
+    rho_m11 = discretization.get_scalar_field(name='rho_m11')
+    rho_1m1 = discretization.get_scalar_field(name='rho_1m1')
+
     # NODAL VALUES OF CONNECTED POINTS
-    rho_00 = phase_field_1nxyz.sg[0, 0]
-    rho_10 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))
-    rho_m10 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))
-    rho_01 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))
-    rho_0m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))
-    rho_m11 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))
-    rho_1m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))
+    rho_00.s[0, 0] = phase_field_1nxyz.sg[0, 0][..., 1:-1]
+    rho_10.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))[..., 1:-1]
+    rho_m10.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))[..., 1:-1]
+    rho_01.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))[..., 1:-1]
+    rho_0m1.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))[..., 1:-1]
+    rho_m11.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))[..., 1:-1]
+    rho_1m1.s[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))[..., 1:-1]
 
     # rho_10 = discretization.roll(discretization.fft, phase_field_1nxyz.s[0, 0], np.array([-1, 0]), axis=(0, 1))
     # rho_m10 = discretization.roll(discretization.fft, phase_field_1nxyz.s[0, 0], np.array([1, 0]), axis=(0, 1))
@@ -669,30 +665,47 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
     # rho_m11 = discretization.roll(discretization.fft, phase_field_1nxyz.s[0, 0], np.array([1, -1]), axis=(0, 1))
     # rho_1m1 = discretization.roll(discretization.fft, phase_field_1nxyz.s[0, 0], np.array([-1, 1]), axis=(0, 1))
 
-    drho_squared = (rho_00 + 1 / 6 * (rho_10 + rho_m10 + rho_01
-                                      + rho_0m1 + rho_m11 + rho_1m1)) * Jacobian_det
+    drho_squared = (rho_00.s[0, 0] + 1 / 6 * (rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0]
+                                              + rho_0m1.s[0, 0] + rho_m11.s[0, 0] + rho_1m1.s[0, 0])) * Jacobian_det
 
-    drho_cubed = ((9 / 10) * rho_00 ** 2 \
-                  + (1 / 10) * (rho_10 ** 2 + rho_m10 ** 2 + rho_01 ** 2 + rho_0m1 ** 2 + rho_m11 ** 2 + rho_1m1 ** 2) \
-                  + (2 / 10) * rho_00 * (rho_10 + rho_m10 + rho_01 + rho_0m1 + rho_m11 + rho_1m1) \
-                  + (1 / 20) * (rho_10 * rho_01 + rho_01 * rho_m11 + rho_m11 * rho_m10 \
-                                + rho_m10 * rho_0m1 + rho_0m1 * rho_1m1 + rho_1m1 * rho_10) \
+    drho_cubed = ((9 / 10) * rho_00.s[0, 0] ** 2 \
+                  + (1 / 10) * (
+                              rho_10.s[0, 0] ** 2 + rho_m10.s[0, 0] ** 2 + rho_01.s[0, 0] ** 2 + rho_0m1.s[0, 0] ** 2 +
+                              rho_m11.s[0, 0] ** 2 + rho_1m1.s[0, 0] ** 2) \
+                  + (2 / 10) * rho_00.s[0, 0] * (
+                              rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
+                              rho_1m1.s[0, 0]) \
+                  + (1 / 20) * (rho_10.s[0, 0] * rho_01.s[0, 0] + rho_01.s[0, 0] * rho_m11.s[0, 0] + rho_m11.s[0, 0] *
+                                rho_m10.s[0, 0] \
+                                + rho_m10.s[0, 0] * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] + rho_1m1.s[
+                                    0, 0] * rho_10.s[0, 0]) \
                   ) * Jacobian_det
 
-    drho_quartic = ((24 / 30) * rho_00 ** 3 \
+    drho_quartic = ((24 / 30) * rho_00.s[0, 0] ** 3 \
                     + (2 / 30) * (
-                            rho_10 ** 3 + rho_m10 ** 3 + rho_01 ** 3 + rho_0m1 ** 3 + rho_m11 ** 3 + rho_1m1 ** 3) \
-                    + (6 / 30) * rho_00 ** 2 * (rho_10 + rho_m10 + rho_01 + rho_0m1 + rho_m11 + rho_1m1) \
-                    + (4 / 30) * rho_00 * (
-                            rho_10 ** 2 + rho_m10 ** 2 + rho_01 ** 2 + rho_0m1 ** 2 + rho_m11 ** 2 + rho_1m1 ** 2) \
-                    + (1 / 30) * (rho_10 ** 2 * rho_01 + rho_01 ** 2 * rho_m11 + rho_m11 ** 2 * rho_m10 \
-                                  + rho_m10 ** 2 * rho_0m1 + rho_0m1 ** 2 * rho_1m1 + rho_1m1 ** 2 * rho_10) \
-                    + (1 / 30) * (rho_10 * rho_01 ** 2 + rho_01 * rho_m11 ** 2 + rho_m11 * rho_m10 ** 2 \
-                                  + rho_m10 * rho_0m1 ** 2 + rho_0m1 * rho_1m1 ** 2 + rho_1m1 * rho_10 ** 2) \
-                    + (2 / 30) * rho_00 * (rho_10 * rho_01 + rho_01 * rho_m11 + rho_m11 * rho_m10 \
-                                           + rho_m10 * rho_0m1 + rho_0m1 * rho_1m1 + rho_1m1 * rho_10)
+                            rho_10.s[0, 0] ** 3 + rho_m10.s[0, 0] ** 3 + rho_01.s[0, 0] ** 3 + rho_0m1.s[0, 0] ** 3 +
+                            rho_m11.s[0, 0] ** 3 + rho_1m1.s[0, 0] ** 3) \
+                    + (6 / 30) * rho_00.s[0, 0] ** 2 * (
+                                rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
+                                rho_1m1.s[0, 0]) \
+                    + (4 / 30) * rho_00.s[0, 0] * (
+                            rho_10.s[0, 0] ** 2 + rho_m10.s[0, 0] ** 2 + rho_01.s[0, 0] ** 2 + rho_0m1.s[0, 0] ** 2 +
+                            rho_m11.s[0, 0] ** 2 + rho_1m1.s[0, 0] ** 2) \
+                    + (1 / 30) * (rho_10.s[0, 0] ** 2 * rho_01.s[0, 0] + rho_01.s[0, 0] ** 2 * rho_m11.s[0, 0] +
+                                  rho_m11.s[0, 0] ** 2 * rho_m10.s[0, 0] \
+                                  + rho_m10.s[0, 0] ** 2 * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] ** 2 * rho_1m1.s[0, 0] +
+                                  rho_1m1.s[0, 0] ** 2 * rho_10.s[0, 0]) \
+                    + (1 / 30) * (rho_10.s[0, 0] * rho_01.s[0, 0] ** 2 + rho_01.s[0, 0] * rho_m11.s[0, 0] ** 2 +
+                                  rho_m11.s[0, 0] * rho_m10.s[0, 0] ** 2 \
+                                  + rho_m10.s[0, 0] * rho_0m1.s[0, 0] ** 2 + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] ** 2 +
+                                  rho_1m1.s[0, 0] * rho_10.s[0, 0] ** 2) \
+                    + (2 / 30) * rho_00.s[0, 0] * (
+                                rho_10.s[0, 0] * rho_01.s[0, 0] + rho_01.s[0, 0] * rho_m11.s[0, 0] + rho_m11.s[0, 0] *
+                                rho_m10.s[0, 0] \
+                                + rho_m10.s[0, 0] * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] + rho_1m1.s[
+                                    0, 0] * rho_10.s[0, 0])
                     ) * Jacobian_det
-    output_1nxyz.sg[0, 0] = (drho_squared - 2 * drho_cubed + drho_quartic)
+    output_1nxyz.s[0, 0] = (drho_squared - 2 * drho_cubed + drho_quartic)
     return output_1nxyz
 
 
@@ -926,7 +939,6 @@ def compute_gradient_of_phase_field_potential(discretization, phase_field_1nxyz)
     discretization.apply_gradient_operator_mugrid(u_inxyz=phase_field_1nxyz,
                                                   grad_u_ijqxyz=phase_field_gradient_ijqxyz)
 
-
     # this is without mpi. Integrate already has mpi sum
     f_rho_grad = np.sum(
         discretization.integrate_over_cell(phase_field_gradient_ijqxyz.s ** 2))
@@ -1111,7 +1123,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     # # apply material distribution
     # discretization.N_basis_interpolator_array
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
-        name='phase_field_at_quads_in_partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE')
+        name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     dmaterial_data_field_drho_ijklqxyz_FE = discretization.get_material_data_size_field_mugrid(
@@ -1131,7 +1143,6 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # compute strain field from to displacement and macro gradient
     strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdofsewpf')
-
     discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
                                                               grad_u_ijqxyz=strain_ijqxyz)
     strain_ijqxyz.s = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
@@ -1240,8 +1251,8 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     #         dfstress_drho_OLD += np.roll(dfstress_drho_pixel_node, 1 * pixel_node,
     #                                      axis=(0, 1, 2))
     #         warnings.warn('Gradient transposed is not tested for 3D.')
-
-    return -2 * dfstress_drho.s / discretization.cell.domain_volume / np.sum(target_stress_ij ** 2)
+    dfstress_drho.s = -2 * dfstress_drho.s / discretization.cell.domain_volume / np.sum(target_stress_ij ** 2)
+    return dfstress_drho
 
 
 def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_pixel(discretization,
@@ -1680,11 +1691,11 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     #
     # Gradient of material data with respect to phase field
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
-        name='phase_field_at_quads_in_partial_derivative_of_adjoint_potential_wrt_phase_field_FE')
+        name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_drho_partial_derivative_of_adjoint_potential_wrt_phase_field_FE')
+        name='data_field_in_sensitivity_reusable')
 
     dmaterial_data_field_drho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * (
             p * np.power(phase_field_at_quad_poits_1qxyz.s[0, 0, :, ...], (p - 1)))
@@ -2516,7 +2527,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # -----    stress difference potential ----- #
     # Gradient of material data with respect to phase field
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
-        name='phase_field_at_quads_in_sensitivity_stress_and_adjoint_FE_NEW')
+        name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
     # phase_field_at_quad_poits_1qnxyz, N_at_quad_points_qnijk = discretization.evaluate_field_at_quad_points(
     #     nodal_field_fnxyz=phase_field_1nxyz.s,
@@ -2528,7 +2539,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_in_sensitivity_phase_field_term_FE_NEW')
+        name='data_field_in_sensitivity_sensitivity_stress_and_adjoint_FE_NEW')
     material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
@@ -2555,7 +2566,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     stress_difference_ij = target_stress_ij - actual_stress_ij
 
     stress_difference_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_difference_ijqxyz_in_sensitivity_stress_and_adjoint_FE_NEW')
+        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
     # stress_difference_ijqxyz = discretization.get_gradient_size_field()
     # stress_difference_ijqxyz[:, :, ...] = stress_difference_ij[
     #     (...,) + (np.newaxis,) * (stress_difference_ijqxyz.ndim - 2)]
@@ -2611,7 +2622,9 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     )
     nb_it = len(norms_cg_adjoint['residual_rr'])
     info_adjoint_['num_iteration_adjoint'] = nb_it
-    info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
+    # info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
+    del norms_cg_adjoint
+    gc.collect()
     if disp and MPI.COMM_WORLD.rank == 0:
         print(f' nb_ steps CG adjoint ={nb_it}' + f'residual_rz = {0}'.format(info_adjoint_['residual_rz']))
 
@@ -2627,7 +2640,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         p=p)
 
     stress_field_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_field_ijqxyz_in_sensitivity_stress_and_adjoint_FE_NEW')
+        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
         displacement_field_inxyz=displacement_field_inxyz,
@@ -2640,7 +2653,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         stress_field_ijqxyz=stress_field_ijqxyz,
         adjoint_field_inxyz=adjoint_field_inxyz)
 
-    return weight * dstress_drho + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy, info_adjoint_
+    return weight * dstress_drho.s + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy, info_adjoint_
 
 
 def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
@@ -2838,11 +2851,11 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
     #     quad_field_fqnxyz=None,
     #     quad_points_coords_iq=None)
 
-    phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(name='phase_field_at_quads_in_sensitivity')
+    phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_in_sensitivity_phase_field_term_FE_NEW')
+        name='data_field_in_sensitivity_reusable')
     material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 

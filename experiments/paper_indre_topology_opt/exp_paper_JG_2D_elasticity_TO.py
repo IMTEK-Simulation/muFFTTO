@@ -4,6 +4,7 @@ import matplotlib as mpl
 import time
 import sys
 import argparse
+import gc
 
 sys.path.append("/home/martin/Programming/muFFTTO_paralellFFT_test/muFFTTO")
 sys.path.append('../..')  # Add parent directory to path
@@ -33,7 +34,7 @@ parser.add_argument(
     "-p", "--preconditioner_type",
     type=str,
     choices=["Green", "Jacobi", "Green_Jacobi"],  # example options
-    default="Green",
+    default="Green_Jacobi",
     help="Type of preconditioner to use"
 )
 parser.add_argument(
@@ -134,13 +135,10 @@ if MPI.COMM_WORLD.rank == 0:
     print('macro_gradients = \n {}'.format(macro_gradients))
 
 # Set up  macroscopic gradients
-macro_gradient_fields = []
-for load_case in np.arange(nb_load_cases):
-    macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name=f'macro_gradient_field_{load_case}')
-    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
-                                                   macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-    macro_gradient_fields.append(macro_gradient_field_ijqxyz)
+#macro_gradient_fields = []
+macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name=f'macro_gradient_field_')
 
+for load_case in np.arange(nb_load_cases):
     stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
     print('init_stress for load case {} = \n {}'.format(load_case, stress))
 
@@ -149,314 +147,282 @@ for load_case in np.arange(nb_load_cases):
 # poison_target = -0.5
 # E_target = E_0 * 0.1
 # poison_target = 0.2
-for ration in [-0.5]:
-    poison_target = ration
-    G_target_auxet = (3 / 20) * E_0  # (3 / 10) * E_0  #
-    # G_target_auxet = (1 / 4) * E_0
-    E_target = 2 * G_target_auxet * (1 + poison_target)
-    # E_target = 0.15
-    # Auxetic metamaterials
-    # G_target_auxet = (1 / 4) * E_0  #23   25
-    # E_target=2*G_target_auxet*(1+poison_target)
-    # test materials
-    #
-    K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
+poison_target = -0.5
+G_target_auxet = (3 / 20) * E_0  # (3 / 10) * E_0  #
+# G_target_auxet = (1 / 4) * E_0
+E_target = 2 * G_target_auxet * (1 + poison_target)
+# E_target = 0.15
+# Auxetic metamaterials
+# G_target_auxet = (1 / 4) * E_0  #23   25
+# E_target=2*G_target_auxet*(1+poison_target)
+# test materials
+#
+K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
-    elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                          K=K_targer,
-                                                          mu=G_target,
-                                                          kind='linear')
+elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                      K=K_targer,
+                                                      mu=G_target,
+                                                      kind='linear')
+if MPI.COMM_WORLD.rank == 0:
+    print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_target)))
+##### create target stresses
+target_stresses = np.zeros([nb_load_cases, dim, dim])
+target_energy = np.zeros([nb_load_cases])
+
+for load_case in np.arange(nb_load_cases):
+    target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
+    target_energy[load_case] = np.einsum('ij,ijkl,lk->', left_macro_gradients[load_case], elastic_C_target,
+                                         macro_gradients[load_case])
     if MPI.COMM_WORLD.rank == 0:
-        print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_target)))
-    ##### create target stresses
-    target_stresses = np.zeros([nb_load_cases, dim, dim])
-    target_energy = np.zeros([nb_load_cases])
+        print('target_stress for load case {} = \n {}'.format(load_case, target_stresses[load_case]))
+        print('target stress norm for load case {} = \n {}'.format(load_case,
+                                                                   np.sum(target_stresses[load_case] ** 2)))
+        print('target_energy for load case {} = \n {}'.format(load_case, target_energy[load_case]))
+
+displacement_field_load_case = []
+adjoint_field_load_case = []
+for load_case in np.arange(nb_load_cases):
+    displacement_field_load_case.append(
+        discretization.get_unknown_size_field(name=f'displacement_field_load_case{load_case}'))
+    adjoint_field_load_case.append(
+        discretization.get_unknown_size_field(name=f'adjoint_field_load_case_{load_case}'))
+
+# Auxetic metamaterials
+p = 2
+double_well_depth_test = 1
+energy_objective = False
+norms_sigma = []
+norms_pf = []
+info_mech = {}
+info_mech['num_iteration_adjoint'] = []
+info_mech['residual_rz'] = []
+
+info_adjoint = {}
+info_adjoint['num_iteration_adjoint'] = []
+info_adjoint['residual_rz'] = []
+weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
+
+w_mult = 5
+eta_mult = 0.01
+pixel_diameter = np.sqrt(np.sum(discretization.pixel_size ** 2))
+w = w_mult / nb_load_cases
+eta = eta_mult
+if MPI.COMM_WORLD.rank == 0:
+    print('p =   {}'.format(p))
+    print('w  =  {}'.format(w))
+    print('eta =  {}'.format(eta))
+phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
+phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
+    name='phase_field_at_quads_in_objective_function_multiple_load_cases')
+material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
+    name='material_data_field_C_0_rho_ijklqxyz_in_objective')
+s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
+rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
+s_stress_and_adjoint_load_case = discretization.get_scalar_field(
+    name='s_stress_and_adjoint_load_case')
+cg_setup = {'cg_tol': 1e-8}
+
+
+def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
+    # print('Objective function:')
+    # reshape the field
+    # zero_small_phases = False
+    # if zero_small_phases:
+    #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
+    disp = False
+    phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+
+    # Phase field  in quadrature points
+    discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
+
+    # Material data in quadrature points
+    material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                             np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+
+    # objective function phase field terms
+    f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
+                                                                         phase_field_1nxyz=phase_field_1nxyz,
+                                                                         eta=eta,
+                                                                         double_well_depth=double_well_depth_test)
+    #  sensitivity phase field terms
+    s_sensitivity_field.s.fill(0)
+
+    s_sensitivity_field.s[0, 0] = topology_optimization.sensitivity_phase_field_term_FE_NEW(
+        discretization=discretization,
+        base_material_data_ijkl=elastic_C_0,
+        phase_field_1nxyz=phase_field_1nxyz,
+        p=p,
+        eta=eta,
+        double_well_depth=1)
+    # ??????
+    objective_function = f_phase_field
+
+    norms_pf.append(objective_function)
+
+    if preconditioner_type == 'Green':
+        M_fun = M_fun_Green
+    elif preconditioner_type == 'Jacobi':
+        K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+
+        def M_fun_Jacobi(x, Px):
+            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            discretization.fft.communicate_ghosts(Px)
+
+        M_fun = M_fun_Jacobi
+
+    elif preconditioner_type == 'Green_Jacobi':
+        K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
+
+        def M_fun_Green_Jacobi(x, Px):
+            discretization.fft.communicate_ghosts(x)
+            x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
+
+            x_jacobi_temp.s = K_diag_alg.s * x.s
+            discretization.apply_preconditioner_mugrid(
+                preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                input_nodal_field_fnxyz=x_jacobi_temp,
+                output_nodal_field_fnxyz=Px)
+
+            Px.s = K_diag_alg.s * Px.s
+            discretization.fft.communicate_ghosts(Px)
+
+        M_fun = M_fun_Green_Jacobi
+
+        # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
+        #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+        #     nodal_field_fnxyz=K_diag_alg * x)
+
+    # K_fun = lambda x: discretization.apply_system_matrix(
+    #     material_data_field=material_data_field_C_0_rho_ijklqxyz,
+    #     displacement_field=x,
+    #     formulation='small_strain')
+
+    def K_fun(x, Ax):
+        discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
+                                                  input_field_inxyz=x,
+                                                  output_field_inxyz=Ax,
+                                                  formulation='small_strain')
+
+    # Solve mechanical equilibrium constrain
+    homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
+
+    f_sigmas = np.zeros([nb_load_cases, 1])
+    # f_sigmas_energy = np.zeros([nb_load_cases, 1])
+    adjoint_energies = np.zeros([nb_load_cases, 1])
+    # s_stress_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
+    # s_energy_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
 
     for load_case in np.arange(nb_load_cases):
-        target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
-        target_energy[load_case] = np.einsum('ij,ijkl,lk->', left_macro_gradients[load_case], elastic_C_target,
-                                             macro_gradients[load_case])
+
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
+                                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+
+
+        rhs_load_case_inxyz.s.fill(0)
+        discretization.get_rhs_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            rhs_inxyz=rhs_load_case_inxyz)
+
+        norms_cg_mech = dict()
+        norms_cg_mech['residual_rr'] = []
+        norms_cg_mech['residual_rz'] = []
+
+        def callback(it, x, r, p, z, stop_crit_norm):
+            # global norms_cg_mech
+            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norms_cg_mech['residual_rr'].append(norm_of_rr)
+            norms_cg_mech['residual_rz'].append(norm_of_rz)
+
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.fft.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_load_case_inxyz,
+            x=displacement_field_load_case[load_case],
+            P=M_fun,
+            tol=cg_setup['cg_tol'],
+            maxiter=10000,
+            callback=callback,
+            # norm_metric=res_norm
+        )
+
         if MPI.COMM_WORLD.rank == 0:
-            print('target_stress for load case {} = \n {}'.format(load_case, target_stresses[load_case]))
-            print('target stress norm for load case {} = \n {}'.format(load_case,
-                                                                       np.sum(target_stresses[load_case] ** 2)))
-            print('target_energy for load case {} = \n {}'.format(load_case, target_energy[load_case]))
+            nb_it = len(norms_cg_mech['residual_rr'])
+            try:
+                norm_rz = norms_cg_mech['residual_rz'][-1]
+                norm_rr = norms_cg_mech['residual_rr'][-1]
+            except:
+                norm_rz = 0
+                norm_rr = 0
+            info_mech['num_iteration_adjoint'].append(nb_it)
+            # info_mech['residual_rz'].append(norms_cg_mech['residual_rz'])
 
-    displacement_field_load_case = []
-    adjoint_field_load_case = []
-    for load_case in np.arange(nb_load_cases):
-        displacement_field_load_case.append(
-            discretization.get_unknown_size_field(name=f'displacement_field_load_case{load_case}'))
-        adjoint_field_load_case.append(
-            discretization.get_unknown_size_field(name=f'adjoint_field_load_case_{load_case}'))
+            print(
+                'load case ' f'{load_case},  nb_ steps CG of =' f'{nb_it}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+        del norms_cg_mech
+        gc.collect()  # forces garbage collection
+            # compute homogenized stress field corresponding t
+        homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+            displacement_field_inxyz=displacement_field_load_case[load_case],
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            formulation='small_strain')
+        # print('homogenized stress = \n'          ' {} '.format(homogenized_stresses[load_case] )) # good in MPI
 
-    # Auxetic metamaterials
-    p = 2
-    double_well_depth_test = 1
-    energy_objective = False
-    norms_sigma = []
-    norms_pf = []
-    info_mech = {}
-    info_mech['num_iteration_adjoint'] = []
-    info_mech['residual_rz'] = []
+        # stress difference potential: actual_stress_ij is homogenized stress
+        # f_sigmas[load_case] = w * topology_optimization.compute_stress_equivalence_potential(
+        #     actual_stress_ij=homogenized_stresses[load_case],
+        #     target_stress_ij=target_stresses[load_case])
 
-    info_adjoint = {}
-    info_adjoint['num_iteration_adjoint'] = []
-    info_adjoint['residual_rz'] = []
-    weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
-    for w_mult in weights:  # ,10.,20.,30.,40.0 np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):  # [2, ]:  #
-        for eta_mult in [0.01, ]:
-            # np.arange(0.05, 0.5, 0.05):#[0.1, ]:  # np.arange(0.001, 0.01, 0.002):#[0.005, ]:  # np.arange(0.01, 0.5, 0.05):#
-            # w = 1.#1 * 1e-2  # 1e-2 #/6# * E_0  # 1 / 10  # 1e-4 Young modulus of solid
-            # eta = 0.01  # 0.005# domain_size[0] / number_of_pixels[0]  # 0.020.005# 2 *
-            # eta =0.005#125#/discretization.pixel_size[0]
-            pixel_diameter = np.sqrt(np.sum(discretization.pixel_size ** 2))
-            # w = w_mult / nb_load_cases  # / discretization.pixel_size[0]
-            w = w_mult / nb_load_cases  # / discretization.pixel_size[0]
-            eta = eta_mult  # * discretization.pixel_size[0]  # pixel_diameter#
-            # *eta_mult#pixel_diameter / eta_mult  # * discretization.pixel_size[0]
+        f_sigmas[load_case] = topology_optimization.compute_stress_equivalence_potential(
+            actual_stress_ij=homogenized_stresses[load_case],
+            target_stress_ij=target_stresses[load_case])
+        # if MPI.COMM_WORLD.rank == 0:
+        # print('w*f_sigmas  = '          ' {} '.format(f_sigmas[load_case]))  # good in MPI
+        # print('sum of w*f_sigmas  = '          ' {} '.format(np.sum(f_sigmas)))
+
+        s_stress_and_adjoint_load_case.s[0, 0], adjoint_field_load_case[
+            load_case], adjoint_energies[
+            load_case], info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
+            discretization=discretization,
+            base_material_data_ijkl=elastic_C_0,
+            displacement_field_inxyz=displacement_field_load_case[load_case],
+            adjoint_field_inxyz=adjoint_field_load_case[load_case],
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            phase_field_1nxyz=phase_field_1nxyz,
+            target_stress_ij=target_stresses[load_case],
+            actual_stress_ij=homogenized_stresses[load_case],
+            preconditioner_fun=M_fun,
+            system_matrix_fun=K_fun,
+            formulation='small_strain',
+            p=p,
+            weight=w,
+            disp=disp,
+            **cg_setup)
+
+        s_sensitivity_field.s[0, 0] += s_stress_and_adjoint_load_case.s[0, 0]
+
+        objective_function += w * f_sigmas[load_case]
+        objective_function += adjoint_energies[load_case]
+
+        info_adjoint['num_iteration_adjoint'].append(info_adjoint_current['num_iteration_adjoint'])
+        # info_adjoint['residual_rz'].append(info_adjoint_current['residual_rz'])
+
+        if disp:
             if MPI.COMM_WORLD.rank == 0:
-                print('p =   {}'.format(p))
-                print('w  =  {}'.format(w))
-                print('eta =  {}'.format(eta))
+                print(
+                    'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
+                print(
+                    'load case ' f'{load_case},  objective_function =' f'{objective_function}')
 
+    discretization.fft.communicate_ghosts(s_sensitivity_field)
+    norms_sigma.append(objective_function)
+    return objective_function[0], s_sensitivity_field.s[0, 0].reshape(-1)
 
-            def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
-                # print('Objective function:')
-                # reshape the field
-                # zero_small_phases = False
-                # if zero_small_phases:
-                #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
-                disp = False
-                phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-                phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
-
-                # Phase field  in quadrature points
-                phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
-                    name='phase_field_at_quads_in_objective_function_multiple_load_cases')
-                discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
-
-                # Material data in quadrature points
-
-                material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-                    name='material_data_field_C_0_rho_ijklqxyz_in_objective')
-                material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
-
-                # objective function phase field terms
-
-                f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                     phase_field_1nxyz=phase_field_1nxyz,
-                                                                                     eta=eta,
-                                                                                     double_well_depth=double_well_depth_test)
-                #  sensitivity phase field terms
-                s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
-                s_sensitivity_field.s.fill(0)
-
-                s_sensitivity_field.s[0, 0] = topology_optimization.sensitivity_phase_field_term_FE_NEW(
-                    discretization=discretization,
-                    base_material_data_ijkl=elastic_C_0,
-                    phase_field_1nxyz=phase_field_1nxyz,
-                    p=p,
-                    eta=eta,
-                    double_well_depth=1)
-                # ??????
-                objective_function = f_phase_field
-
-                norms_pf.append(objective_function)
-
-                if preconditioner_type == 'Green':
-                    M_fun = M_fun_Green
-                elif preconditioner_type == 'Jacobi':
-                    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-
-                    def M_fun_Jacobi(x, Px):
-                        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
-                        discretization.fft.communicate_ghosts(Px)
-
-                    M_fun = M_fun_Jacobi
-
-                elif preconditioner_type == 'Green_Jacobi':
-                    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
-
-                    def M_fun_Green_Jacobi(x, Px):
-                        discretization.fft.communicate_ghosts(x)
-                        x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
-
-                        x_jacobi_temp.s = K_diag_alg.s * x.s
-                        discretization.apply_preconditioner_mugrid(
-                            preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-                            input_nodal_field_fnxyz=x_jacobi_temp,
-                            output_nodal_field_fnxyz=Px)
-
-                        Px.s = K_diag_alg.s * Px.s
-                        discretization.fft.communicate_ghosts(Px)
-
-                    M_fun = M_fun_Green_Jacobi
-
-                    # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-                    #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-                    #     nodal_field_fnxyz=K_diag_alg * x)
-
-                # K_fun = lambda x: discretization.apply_system_matrix(
-                #     material_data_field=material_data_field_C_0_rho_ijklqxyz,
-                #     displacement_field=x,
-                #     formulation='small_strain')
-
-                def K_fun(x, Ax):
-                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
-                                                              input_field_inxyz=x,
-                                                              output_field_inxyz=Ax,
-                                                              formulation='small_strain')
-
-                # Solve mechanical equilibrium constrain
-                homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
-
-                f_sigmas = np.zeros([nb_load_cases, 1])
-                f_sigmas_energy = np.zeros([nb_load_cases, 1])
-                adjoint_energies = np.zeros([nb_load_cases, 1])
-                # s_stress_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
-                # s_energy_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
-
-                for load_case in np.arange(nb_load_cases):
-                    rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
-                    rhs_load_case_inxyz.s.fill(0)
-                    discretization.get_rhs_mugrid(
-                        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                        macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
-                        rhs_inxyz=rhs_load_case_inxyz)
-                    # if MPI.COMM_WORLD.size == 1:
-                    #     print('rhs Of = {}'.format(np.linalg.norm(rhs_load_case)))
-                    # if preconditioer == 'Green':
-                    norms_cg_mech = dict()
-                    norms_cg_mech['residual_rr'] = []
-                    norms_cg_mech['residual_rz'] = []
-
-                    def callback(it, x, r, p, z, stop_crit_norm):
-                        # global norms_cg_mech
-                        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
-                        norms_cg_mech['residual_rr'].append(norm_of_rr)
-                        norms_cg_mech['residual_rz'].append(norm_of_rz)
-
-                    # displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                    #                                                                B=rhs_load_case_inxyz.s,
-                    #                                                                x0=displacement_field_load_case[
-                    #                                                                    load_case].s,
-                    #                                                                P=M_fun,
-                    #                                                                steps=int(10000),
-                    #                                                                toler=1e-14,
-                    #                                                                norm_type='rr_rel',
-                    #                                                                # norm_metric=M_fun_Green
-                    #                                                                )
-                    solvers.conjugate_gradients_mugrid(
-                        comm=discretization.fft.communicator,
-                        fc=discretization.field_collection,
-                        hessp=K_fun,  # linear operator
-                        b=rhs_load_case_inxyz,
-                        x=displacement_field_load_case[load_case],
-                        P=M_fun,
-                        tol=1e-8,
-                        maxiter=10000,
-                        callback=callback,
-                        # norm_metric=res_norm
-                    )
-
-                    # elif preconditioer == 'Jacobi':
-                    #     displacement_field_load_case[load_case], norms = solvers.PCG(Afun=K_fun,
-                    #                                                                  B=rhs_load_case_inxyz,
-                    #                                                                  x0=None,
-                    #                                                                  P=M_fun,
-                    #                                                                  steps=int(10000),
-                    #                                                                  toler=1e-6,
-                    #                                                                  norm_type='rr',
-                    #                                                                  # norm_metric=M_fun_Green
-                    #                                                                  )
-                    #     # displacement_field_load_case[                            load_case],
-                    # elif preconditioer == 'Jacobi_Green':
-                    #     displacement_field_load_case[load_case].s, norms = solvers.PCG(Afun=K_fun,
-                    #                                                                    B=rhs_load_case_inxyz.s,
-                    #                                                                    x0=displacement_field_load_case[
-                    #                                                                        load_case].s,
-                    #                                                                    P=M_fun,
-                    #                                                                    steps=int(10000),
-                    #                                                                    toler=1e-10,
-                    #                                                                    norm_type='rr_rel',
-                    #                                                                    # norm_metric=M_fun_Green
-                    #                                                                    )
-
-                    if MPI.COMM_WORLD.rank == 0:
-                        nb_it = len(norms_cg_mech['residual_rr'])
-                        try:
-                            norm_rz = norms_cg_mech['residual_rz'][-1]
-                            norm_rr = norms_cg_mech['residual_rr'][-1]
-                        except:
-                            norm_rz = 0
-                            norm_rr = 0
-                        info_mech['num_iteration_adjoint'].append(nb_it)
-                        info_mech['residual_rz'].append(norms_cg_mech['residual_rz'])
-
-                        print(
-                            'load case ' f'{load_case},  nb_ steps CG of =' f'{nb_it}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
-                        # compute homogenized stress field corresponding t
-                    homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
-                        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-                        displacement_field_inxyz=displacement_field_load_case[load_case],
-                        macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
-                        formulation='small_strain')
-                    # print('homogenized stress = \n'          ' {} '.format(homogenized_stresses[load_case] )) # good in MPI
-
-                    # stress difference potential: actual_stress_ij is homogenized stress
-                    # f_sigmas[load_case] = w * topology_optimization.compute_stress_equivalence_potential(
-                    #     actual_stress_ij=homogenized_stresses[load_case],
-                    #     target_stress_ij=target_stresses[load_case])
-
-                    f_sigmas[load_case] = topology_optimization.compute_stress_equivalence_potential(
-                        actual_stress_ij=homogenized_stresses[load_case],
-                        target_stress_ij=target_stresses[load_case])
-                    # if MPI.COMM_WORLD.rank == 0:
-                    # print('w*f_sigmas  = '          ' {} '.format(f_sigmas[load_case]))  # good in MPI
-                    # print('sum of w*f_sigmas  = '          ' {} '.format(np.sum(f_sigmas)))
-                    s_stress_and_adjoint_load_case = discretization.get_scalar_field(
-                        name='s_stress_and_adjoint_load_case')
-                    s_stress_and_adjoint_load_case.s[0, 0], adjoint_field_load_case[
-                        load_case], adjoint_energies[
-                        load_case], info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
-                        discretization=discretization,
-                        base_material_data_ijkl=elastic_C_0,
-                        displacement_field_inxyz=displacement_field_load_case[load_case],
-                        adjoint_field_inxyz=adjoint_field_load_case[load_case],
-                        macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
-                        phase_field_1nxyz=phase_field_1nxyz,
-                        target_stress_ij=target_stresses[load_case],
-                        actual_stress_ij=homogenized_stresses[load_case],
-                        preconditioner_fun=M_fun,
-                        system_matrix_fun=K_fun,
-                        formulation='small_strain',
-                        p=p,
-                        weight=w,
-                        disp=disp)
-
-                    s_sensitivity_field.s[0, 0] += s_stress_and_adjoint_load_case.s[0, 0]
-
-                    objective_function += w * f_sigmas[load_case]
-                    objective_function += adjoint_energies[load_case]
-
-                    info_adjoint['num_iteration_adjoint'].append(info_adjoint_current['num_iteration_adjoint'])
-                    info_adjoint['residual_rz'].append(info_adjoint_current['residual_rz'])
-
-                    if disp:
-                        if MPI.COMM_WORLD.rank == 0:
-                            print(
-                                'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
-                            print(
-                                'load case ' f'{load_case},  objective_function =' f'{objective_function}')
-
-                discretization.fft.communicate_ghosts(s_sensitivity_field)
-                norms_sigma.append(objective_function)
-                return objective_function[0], s_sensitivity_field.s[0, 0].reshape(-1)
 
 if __name__ == '__main__':
     import os
@@ -524,6 +490,9 @@ if __name__ == '__main__':
         # phase = (phase + np.abs(min_)) / (max_ + np.abs(min_))
 
 
+    phase_field_0.s[0, 0] = (np.sin(discretization.fft.coords[0] * 4 * np.pi) + np.sin(
+        discretization.fft.coords[1] * 4 * np.pi) + 2) / 4
+
     # phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
     apply_filter(phase_field_0)
     phase_field_00 = np.copy(phase_field_0)
@@ -548,13 +517,13 @@ if __name__ == '__main__':
 
     #    if MPI.COMM_WORLD.size == 1:
     # print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f'')
-    plt.figure()
-    plt.contourf(phase_field_0.s[0, 0], cmap=mpl.cm.Greys)
-    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-    plt.clim(0, 1)
-    plt.colorbar()
-
-    plt.show()
+    # plt.figure()
+    # plt.contourf(phase_field_0.s[0, 0], cmap=mpl.cm.Greys)
+    # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+    # plt.clim(0, 1)
+    # plt.colorbar()
+    #
+    # plt.show()
     # phase_field_0 = phase_field_0.s.ravel()
 
     norms_f = []
@@ -579,7 +548,8 @@ if __name__ == '__main__':
         file_data_name_it = f'iteration{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
         if save_data:
-            save_npy(data_folder_path +f'{preconditioner_type}'+ file_data_name_it + f'.npy', result_norms.reshape([*discretization.nb_of_pixels]),
+            save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
+                     result_norms.reshape([*discretization.nb_of_pixels]),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             if MPI.COMM_WORLD.size == 1:
@@ -599,9 +569,9 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-5,
-                                      ftol=1e-5,
-                                      maxiter=10000,
+                                      gtol=1e-4,
+                                      ftol=1e-4,
+                                      maxiter=10,
                                       comm=MPI.COMM_WORLD,
                                       disp=True,
                                       callback=my_callback
@@ -610,6 +580,20 @@ if __name__ == '__main__':
 
     solution_phase.s = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
     sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
+
+    print("=== REAL SPACE FIELDS ===")
+    sum_buffer = 0
+    for i, name in enumerate(discretization.field_collection.field_names):
+        field = discretization.field_collection.get_field(name)
+        print(
+            f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size * 8 / 1024 / 1024:30} MiB {field.shape} ")
+        sum_buffer += field.buffer_size
+    print("=== FOURIER SPACE FIELDS ===")
+    for i, name in enumerate(discretization.ffield_collection.field_names):
+        field = discretization.ffield_collection.get_field(name)
+        print(f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size:30} MiB {field.shape} ")
+        sum_buffer += field.buffer_size
+    print(f"Total memory: {sum_buffer * 8 / 1024 / 1024} MiB")
 
     _info = {}
     # if MPI.COMM_WORLD.size == 1:
@@ -672,9 +656,12 @@ if __name__ == '__main__':
         rhs_field_final = discretization.get_unknown_size_field(name='rhs_field_final')
         rhs_field_final.s.fill(0)
 
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
+                                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+
         discretization.get_rhs_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
-            macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             rhs_inxyz=rhs_field_final)
 
 
@@ -704,7 +691,7 @@ if __name__ == '__main__':
         homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
             displacement_field_inxyz=displacement_field,
-            macro_gradient_field_ijqxyz=macro_gradient_fields[load_case],
+            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             formulation='small_strain')
 
         _info['target_stress' + f'{load_case}'] = target_stresses[load_case]
