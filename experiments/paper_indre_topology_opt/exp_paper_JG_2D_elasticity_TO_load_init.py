@@ -6,6 +6,7 @@ import sys
 import argparse
 import gc
 import tracemalloc
+
 tracemalloc.start()
 # run iterations
 
@@ -32,6 +33,8 @@ parser = argparse.ArgumentParser(
     prog="exp_paper_JG_2D_elasticity_TO.py", description="Solve topology optimization of negative poison ratio"
 )
 parser.add_argument("-n", "--nb_pixels", default="32")
+parser.add_argument("-start", "--first_iteration", default="0")
+parser.add_argument("-stop", "--last_iteration", default="10")
 
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
@@ -46,12 +49,21 @@ parser.add_argument(
     action="store_true",
     help="Enable saving phases"
 )
+parser.add_argument(
+    "-r", "--random_init",
+    action="store_true",
+    help="Random initial guess of cosine"
+)
 # Total phase contrast (integer)
 
 args = parser.parse_args()
 nb_pixels = int(args.nb_pixels)
 preconditioner_type = args.preconditioner_type
 save_data = args.save_phases
+start = int(args.first_iteration)
+stop = int(args.last_iteration)
+random_init = args.random_init
+
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -60,7 +72,8 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]  #
 number_of_pixels = (nb_pixels, nb_pixels)
-print(number_of_pixels)
+if MPI.COMM_WORLD.rank == 0:
+    print(number_of_pixels)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -139,12 +152,13 @@ if MPI.COMM_WORLD.rank == 0:
     print('macro_gradients = \n {}'.format(macro_gradients))
 
 # Set up  macroscopic gradients
-#macro_gradient_fields = []
+# macro_gradient_fields = []
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name=f'macro_gradient_field_')
 
 for load_case in np.arange(nb_load_cases):
     stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
-    print('init_stress for load case {} = \n {}'.format(load_case, stress))
+    if MPI.COMM_WORLD.rank == 0:
+        print('init_stress for load case {} = \n {}'.format(load_case, stress))
 
 ##### create target material data
 # validation metamaterials
@@ -224,7 +238,7 @@ s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
 s_stress_and_adjoint_load_case = discretization.get_scalar_field(
     name='s_stress_and_adjoint_load_case')
-cg_setup = {'cg_tol': 1e-8}
+cg_setup = {'cg_tol': 1e-5}
 
 
 def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
@@ -295,15 +309,6 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
         M_fun = M_fun_Green_Jacobi
 
-        # M_fun = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-        #     preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
-        #     nodal_field_fnxyz=K_diag_alg * x)
-
-    # K_fun = lambda x: discretization.apply_system_matrix(
-    #     material_data_field=material_data_field_C_0_rho_ijklqxyz,
-    #     displacement_field=x,
-    #     formulation='small_strain')
-
     def K_fun(x, Ax):
         discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
                                                   input_field_inxyz=x,
@@ -314,16 +319,12 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
 
     f_sigmas = np.zeros([nb_load_cases, 1])
-    # f_sigmas_energy = np.zeros([nb_load_cases, 1])
     adjoint_energies = np.zeros([nb_load_cases, 1])
-    # s_stress_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
-    # s_energy_and_adjoint_load_cases = np.zeros([nb_load_cases, *s_phase_field.shape])
 
     for load_case in np.arange(nb_load_cases):
 
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
                                                        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-
 
         rhs_load_case_inxyz.s.fill(0)
         discretization.get_rhs_mugrid(
@@ -369,7 +370,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             # info_mech['residual_rz'].append(norms_cg_mech['residual_rz'])
 
             print(
-                'load case ' f'{load_case},  nb_ steps CG of =' f'{nb_it}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
+                'load case ' f'{load_case},  nb_ steps CG mech    =' f'{nb_it}, residual_rz = {norm_rz}, residual_rr = {norm_rr}')
             del norms_cg_mech
             gc.collect()  # forces garbage collection
             # compute homogenized stress field corresponding t
@@ -417,13 +418,14 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
         objective_function += adjoint_energies[load_case]
         if MPI.COMM_WORLD.rank == 0:
             info_adjoint['num_iteration_adjoint'].append(info_adjoint_current['num_iteration_adjoint'])
+            nb_it_adjoint = info_adjoint_current['num_iteration_adjoint']
+            print(
+                'load case ' f'{load_case},  nb_steps CG adjoint  =' f'{nb_it_adjoint} ')
             if disp:
                 print(
                     'load case ' f'{load_case},  f_sigmas =' f'{f_sigmas[load_case]}')
                 print(
                     'load case ' f'{load_case},  objective_function =' f'{objective_function}')
-
-
 
     discretization.fft.communicate_ghosts(s_sensitivity_field)
     norms_sigma.append(objective_function)
@@ -433,47 +435,21 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 if __name__ == '__main__':
     import os
 
-    script_name = os.path.splitext(os.path.basename(__file__))[0] + f'_N_{number_of_pixels[0]}'
+
+    script_name = os.path.splitext(os.path.basename(__file__))[0] + f'_random_{random_init}'+ f'_N_{number_of_pixels[0]}'
     file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
     figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
-    if not os.path.exists(data_folder_path):
-        os.makedirs(data_folder_path)
+    if MPI.COMM_WORLD.rank == 0:
+        if not os.path.exists(data_folder_path):
+            os.makedirs(data_folder_path)
 
-    if not os.path.exists(figure_folder_path):
-        os.makedirs(figure_folder_path)
+        if not os.path.exists(figure_folder_path):
+            os.makedirs(figure_folder_path)
 
-    # log_name = 'final_log'
-    # _info=np.load(data_folder_path + log_name + f'info_log.npz',  allow_pickle=True)
 
-    run_adam = False
-    run_lbfg = True
-    random_initial_geometry = False
-    bounds = False
 
-    # fp = 'exp_data/muFFTTO_elasticity_random_init_N16_E_target_0.25_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI2.npy'
-    # phase = np.load(fp)
-    np.random.seed(MPI.COMM_WORLD.rank)
-    phase_field_0 = discretization.get_scalar_field(name='phase_field_in_initial_')
-    if not random_initial_geometry:
-        geometry_ID = 'circle_inclusions'
-        nb_circles = 3  # number of circles in single dimention
-        vol_frac = 1 / 4
-        r_0 = np.sqrt(vol_frac / np.pi)
-        _geom_parameters = {'nb_circles': nb_circles,
-                            'r_0': r_0,
-                            'vol_frac': vol_frac,
-                            'random_density': True,
-                            'random_centers': True}
-        phase_field_0.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                                    microstructure_name=geometry_ID,
-                                                                    coordinates=discretization.fft.coords,
-                                                                    **_geom_parameters)
-
-        phase_field_0.s[phase_field_0.s > 1] = 1
-        phase_field_0.s[phase_field_0.s < 0] = 0
-        phase_field_0.s[0, 0] = abs(phase_field_0.s[0, 0] - 1)
 
 
     # # material distribution
@@ -496,31 +472,43 @@ if __name__ == '__main__':
         # phase = (phase + np.abs(min_)) / (max_ + np.abs(min_))
 
 
-    phase_field_0.s[0, 0] = (np.sin(discretization.fft.coords[0] * 4 * np.pi) + np.sin(
-        discretization.fft.coords[1] * 4 * np.pi) + 2) / 4
-
-    # phase_field_0.s += 0.7 * np.random.rand(*phase_field_0.s.shape) ** 1
-    apply_filter(phase_field_0)
-    phase_field_00 = np.copy(phase_field_0)
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
+    phase_field_0 = discretization.get_scalar_field(name='phase_field_in_initial_')
 
-    load_init_from_same_grid = False
-    if load_init_from_same_grid:
-        # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-        file_data_name = f'iteration_final'
-        if MPI.COMM_WORLD.size == 1 or None:
-            # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
-            # phase= np.load(f'experiments/exp_data/'  + file_data_name)
-            phase = np.load(os.path.expanduser(data_folder_path + file_data_name + f'.npy'), allow_pickle=True)
+    if start == 0:
+
+        if random_init:
+            np.random.seed(MPI.COMM_WORLD.rank)
+            phase_field_0.s += 1.0 * np.random.rand(*phase_field_0.s.shape) ** 1
         else:
-            phase = load_npy(data_folder_path + file_data_name,
-                             tuple(discretization.fft.subdomain_locations),
-                             tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+            phase_field_0.s[0, 0] = (np.sin(discretization.fft.coords[0] * 4 * np.pi) + np.sin(
+                discretization.fft.coords[1] * 4 * np.pi) + 2) / 4
+            phase_field_0.s += 0.5 * np.random.rand(*phase_field_0.s.shape) ** 1
+
+        apply_filter(phase_field_0)
+        print()
+    elif start > 0:
+        # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        file_data_name = f'_iteration_{start}'
+        # if MPI.COMM_WORLD.size == 1 or None:
+        #     # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
+        #     # phase= np.load(f'experiments/exp_data/'  + file_data_name)
+        #     phase = np.load(os.path.expanduser(data_folder_path + file_data_name + f'.npy'), allow_pickle=True)
+        # else:
+        phase = load_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
+                         subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+                         nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+                         components_are_leading=True,
+                         comm=MPI.COMM_WORLD)
+        # save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
+        #          result_norms.reshape([*discretization.nb_of_pixels]),
+        #          tuple(discretization.subdomain_locations_no_buffers),
+        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         phase_field_0.s[0, 0] = phase  # [discretization.fft.subdomain_slices]
 
     # b
-
+    # phase_field_00 = np.copy(phase_field_0)
     #    if MPI.COMM_WORLD.size == 1:
     # print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f'')
     # plt.figure()
@@ -544,22 +532,16 @@ if __name__ == '__main__':
 
     def my_callback(result_norms):
         global iterat
-        # iteration = result_norms[-1]
-        # norms_f.append(result_norms[0])
-        # norms_delta_f.append(result_norms[1])
-        # norms_max_grad_f.append(result_norms[2])
-        # norms_norm_grad_f.append(result_norms[3])
-        # norms_max_delta_x.append(result_norms[4])
-        # norms_norm_delta_x.append(result_norms[5])
-        file_data_name_it = f'iteration{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        file_data_name_it = f'_iteration_{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
         if save_data:
-            save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
-                     result_norms.reshape([*discretization.nb_of_pixels]),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            if MPI.COMM_WORLD.size == 1:
-                print(data_folder_path + file_data_name_it + f'.npy')
+            if iterat % 10 == 0:
+                save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
+                         result_norms.reshape([*discretization.nb_of_pixels]),
+                         tuple(discretization.subdomain_locations_no_buffers),
+                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+                if MPI.COMM_WORLD.size == 1:
+                    print(data_folder_path + file_data_name_it + f'.npy')
 
         iterat += 1
         # plt.figure()
@@ -575,9 +557,9 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-5,
-                                      ftol=1e-5,
-                                      maxiter=100000,
+                                      gtol=1e-6,
+                                      ftol=1e-6,
+                                      maxiter=stop-start,
                                       comm=MPI.COMM_WORLD,
                                       disp=True,
                                       callback=my_callback
@@ -587,32 +569,31 @@ if __name__ == '__main__':
     solution_phase.s = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
     sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
 
-    print(tracemalloc.get_traced_memory())
+    # print(tracemalloc.get_traced_memory())
 
-
-    print("=== REAL SPACE FIELDS ===")
-    sum_buffer = 0
-    for i, name in enumerate(discretization.field_collection.field_names):
-        field = discretization.field_collection.get_field(name)
-        print(
-            f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size * 8 / 1024 / 1024:30} MiB {field.shape} ")
-        sum_buffer += field.buffer_size
-    print("=== FOURIER SPACE FIELDS ===")
-    for i, name in enumerate(discretization.ffield_collection.field_names):
-        field = discretization.ffield_collection.get_field(name)
-        print(f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size:30} MiB {field.shape} ")
-        sum_buffer += field.buffer_size
-    print(f"Total memory: {sum_buffer * 8 / 1024 / 1024} MiB")
+    # print("=== REAL SPACE FIELDS ===")
+    # sum_buffer = 0
+    # for i, name in enumerate(discretization.field_collection.field_names):
+    #     field = discretization.field_collection.get_field(name)
+    #     print(
+    #         f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size * 8 / 1024 / 1024:30} MiB {field.shape} ")
+    #     sum_buffer += field.buffer_size
+    # print("=== FOURIER SPACE FIELDS ===")
+    # for i, name in enumerate(discretization.ffield_collection.field_names):
+    #     field = discretization.ffield_collection.get_field(name)
+    #     print(f"{i + 1:3}: {name:30} {field.buffer_size:30} {field.buffer_size:30} MiB {field.shape} ")
+    #     sum_buffer += field.buffer_size
+    # print(f"Total memory: {sum_buffer * 8 / 1024 / 1024} MiB")
 
     _info = {}
     # if MPI.COMM_WORLD.size == 1:
-    print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f' ')
-    plt.figure()
-    plt.contourf(solution_phase.s[0, 0], cmap=mpl.cm.Greys)
-    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-    plt.clim(0, 1)
-    plt.colorbar()
-    plt.show()
+    # print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f' ')
+    # plt.figure()
+    # plt.contourf(solution_phase.s[0, 0], cmap=mpl.cm.Greys)
+    # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+    # plt.clim(0, 1)
+    # plt.colorbar()
+    # plt.show()
 
     if MPI.COMM_WORLD.rank == 0:
         _info["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
@@ -633,9 +614,10 @@ if __name__ == '__main__':
     _info['norms_pf'] = norms_pf
     _info['nb_iterations'] = iterat
 
-    file_data_name = f'iteration_final'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+    file_data_name = f'_iteration_{start + iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-    save_npy(data_folder_path + file_data_name + f'.npy', solution_phase.s[0].mean(axis=0),
+    save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
+             solution_phase.s[0].mean(axis=0),
              tuple(discretization.subdomain_locations_no_buffers),
              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
     if MPI.COMM_WORLD.rank == 0:
@@ -756,4 +738,4 @@ if __name__ == '__main__':
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}' + f'_log.npz', **_info)
+        np.savez(data_folder_path + f'{preconditioner_type}'  + f'_log.npz', **_info)#+ f'_its_{start}_{start + iterat}'

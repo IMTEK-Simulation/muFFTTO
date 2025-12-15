@@ -5,7 +5,6 @@ import numpy as np
 import scipy as sc
 import time
 
-
 from muFFTTO import domain
 from muFFTTO import solvers
 
@@ -446,6 +445,10 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     # (ρ^2 (1 - ρ)^2) = ρ^2 - 2ρ^3 + ρ^4
     integral = rho_squared - 2 * rho_qubed + rho_quartic
 
+    del rho_00
+    del rho_10
+    del rho_01
+    del rho_11
     return integral
 
 
@@ -670,11 +673,11 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
 
     drho_cubed = ((9 / 10) * rho_00.s[0, 0] ** 2 \
                   + (1 / 10) * (
-                              rho_10.s[0, 0] ** 2 + rho_m10.s[0, 0] ** 2 + rho_01.s[0, 0] ** 2 + rho_0m1.s[0, 0] ** 2 +
-                              rho_m11.s[0, 0] ** 2 + rho_1m1.s[0, 0] ** 2) \
+                          rho_10.s[0, 0] ** 2 + rho_m10.s[0, 0] ** 2 + rho_01.s[0, 0] ** 2 + rho_0m1.s[0, 0] ** 2 +
+                          rho_m11.s[0, 0] ** 2 + rho_1m1.s[0, 0] ** 2) \
                   + (2 / 10) * rho_00.s[0, 0] * (
-                              rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
-                              rho_1m1.s[0, 0]) \
+                          rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
+                          rho_1m1.s[0, 0]) \
                   + (1 / 20) * (rho_10.s[0, 0] * rho_01.s[0, 0] + rho_01.s[0, 0] * rho_m11.s[0, 0] + rho_m11.s[0, 0] *
                                 rho_m10.s[0, 0] \
                                 + rho_m10.s[0, 0] * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] + rho_1m1.s[
@@ -686,8 +689,8 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
                             rho_10.s[0, 0] ** 3 + rho_m10.s[0, 0] ** 3 + rho_01.s[0, 0] ** 3 + rho_0m1.s[0, 0] ** 3 +
                             rho_m11.s[0, 0] ** 3 + rho_1m1.s[0, 0] ** 3) \
                     + (6 / 30) * rho_00.s[0, 0] ** 2 * (
-                                rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
-                                rho_1m1.s[0, 0]) \
+                            rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0] + rho_0m1.s[0, 0] + rho_m11.s[0, 0] +
+                            rho_1m1.s[0, 0]) \
                     + (4 / 30) * rho_00.s[0, 0] * (
                             rho_10.s[0, 0] ** 2 + rho_m10.s[0, 0] ** 2 + rho_01.s[0, 0] ** 2 + rho_0m1.s[0, 0] ** 2 +
                             rho_m11.s[0, 0] ** 2 + rho_1m1.s[0, 0] ** 2) \
@@ -700,12 +703,21 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
                                   + rho_m10.s[0, 0] * rho_0m1.s[0, 0] ** 2 + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] ** 2 +
                                   rho_1m1.s[0, 0] * rho_10.s[0, 0] ** 2) \
                     + (2 / 30) * rho_00.s[0, 0] * (
-                                rho_10.s[0, 0] * rho_01.s[0, 0] + rho_01.s[0, 0] * rho_m11.s[0, 0] + rho_m11.s[0, 0] *
-                                rho_m10.s[0, 0] \
-                                + rho_m10.s[0, 0] * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] + rho_1m1.s[
-                                    0, 0] * rho_10.s[0, 0])
+                            rho_10.s[0, 0] * rho_01.s[0, 0] + rho_01.s[0, 0] * rho_m11.s[0, 0] + rho_m11.s[0, 0] *
+                            rho_m10.s[0, 0] \
+                            + rho_m10.s[0, 0] * rho_0m1.s[0, 0] + rho_0m1.s[0, 0] * rho_1m1.s[0, 0] + rho_1m1.s[
+                                0, 0] * rho_10.s[0, 0])
                     ) * Jacobian_det
     output_1nxyz.s[0, 0] = (drho_squared - 2 * drho_cubed + drho_quartic)
+
+    del rho_00
+    del rho_10
+    del rho_m10
+    del rho_01
+    del rho_0m1
+    del rho_m11
+    del rho_1m1
+
     return output_1nxyz
 
 
@@ -2523,7 +2535,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # Output:
     #        df_drho_fnxyz [1,n,x,y,z]
     # -- -- -- -- -- -- -- -- -- -- --
-    info_adjoint_ = {}
+
     # -----    stress difference potential ----- #
     # Gradient of material data with respect to phase field
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -2597,16 +2609,19 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     #                                                    steps=int(10000),
     #                                                    toler=1e-14,
     #                                                    norm_type='rr_rel', )
-    norms_cg_adjoint = dict()
-    norms_cg_adjoint['residual_rr'] = []
-    norms_cg_adjoint['residual_rz'] = []
+    info_adjoint_ = {}
+    if MPI.COMM_WORLD.rank == 0:
+        norms_cg_adjoint = dict()
+        norms_cg_adjoint['residual_rr'] = []
+        norms_cg_adjoint['residual_rz'] = []
 
     def callback_adjoint(it, x, r, p, z, stop_crit_norm):
         # global norms_cg_mech
         norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
         norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
-        norms_cg_adjoint['residual_rr'].append(norm_of_rr)
-        norms_cg_adjoint['residual_rz'].append(norm_of_rz)
+        if MPI.COMM_WORLD.rank == 0:
+            norms_cg_adjoint['residual_rr'].append(norm_of_rr)
+            norms_cg_adjoint['residual_rz'].append(norm_of_rz)
 
     solvers.conjugate_gradients_mugrid(
         comm=discretization.fft.communicator,
@@ -2620,13 +2635,17 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         callback=callback_adjoint,
         # norm_metric=res_norm
     )
-    nb_it = len(norms_cg_adjoint['residual_rr'])
-    info_adjoint_['num_iteration_adjoint'] = nb_it
+
     # info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
-    del norms_cg_adjoint
-    gc.collect()
-    if disp and MPI.COMM_WORLD.rank == 0:
-        print(f' nb_ steps CG adjoint ={nb_it}' + f'residual_rz = {0}'.format(info_adjoint_['residual_rz']))
+    if MPI.COMM_WORLD.rank == 0:
+        nb_it = len(norms_cg_adjoint['residual_rr'])
+        info_adjoint_['num_iteration_adjoint'] = nb_it
+
+        del norms_cg_adjoint
+        gc.collect()
+
+        if disp:
+            print(f' nb_ steps CG adjoint ={nb_it}' + f'residual_rz = {0}'.format(info_adjoint_['residual_rz']))
 
     dadjoin_drho = discretization.get_scalar_field(name='dadjoin_drho_in_sensitivity_stress_and_adjoint_FE_NEW')
     dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
@@ -2828,6 +2847,7 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
                                         phase_field_1nxyz,
                                         p,
                                         eta,
+                                        output_array,
                                         double_well_depth=1):
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
@@ -2882,9 +2902,7 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
                                                             output_1nxyz=dgradrho_drho)
 
     # sum of all parts of df_drho
-    dphase_drho = (dgradrho_drho.s * eta + double_well_depth * ddw_drho.s / eta)
-
-    return dphase_drho
+    output_array.s = (dgradrho_drho.s * eta + double_well_depth * ddw_drho.s / eta)
 
 
 def sensitivity_with_adjoint_problem_FE_weights(discretization,

@@ -18,6 +18,7 @@ plt.rcParams.update({
 })
 
 
+
 N = 32  # , 64, 128
 plt.figure(figsize=[8, 6])
 max_it = 70
@@ -29,9 +30,20 @@ nbit_per_lbfgs_adjoint_G = []
 nbit_per_lbfgs_mech_GJ = []
 nbit_per_lbfgs_adjoint_GJ = []
 
-script_name = 'exp_paper_JG_2D_elasticity_TO' + f'_N_{N}/'
+script_name = 'exp_paper_JG_2D_elasticity_TO_load_init' + f'_N_{N}/'
 preconditioner_type = 'Green_Jacobi'
 file_name = f'_log.npz'
+
+
+
+
+
+
+
+
+
+
+
 
 # _info_log_GJ = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name,
 #                        allow_pickle=True)
@@ -51,7 +63,7 @@ for i in np.arange(max_it):
     plt.colorbar()
     plt.show()
 
-
+quit
 Ns = [16, 32, 64, 128]  # , 64, 128
 plt.figure(figsize=[8, 6])
 max_it = 300
