@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("-n", "--nb_pixels", default="32")
 parser.add_argument("-start", "--first_iteration", default="0")
 parser.add_argument("-stop", "--last_iteration", default="10")
-
+parser.add_argument("-cg_tol", "--cg_tol_exponent", default="6")
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
     "-p", "--preconditioner_type",
@@ -58,12 +58,13 @@ parser.add_argument(
 
 args = parser.parse_args()
 nb_pixels = int(args.nb_pixels)
+cg_tol_exponent = int(args.cg_tol_exponent)
+
 preconditioner_type = args.preconditioner_type
 save_data = args.save_phases
 start = int(args.first_iteration)
 stop = int(args.last_iteration)
 random_init = args.random_init
-
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -238,7 +239,7 @@ s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
 s_stress_and_adjoint_load_case = discretization.get_scalar_field(
     name='s_stress_and_adjoint_load_case')
-cg_setup = {'cg_tol': 1e-5}
+cg_setup = {'cg_tol': 10 ** (-cg_tol_exponent)}
 
 
 def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
@@ -435,8 +436,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 if __name__ == '__main__':
     import os
 
-
-    script_name = os.path.splitext(os.path.basename(__file__))[0] + f'_random_{random_init}'+ f'_N_{number_of_pixels[0]}'
+    script_name = os.path.splitext(os.path.basename(__file__))[
+                      0] + f'_random_{random_init}' + f'_N_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}'
     file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
     figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
@@ -447,9 +448,6 @@ if __name__ == '__main__':
 
         if not os.path.exists(figure_folder_path):
             os.makedirs(figure_folder_path)
-
-
-
 
 
     # # material distribution
@@ -529,6 +527,8 @@ if __name__ == '__main__':
 
     iterat = 0
 
+    _info_iter = {}
+
 
     def my_callback(result_norms):
         global iterat
@@ -542,6 +542,14 @@ if __name__ == '__main__':
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
                 if MPI.COMM_WORLD.size == 1:
                     print(data_folder_path + file_data_name_it + f'.npy')
+
+            if MPI.COMM_WORLD.rank == 0:
+                _info_iter["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
+                _info_iter["residual_rz_mech"] = np.array(info_mech["residual_rz"], dtype=object)
+
+                _info_iter["num_iteration_adjoint"] = np.array(info_adjoint["num_iteration_adjoint"], dtype=object)
+                _info_iter["residual_rz"] = np.array(info_adjoint["residual_rz"], dtype=object)
+                np.savez(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'_log.npz', **_info_iter)
 
         iterat += 1
         # plt.figure()
@@ -557,9 +565,9 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-6,
-                                      ftol=1e-6,
-                                      maxiter=stop-start,
+                                      gtol=1e-7,
+                                      ftol=1e-7,
+                                      maxiter=stop - start,
                                       comm=MPI.COMM_WORLD,
                                       disp=True,
                                       callback=my_callback
@@ -738,4 +746,5 @@ if __name__ == '__main__':
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}'  + f'_log.npz', **_info)#+ f'_its_{start}_{start + iterat}'
+        np.savez(data_folder_path + f'{preconditioner_type}' + f'_log.npz',
+                 **_info)  # + f'_its_{start}_{start + iterat}'
