@@ -6,6 +6,8 @@ import argparse
 import numpy as np
 from mpi4py import MPI
 from NuMPI.IO import save_npy
+from NuMPI.IO import load_npy
+
 
 sys.path.append("/home/martin/Programming/muFFTTO_paralellFFT_test/muFFTTO")
 sys.path.append('../..')  # Add parent directory to path
@@ -20,7 +22,7 @@ parser = argparse.ArgumentParser(
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
 parser.add_argument("-n", "--nb_pixel", default="16")
-parser.add_argument("-exp", "--exponent_elastic", default="10")
+parser.add_argument("-exp", "--exponent_elastic", default="5")
 parser.add_argument(
     "-p", "--preconditioner_type",
     type=str,
@@ -38,8 +40,6 @@ preconditioner_type = args.preconditioner_type
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
-
-
 
 save_results = True
 _info = {}
@@ -101,6 +101,7 @@ II = np.einsum('ij...  ,kl...  ->ijkl...', i, i)
 I4s = (I4 + I4rt) / 2.
 I4d = (I4s - II / 3.)
 
+
 model_parameters_non_linear = {'K': 2,
                                'mu': 1.0,
                                'sig0': 0.5,
@@ -115,19 +116,28 @@ _info['model_parameters_linear'] = model_parameters_linear
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 
-geometry_ID = 'square_inclusion'
-phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                          microstructure_name=geometry_ID,
-                                                          coordinates=discretization.fft.coords)
-# TODO delete
-phase_field.s[0, 0,
-1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
-1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
-1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
-] = 0
+# save
+results_name = (f'bubbles_' + f'dof={nnn}')
+geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_bubles_generate_geom/'
 
-matrix_mask = phase_field.s[0, 0] == 0
-inc_mask = phase_field.s[0, 0] > 0
+inclusions = load_npy(geom_folder_path + results_name + f'.npy',
+                                         tuple(discretization.subdomain_locations_no_buffers),
+                                         tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+
+#
+# geometry_ID = 'square_inclusion'
+# phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+#                                                           microstructure_name=geometry_ID,
+#                                                           coordinates=discretization.fft.coords)
+#
+# phase_field.s[0, 0,
+# 1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
+# 1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
+# 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
+# ] = 0
+
+matrix_mask = inclusions > 0
+inc_mask = inclusions  == 0
 
 
 # phase_field[:26, :, :] = 1.
@@ -160,52 +170,85 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
                                stress_ijqxyz,
                                phase_xyz,
                                **kwargs):
-    # K = 2.  # bulk modulus
-    # sigma = K*trace(small_strain)*I_ij  + sigma_0* (strain_eq/epsilon_0)^n * N_ijkl
+    """
+    Nonlinear elastic (power-law) constitutive model.
+
+    stress = 3*K*strain_vol + (2/3)*sig0*(strain_eq/eps0)^(n-1) * strain_dev
+    """
     K = kwargs['K']
-    sig0 = kwargs['sig0']  # 1e3  # 0.25 #* K  # reference stress # 1e5              # 0.5
-    eps0 = kwargs['eps0']  # = 0.03  # 0.2  # reference strain #    # 0.03                  # 0.1
-    n = kwargs['n']  # 5.0  # 3.0  # hardening exponent  # # 5.0               # 10.0
+    sig0 = kwargs['sig0']
+    eps0 = kwargs['eps0']
+    n = kwargs['n']
 
-    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3  # todo{2 or 3 in 2D }
-    # strain_trace_xyz = np.einsum('ijxyz,ji ->xyz', strain, I) / 3  # todo{2 or 3 in 2D }
+    # Volumetric strain (trace / 3)
+    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3
 
-    # volumetric strain
+    # Volumetric strain tensor
     strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
-    # strain_vol_ijqxyz = np.ndarray(shape=strain.shape)
     strain_vol_ijqxyz.s.fill(0)
     for d in np.arange(discretization.domain_dimension):
         strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
 
-    # deviatoric strain
+    # Deviatoric strain
     strain_dev_ijqxyz = discretization.get_gradient_size_field(name='strain_dev_ijqxyz')
     strain_dev_ijqxyz.s[..., phase_xyz] = strain_ijqxyz.s[..., phase_xyz] - strain_vol_ijqxyz.s[..., phase_xyz]
 
-    # equivalent strain
-    strain_dev_ddot = np.einsum('ijqx...,jiqx...-> qx...', strain_dev_ijqxyz.s[..., phase_xyz],
+    # Equivalent strain
+    strain_dev_ddot = np.einsum('ij...,ji...->...',
+                                strain_dev_ijqxyz.s[..., phase_xyz],
                                 strain_dev_ijqxyz.s[..., phase_xyz])
     strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
 
-    stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
-                                       + 2. / 3. * sig0 / (eps0 ** n) *
-                                       (strain_eq_qx ** (n - 1.)) * strain_dev_ijqxyz.s[..., phase_xyz])
-    #
-    # sig = 3. * K * strain_vol_ijqxyz * (strain_eq_qxyz == 0.).astype(float) + sig * (
-    #         strain_eq_qxyz != 0.).astype(float)
+    # Handle zero strain to avoid division by zero
+    eps_small = 1e-15
+    strain_eq_safe = np.maximum(strain_eq_qx, eps_small)
+    zero_mask = strain_eq_qx < eps_small
 
-    # K4_d = discretization.get_material_data_size_field(name='alg_tangent')
-    strain_dev_dyad = np.einsum('ijqx...,klqx...->ijklqx...', strain_dev_ijqxyz.s[..., phase_xyz],
+    # Stress calculation
+    # sigma = 3*K*eps_vol + (2/3)*sig0*(eps_eq/eps0)^(n-1) * eps_dev
+    prefactor = (2. / 3.) * sig0 * (strain_eq_safe / eps0) ** (n - 1.)
+
+    stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
+                                       + prefactor * strain_dev_ijqxyz.s[..., phase_xyz])
+
+    # For zero strain, stress is just volumetric part
+    # (prefactor -> 0 as strain_eq -> 0 for n > 1, so this is handled)
+
+    # Algorithmic tangent
+    # d(sigma)/d(epsilon) = 3*K*I_vol + d(sigma_dev)/d(epsilon)
+
+    # Deviatoric part of tangent:
+    # d(sigma_dev)/d(eps) = (2/3)*sig0/eps0^(n-1) * [
+    #     (n-1)*eps_eq^(n-3) * (2/3) * eps_dev (x) eps_dev
+    #     + eps_eq^(n-1) * I4_dev
+    # ]
+
+    strain_dev_dyad = np.einsum('ij...,kl...->ijkl...',
+                                strain_dev_ijqxyz.s[..., phase_xyz],
                                 strain_dev_ijqxyz.s[..., phase_xyz])
 
-    K4_d = 2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_qx ** (n - 3.)
-                                           + strain_eq_qx ** (n - 1.) * I4d[..., np.newaxis, np.newaxis])
+    coeff = (2. / 3.) * sig0 / (eps0 ** (n - 1.))
 
-    # threshold = 1e-15
-    # mask = (np.abs(strain_eq_qxyz) > threshold).astype(float)
+    # Term 1: from derivative of eps_eq^(n-1)
+    term1 = (n - 1.) * (strain_eq_safe ** (n - 3.)) * (2. / 3.) * strain_dev_dyad
+
+    # Term 2: from derivative of eps_dev
+    term2 = (strain_eq_safe ** (n - 1.)) * I4d[..., np.newaxis, np.newaxis]
+
+    K4_d = coeff * (term1 + term2)
+
+    # At zero strain, use linear tangent (limit as eps_eq -> 0)
+    # For n > 1, the deviatoric tangent vanishes; for n = 1, it's just sig0/eps0 * I4d
+    if n == 1:
+        K4_d_zero = (2. / 3.) * sig0 / eps0 * I4d[..., np.newaxis, np.newaxis]
+    else:
+        K4_d_zero = 0.
+
+    # Apply zero mask
+    K4_d = np.where(zero_mask, K4_d_zero, K4_d)
 
     tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
-    # * mask  # *(strain_equivalent_qxyz != 0.).astype(float)
-
+   # print()
 
 def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
     #            phase_field = np.zeros([*number_of_pixels])
@@ -452,7 +495,7 @@ for inc in range(ninc):
             tol=1e-5,
             maxiter=20000,
             callback=callback,
-            norm_metric=M_fun_Green
+           # norm_metric=M_fun_Green
         )
 
         nb_it_comb = len(norms['residual_rr'])

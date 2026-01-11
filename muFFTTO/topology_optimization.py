@@ -1112,6 +1112,7 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
 
 def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE(discretization,
                                                                                    material_data_field_ijkl,
+                                                                                   void_material_data_ijkl,
                                                                                    displacement_field_fnxyz,
                                                                                    macro_gradient_field_ijqxyz,
                                                                                    phase_field_1nxyz,
@@ -1143,8 +1144,11 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     # dmaterial_data_field_drho_ijklqxyz_FE.s = material_data_field_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                           np.power(
     #                                               p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
-    dmaterial_data_field_drho_ijklqxyz_FE.s = material_data_field_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    # TODO{WARNING} here is missing Cvoidd becouse of derivateive
+    dmaterial_data_field_drho_ijklqxyz_FE.s = (material_data_field_ijkl - void_material_data_ijkl)[
+                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
                                               np.power(p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
+
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
     # p = 2
@@ -1674,6 +1678,7 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_pixel_OLD(discretiza
 
 def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
                                                                base_material_data_ijkl,
+                                                               void_material_data_ijkl,
                                                                displacement_field_fnxyz,
                                                                macro_gradient_field_ijqxyz,
                                                                phase_field_1nxyz,
@@ -1709,8 +1714,11 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_reusable')
 
-    dmaterial_data_field_drho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * (
+    dmaterial_data_field_drho_ijklqxyz.s = (base_material_data_ijkl-void_material_data_ijkl)[..., np.newaxis, np.newaxis, np.newaxis] * (
             p * np.power(phase_field_at_quad_poits_1qxyz.s[0, 0, :, ...], (p - 1)))
+
+
+
     # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
     # compute strain field from to displacement and macro gradient
@@ -2505,6 +2513,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
 
 def sensitivity_stress_and_adjoint_FE_NEW(discretization,
                                           base_material_data_ijkl,
+                                          void_material_data_ijkl,
                                           displacement_field_inxyz,
                                           adjoint_field_inxyz,
                                           macro_gradient_field_ijqxyz,
@@ -2552,9 +2561,14 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     #                                      np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_sensitivity_stress_and_adjoint_FE_NEW')
-    material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+    # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
+    material_data_field_rho_ijklqxyz.s = (base_material_data_ijkl - void_material_data_ijkl)[
+                                             ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                         void_material_data_ijkl[
+                                             ..., np.newaxis, np.newaxis, np.newaxis]
     # material_data_field_rho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] * (
     #     np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...])
 
@@ -2568,6 +2582,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         target_stress_ij=target_stress_ij,
         actual_stress_ij=actual_stress_ij,
         material_data_field_ijkl=base_material_data_ijkl,
+        void_material_data_ijkl=void_material_data_ijkl,
         displacement_field_fnxyz=displacement_field_inxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         p=p)
@@ -2651,6 +2666,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     dadjoin_drho = partial_derivative_of_adjoint_potential_wrt_phase_field_FE(
         discretization=discretization,
         base_material_data_ijkl=base_material_data_ijkl,
+        void_material_data_ijkl=void_material_data_ijkl,
         displacement_field_fnxyz=displacement_field_inxyz,
         macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
         phase_field_1nxyz=phase_field_1nxyz,
@@ -2844,6 +2860,7 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
 
 def sensitivity_phase_field_term_FE_NEW(discretization,
                                         base_material_data_ijkl,
+                                        void_material_data_ijkl,
                                         phase_field_1nxyz,
                                         p,
                                         eta,
@@ -2876,8 +2893,10 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_reusable')
-    material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+    material_data_field_rho_ijklqxyz.s = (base_material_data_ijkl - void_material_data_ijkl)[
+                                             ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                         void_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis]
 
     # -----    Double well potential ----- #
 

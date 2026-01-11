@@ -69,7 +69,7 @@ plot = False  # plot rediduals
 plot_cg_tol_vs_error = False
 plot_solution_differences = True
 
-store_fields = True
+store_fields = False
 compute = False
 enforce_mean = False
 if compute:

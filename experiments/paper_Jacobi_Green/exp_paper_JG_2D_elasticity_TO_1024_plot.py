@@ -212,7 +212,8 @@ ax_iterations.set_ylim([4 , 2e4])
 # ax_iterations.set_yticks(ticks=[1,1000,2500,5000,7500,10000])
 # ax_iterations.set_yticklabels([1,1000,2500,5000,7500,10000])
 
-
+# ax_iterations.set_yscale('linear')
+# ax_iterations.set_ylim([1 , 1])
 
 #ax_iterations.set_xlabel("L-BFGS optimization process")
 ax_iterations.set_ylabel(r"$\#$ PCG iterations")

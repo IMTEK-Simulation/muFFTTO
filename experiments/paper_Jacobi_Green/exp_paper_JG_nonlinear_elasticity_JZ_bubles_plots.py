@@ -15,7 +15,7 @@ plt.rcParams.update({
 plt.rcParams.update({'font.size': 11})
 plt.rcParams["font.family"] = "Arial"
 
-script_name = 'exp_paper_JG_nonlinear_elasticity_JZ'  # exp_paper_JG_nonlinear_elasticity_JZ
+script_name = 'exp_paper_JG_nonlinear_elasticity_JZ_bubles'  # exp_paper_JG_nonlinear_elasticity_JZ
 folder_name = '../exp_data/'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 
@@ -23,13 +23,13 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 plot_time_vs_dofs = False
 plot_stress_field = False
-plot_data_vs_CG = True
+plot_data_vs_CG = False
 plot_3D_geometry = True
 
 if plot_3D_geometry:
     from muFFTTO import domain
 
-    number_of_pixels = 3*(64,)
+    number_of_pixels = 3*(32,)
     domain_size = [1, 1, 1]
     Nx = number_of_pixels[0]
     Ny = number_of_pixels[1]
@@ -115,59 +115,128 @@ if plot_3D_geometry:
         seed=42
     )
 
-    import matplotlib.pyplot as plt
-    import numpy as np
 
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-
-    def visualize_inclusions_voxels(inclusions, color='blue', edgecolor='k', alpha=0.9, figsize=(8, 8)):
+    def visualize_inclusions_voxels(inclusions, color='blue', edgecolor=None, figsize=(8, 8)):
         """
         Visualize 3D inclusion geometry using voxels.
-
-        Parameters
-        ----------
-        inclusions : ndarray, shape [Nx, Ny, Nz]
-            Boolean array of inclusions
-        color : str
-            Color of the inclusions
-        edgecolor : str
-            Edge color of voxels ('k' for black, None for no edges)
-        alpha : float
-            Transparency (0-1)
-        figsize : tuple
-            Figure size
         """
-        # Create boolean array
-        voxelarray = inclusions.astype(bool)
 
-        # Set colors
-        colors = np.empty(voxelarray.shape, dtype=object)
-        colors[voxelarray] = color
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.patches import Patch
 
-        # Plot
-        fig = plt.figure(figsize=figsize)
+        # Create cutaway version of the data
+        cutoff_x = 2 * inclusions.shape[0] // 3 - 3
+        cutoff_y = 2 * inclusions.shape[1] // 3 - 3
+        cutoff_z = inclusions.shape[2] // 2
+
+        inclusions_cut = inclusions.copy()
+        inclusions_cut[:cutoff_x, : cutoff_y, cutoff_z:] = -1
+
+        # Create boolean arrays
+        voxelarray_inclusions = (inclusions_cut == 1)
+        voxelarray_matrix = (inclusions_cut == 0)
+
+        # Use string colors instead of RGBA - simpler and more reliable
+        colors = np.empty(inclusions_cut.shape, dtype=object)
+        colors[voxelarray_inclusions] = '#d3d3d3'  # Gray for inclusions
+        colors[voxelarray_matrix] = '#1f77b4'  # Blue for matrix
+
+        voxelarray_combined = voxelarray_inclusions | voxelarray_matrix
+
+        # Publication-quality settings
+        plt.rcParams.update({
+            'font.family': 'serif',
+            'font.size': 12,
+            'axes.labelsize': 14,
+            'figure.dpi': 300,
+            'savefig.dpi': 300,
+        })
+
+        fig = plt.figure(figsize=(6, 6))
         ax = fig.add_subplot(projection='3d')
-        ax.voxels(voxelarray, facecolors=colors, edgecolor=edgecolor, alpha=alpha)
 
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('3D Inclusions')
+        # ===== KEY FIX: Remove alpha parameter entirely =====
+        # Don't pass alpha at all, or set shade=False to prevent any transparency effects
+        ax.voxels(voxelarray_combined,
+                  facecolors=colors,
+                  edgecolor='none',  # <-- No edges
+                  linewidth=0,  # <-- Zero line width
+                  shade=False)  # shade=False prevents lighting effects that can look like transparency
 
-        plt.tight_layout()
+        # Axis labels
+        ax.set_xlabel(r'voxel index in $x_1$ direction', labelpad=10)
+        ax.set_ylabel(r'voxel index in $x_2$ direction', labelpad=10)
+        ax.set_zlabel(r'voxel index in $x_3$ direction', labelpad=10)
+
+        ax.view_init(elev=25, azim=-135)
+        ax.set_box_aspect([1, 1, 1])
+        # Clean panes - REMOVE EVERYTHING
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+
+        # Hide pane edges
+        ax.xaxis.pane.set_visible(False)
+        ax.yaxis.pane.set_visible(False)
+        ax.zaxis.pane.set_visible(False)
+
+        # Remove grid completely
+        ax.grid(False)
+
+        # Alternative: Hide gridlines via axinfo
+        ax.xaxis._axinfo['grid']['linewidth'] = 0
+        ax.yaxis._axinfo['grid']['linewidth'] = 0
+        ax.zaxis._axinfo['grid']['linewidth'] = 0
+        # Clean panes
+        # ax.xaxis.pane.fill = False
+        # ax.yaxis.pane.fill = False
+        # ax.zaxis.pane.fill = False
+        #
+        # ax.xaxis.pane.set_edgecolor('gray')
+        # ax.yaxis.pane.set_edgecolor('gray')
+        # ax.zaxis.pane.set_edgecolor('gray')
+        # ax.grid(True, linestyle='--', alpha=0.01)
+
+        # Legend
+        legend_elements = [
+            Patch(facecolor='#d3d3d3', edgecolor='#d3d3d3', label='Inclusions'),
+            Patch(facecolor='#1f77b4', edgecolor='#1f77b4', label='Matrix'),
+        ]
+        ax.legend(handles=legend_elements, loc='upper left')
+
+        # Axis limits
+        ax.set_xlim(0, inclusions.shape[0])
+        ax.set_ylim(0, inclusions.shape[1])
+        ax.set_zlim(0, inclusions.shape[2])
+
+        # Ticks
+        nx, ny, nz = inclusions.shape
+        ax.set_xticks([0, nx // 2, nx])
+        ax.set_yticks([0, ny // 2, ny])
+        ax.set_zticks([0, nz // 2, nz])
+        ax.set_xticklabels(['1', str(nx // 2), str(nx)])
+        ax.set_yticklabels(['1', str(ny // 2), str(ny)])
+        ax.set_zticklabels(['1', str(nz // 2), str(nz)])
+
+        ax.set_box_aspect([
+            inclusions.shape[0],
+            inclusions.shape[1],
+            inclusions.shape[2]
+        ])
+
+        plt.savefig('composite_cutaway.pdf', format='pdf', dpi=1200, bbox_inches='tight', pad_inches=0.4)
+        plt.savefig('composite_cutaway.png', format='png', dpi=1200, bbox_inches='tight', pad_inches=0.4)
         plt.show()
 
-        # Print volume fraction
         vf = inclusions.sum() / inclusions.size
-        print(f"Volume fraction: {vf:.2%}")
+        print(f"Inclusion volume fraction: {vf:.2%}")
+        print(f"Matrix volume fraction: {1 - vf:.2%}")
 
 
     visualize_inclusions_voxels(inclusions)
-
     # Or with custom options
-    visualize_inclusions_voxels(inclusions, color='red', edgecolor=None, alpha=0.7)
+    #visualize_inclusions_voxels(inclusions, color='red', edgecolor=None, alpha=0.7)
 
 if plot_time_vs_dofs:
     # print time vs DOFS
@@ -260,12 +329,12 @@ if plot_data_vs_CG:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx = 2 ** 4#8
+    Nx = 2 ** 7#8
     Ny = Nx
     Nz = Nx
     it_max = 10
-    n_exponents = np.array([10])
-    iterations = np.arange(it_max)  # numbers of grids points
+    n_exponents = np.array([5])
+    iterations = np.arange(it_max) # numbers of grids points
 
     its_G = np.zeros([it_max, len(n_exponents)])
     its_GJ = np.zeros([it_max, len(n_exponents)])
@@ -287,7 +356,7 @@ if plot_data_vs_CG:
                     _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
                                             allow_pickle=True)
 
-            with open(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', 'rb') as f:
+            with open(data_folder_path + f'stress' + f'_exp_{n_exp}_it{iteration_total+1}' + f'.npy', 'rb') as f:
                 magic = f.read(6)
                 print(f"Magic number: {magic}")
 
@@ -303,7 +372,7 @@ if plot_data_vs_CG:
             its_G[iteration_total, j] = _info_final_G.f.nb_it_comb
             norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
             norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
-            info_log_final_G = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+            info_log_final_G = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
 
             preconditioner_type = 'Green_Jacobi'
 
@@ -349,7 +418,7 @@ if plot_data_vs_CG:
             # rhs_inf_GJ.append(
             #     np.linalg.norm(rhs_field_GJ.ravel(), ord=np.inf))
 
-            info_log_final_GJ = np.load(data_folder_path + f'info_log_final.npz', allow_pickle=True)
+            info_log_final_GJ = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
 
     # del strain_fluc_G, strain_total_G, stress_G, rhs_field_G
     # del strain_fluc_GJ, strain_total_GJ, stress_GJ, rhs_field_GJ
@@ -391,7 +460,7 @@ if plot_data_vs_CG:
     gs_global.set_xticks(iterations)
 
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
-                       xy=(iterations[2], its_GJ[2]),
+                       xy=(iterations[1], its_GJ[1]),
                        xytext=(3., 100.),
                        arrowprops=dict(arrowstyle='->',
                                        color='Black',
@@ -404,13 +473,13 @@ if plot_data_vs_CG:
                        xy=(iterations[2], its_G[2]),
                        xytext=(3, 200.),
                        arrowprops=dict(arrowstyle='->',
-                                       color='k',
+                                       color='green',
                                        lw=1,
                                        ls='-'),
                        fontsize=11,
-                       color='k',
+                       color='green',
                        )
-    gs_global.text(0.15,  0.95, r'$ \approx  50 \times 10^{6}$ DOFs ',
+    gs_global.text(0.20,  0.95, r'$ \approx  6 \times 10^{6}$ DOFs ',
                    transform=gs_global.transAxes)
 
     # gs_global.set_ylim(0, 800)
@@ -448,7 +517,7 @@ if plot_data_vs_CG:
     # first iteration
     iteration_total = 1
     i = 0
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
 
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
 
@@ -466,7 +535,7 @@ if plot_data_vs_CG:
     norm = mpl.colors.TwoSlopeNorm(vmin=min_K, vcenter=mid_K, vmax=max_K)
     cmap_ = mpl.cm.cividis  # mpl.cm.seismic
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -500,19 +569,52 @@ if plot_data_vs_CG:
     ax_cbar.set_ylabel(r'$\mathrm{C}_{11}/\mathrm{K}$')
     # ----------------
     iteration_total = 0
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    # voxelino=np.copy(K4_xyz_G)
+    # voxelino[voxelino < 2.5] = 0
+    #
+    # # Create boolean array
+    # voxelarray = voxelino.astype(bool)
+    #
+    # # Set colors
+    # colors = np.empty(voxelarray.shape, dtype=object)
+    # colors[voxelarray] = 'blue'
+    #
+    # # Plot
+    # fig3D = plt.figure(5)
+    # ax_3D = fig3D.add_subplot(projection='3d')
+    # ax_3D.voxels(voxelarray, facecolors=colors, edgecolor=None, alpha=0.9)
+    #
+    # ax_3D.set_xlabel('X')
+    # ax_3D.set_ylabel('Y')
+    # ax_3D.set_zlabel('Z')
+    # ax_3D.set_title('3D Inclusions')
+    #
+    # plt.tight_layout()
+    #plt.show()
+
+    # Print volume fraction
+    # vf = voxelino.sum() / voxelino.size
+    # print(f"Volume fraction: {vf:.2%}")
+
+
+
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+
+
+
+
     ax_geom_0 = fig.add_subplot(gs[0, 1])
     # ax_geom_0 = fig.add_axes([0.1, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
     ax_geom_0.set_aspect('equal')
     ax_geom_0.set_title(fr'$i={iteration_total}$')
-    ax_geom_0.text(0.32, 0.5, r'$N_{z}$=256', transform=ax_geom_0.transAxes)
+    ax_geom_0.text(0.5, 0.4, r'$N_{z}$'+f'={Nx}', transform=ax_geom_0.transAxes)
     ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.1)}}', transform=ax_geom_0.transAxes)
     ax_geom_0.set_aspect('equal')
 
@@ -523,19 +625,20 @@ if plot_data_vs_CG:
     # ax_geom_0.set_xlim([0, Nz])
     # ax_geom_0.set_ylim([0, Nz])
     ax_geom_0.set_box_aspect(1)
+
     # ----------------
 
     # for iteration_total in 6:
     iteration_total = 2
     # iteration_total = 2
     del K4_xyz_G
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
 
     ax_geom_0 = fig.add_subplot(gs[0, 3])
     # ax_geom_0 = fig.add_axes([0.5, 0.75, 0.2, 0.2])
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -557,14 +660,14 @@ if plot_data_vs_CG:
     # for iteration_total in 6:
     iteration_total = 3
     # iteration_total = 2
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[1, 1])
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -584,14 +687,14 @@ if plot_data_vs_CG:
 
     iteration_total = 4
     # iteration_total = 2
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[1, 2])
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
@@ -612,14 +715,14 @@ if plot_data_vs_CG:
 
     iteration_total = 5
     # iteration_total = 2
-    results_name = (f'K4_ijklqyz' + f'_it{iteration_total}')
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[1, 3])
 
-    pcm = ax_geom_0.pcolormesh(np.tile(K4_to_plot_G / K, (1, 1)),
+    pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
                                cmap=cmap_, norm=norm,
                                linewidth=0,
                                rasterized=True)
