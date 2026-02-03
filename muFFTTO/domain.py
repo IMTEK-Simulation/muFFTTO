@@ -2553,6 +2553,68 @@ def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
 
     return C
 
+def get_elastic_tangent(E, nu, mode="3D"):
+    """
+    Returns the elastic constitutive (tangent) matrix C for:
+        mode = "plane_stress"
+        mode = "plane_strain"
+        mode = "3D"
+
+    Parameters
+    ----------
+    E : float
+        Young's modulus
+    nu : float
+        Poisson's ratio
+    mode : str
+        "plane_stress", "plane_strain", or "3D"
+
+    Returns
+    -------
+    C : ndarray
+        Elastic tangent matrix
+    """
+
+    # Lame parameters
+    lam = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+    mu  = E / (2 * (1 + nu))
+
+    if mode.lower() == "3d":
+        # 6x6 matrix in Voigt notation
+        C = np.array([
+            [lam + 2*mu, lam,        lam,        0,      0,      0],
+            [lam,        lam + 2*mu, lam,        0,      0,      0],
+            [lam,        lam + 2*mu, lam + 2*mu, 0,      0,      0],
+            [0,          0,          0,          mu,     0,      0],
+            [0,          0,          0,          0,      mu,     0],
+            [0,          0,          0,          0,      0,      mu]
+        ])
+        return C
+
+    elif mode.lower() == "plane_strain":
+        # 3x3 matrix (σxx, σyy, σxy)
+        C = np.array([
+            [lam + 2*mu, lam,        0],
+            [lam,        lam + 2*mu, 0],
+            [0,          0,          mu]
+        ])
+        return C
+
+    elif mode.lower() == "plane_stress":
+        # Plane stress uses reduced constitutive matrix
+        C11 = E / (1 - nu**2)
+        C12 = nu * C11
+        C66 = E / (2 * (1 + nu))
+
+        C = np.array([
+            [C11, C12, 0],
+            [C12, C11, 0],
+            [0,   0,   C66]
+        ])
+        return C
+
+    else:
+        raise ValueError("mode must be 'plane_stress', 'plane_strain', or '3D'")
 
 def compute_stress_difference(actual_stress, target_stress):
     stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
@@ -2672,3 +2734,6 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
             quad_points_weights[17] = 0.0558144204830443
 
         return quad_points_coord, quad_points_weights
+
+
+

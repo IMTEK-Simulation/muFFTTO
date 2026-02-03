@@ -24,7 +24,8 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 plot_time_vs_dofs = False
 plot_stress_field = False
 plot_data_vs_CG = False
-plot_3D_geometry = True
+plot_data_vs_CG_3D= True
+plot_3D_geometry = False
 
 if plot_3D_geometry:
     from muFFTTO import domain
@@ -314,6 +315,592 @@ if plot_time_vs_dofs:
 
     plt.show()
 
+if plot_data_vs_CG_3D:
+    # print time vs DOFS
+    its_G = []
+    its_GJ = []
+    stress_diff_norm = []
+    strain_fluc_norm = []
+    strain_total_norm = []
+    diff_rhs_norm = []
+    norm_rhs_G = []
+    norm_rhs_GJ = []
+    rhs_inf_G = []
+    rhs_inf_GJ = []
+    norm_newrton_stop_G = []
+    norm_newrton_stop_GJ = []
+
+    Nx =200 # 2 ** 7# 8
+    Ny = Nx
+    Nz = Nx
+    it_max = 10
+    n_exponents = np.array([5])
+    iterations = np.arange(it_max)  # numbers of grids points
+
+    its_G = np.zeros([it_max, len(n_exponents)])
+    its_GJ = np.zeros([it_max, len(n_exponents)])
+
+    for j in np.arange(len(n_exponents)):
+        n_exp = n_exponents[j]
+        for iteration_total in iterations:
+
+            preconditioner_type = 'Green'
+
+            data_folder_path = (
+                    file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                    + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max:
+                if Nx == 256:
+                    _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
+
+                else:
+                    _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                            allow_pickle=True)
+
+            # with open(data_folder_path + f'stress' + f'_exp_{n_exp}_it{iteration_total + 1}' + f'.npy', 'rb') as f:
+            #     magic = f.read(6)
+            #     print(f"Magic number: {magic}")
+
+            # strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+            #                         allow_pickle=True)
+            # strain_total_G = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+            #                          allow_pickle=True)
+            # stress_G = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy',
+            #                    allow_pickle=True)  # , allow_pickle=True
+
+            # rhs_field_G = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+
+            its_G[iteration_total, j] = _info_final_G.f.nb_it_comb
+            norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
+            norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
+            info_log_final_G = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+
+            preconditioner_type = 'Green_Jacobi'
+
+            data_folder_path = (
+                    file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                    + f'_{preconditioner_type}' + '/')
+            if iteration_total < it_max:
+                if Nx == 256:
+                    _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
+                                             allow_pickle=True)
+
+                else:
+                    _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                             allow_pickle=True)
+            # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+            # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+            #                          allow_pickle=True)
+            # strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+            #                           allow_pickle=True)
+            # rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+
+            its_GJ[iteration_total, j] = _info_final_GJ.f.nb_it_comb
+            norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
+            norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
+            # diff_stress = stress_G - stress_GJ
+            # stress_diff_norm.append(
+            #      np.linalg.norm(diff_stress.ravel(), ord=np.inf))  # / np.linalg.norm(stress_G))
+            print(_info_final_G.f.norm_rr[0])
+
+            # diff_strain_fluc = strain_fluc_G - strain_fluc_GJ
+            # strain_fluc_norm.append(
+            #     np.linalg.norm(diff_strain_fluc.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+            print(_info_final_GJ.f.norm_rr[0])
+            # diff_strain_total = strain_total_G - strain_total_GJ
+            # strain_total_norm.append(
+            #    np.linalg.norm(diff_strain_total.ravel(), ord=np.inf))  # / _info_final_GJ.f.norm_En)
+
+            # diff_rhs = rhs_field_G - rhs_field_GJ
+            # diff_rhs_norm.append(
+            #    np.linalg.norm(diff_rhs.ravel()))
+            # rhs_inf_G.append(
+            #     np.linalg.norm(rhs_field_G.ravel(), ord=np.inf))
+            # rhs_inf_GJ.append(
+            #     np.linalg.norm(rhs_field_GJ.ravel(), ord=np.inf))
+
+            info_log_final_GJ = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+
+    # del strain_fluc_G, strain_total_G, stress_G, rhs_field_G
+    # del strain_fluc_GJ, strain_total_GJ, stress_GJ, rhs_field_GJ
+    # del diff_stress
+
+    # data = np.load('large_3d_array.npy', mmap_mode='r')
+    K = 2  # _info_final_G.f.model_parameters_linear
+    its_G = np.array(its_G)
+    its_GJ = np.array(its_GJ)
+    strain_0_norm = np.array(np.atleast_1d(_info_final_GJ.f.norm_En))
+    # stress_diff_norm = np.array(stress_diff_norm)
+    # strain_fluc_norm = np.array(strain_fluc_norm)
+    # strain_total_norm = np.array(strain_total_norm)
+    # diff_rhs_norm = np.array(diff_rhs_norm)
+
+    norm_rhs_t_G = np.concatenate((np.array(np.atleast_1d(_info_final_G.f.rhs_t_norm)), np.array(norm_rhs_G)))
+    norm_rhs_t_GJ = np.concatenate((np.array(np.atleast_1d(_info_final_GJ.f.rhs_t_norm)), np.array(norm_rhs_GJ)))
+
+    fig = plt.figure(figsize=(8.3, 4.0))
+    gs = fig.add_gridspec(2, 5, hspace=0.2, wspace=0.1, width_ratios=[1, 1, 1, 1, 0.05],
+                          height_ratios=[1, 1.])
+
+    gs_global = fig.add_subplot(gs[:, 0])
+
+    gs_global.plot(iterations, its_G[:, 0], 'g-', marker='x', label='Green')
+    gs_global.plot(iterations, its_GJ[:, 0], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+
+    # gs_global.plot(iterations, its_G[:, -2], 'g-', marker='x', label='Green')
+    # gs_global.plot(iterations, its_GJ[:, -2], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+    #
+    # gs_global.plot(iterations, its_G[:, -1], 'g-', marker='x', label='Green')
+    # gs_global.plot(iterations, its_GJ[:, -1], 'k-', marker='o', markerfacecolor='none', label='Green-Jacobi')
+
+    gs_global.set_xlabel(r'Newton iteration -  $i$')
+    gs_global.set_ylabel(r'$\#$ of PCG iterations')
+    # gs_global.legend(loc='best')
+    gs_global.set_xlim(-0.05, iterations[-1] + .05)
+    gs_global.set_ylim(0., 750)
+    gs_global.set_xticks(iterations)
+
+    gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
+                       xy=(iterations[1], its_GJ[1]),
+                       xytext=(3., 200.),
+                       arrowprops=dict(arrowstyle='->',
+                                       color='Black',
+                                       lw=1,
+                                       ls='-'),
+                       fontsize=11,
+                       color='Black',
+                       )
+    gs_global.annotate(text=f'Green',  # \n contrast = 100
+                       xy=(iterations[2], its_G[2]),
+                       xytext=(3, 400.),
+                       arrowprops=dict(arrowstyle='->',
+                                       color='green',
+                                       lw=1,
+                                       ls='-'),
+                       fontsize=11,
+                       color='green',
+                       )
+    gs_global.text(0.20, 0.95, r'$ \approx 24 \times 10^{6}$ DOFs ',
+                   transform=gs_global.transAxes)
+
+
+
+    # plot mat data 0 Newton iteration
+    ijkl = (0, 0, 0, 0)
+    cut_to_plot = Nz // 2 - 1
+
+    preconditioner_type = 'Green'
+    data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        + f'_{preconditioner_type}' + '/')
+
+    # first iteration
+    iteration_total = 1
+    i = 0
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    # Normalize values
+    # idx = np.unravel_index(np.argmax(values), values.shape)
+    values = np.copy(K4_xyz_G) / K
+    # Calculate normalization parameters
+    max_K =10#values.max() #10#
+    min_K =1# values.min()
+    mid_K =1.66#max_K/2#  values.mean() #1.66
+
+    # Set up colormap and normalization
+    norm = mpl.colors.TwoSlopeNorm(vmin=min_K, vcenter=mid_K, vmax=max_K)
+
+    def plot_voxels_colormap(fig, gs_position, K4_xyz_G, K, Nz, iteration_total,
+                             cmap='cividis', cutaway_type='half_z',
+                             label='(b.2)', cbar_gs_position=None, norm=norm,
+                             cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$',
+                             keep_ticks=False   ):
+        """
+        Plot 3D voxels with colormap based on continuous values.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            Figure object
+        gs_position : tuple or GridSpec index
+            Position in gridspec, e.g., gs[0, 2]
+        K4_xyz_G : ndarray, shape [Nx, Ny, Nz]
+            3D array of values to plot
+        K : float
+            Normalization constant
+        Nz : int
+            Size in z direction
+        iteration_total : int
+            Iteration number for title
+        cmap : str or Colormap
+            Colormap to use (default: 'cividis')
+        cutaway_type : str
+            Type of cutaway: 'half_z', 'quarter', 'none'
+        label : str
+            Subplot label, e.g., '(b.2)'
+        cbar_gs_position : GridSpec index or None
+            Position for colorbar, e.g., gs[0, 4]. If None, no colorbar is added.
+        cbar_label : str
+            Label for colorbar
+
+        Returns
+        -------
+        ax : Axes3D
+            The 3D axes object
+        cbar : Colorbar or None
+            The colorbar object (if cbar_gs_position is provided)
+        """
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        ax = fig.add_subplot(gs_position, projection='3d')
+
+        # Normalize values
+        values = np.copy(K4_xyz_G.transpose()) / K
+
+        # Get dimensions
+        nx, ny, nz = values.shape
+
+        ax.dist = 2  # Lower value = closer/larger plot (default is ~10)
+
+        # Remove padding around axes
+        ax.margins(0)
+
+        # Tighten the axis bounds
+        ax.autoscale_view(tight=True)
+
+        cmap_obj = mpl.cm.get_cmap(cmap) if isinstance(cmap, str) else cmap
+
+        # Create mask for cutaway (True = show, False = hide)
+        mask_cut = np.ones(values.shape, dtype=bool)
+
+        if cutaway_type == 'half_z':
+#            cutoff_z = nz // 2
+#            mask_cut[:, :, cutoff_z:] = False
+            cutoff_z =  74#nz // 2
+            mask_cut[:-10, :-10, cutoff_z:] = False
+            mask_cut[  :-9, :-9, cutoff_z:] = False
+            #mask_cut[:-9, :, cutoff_z:] = False
+            mask_cut[1: , 1: , :cutoff_z-1]= False
+        elif cutaway_type == 'quarter':
+            cutoff_x = 2 * nx // 3 - 3
+            cutoff_y = 2 * ny // 3 - 3
+            cutoff_z = nz // 2
+            mask_cut[:cutoff_x, :cutoff_y, cutoff_z:] = False
+        elif cutaway_type == 'corner':
+            cutoff_x = nx // 2
+            cutoff_y = ny // 2
+            mask_cut[:cutoff_x, :cutoff_y, :] = False
+        # 'none' = no cutaway, show all voxels
+
+        # Convert values to colors using colormap
+        colors = cmap_obj(norm(values))  # Returns RGBA array [Nx, Ny, Nz, 4]
+
+        # Plot voxels with colormap colors
+        ax.voxels(mask_cut,
+                  facecolors=colors,
+                 # edgecolor='none',
+                  edgecolors=colors,  # Same as face colors
+                  linewidth=0,
+                  shade=False)
+
+        # View and aspect
+        ax.view_init(elev=35, azim=-135)
+        ax.set_box_aspect([nx, ny, nz])
+
+
+        # Clean panes and grid - SAFE VERSION
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+
+        ax.xaxis.pane.set_edgecolor('none')
+        ax.yaxis.pane.set_edgecolor('none')
+        ax.zaxis.pane.set_edgecolor('none')
+
+        # Remove grid
+        ax.grid(False)
+
+        # Make grid lines transparent (safer than setting linewidth to 0)
+        ax.xaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+        ax.yaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+        ax.zaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+
+
+
+        # Axis limits
+        ax.set_xlim(0, nx)
+        ax.set_ylim(0, ny)
+        ax.set_zlim(0, nz)
+
+        # Ticks: First, Middle, Last
+        if keep_ticks:
+            ax.set_xticks([0, nx // 2, nx])
+            ax.set_yticks([0, ny // 2, ny])
+            ax.set_zticks([0, nz // 2, nz])
+            ax.set_xticklabels(['1', str(nx // 2), str(nx)])
+            ax.set_yticklabels(['1', str(ny // 2), str(ny)])
+            ax.set_zticklabels(['1', str(nz // 2), str(nz)])
+            ax.zaxis._axinfo['juggled'] = (1, 2, 0)  # Change axis position
+            # Axis labels
+            ax.set_xlabel(r'$x_1$', labelpad=3)
+            ax.set_ylabel(r'$x_2$', labelpad=3)
+            ax.set_zlabel(f'voxel index in \n '+ r'$x_3$ dircetion', labelpad=5)
+        else:
+            ax.set_xticks([ ])
+            ax.set_yticks([ ])
+            ax.set_zticks([])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.set_zticklabels([])
+            ax.zaxis._axinfo['juggled'] = (1, 2, 0)  # Change axis position
+
+
+
+
+
+        # Title and label
+        ax.set_title(fr'$i={iteration_total}$')
+        if label:
+            ax.text2D(0.0, 1.05, rf'\textbf{{{label}}}', transform=ax.transAxes)
+
+        # Add colorbar if position is provided
+        cbar = None
+        if cbar_gs_position is not None:
+            ax_cbar = fig.add_subplot(cbar_gs_position)
+            sm = mpl.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+            sm.set_array([])
+
+            cbar = plt.colorbar(sm, location='left', cax=ax_cbar)
+            cbar.set_ticks([min_K, mid_K, max_K])
+            cbar.set_ticklabels([f'{min_K:.1f}', f'{mid_K:.1f}', f'{max_K:.1f}'])
+            ax_cbar.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+            cbar.ax.yaxis.set_ticks_position('right')
+            cbar.ax.yaxis.set_label_position('right')
+            ax_cbar.set_ylabel(cbar_label)
+
+        return ax, cbar, cmap
+
+
+    # ===== USAGE EXAMPLE =====
+
+    # Call the function
+    ax_geom_0, cbar, cmap_  = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[0, 2],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label='(b.2)',
+        norm=norm,
+        cbar_gs_position=gs[0, 4],
+        cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )
+
+    gs_global.text(-2.3, 1.05, rf'\textbf{{(a)}}', transform=ax_geom_0.transAxes)
+    #ax.text2D(0.0, 1.05, rf'\textbf{{{label}}}', transform=ax.transAxes)
+    # Add additional text if needed
+    # gs_global.text(-2.3, 1.05, rf'\textbf{{(a)}}', transform=ax_geom_0.transAxes)
+
+    # ----------------
+    iteration_total = 0
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+
+    # K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    #
+    # ax_geom_0 = fig.add_subplot(gs[0, 1])
+    # # ax_geom_0 = fig.add_axes([0.1, 0.75, 0.2, 0.2])
+    # pcm = ax_geom_0.pcolormesh(np.tile(np.transpose(K4_to_plot_G) / K, (1, 1)),
+    #                            cmap=cmap_, norm=norm,
+    #                            linewidth=0,
+    #                            rasterized=True)
+    # ax_geom_0.set_aspect('equal')
+    # ax_geom_0.set_title(fr'$i={iteration_total}$')
+    # ax_geom_0.text(0.5, 0.4, r'$N_{z}$' + f'={Nx}', transform=ax_geom_0.transAxes)
+    # ax_geom_0.text(-0., 1.05, rf'\textbf{{(b.1)}}', transform=ax_geom_0.transAxes)
+    # ax_geom_0.set_aspect('equal')
+    #
+    # ax_geom_0.set_xticks([])
+    # ax_geom_0.set_xticklabels([])
+    # ax_geom_0.set_yticks([])
+    # ax_geom_0.set_yticklabels([])
+    # # ax_geom_0.set_xlim([0, Nz])
+    # # ax_geom_0.set_ylim([0, Nz])
+#    ax_geom_0.set_box_aspect(1)
+
+    # Call the function
+    ax_geom_0  = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[0, 1],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label='(b.1)',
+        norm=norm,
+       #cbar_gs_position=gs[0, 4],
+       # cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )[0]
+    # ----------------
+
+    # for iteration_total in 6:
+    iteration_total = 2
+    # iteration_total = 2
+    del K4_xyz_G
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+
+    #ax_geom_0 = fig.add_subplot(gs[0, 3])
+    # Call the function
+    ax_geom_0  = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[0, 3],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label='(b.3)',
+        norm=norm,
+       #cbar_gs_position=gs[0, 4],
+       # cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )[0]
+    # ----------------
+    # for iteration_total in 6:
+    iteration_total = 3
+    # iteration_total = 2
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+   # K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
+    # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
+    ax_geom_0 = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[1, 1],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label=f'(b.{iteration_total})',
+        norm=norm,
+        # cbar_gs_position=gs[0, 4],
+        # cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )[0]
+
+    iteration_total = 4
+    # iteration_total = 2
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+
+    ax_geom_0 = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[1, 2],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label=f'(b.{5})',
+        norm=norm,
+        # cbar_gs_position=gs[0, 4],
+        # cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )[0]
+
+    iteration_total = 5
+    # iteration_total = 2
+    results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+    del K4_xyz_G
+    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    ax_geom_0 = plot_voxels_colormap(
+        fig=fig,
+        gs_position=gs[1, 3],
+        K4_xyz_G=K4_xyz_G,
+        K=K,
+        Nz=Nz,
+        iteration_total=iteration_total,
+        cmap='cividis',
+        cutaway_type='half_z',
+        label=f'(b.{6})',
+        norm=norm,
+        keep_ticks=True,
+        # cbar_gs_position=gs[0, 4],
+        # cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$'
+    )[0]
+    #ax_geom_0.yaxis.set_ticks_position('right')
+    #ax_geom_0.yaxis.set_label_position('right')
+
+    # axis for cross sections
+    add_stress_plot = False
+    if add_stress_plot:
+        #### STRESSES
+        ax_cross = fig.add_axes([0.65, 0.2, 0.2, 0.2])
+        iteration_total = 6
+        preconditioner_type = 'Green'
+
+        data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                            + f'_{preconditioner_type}' + '/')
+
+        stress_G = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+                                allow_pickle=True)
+
+        preconditioner_type = 'Jacobi_Green'
+
+        data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                            + f'_{preconditioner_type}' + '/')
+        stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+        strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+                                 allow_pickle=True)
+
+        ### compute the difference
+        ij = (0, 0)
+
+        stress_diff = abs((stress_GJ[ij + (..., 0)] - stress_G[ij + (..., 0)]))  # / stress_G[ij + (..., 0)])
+
+        max_K = stress_diff.max()
+        min_K = 0  # stress_diff.min()
+
+        pcm = ax_cross.pcolormesh(np.tile(stress_diff, (1, 1)),
+                                  cmap=cmap_,
+                                  # norm=norm,
+                                  linewidth=0,
+                                  rasterized=True)
+        ax_cross.set_aspect('equal')
+
+        ax_cbar2 = fig.add_axes([0.9, 0.2, 0.01, 0.3])
+        cbar = plt.colorbar(pcm, location='left', cax=ax_cbar2)
+        cbar.set_ticks(ticks=[0, max_K])  # 0,min_K,
+        # cbar.set_ticklabels([f'{min_K:.0f}', f'{0:.0f}', f'{max_K:.0f}'])
+        cbar.set_ticklabels(
+            ['0',
+             f'$10^{{{int(np.log10(max_K))}}}$'])  # f'$10^{{{-int(np.log10(abs(min_K)))}}}$', f'$10^{{{int(np.log10(1))}}}$',
+        ax_cbar2.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+        cbar.ax.yaxis.set_ticks_position('right')  # move ticks to right
+        cbar.ax.yaxis.set_label_position('right')  # move label to right
+        ax_cbar2.set_ylabel(fr'$(\sigma^{{G}}_{{11}}-\sigma^{{GJ}}_{{11}})  $')
+
+    fig.tight_layout()
+    fname = f'fig_3D_{Nx}_exp_{n_exponents[0]}' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
+    plt.savefig('fig_3D.pdf', format='pdf', dpi=1200, bbox_inches='tight', pad_inches=0.1)
+    plt.savefig('fig_3D.png', format='png', dpi=1200, bbox_inches='tight', pad_inches=0.1)
+    plt.show()
+
 if plot_data_vs_CG:
     # print time vs DOFS
     its_G = []
@@ -329,7 +916,7 @@ if plot_data_vs_CG:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx = 2 ** 7#8
+    Nx = 2 ** 4#8
     Ny = Nx
     Nz = Nx
     it_max = 10

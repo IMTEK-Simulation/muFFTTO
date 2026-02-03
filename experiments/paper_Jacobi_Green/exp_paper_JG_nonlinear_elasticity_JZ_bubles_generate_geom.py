@@ -37,11 +37,13 @@ domain_size = [1, 1, 1]
 # Variables to be set up
 
 max_size=12
-for nb_pixels_power in np.arange(6, max_size + 1):
-    nb_laminates = 2 ** nb_pixels_power
+for nb_pixels_power in np.arange(12, max_size + 1):
 
+   # nb_laminates = 2 ** nb_pixels_power
+    nb_laminates=200
     #
-    number_of_pixels = (2 ** nb_pixels_power, 2 ** nb_pixels_power, 2 ** nb_pixels_power)
+   # number_of_pixels = (2 ** nb_pixels_power, 2 ** nb_pixels_power, 2 ** nb_pixels_power)
+    number_of_pixels =  (nb_laminates, nb_laminates, nb_laminates)
 
     geometry_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                             problem_type=problem_type)

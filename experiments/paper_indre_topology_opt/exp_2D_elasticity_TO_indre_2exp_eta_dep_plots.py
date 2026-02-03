@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import os
 
 from muFFTTO import domain
 from muFFTTO import topology_optimization
@@ -35,7 +36,7 @@ def make_parallelograms(displ ):
 # Create a random 2D array with 0 and 1
 # The probabilities can be adjusted to get a different distribution of bubbles (0) and matrix (1)
 array = np.random.choice([0, 1], size=(rows, cols), p=[0.5, 0.5])  # equal probability for 0 and 1
-plot_figs = True
+plot_figs = False
 plot_movie = True
 domain_size = [1, 1]
 problem_type = 'elasticity'
@@ -56,109 +57,106 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     poison_target = ration
     plt.clf()
     for w_mult in weights:  # np.arange(0.1, 1., 0.1):# [1]:
-        etas=[0.005,0.01,0.02,0.05]#np.concatenate([np.arange(0.005, 0.03, 0.005)])
-        for eta_mult in etas :  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
-            energy_objective = False
-            print(w_mult, eta_mult)
-            pixel_size = 0.0078125
-            # eta = 0.03125  # eta_mult * pixel_size
-            E_target_0 = 0.3
-            N = 64
-            cores = 6
-            p = 2
-            nb_load_cases = 3
-            random_initial_geometry = True
-            bounds = False
-            optimizer = 'lbfg'  # adam2
-            script_name = 'exp_2D_elasticity_TO_indre_2exp'
+        etas= [0.005,0.01,0.02,0.05]#:# [0.005,0.01,0.02,0.05]#np.concatenate([np.arange(0.005, 0.03, 0.005)])
+        for eta  in etas :  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
+            random_init=False
+            cg_tol_exponent=8
+            soft_phase_exponent=5
+            N = 16
+            script_name = 'exp_paper_TO_exp_2_square'+ f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 
-            # name = (            f'{optimizer}_muFFTTO_elasticity_{script_name}_N{N}_E_target_0.15_Poisson_-0.5_Poisson0_0.2_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+
+            preconditioner_type = "Green_Jacobi"
+            file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+            data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+            figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
             # name = (
-            #     f'{optimizer}_muFFTTO_elasticity_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-            name = (
-            f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+            # f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
-            if plot_figs:
-                phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
-
-                my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                                  problem_type=problem_type)
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=(N, N),
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-                f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                                     phase_field_1nxyz=np.expand_dims(
-                                                                                         np.expand_dims(phase_field,
-                                                                                                        axis=0), axis=0),
-                                                                                     eta=eta_mult,
-                                                                                     double_well_depth=1)
-
-                xopt = np.load('../exp_data/'+ name + f'xopt_log.npz', allow_pickle=True)
-
-                src = './figures/'  # source folder\
-                fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-
-                fig = plt.figure(figsize=(11, 4.5))
-                gs = fig.add_gridspec(1, 2)
-                               # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-                #            plt.clim(0, 1)
-
-
-                ax1 = fig.add_subplot(gs[0, 1])
-
-                # fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-                # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
-                #ax1.hlines(y=N//2, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
-                ax1.plot([0, 1], [0, 1], color='black', linestyle='--', linewidth=1.,transform=ax1.transAxes)
-                nb_reps = 1
-                roll_x = 0
-                roll_y = -25
-                #phase_field=phase_field**2
-                phase_field = np.roll(phase_field, roll_y, axis=0)
-                phase_field = np.roll(phase_field, roll_x, axis=1)
-                contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)), cmap='jet', vmin=0, vmax=1)
-
-                # Colorbar
-                divider = make_axes_locatable(ax1)
-
-                ax_cb = divider.new_horizontal(size="5%", pad=0.05)
-                fig.add_axes(ax_cb)
-
-                # cbar = fig.colorbar(contour, cax=ax_cb)
-
-                cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
-                                    ticks=np.arange(0, 1.2, 0.2))
-                cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
-
-                ax1.set_aspect('equal')
-                ax1.set_xlabel(r'Position x')
-                ax1.set_ylabel(r'Position y')
-                ax1.set_xlim(0, N-1)
-                ax1.set_ylim(0, N-1)
-                ax1.set_yticklabels([])
-                ax1.set_xticklabels([])
-                # plot cross section
-                ax0 = fig.add_subplot(gs[0, 0])
-                #ax0.plot(phase_field[N // 2, :])
-                ax0.plot(np.diag(phase_field))
-
-                ax0.hlines(y=1, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
-                ax0.hlines(y=0, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
-
-                ax0.set_title(r'Cross section at y=20')
-                # ax0.set_aspect('equal')
-                ax0.set_xlabel(r'Position x')
-                ax0.set_xlim(0, N)
-                ax0.set_ylim(-0.1, 1.1)
-
-                fname = src + f'{w_mult:.2f}' + fig_data_name + '{}'.format('.png')
-                print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
-                # plt.savefig(fname, bbox_inches='tight')
-
-                #plt.show()
-                #f_sigmas.append(np.sum(f_sigma))
-                #f_pfs.append(f_phase_field)
+            name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_log.npz'
+            xopt = np.load(name, allow_pickle=True)
+            #
+            # if plot_figs:
+            #     phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
+            #
+            #     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+            #                                       problem_type=problem_type)
+            #     discretization = domain.Discretization(cell=my_cell,
+            #                                            nb_of_pixels_global=(N, N),
+            #                                            discretization_type=discretization_type,
+            #                                            element_type=element_type)
+            #     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
+            #                                                                          phase_field_1nxyz=np.expand_dims(
+            #                                                                              np.expand_dims(phase_field,
+            #                                                                                             axis=0), axis=0),
+            #                                                                          eta=eta_mult,
+            #                                                                          double_well_depth=1)
+            #
+            #     xopt = np.load('../exp_data/'+ name + f'xopt_log.npz', allow_pickle=True)
+            #
+            #     src = './figures/'  # source folder\
+            #     fig_data_name = f'muFFTTO_{name}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+            #
+            #     fig = plt.figure(figsize=(11, 4.5))
+            #     gs = fig.add_gridspec(1, 2)
+            #                    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+            #     #            plt.clim(0, 1)
+            #
+            #
+            #     ax1 = fig.add_subplot(gs[0, 1])
+            #
+            #     # fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+            #     # plt.contourf(np.tile(phase_field, (3, 3)), cmap=mpl.cm.Greys)
+            #     #ax1.hlines(y=N//2, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
+            #     ax1.plot([0, 1], [0, 1], color='black', linestyle='--', linewidth=1.,transform=ax1.transAxes)
+            #     nb_reps = 1
+            #     roll_x = 0
+            #     roll_y = -25
+            #     #phase_field=phase_field**2
+            #     phase_field = np.roll(phase_field, roll_y, axis=0)
+            #     phase_field = np.roll(phase_field, roll_x, axis=1)
+            #     contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)), cmap='jet', vmin=0, vmax=1)
+            #
+            #     # Colorbar
+            #     divider = make_axes_locatable(ax1)
+            #
+            #     ax_cb = divider.new_horizontal(size="5%", pad=0.05)
+            #     fig.add_axes(ax_cb)
+            #
+            #     # cbar = fig.colorbar(contour, cax=ax_cb)
+            #
+            #     cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=contour.norm, cmap=contour.cmap), cax=ax_cb,
+            #                         ticks=np.arange(0, 1.2, 0.2))
+            #     cbar.ax.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
+            #
+            #     ax1.set_aspect('equal')
+            #     ax1.set_xlabel(r'Position x')
+            #     ax1.set_ylabel(r'Position y')
+            #     ax1.set_xlim(0, N-1)
+            #     ax1.set_ylim(0, N-1)
+            #     ax1.set_yticklabels([])
+            #     ax1.set_xticklabels([])
+            #     # plot cross section
+            #     ax0 = fig.add_subplot(gs[0, 0])
+            #     #ax0.plot(phase_field[N // 2, :])
+            #     ax0.plot(np.diag(phase_field))
+            #
+            #     ax0.hlines(y=1, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
+            #     ax0.hlines(y=0, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
+            #
+            #     ax0.set_title(r'Cross section at y=20')
+            #     # ax0.set_aspect('equal')
+            #     ax0.set_xlabel(r'Position x')
+            #     ax0.set_xlim(0, N)
+            #     ax0.set_ylim(-0.1, 1.1)
+            #
+            #     fname = src + f'{w_mult:.2f}' + fig_data_name + '{}'.format('.png')
+            #     print(('create figure: {}'.format(fname)))  # axes[1, 0].legend(loc='upper right')
+            #     # plt.savefig(fname, bbox_inches='tight')
+            #
+            #     #plt.show()
+            #     #f_sigmas.append(np.sum(f_sigma))
+            #     #f_pfs.append(f_phase_field)
 
     fig = plt.figure(figsize=(11, 4.5))
     gs = fig.add_gridspec(2, 5, width_ratios=[0.1,1,1, 1, 1])
@@ -166,100 +164,142 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     colors = ['red', 'blue', 'green', 'orange', 'purple']
     linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
     letter_offset=-0.18
-
-    for i in np.arange(4):  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
+    etas = [0.005,0.01,0.02,0.05]#
+    cg_tol_exponent = 8
+    soft_phase_exponent = 5
+    N = 128
+    for i in np.arange(0,len(etas)):  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
         eta_mult = etas[i]
-        name = (
-            f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
-        phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
+        weight=1.
+        script_name = 'exp_paper_TO_exp_2_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
+
+        preconditioner_type = "Green_Jacobi"
+        file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
+        data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+        figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+        if not os.path.exists(figure_folder_path):
+            os.makedirs(figure_folder_path)
+        # name = (
+        # f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+
+        #name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}'+ f'_w_{weight}'  +'_final' + f'.npy'
+        name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}'  +'_final' + f'.npy'
+
+        phase_field = np.load(name, allow_pickle=True)
 
         nb_reps = 1
         if i == 0:
-            roll_x = 16
-            roll_y = -21
-            ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
-                         xy=(19, 1.0),
+            roll_x = 0
+            roll_y = -0
+            ax1 = fig.add_subplot(gs[1, i + 1])
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
+                         xy=(18, 1.0),
                          xytext=(23., 0.6),
                          arrowprops=dict(arrowstyle='->',
                                          color=colors[i],
                                          lw=1,
                                          ls='-'),
-                         color=colors[i]
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
+
                          )
             ax0.text(letter_offset, 1.05, '(b)', transform=ax1.transAxes)
         if i == 1:
-            roll_x = -4
-            roll_y = -21
-            ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
-                     xy=(20, 0.3),
-                     xytext=(12., 0.1),
-                     arrowprops=dict(arrowstyle='->',
-                                     color=colors[i],
-                                     lw=1,
-                                     ls='-'),
-                     color=colors[i]
-                     )
+            roll_x = 10
+            roll_y = 8
+            ax1 = fig.add_subplot(gs[1, i + 1])
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
+                         xy=(20, 0.3),
+                         xytext=(12., 0.1),
+                         arrowprops=dict(arrowstyle='->',
+                                         color=colors[i],
+                                         lw=1,
+                                         ls='-'),
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
+                         )
             ax0.text(letter_offset, 1.05, '(c)', transform=ax1.transAxes)
 
         elif i == 2:
-            roll_x = -3
-            roll_y = -23
-            ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}'+r'$L$',
-                     xy=(18, 0.85),
-                     xytext=(11., 0.4),
-                     arrowprops=dict(arrowstyle='->',
-                                     color=colors[i],
-                                     lw=1,
-                                     ls='-'),
-                     color=colors[i]
-                     )
+            roll_x = 52
+            roll_y = 44
+            ax1 = fig.add_subplot(gs[1, i + 1])
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
+                         xy=(18, 0.85),
+                         xytext=(11., 0.4),
+                         arrowprops=dict(arrowstyle='->',
+                                         color=colors[i],
+                                         lw=1,
+                                         ls='-'),
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
+                         )
             ax0.text(letter_offset, 1.05, '(d)', transform=ax1.transAxes)
 
         elif i == 3:
-            roll_x = 1
-            roll_y = -25
-            ax1 = fig.add_subplot(gs[1, i+1])
-            ax0.annotate(text=r'$\eta = $' +f'{eta_mult}'+r'$L$',
+            roll_x = 0
+            roll_y = 50
+            ax1 = fig.add_subplot(gs[1, i + 1])
+            ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
                          xy=(15, 0.85),
                          xytext=(5., 0.5),
                          arrowprops=dict(arrowstyle='->',
-                                         color= colors[i],
+                                         color=colors[i],
                                          lw=1,
                                          ls='-'),
-                         color=colors[i]
+                         color=colors[i],
+                         bbox=dict(
+                             facecolor='white',  # background color
+                             edgecolor='none',  # border color (set to 'black' if you want a frame)
+                             alpha=0.8,  # transparency
+                             boxstyle='round,pad=0.3'  # rounded box with padding
+                         )
                          )
             ax0.text(letter_offset, 1.05, '(e)', transform=ax1.transAxes)
 
         # phase_field=phase_field**2
         phase_field = np.roll(phase_field, roll_x, axis=1)
         phase_field = np.roll(phase_field, roll_y, axis=0)
-        x = np.arange(0, nb_reps*N)
-        y = np.arange(0, nb_reps*N)
+        x = np.arange(0, nb_reps * N)
+        y = np.arange(0, nb_reps * N)
         X, Y = np.meshgrid(x, y)
-        levels = [-0.1,0.2,0.3,0.4,0.5,0.6, 0.7, 0.8,0.9,1.1] #levels,
-        #levels =np.arange(-0.1, 1.1,1.2/64)
-        #contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)),levels, cmap='gray_r', vmin=0, vmax=1)
-        contour = ax1.pcolormesh(X,Y,np.tile(phase_field, (nb_reps, nb_reps)),  cmap='gray_r', vmin=0, vmax=1,linewidth=0,rasterized=True)
+        levels = [-0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.1]  # levels,
+        # levels =np.arange(-0.1, 1.1,1.2/64)
+        # contour = ax1.contourf(np.tile(phase_field, (nb_reps, nb_reps)),levels, cmap='gray_r', vmin=0, vmax=1)
+        contour = ax1.pcolormesh(X, Y, np.tile(phase_field, (nb_reps, nb_reps)), cmap='gray_r', vmin=0, vmax=1,
+                                 linewidth=0, rasterized=True)
         contour.set_edgecolor('face')
 
         ax1.plot([0, 1], [0, 1], color=colors[i], linestyle=linestyles[i], linewidth=1., transform=ax1.transAxes)
 
         if i == 0:
             # Colorbar
-            #divider = make_axes_locatable(ax1)
+            # divider = make_axes_locatable(ax1)
             # Prevent shrinking the original image
-            #ax1.set_anchor('SE')
-            #ax_cb = divider.new_horizontal(size="5%", pad=-0.5)
-            #ax_cb = divider.append_axes("left", size="5%", pad=0.5)
-            #fig.add_axes(ax_cb)
+            # ax1.set_anchor('SE')
+            # ax_cb = divider.new_horizontal(size="5%", pad=-0.5)
+            # ax_cb = divider.append_axes("left", size="5%", pad=0.5)
+            # fig.add_axes(ax_cb)
             pos0 = ax0.get_position()
             pos1 = ax1.get_position()
 
-            ax_cb=fig.add_axes([pos0.x0, pos1.y0, 0.02, pos1.height])
-                               #ax_cb.invert_xaxis()  # Invert the x-axis to match the positioning
+            ax_cb = fig.add_axes([pos0.x0, pos1.y0, 0.02, pos1.height])
+            # ax_cb.invert_xaxis()  # Invert the x-axis to match the positioning
             ax_cb.yaxis.tick_left()
             # cbar = fig.colorbar(contour, cax=ax_cb)
 
@@ -267,8 +307,8 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                                 ticks=np.arange(0, 1.2, 0.25))
             ax_cb.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=-65)
             ax_cb.yaxis.set_ticks_position('left')
-             #ax_cb.xaxis.set_label_position('left')
-        ax1.set_xlabel(r'$\eta = $' +f'{eta_mult}'+r'$L$')
+            # ax_cb.xaxis.set_label_position('left')
+        ax1.set_xlabel(r'$\eta = $' + f'{eta_mult}' + r'$L$')
 
         ax1.set_xlim(0, N - 1)
         ax1.set_ylim(0, N - 1)
@@ -277,28 +317,41 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         ax1.xaxis.set_ticks_position('none')
         ax1.yaxis.set_ticks_position('none')
         ax1.set_aspect('equal')
-        #ax1.axis('off')
+        # ax1.axis('off')
 
-        #ax1.hlines(y=32, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
-        #ax1.vlines(x=32, ymin=0, ymax=N, colors='black', linestyles='--', linewidth=1.)
+        # ax1.hlines(y=32, xmin=0, xmax=N, colors='black', linestyles='--', linewidth=1.)
+        # ax1.vlines(x=32, ymin=0, ymax=N, colors='black', linestyles='--', linewidth=1.)
 
-        ax0.plot(np.diag(phase_field),color=colors[i], linestyle=linestyles[i])
-    #ax0.grid(axis='x')
+        ax0.plot(np.diag(phase_field), color=colors[i], linestyle=linestyles[i])
+
+        # ax0.grid(axis='x')
     number_of_runs = range(1, N)  # use your actual number_of_runs
     ax0.set_xticks(number_of_runs, minor=False)
-    ax0.xaxis.grid(True,color='grey', linestyle='-', linewidth=0.01)
+    ax0.xaxis.grid(True, color='grey', linestyle='-', linewidth=0.01)
     ax0.set_xticklabels([])
     ax0.xaxis.set_ticks_position('none')
-    #ax0.yaxis.set_ticks_position('none')
+    # ax0.yaxis.set_ticks_position('none')
     ax0.set_ylabel(r'Phase $\rho$', rotation=90, labelpad=10)
     ax0.set_xlim(0, N - 1)
     ax0.text(-0.05, 1.1, '(a)', transform=ax0.transAxes)
-    #ax0.set_ylim(0, N - 1)
-        #ax0.set_aspect('equal')
-    #ax1.set_ylabel(r'Position y')
+    # ax0.set_ylim(0, N - 1)
+    # ax0.set_aspect('equal')
+    # ax1.set_ylabel(r'Position y')
     ax1.yaxis.set_label_position("right")
+    # Annotate distance with arrow
+    ax0.annotate(
+        "", xy=(0.2658, 1.05), xytext=(0.352, 1.05),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle='<->', color='black')
+    )
+    ax0.text(
+        0.31, 1.12, "5h",
+        ha="center", va="center",
+        # bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="black"),
+        transform=ax0.transAxes
+    )
 
-    fname = src + 'exp1_rectangles{}'.format('.pdf')
+    fname = figure_folder_path + 'exp1_rectangles{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     # plt.show()
@@ -356,7 +409,6 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
 
 
 
-    quit()
     if plot_movie:
         if random_initial_geometry:
             plt.figure()

@@ -8,7 +8,6 @@ from mpi4py import MPI
 from NuMPI.IO import save_npy
 from NuMPI.IO import load_npy
 
-
 sys.path.append("/home/martin/Programming/muFFTTO_paralellFFT_test/muFFTTO")
 sys.path.append('../..')  # Add parent directory to path
 
@@ -101,7 +100,6 @@ II = np.einsum('ij...  ,kl...  ->ijkl...', i, i)
 I4s = (I4 + I4rt) / 2.
 I4d = (I4s - II / 3.)
 
-
 model_parameters_non_linear = {'K': 2,
                                'mu': 1.0,
                                'sig0': 0.5,
@@ -121,8 +119,8 @@ results_name = (f'bubbles_' + f'dof={nnn}')
 geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_bubles_generate_geom/'
 
 inclusions = load_npy(geom_folder_path + results_name + f'.npy',
-                                         tuple(discretization.subdomain_locations_no_buffers),
-                                         tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+                      tuple(discretization.subdomain_locations_no_buffers),
+                      tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
 #
 # geometry_ID = 'square_inclusion'
@@ -137,7 +135,8 @@ inclusions = load_npy(geom_folder_path + results_name + f'.npy',
 # ] = 0
 
 matrix_mask = inclusions > 0
-inc_mask = inclusions  == 0
+inc_mask = inclusions == 0
+del inclusions
 
 
 # phase_field[:26, :, :] = 1.
@@ -248,7 +247,9 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
     K4_d = np.where(zero_mask, K4_d_zero, K4_d)
 
     tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
-   # print()
+
+
+# print()
 
 def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
     #            phase_field = np.zeros([*number_of_pixels])
@@ -495,7 +496,7 @@ for inc in range(ninc):
             tol=1e-5,
             maxiter=20000,
             callback=callback,
-           # norm_metric=M_fun_Green
+            # norm_metric=M_fun_Green
         )
 
         nb_it_comb = len(norms['residual_rr'])
@@ -535,28 +536,28 @@ for inc in range(ninc):
         rhs_field.s *= -1
 
         if save_results:
-            results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-            # save strain fluctuation
-            results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-            # save total  strain
-            results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-            # save stress
-            results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            # results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            #
+            # # save strain fluctuation
+            # results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            #
+            # # save total  strain
+            # results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            #
+            # # save stress
+            # results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # save K4_ijklqyz
             results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
@@ -564,10 +565,10 @@ for inc in range(ninc):
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
-            results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            # results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
             # rhs *= -1
 
@@ -610,14 +611,14 @@ for inc in range(ninc):
 
         if norm_rhs < 1.e-5 and iiter > 0: break
 
-        if iiter == 40:
+        if iiter == 10:
             break
 
     # # linear part of displacement(X-domain_size[0]/2)
-    disp_linear_x = ((X - domain_size[0] / 2) * macro_gradient_inc[0, 0] * inc +
-                     Y * macro_gradient_inc[0, 1] * inc)  # (X - domain_size[0] / 2)
-    disp_linear_y = ((X - domain_size[0] / 2) * macro_gradient_inc[1, 0] * inc
-                     + Y * macro_gradient_inc[1, 1] * inc)
+    # disp_linear_x = ((X - domain_size[0] / 2) * macro_gradient_inc[0, 0] * inc +
+    #                  Y * macro_gradient_inc[0, 1] * inc)  # (X - domain_size[0] / 2)
+    # disp_linear_y = ((X - domain_size[0] / 2) * macro_gradient_inc[1, 0] * inc
+    #                  + Y * macro_gradient_inc[1, 1] * inc)
     # displacement in voids should be zero
     # displacement_fluctuation_field.s[:, 0, :, :5] = 0.0
     end_time = time.time()

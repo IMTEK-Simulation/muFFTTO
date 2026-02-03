@@ -30,7 +30,7 @@ from muFFTTO import topology_optimization
 from muFFTTO import microstructure_library
 
 parser = argparse.ArgumentParser(
-    prog="exp_paper_JG_2D_elasticity_TO.py", description="Solve topology optimization of negative poison ratio"
+    prog="exp_paper_JG_2D_elasticity_TO_load_init_hexa.py", description="Solve topology optimization of negative poison ratio on hexa gird"
 )
 parser.add_argument("-n", "--nb_pixels", default="16")
 parser.add_argument("-start", "--first_iteration", default="0")
@@ -69,10 +69,10 @@ random_init = args.random_init
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
+element_type = 'linear_triangles_tilled'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
 formulation = 'small_strain'
 
-domain_size = [1, 1]  #
+domain_size = [1, np.sqrt(3) / 2]  #
 number_of_pixels = (nb_pixels, nb_pixels)
 if MPI.COMM_WORLD.rank == 0:
     print(number_of_pixels)
@@ -115,7 +115,7 @@ if soft_phase_exponent == 0:
     soft_phase = 0
 else:
     soft_phase = 10 ** (-soft_phase_exponent)
-    #soft_phase = 0
+    # soft_phase = 0
 elastic_C_void = elastic_C_0 * soft_phase
 # if MPI.COMM_WORLD.rank == 0:
 # print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
@@ -141,7 +141,7 @@ def M_fun_Green(x, Px):
 # set up load cases
 nb_load_cases = 2
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_multip = 1.
+macro_multip = 0.01
 macro_gradients[0] = np.array([[1.0, 0.0],
                                [0., .0]]) * macro_multip
 macro_gradients[1] = np.array([[.0, .0],
@@ -183,7 +183,7 @@ E_target = 2 * G_target_auxet * (1 + poison_target)
 # E_target=2*G_target_auxet*(1+poison_target)
 # test materials
 #
-#C_targer = domain.get_elastic_tangent(E=E_target, nu=poison_target, mode="plane_strain")
+# C_targer = domain.get_elastic_tangent(E=E_target, nu=poison_target, mode="plane_strain")
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
 elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
@@ -227,7 +227,7 @@ info_mech['residual_rz'] = []
 info_adjoint = {}
 info_adjoint['num_iteration_adjoint'] = []
 info_adjoint['residual_rz'] = []
-#weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
+# weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
 
 w_mult = 5
 eta_mult = 0.01
@@ -509,17 +509,6 @@ if __name__ == '__main__':
                          nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
                          components_are_leading=True,
                          comm=MPI.COMM_WORLD)
-        # perturbed_geom=phase + phase.transpose() + 0.2 * np.random.rand(*phase.shape)
-        # perturbed_geom/=perturbed_geom.max()
-        # phase_field_0.s[0, 0] = perturbed_geom
-        # save_npy(data_folder_path + f'{preconditioner_type}' +  f'_iteration_{5425}' + f'.npy',
-        #                  perturbed_geom,
-        #                    tuple(discretization.subdomain_locations_no_buffers),
-        #                     tuple(discretization.nb_of_pixels_global),
-        #                 comm=MPI.COMM_WORLD)
-
-        #phase_field_0.s[0, 0]=perturbed_geom
-        #apply_filter(phase_field_0)
         # save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
         #          result_norms.reshape([*discretization.nb_of_pixels]),
         #          tuple(discretization.subdomain_locations_no_buffers),
