@@ -522,12 +522,17 @@ if __name__ == '__main__':
         print()
     elif start > 0:
         # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-        file_data_name = f'_iteration_{start}'
+        #file_data_name = f'_iteration_{start}'
+        file_data_name = f'_eta_{eta:.2f}' + f'_w_{weight:.1f}' + f'_iteration_{start}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+        #file_data_name_it = f'_eta_{eta}' + f'_w_{weight}' + f'_iteration_{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
+        # Green_Jacobi_eta_0.01_w_0.3_iteration_500.npy
         # if MPI.COMM_WORLD.size == 1 or None:
         #     # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
         #     # phase= np.load(f'experiments/exp_data/'  + file_data_name)
         #     phase = np.load(os.path.expanduser(data_folder_path + file_data_name + f'.npy'), allow_pickle=True)
         # else:
+
         phase = load_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
                          subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
                          nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),

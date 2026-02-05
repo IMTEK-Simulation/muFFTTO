@@ -517,7 +517,10 @@ if __name__ == '__main__':
         print()
     elif start > 0:
         # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-        file_data_name = f'_iteration_{start}'
+        # file_data_name = f'_iteration_{start}'
+        #file_data_name = f'_eta_{0.01:.2f}' + f'_w_{0.3:.1f}' + f'_iteration_{start}'
+        file_data_name = f'_eta_{eta:.2f}' + f'_w_{weight:.1f}' + f'_iteration_{start}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+
         # if MPI.COMM_WORLD.size == 1 or None:
         #     # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
         #     # phase= np.load(f'experiments/exp_data/'  + file_data_name)

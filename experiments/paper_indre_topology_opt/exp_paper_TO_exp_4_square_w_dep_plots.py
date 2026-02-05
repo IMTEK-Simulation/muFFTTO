@@ -29,15 +29,20 @@ poison_ratios = []
 Young_modulus = []
 c13_ = []
 c23_ = []
+
+E1= []
+nu12= []
+C_22= []
 # weights = np.concatenate(
 #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0, 300.0, 400.0, 500.0])])
-weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
+# weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
+weights=np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
 
 # weights=[5]
-N = 256
+N = 1024
 for w_mult in weights:
 
-    eta_mult = 0.02
+    eta_mult = 0.01
     weight = w_mult
     script_name = 'exp_paper_TO_exp_4_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 
@@ -70,17 +75,19 @@ for w_mult in weights:
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
     lam, mu = Cij[0, 1], Cij[2, 2]
 
-    # poison_ratios.append( lam / (2 * (lam + mu)))
-    # Young_modulus.append( mu * (3 * lam + 2 * mu) / (lam + mu))
+    poison_ratios.append(lam / (2 * (lam + mu)))
+    Young_modulus.append(mu * (3 * lam + 2 * mu) / (lam + mu))
+
     c13_.append(Cij[0, 2])
     c23_.append(Cij[1, 2])
     # for Orthotropic material
     S_compl = np.linalg.inv(Cij)
 
-    E1 = 1 / S_compl[0, 0]  # ≈ 0.25
-    nu12 = -S_compl[0, 1] / S_compl[0, 0]  # ≈ -0.33
-    poison_ratios.append(nu12)
-    Young_modulus.append(E1)
+    E1.append(1 / S_compl[0, 0])  # ≈ 0.25
+    nu12.append(-S_compl[0, 1] / S_compl[0, 0])  # ≈ -0.33
+    C_22.append(1 / S_compl[2, 2])
+    # poison_ratios.append(nu12)
+    # Young_modulus.append(E1)
 
 Cij_target = info_.f.target_C_ijkl
 lam, mu = Cij_target[0, 1], Cij_target[2, 2]
@@ -88,19 +95,35 @@ lam, mu = Cij_target[0, 1], Cij_target[2, 2]
 poison_target = lam / (2 * (lam + mu))
 Young_target = mu * (3 * lam + 2 * mu) / (lam + mu)
 
-#  plt.figure()
-#  nb_tiles=3
-#  pcm=plt.pcolormesh( np.tile(phase_field, (nb_tiles, nb_tiles)),
-#                         shading='flat',
-#                         edgecolors='none',
-#                         lw=0.01,
-#                         cmap=mpl.cm.Greys,
-#                          rasterized=True)
-#  plt.title(f'w = {weight:.1f}')
-# # plt.colorbar(limit=(0, 1))
-#  plt.colorbar(pcm)
-#  plt.show()
+S_compl_target = np.linalg.inv(Cij_target)
 
+E1_target = 1 / S_compl_target[0, 0]  # ≈ 0.25
+nu12_target = -S_compl_target[0, 1] / S_compl_target[0, 0]  # ≈ -0.33
+G_target = 1 / S_compl_target[2, 2]
+
+plt.figure()
+plt.semilogx(weights, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
+             label=r' - Poisson ratio difference')
+plt.axhline(y=nu12_target, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
+
+plt.semilogx(weights, np.asarray(E1), '-', color='k', linewidth=2, marker='|',
+             label=r'C_{11} - Young modulus difference')
+plt.axhline(y=E1_target, color='k', linestyle='-.', linewidth=2, label=r'Target Young modulus difference')
+
+plt.semilogx(weights, np.asarray(C_22), '-', color='b', linewidth=2, marker='|',
+             label=r'C_{33} - Shear modulus difference')
+plt.axhline(y=G_target, color='b', linestyle='-.', linewidth=2, label=r'Target C_{33} - Shear modulus difference')
+
+plt.yscale('linear')
+plt.legend(loc='best')
+plt.xlabel(r'Weight $a$')
+plt.xlim(0.1, 100)
+plt.ylim(-0.5, 2)
+plt.title(r'Square grid : 3 load cases' + f' N={N}, eta={eta_mult}')
+fname = figure_folder_path + 'exp4_square_convergence{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
 plt.figure()
 plt.semilogx(weights, np.abs(np.asarray(poison_ratios) - poison_target), '-', color='r', linewidth=2, marker='|',
              label=r'Poisson ratio difference')
@@ -116,7 +139,7 @@ plt.semilogx(weights, np.abs(c23_), '--', color='k', linewidth=1, marker='|', la
 plt.yscale('log')
 plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
-plt.xlim(0.1, 500)
+plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
 plt.show()
 
@@ -146,7 +169,7 @@ ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
                              ls='-')
              )
 ax5.annotate(r'Phase field - $f_{\rho}$',
-             xy=(50., f_pfs[np.where(weights == 50.0)[0][0]]),
+             xy=(50., f_pfs[np.where(weights == 70.0)[0][0]]),
              xytext=(20., 5.),
              arrowprops=dict(arrowstyle='->',
                              color='black',
@@ -158,7 +181,9 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 letter_offset = -0.15
 
 for upper_ax in np.arange(5):
-    weight = np.array([0.1, 1, 20, 30, 50])[upper_ax]
+    weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
+    #weight = weights[upper_ax]
+    #weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
         ax1 = fig.add_axes([0.12, 0.5, 0.18, 0.18], transform=ax5.transAxes)
@@ -230,12 +255,34 @@ for upper_ax in np.arange(5):
                      )
         ax5.text(letter_offset, 0.9, r'$\textbf{{E}}$', transform=ax1.transAxes)
 
-    name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + '_final' + f'.npy'
+    prefix = f"{preconditioner_type}_eta_{eta_mult}_w_{weight:.1f}_iteration_"
+    suffix = ".npy"
 
-    phase_field = np.load(name, allow_pickle=True)
-    # plotting part
+    highest_iteration = -1
+    latest_file = None
+
+    # Scan directory for matching files
+    if os.path.exists(data_folder_path):
+        for filename in os.listdir(data_folder_path):
+            if filename.startswith(prefix) and filename.endswith(suffix):
+                try:
+                    # Extract iteration number
+                    iteration = int(filename[len(prefix):-len(suffix)])
+                    if iteration > highest_iteration:
+                        highest_iteration = iteration
+                        latest_file = os.path.join(data_folder_path, filename)
+                except ValueError:
+                    continue
+
+    # Load the file if found
+    if latest_file is None:
+        raise FileNotFoundError("No phase field files found matching the pattern.")
+
+    print(f"Loading phase field data from {latest_file}")
+    phase_field = np.load(latest_file, allow_pickle=True)
     # center the inclusion
     phase_opt = phase_field
+    print(f'min = {phase_opt.min()}, max = {phase_opt.max()}')
 
     phase_opt = np.roll(phase_opt, roll_x, axis=0)
     phase_opt = np.roll(phase_opt, roll_y, axis=1)
