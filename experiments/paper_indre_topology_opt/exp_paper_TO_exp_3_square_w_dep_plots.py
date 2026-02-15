@@ -122,7 +122,7 @@ plt.title(r'Square grid : 2 load cases' + f' N={N}, eta={eta_mult}')
 fname = figure_folder_path + 'exp3_square_convergence{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
-plt.show()
+# plt.show()
 
 plt.figure()
 plt.semilogx(weights, np.abs(np.asarray(poison_ratios) - poison_target), '-', color='r', linewidth=2, marker='|',
@@ -141,7 +141,7 @@ plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
 plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
-plt.show()
+# plt.show()
 
 fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
 
@@ -183,7 +183,7 @@ letter_offset = -0.15
 
 #for upper_ax in np.arange(5):
 for upper_ax in np.arange(5):
-    weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
+    weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
     #weight = weights[upper_ax] 10
 
     if upper_ax == 0:
@@ -339,4 +339,3 @@ fname = figure_folder_path + 'exp3_square{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 # plt.show()
-plt.show()

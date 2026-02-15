@@ -58,8 +58,10 @@ parser.add_argument(
 )
 parser.add_argument(
     "-s", "--save_phases",
-    action="store_true",
-    help="Enable saving phases"
+    type=int,
+    default=None,
+    metavar="ITER",
+    help="Save phases at specified iteration number"
 )
 parser.add_argument(
     "-r", "--random_init",
@@ -119,10 +121,10 @@ if discretization.fft.communicator.rank == 0:
 # start_time =  MPI.Wtime()
 
 # create material data of solid phase rho=1
-E_0 = 1
-poison_0 = 0.0
-G_0 = E_0 / (2 * (1 + poison_0))
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+# create material data of solid phase rho=1
+K_0, G_0 = 1, 0.5
+E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
+poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
@@ -519,7 +521,7 @@ if __name__ == '__main__':
         print()
     elif start > 0:
         # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-        file_data_name = f'_iteration_{start}'
+        file_data_name = f'_eta_{eta:.2f}' + f'_w_{weight:.1f}' + f'_iteration_{start}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
         # if MPI.COMM_WORLD.size == 1 or None:
         #     # phase = np.load(f'experiments/exp_data/init_phase_FE_N{number_of_pixels[0]}_NuMPI6.npy')
         #     # phase= np.load(f'experiments/exp_data/'  + file_data_name)
@@ -577,8 +579,8 @@ if __name__ == '__main__':
         global iterat
         file_data_name_it = f'_eta_{eta}' + f'_w_{weight}' + f'_iteration_{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
-        if save_data:
-            if iterat % 10 == 0:
+        if save_data is not None:
+            if iterat % save_data == 0:
                 save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
                          result_norms.reshape([*discretization.nb_of_pixels]),
                          tuple(discretization.subdomain_locations_no_buffers),
@@ -705,7 +707,7 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=1000,
+            maxiter=10000,
         )
         # compute homogenized stress field corresponding t
         homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
@@ -749,7 +751,7 @@ if __name__ == '__main__':
                 x=displacement_field,
                 P=M_fun,
                 tol=1e-5,
-                maxiter=1000,
+                maxiter=10000,
             )
             # ----------------------------------------------------------------------
             # compute homogenized stress field corresponding

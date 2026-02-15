@@ -136,7 +136,7 @@ plt.title(r'Hexagonal grid : 3 load cases' + f' N={N}, eta={eta_mult}')
 fname = figure_folder_path + 'exp4_hexa_convergence{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
-plt.show()
+# plt.show()
 
 plt.figure()
 plt.semilogx(weights, np.abs(np.asarray(poison_ratios)-poison_target), '-', color='r', linewidth=2, marker='|', label=r'Poisson ratio difference')
@@ -153,7 +153,7 @@ plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
 plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
-plt.show()
+# plt.show()
 
 fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
 
@@ -352,4 +352,4 @@ fname = figure_folder_path + 'exp4_hexa{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 # plt.show()
-plt.show()
+# plt.show()
