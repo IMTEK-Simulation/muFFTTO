@@ -193,7 +193,7 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 letter_offset = -0.15
 
 for upper_ax in np.arange(5):
-    weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
+    weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
    # weight = weights[upper_ax]
 
     if upper_ax == 0:
@@ -335,7 +335,7 @@ ax6.set_xlabel(r'Weight $a$')
 # ax6.legend(loc='best')
 # ax6.grid(True, which="both", ls="--", linewidth=0.5)
 # ax6.grid(axis='y', which="both", visible=False)  # remove y-grid
-ax6.set_xlim(0.1, 500)
+ax6.set_xlim(0.1, 100)
 ax6.set_ylim(0.6, 1.2)
 ax6.annotate(r'Zener ratio', color='b',
              xy=(1., zener_ratios[np.where(weights == 1.0)[0][0]]),

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the directory where the scripts are located
-SCRIPT_DIR="experiments/paper_indre_topology_opt"
+SCRIPT_DIR="./"
 
 # List of scripts to run
 SCRIPTS=(
