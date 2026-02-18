@@ -92,8 +92,6 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         print('  ----   ----          ------       ---------        --------')
         print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
               f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
-    # set macroscopic gradient
-    macro_gradient = np.array([[1.0, 0], [0, 1.0]])
 
     # create material data field
     K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)

@@ -30,3 +30,5 @@ experiments/exp_data/
 *.zip
 
 *.iml
+
+.junie/

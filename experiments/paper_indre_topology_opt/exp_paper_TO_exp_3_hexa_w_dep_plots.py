@@ -41,7 +41,7 @@ weights=np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
 
 # weights=[5]
 N = 1024
-nb_tiles = 5
+nb_tiles = 4
 
 # for domain size
 x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
@@ -307,8 +307,8 @@ for upper_ax in np.arange(5):
     phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
     # create repeatable cells
     ax1.set_aspect('equal')
-    ax1.set_xlim(0, 3)
-    ax1.set_ylim(0, 3)
+    ax1.set_xlim(0, nb_tiles-2)
+    ax1.set_ylim(0, nb_tiles-2)
     # plot solution
     pcm=ax1.pcolormesh( x_coords[0], x_coords[1],np.tile(phase_field, (nb_tiles, nb_tiles)),
                            shading='flat',

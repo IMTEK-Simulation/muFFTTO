@@ -180,11 +180,11 @@ plt.title(r'Square grid zero poisson: 3 load cases' + f' N={N}, eta={eta_mult}')
 
 ax5.set_xlabel(r'Weight $a$')
 ax5.set_xlim(0.1, 100)
-ax5.set_ylim(1e-6, 1e1)
+ax5.set_ylim(1e-6, 3e1)
 ax5.set_xticklabels([])
 
 ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
-             xy=(0.6, f_sigmas[np.where(weights == 1)[0][0]]),
+             xy=(weights[3], f_sigmas[np.where(weights == 1)[0][0]]),
              xytext=(1.0, 5.),
              arrowprops=dict(arrowstyle='->',
                              color='red',
@@ -192,7 +192,7 @@ ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
                              ls='-')
              )
 ax5.annotate(r'Phase field - $f_{\rho}$',
-             xy=(50., f_pfs[np.where(weights == 70.0)[0][0]]),
+             xy=(weights[8], f_pfs[np.where(weights == 70.0)[0][0]]),
              xytext=(20., 5.),
              arrowprops=dict(arrowstyle='->',
                              color='black',
@@ -205,7 +205,7 @@ letter_offset = -0.15
 
 #for upper_ax in np.arange(5):
 for upper_ax in np.arange(5):
-    weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
+    weight = np.array([weights[0], weights[3], weights[4], weights[6], weights[-1]])[upper_ax]
     #weight = weights[upper_ax] 10
 
     if upper_ax == 0:
@@ -238,7 +238,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{B}}$', transform=ax1.transAxes)
 
     elif upper_ax == 2:
-        ax1 = fig.add_axes([0.44, 0.32, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.44, 0.35, 0.18, 0.18], transform=ax5.transAxes)
         roll_x = 30
         roll_y = 16
         ax5.annotate('',
@@ -252,12 +252,12 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{C}}$', transform=ax1.transAxes)
 
     elif upper_ax == 3:
-        ax1 = fig.add_axes([0.56, 0.55, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.60, 0.35, 0.18, 0.18], transform=ax5.transAxes)
         roll_x = 25
         roll_y = 10
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
-                     xytext=(10., 3e-2),
+                     xytext=(14., 3e-4),
                      arrowprops=dict(arrowstyle='->',
                                      color='black',
                                      lw=1,
@@ -266,7 +266,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{D}}$', transform=ax1.transAxes)
 
     elif upper_ax == 4:
-        ax1 = fig.add_axes([0.72, 0.5, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.72, 0.55, 0.18, 0.18], transform=ax5.transAxes)
         roll_x = 0
         roll_y = 0
         ax5.annotate('',
@@ -318,7 +318,7 @@ for upper_ax in np.arange(5):
     # ax1.set_xlim(0, nb_cells[0])
     # ax1.set_ylim(0, nb_cells[1] * +ymax)
     # plot solution
-    nb_tiles = 3
+    nb_tiles = 2
     pcm = ax1.pcolormesh(np.tile(phase_field, (nb_tiles, nb_tiles)),
                          shading='flat',
                          edgecolors='none',

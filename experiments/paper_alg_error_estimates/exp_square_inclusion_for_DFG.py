@@ -16,7 +16,6 @@ if not os.path.exists(data_folder_path):
 if not os.path.exists(figure_folder_path):
     os.makedirs(figure_folder_path)
 
-
 from NuMPI.IO import save_npy, load_npy
 from mpi4py import MPI
 
@@ -34,11 +33,12 @@ geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
 
-grids_sizes = [3, 4, 5, 6, ]  # [3, 4, 5, 6, 7, 8, 9]  # [4, 6, 8], 10  7, 8, 9, 10
-rhos = [-3, -2, -1, 1, 2, 3]
+grids_sizes = [10]#3, 4, 5, 6, 7, 8, 9]  # [3, 4, 5, 6, 7, 8, 9]  # [4, 6, 8], 10  7, 8, 9, 10
+rhos = [3, ]
 
-for anisotropy in [False, True]:  # ,True
+for anisotropy in [ True]:  #False,
     for rho in rhos:
+
         for n in grids_sizes:
             number_of_pixels = (2 ** n, 2 ** n)
 
@@ -81,9 +81,6 @@ for anisotropy in [False, True]:  # ,True
             A_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
             print("A_eff : ", A_eff)
 
-            material_data_field_C_0_rho = discretization.get_material_data_size_field_mugrid(
-                name='material_data_field_C_0')
-
             material_data_field_C_1 = discretization.get_material_data_size_field_mugrid(name='material_data_field_C_1')
             material_data_field_C_2 = discretization.get_material_data_size_field_mugrid(name='material_data_field_C_2')
             material_data_field_C_ref = discretization.get_material_data_size_field_mugrid(
@@ -112,10 +109,12 @@ for anisotropy in [False, True]:  # ,True
             # apply material distribution
             # material_data_field_C_0_rho = material_data_field_C_1[..., :, :] * np.power(phase_field,                                                                                        1)
             # material_data_field_C_0_rho += material_data_field_C_2[..., :, :] * np.power(1 - phase_field, 2)
+            material_data_field_C_0_rho = discretization.get_material_data_size_field_mugrid(
+                name='material_data_field_C_0')
 
-            material_data_field_C_0_rho.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_1.s[
+            material_data_field_C_0_rho.s[..., matrix_mask] = material_data_field_C_1.s[
                 ..., matrix_mask]
-            material_data_field_C_0_rho.s[..., inc_mask] = mat_contrast * material_data_field_C_2.s[..., inc_mask]
+            material_data_field_C_0_rho.s[..., inc_mask] = material_data_field_C_2.s[..., inc_mask]
             # Set up the equilibrium system
             macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
             discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
@@ -127,8 +126,8 @@ for anisotropy in [False, True]:  # ,True
                                           macro_gradient_field_ijqxyz=macro_gradient_field,
                                           rhs_inxyz=rhs_field)
 
-            #K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
 
+            # K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x)
 
             def K_fun(x, Ax):
 
@@ -145,7 +144,8 @@ for anisotropy in [False, True]:  # ,True
             # # preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
             #
             # M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
-            preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_ref)
+            preconditioner = discretization.get_preconditioner_Green_mugrid(
+                reference_material_data_ijkl=conductivity_C_ref)
 
 
             def M_fun(x, Px):
@@ -158,15 +158,20 @@ for anisotropy in [False, True]:  # ,True
                                                            input_nodal_field_fnxyz=x,
                                                            output_nodal_field_fnxyz=Px)
 
+
             norms_cg_mech = dict()
             norms_cg_mech['residual_rr'] = []
             norms_cg_mech['residual_rz'] = []
+
+
             def callback(it, x, r, p, z, stop_crit_norm):
                 # global norms_cg_mech
                 norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
                 norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
+
+
             # temperatute_field_precise, norms_precise = solvers.PCG(Afun=K_fun,
             #                                                        B=rhs_field,
             #                                                        x0=None,
@@ -176,7 +181,7 @@ for anisotropy in [False, True]:  # ,True
             #                                                        norm_energy_upper_bound=True,
             #                                                        lambda_min=eigen_LB)
             temperatute_field_precise = discretization.get_unknown_size_field(name=f'temperatute_field_precise')
-            solvers.conjugate_gradients_mugrid(
+            solvers.conjugate_gradients_mugrid_experimental(
                 comm=discretization.fft.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
@@ -198,25 +203,33 @@ for anisotropy in [False, True]:  # ,True
             error_in_Aeff_hk = []
             Aeff_hk = []
 
-
             callback_x = discretization.get_unknown_size_field(name=f'callback_x')
+
+            norms_cg_mech = dict()
+            norms_cg_mech['residual_rr'] = []
+            norms_cg_mech['residual_rz'] = []
+
 
             def my_callback(it, x, r, p, z, stop_crit_norm):
                 # compute homogenized stress field corresponding to displacement
-                callback_x.s[:]=x[:]
-                homogenized_flux =  discretization.get_homogenized_stress_mugrid(
-                material_data_field_ijklqxyz=material_data_field_C_0_rho,
-                displacement_field_inxyz=callback_x,
-                macro_gradient_field_ijqxyz=macro_gradient_field)
+                callback_x.s[:] = x[:]
+                homogenized_flux = discretization.get_homogenized_stress_mugrid(
+                    material_data_field_ijklqxyz=material_data_field_C_0_rho,
+                    displacement_field_inxyz=callback_x,
+                    macro_gradient_field_ijqxyz=macro_gradient_field)
                 Aeff_hk.append(homogenized_flux[0, 0])
                 error_in_Aeff_hk.append(homogenized_flux[0, 0] - A_eff)  # J_eff_computed if J_eff is not available
+                norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                norms_cg_mech['residual_rr'].append(norm_of_rr)
+                norms_cg_mech['residual_rz'].append(norm_of_rz)
 
 
             # parameters_CG = {'exact_solution': temperatute_field_precise,
             #                  'energy_lower_bound': True,
             #                  'tau': 0.25}
             # temperatute_field, norms = solvers.PCG(Afun=K_fun,
-            #                                        B=rhs,
+            #                                        B=rhs_field,
             #                                        x0=None,
             #                                        P=M_fun,
             #                                        steps=int(1000), toler=1e-14,
@@ -226,14 +239,14 @@ for anisotropy in [False, True]:  # ,True
             #                                        **parameters_CG)
             temperatute_field_ = discretization.get_unknown_size_field(name=f'temperatute_field_')
 
-            solvers.conjugate_gradients_mugrid(
+            temperatute_field_, norms = solvers.conjugate_gradients_mugrid_experimental(
                 comm=discretization.fft.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_field,
                 x=temperatute_field_,
                 P=M_fun,
-                tol=1e-5,
+                tol=1e-14,
                 maxiter=10000,
                 callback=my_callback,
                 # norm_metric=res_norm
@@ -250,7 +263,7 @@ for anisotropy in [False, True]:  # ,True
 
             # ----------------------------------------------------------------------
             # compute homogenized stress field corresponding to displacement
-            homogenized_flux =  discretization.get_homogenized_stress_mugrid(
+            homogenized_flux = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho,
                 displacement_field_inxyz=temperatute_field_,
                 macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -270,6 +283,9 @@ for anisotropy in [False, True]:  # ,True
             # _info['trivial_lower_bound'] = trivial_lower_bound
             # _info['trivial_upper_bound'] = trivial_upper_bound
             # _info['total_phase_contrast'] = total_phase_contrast
+            _info['lower_estim'] = norms['energy_lower_bound']
+            _info['residual_rz'] = norms_cg_mech['residual_rz']
+            _info['residual_rr'] = norms_cg_mech['residual_rr']
 
             _info['homogenized_flux'] = homogenized_flux
             _info['Aeff_h_precise'] = Aeff_h_precise
@@ -277,7 +293,7 @@ for anisotropy in [False, True]:  # ,True
             _info['Aeff_hk'] = Aeff_hk
             _info['error_in_Aeff_hk'] = error_in_Aeff_hk
 
-            results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2:.2e}_mat{mat_contrast:.2e}_ani{a_ani:.2e}'
+            results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2:.0f}_mat{mat_contrast:.0f}_ani{a_ani:.0f}'
             save_npy(data_folder_path + results_name + f'.npy',
                      temperatute_field_.s[0].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
@@ -286,166 +302,3 @@ for anisotropy in [False, True]:  # ,True
 
             np.savez(data_folder_path + results_name + f'_log.npz', **_info)
             print(data_folder_path + results_name + f'.npy')
-
-plot = False
-if plot:
-    fig = plt.figure(figsize=(7, 4.5))
-    gs = fig.add_gridspec(1, 1, hspace=0.1, wspace=0.1, width_ratios=1 * (1,),
-                          height_ratios=[1, ])
-    ax_norms = fig.add_subplot(gs[0])
-    ax_norms.semilogy(true_e_error,
-                      label=_labels['true_error'],
-                      color=_colors['true_error'],
-                      alpha=1.,
-                      marker=_markers['true_error'],
-                      linewidth=1, markersize=5, markevery=5)
-
-    ax_norms.semilogy(trivial_upper_bound,
-                      label=_labels['trivial_upper_bound'],
-                      color=_colors['trivial_upper_bound'],
-                      alpha=0.5,
-                      marker=_markers['trivial_upper_bound'],
-                      linewidth=1, markersize=5, markevery=5)
-    ax_norms.semilogy(trivial_lower_bound,
-                      label=_labels['trivial_lower_bound'],
-                      color=_colors['trivial_lower_bound'],
-                      alpha=0.5,
-                      marker=_markers['trivial_lower_bound'],
-                      linewidth=1, markersize=5, markevery=5)
-
-    ax_norms.semilogy(upper_bound,
-                      label=_labels['PT_upper_bound'],
-                      color=_colors['PT_upper_bound'],
-                      alpha=0.5,
-                      marker=_markers['PT_upper_bound'],
-                      linewidth=1, markersize=5, markevery=5)
-
-    ax_norms.semilogy(lower_bound,
-                      label=_labels['PT_lower_bound'],
-                      color=_colors['PT_lower_bound'],
-                      linestyle='--',
-                      linewidth=1,
-                      alpha=0.5,
-                      marker=_markers['PT_lower_bound'],
-                      markersize=5, markevery=5)
-    ax_norms.semilogy(upper_estim,
-                      label=_labels['PT_upper_estimate'],
-                      color=_colors['PT_upper_estimate'],
-                      linestyle='--',
-                      linewidth=1,
-                      alpha=0.5,
-                      marker=_markers['PT_upper_estimate'],
-                      markersize=5, markevery=5)
-
-    # ax_norms.semilogy(norms['residual_rr'], label='residual_rr', color='Black',
-    #                   alpha=0.5, marker='.', linewidth=1, markersize=5, markevery=5)
-    # ax_norms.semilogy(error_in_Aeff_00,
-    #                   label=r'hom prop $\overline{\varepsilon}^{T} (A_{h,k}^{\mathrm{eff}} -A^{\mathrm{eff}}_{h,\infty})\,\overline{\varepsilon} $',
-    #                   color='Black',
-    #                   alpha=0.5, marker='x', linewidth=1, markersize=5, markevery=1)
-
-    # plt.title('optimizer {}'.format(optimizer))
-    # ax_norms.set_ylabel('Norms')
-    ax_norms.set_ylim(1e-14, 1e6)
-    # ax_norms.set_yticks([1, 34, 67, 100])
-    # ax_norms.set_yticklabels([1, 34, 67, 100])
-
-    ax_norms.set_xlabel(r'PCG iteration - $k$')
-
-    ax_norms.set_xlim([0, norms['residual_rr'].__len__() - 1])
-    # ax_norms.set_xticks([1, len(eig_G) // 2, len(eig_G)])
-    # ax_norms.set_xticklabels([1, len(eig_G) // 2, len(eig_G)])
-
-    plt.grid(True)
-
-    plt.legend()
-    fig_name = f'norm_evolution_kappa{total_phase_contrast}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-
-    # fig.tight_layout()
-    fname = figure_folder_path + fig_name + '{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight'
-                )
-    plt.show()
-
-    fig = plt.figure(figsize=(7, 4.5))
-    gs = fig.add_gridspec(1, 1, hspace=0.1, wspace=0.1, width_ratios=1 * (1,),
-                          height_ratios=[1, ])
-    ax_norms = fig.add_subplot(gs[0])
-
-    tmp = min(len(lower_bound), len(upper_bound))
-
-    ax_norms.semilogy(trivial_upper_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
-                      label=_labels['trivial_upper_bound'],
-                      color=_colors['trivial_upper_bound'],
-                      marker=_markers['trivial_upper_bound'],
-                      alpha=0.5,
-                      linewidth=1, markersize=5, markevery=5
-                      )
-
-    ax_norms.semilogy(trivial_lower_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
-                      label=_labels['trivial_lower_bound'],
-                      color=_colors['trivial_lower_bound'],
-                      alpha=0.5,
-                      marker=_markers['trivial_lower_bound'],
-                      linewidth=1, markersize=5, markevery=5
-                      )
-
-    ax_norms.semilogy(upper_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
-                      label=_labels['PT_upper_bound'],
-                      color=_colors['PT_upper_bound'],
-                      alpha=0.5,
-                      marker=_markers['PT_upper_bound'],
-                      linewidth=1, markersize=5, markevery=5)
-
-    ax_norms.semilogy(lower_bound[0:tmp - 1] / true_e_error[0:tmp - 1],
-                      label=_labels['PT_lower_bound'],
-                      color=_colors['PT_lower_bound'],
-                      linestyle='--',
-                      linewidth=1,
-                      alpha=0.5,
-                      marker=_markers['PT_lower_bound'],
-                      markersize=5, markevery=5)
-
-    ax_norms.semilogy(upper_estim[0:tmp - 1] / true_e_error[0:tmp - 1],
-                      label=_labels['PT_upper_estimate'],
-                      color=_colors['PT_upper_estimate'],
-                      linestyle='--',
-                      linewidth=1,
-                      alpha=0.5,
-                      marker=_markers['PT_upper_estimate'],
-                      markersize=5, markevery=5)
-
-    # ax_norms.semilogy((1:tmp,upper_estim_M(1:tmp)./norm_ener_error_M(1:tmp))
-    # ax_norms.semilogy((1:tmp,estim_M_UB(1:tmp)./norm_ener_error_M(1:tmp))
-    ax_norms.semilogy(np.ones(tmp), 'k-')
-
-    # ax_norms.set_title('effectivity indices')
-    ax_norms.set_xlabel(r'PCG iteration - $k$')
-
-    # hezci rozsah os, abychom videli efektivitu u jednicky
-    ax_norms.set_ylim(1e-4, 1e4)
-    ax_norms.legend(loc='best')
-    fig_name = f'norm_efficiency_kappa{total_phase_contrast}'  # '  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
-
-    fig.tight_layout()
-    fname = figure_folder_path + fig_name + '{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight'
-                )
-
-    plt.show()
-
-# nc = Dataset('temperatures.nc', 'w', format='NETCDF3_64BIT_OFFSET')
-# nc.createDimension('coords', 1)
-# nc.createDimension('number_of_dofs_x', number_of_pixels[0])
-# nc.createDimension('number_of_dofs_y', number_of_pixels[1])
-# nc.createDimension('number_of_dofs_per_pixel', 1)
-# nc.createDimension('time', None)  # 'unlimited' dimension
-# var = nc.createVariable('temperatures', 'f8',
-#                         ('time', 'coords', 'number_of_dofs_per_pixel', 'number_of_dofs_x', 'number_of_dofs_y'))
-# var[0, ...] = temperatute_field[0, ...]
-#
-# print(homogenized_flux)
-# # var[0, ..., 0] = x
-# # var[0, ..., 1] = y
