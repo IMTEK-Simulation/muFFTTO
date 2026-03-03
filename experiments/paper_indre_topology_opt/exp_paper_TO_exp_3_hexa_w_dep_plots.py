@@ -41,7 +41,7 @@ weights=np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
 
 # weights=[5]
 N = 1024
-nb_tiles = 4
+nb_tiles = 5
 
 # for domain size
 x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
@@ -67,7 +67,29 @@ for w_mult in weights:
         os.makedirs(figure_folder_path)
     # name = (
     # f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
+    prefix = f"{preconditioner_type}_eta_{eta_mult}_w_{weight:.1f}_iteration_"
+    suffix = ".npy"
 
+    highest_iteration = -1
+    latest_file = None
+
+    # Scan directory for matching files
+    if os.path.exists(data_folder_path):
+        for filename in os.listdir(data_folder_path):
+            if filename.startswith(prefix) and filename.endswith(suffix):
+                try:
+                    # Extract iteration number
+                    iteration = int(filename[len(prefix):-len(suffix)])
+                    if iteration > highest_iteration:
+                        highest_iteration = iteration
+                        latest_file = os.path.join(data_folder_path, filename)
+                except ValueError:
+                    continue
+    print(f"Loading phase field data from {latest_file}")
+
+    # Load the file if found
+    if latest_file is None:
+        raise FileNotFoundError("No phase field files found matching the pattern.")
     # name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}'+ f'_w_{weight}'  +'_final' + f'.npy'
     name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}'+ '_final' + f'.npy'
     try:

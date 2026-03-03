@@ -30,8 +30,8 @@ if DOWNSAMPLE:
 else:
     step = 1
 
-weights = np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
-#weights = np.array([ 10.0, 30.0, 70.0, 100.0])
+#weights = np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
+weights = np.array([ 10.0, 30.0, 70.0, 100.0])
 
 # Paths
 grid= 'square'#'hexa' #
