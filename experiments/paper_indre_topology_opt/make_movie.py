@@ -35,7 +35,7 @@ weights = np.array([ 10.0, 30.0, 70.0, 100.0])
 
 # Paths
 grid= 'square'#'hexa' #
-experiment=2
+experiment=5
 script_dir = os.path.dirname(os.path.realpath(__file__))
 script_name = f'exp_paper_TO_exp_{experiment}_{grid}_random_{random_init}_N_{N}_cgtol_{cg_tol_exponent}_soft_{soft_phase_exponent}'
 data_folder_path = os.path.join(script_dir, 'exp_data', script_name)

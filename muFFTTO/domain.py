@@ -953,7 +953,7 @@ class Discretization:
         mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
         if isinstance(material_data_field_ijklqxyz, np.ndarray):
             # mat_data_temp.sg = material_data_field_ijklqxyz
-            raise ("NOT YET  does not supprot ndarray")
+            raise ("NOT YET  does not support ndarray")
         else:
             mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
 

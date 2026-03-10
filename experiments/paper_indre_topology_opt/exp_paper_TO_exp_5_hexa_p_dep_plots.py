@@ -19,7 +19,7 @@ letter_offset = -0.18
 etas = [0.005, 0.01, 0.02, 0.05]  #
 cg_tol_exponent = 8
 soft_phase_exponent = 5
-random_init = True
+random_init = False
 f_sigmas = []
 f_pfs = []
 f_adjoint = []
@@ -32,17 +32,18 @@ nu12_target= []
 E1= []
 nu12= []
 C_22= []
+Cij_= []
 # weights = np.concatenate(
 #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0, 300.0, 400.0, 500.0])])
 # weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
 
-poisson_targets =np.array([-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]) #0.5,
+poisson_targets =np.array([-0.5,-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]) #0.5,
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
-target_Cij=np.zeros((3,3,poisson_targets.shape[0]))
+target_Cij=np.zeros((poisson_targets.shape[0],3,3))
 
 weight=20.0
 # weights=[5]
-N = 64
+N = 1024
 index=0
 
 #  tilled grid
@@ -107,7 +108,7 @@ for poison_target in poisson_targets:
         info_ = np.load(name_info, allow_pickle=True)
     except:
         print(f"No info for p={poison_target}")
-       # continue
+        continue
 # if True:
     f_sigmas.append(info_.f.norms_sigma[-1])
     f_pfs.append(info_.f.norms_pf[-1])
@@ -115,6 +116,7 @@ for poison_target in poisson_targets:
     # for Isotropic material
     Cij = info_.f.homogenized_C_ijkl
     homogenized_Cij[...,index]=info_.f.homogenized_C_ijkl
+    Cij_.append(Cij)
 
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
     lam, mu = Cij[0, 1], Cij[2, 2]
@@ -128,13 +130,15 @@ for poison_target in poisson_targets:
     S_compl = np.linalg.inv(Cij)
 
     E1.append(1 / S_compl[0, 0])  # ≈ 0.25
-    nu12.append(-S_compl[0, 1] / S_compl[0, 0])  # ≈ -0.33
+    s_temp=-S_compl[0, 1] / S_compl[0, 0]
+    nu12.append(s_temp/(1+s_temp))
+
     C_22.append(1 / S_compl[2, 2])
     # poison_ratios.append(nu12)
     # Young_modulus.append(E1)
 
     Cij_target = info_.f.target_C_ijkl
-    target_Cij[...,index]=info_.f.target_C_ijkl
+    target_Cij[index,...]=info_.f.target_C_ijkl
 
     lam, mu = Cij_target[0, 1], Cij_target[2, 2]
 
@@ -145,31 +149,67 @@ for poison_target in poisson_targets:
     #
     S_compl_target = np.linalg.inv(Cij_target)
 
-    E1_target = 1 / S_compl_target[0, 0]  # ≈ 0.25
-    nu12_target.append( -S_compl_target[0, 1] / S_compl_target[0, 0])  # ≈ -0.33
+    E1_target = 1 / S_compl_target[0, 0]
+    s_temp = -S_compl_target[0, 1] / S_compl_target[0, 0]
+    nu12_target.append( s_temp/(1+s_temp))
     G_target = 1 / S_compl_target[2, 2]
     index+=1
-plt.figure()
-# plt.plot(poisson_targets, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
-#              label=r' - Poisson ratio computed')
-# plt.plot(poisson_targets, np.asarray(nu12_target), '-', color='b', linewidth=2, marker='|',
-#              label=r' - Poisson ratio target')
+C_computed = np.array(Cij_)
 
-plt.plot(poisson_targets, target_Cij[0,0,:], '-', color='r', linewidth=2, marker='x',
+plt.figure()
+for i, j in [[0, 0], [1, 1], [0, 1], [2, 2]]:
+    label_c = f'$C_{{{i + 1}{j + 1}}}$'
+    markers = {(0, 0): 'x', (1, 1): 'o', (0, 1): '^', (2, 2): '>'}
+    marker = markers.get((i, j), '|')
+    line, = plt.plot(poisson_targets, C_computed[:, i, j], '-', linewidth=2, marker=marker,
+                     label=f' - {label_c}  ')
+    plt.plot(poisson_targets, target_Cij[:, i, j], color=line.get_color(), linestyle='-.', linewidth=2,
+             label=f'Target {label_c}')
+
+plt.yscale('linear')
+plt.legend(loc='best')
+plt.xlabel(r'Poisson targets')
+plt.xlim(-0.5, 0.3)
+plt.ylim(-0.5, 1)
+
+
+plt.show()
+
+
+plt.figure()
+plt.plot(poisson_targets, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
+             label=r' - Poisson ratio computed')
+plt.plot(poisson_targets, np.asarray(nu12_target), '-', color='b', linewidth=2, marker='|',
+             label=r' - Poisson ratio target')
+plt.yscale('linear')
+plt.legend(loc='best')
+plt.xlabel(r'Poisson')
+plt.xlim(-0.51, 0.3)
+plt.ylim(-0.55, 0.5)
+plt.title(r'Square grid : 3 load cases' + f' N={N}, poisson={poison_target}')
+fname = figure_folder_path +f'{weight}' +'exp5_square_poisson{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
+
+
+plt.figure()
+
+plt.plot(poisson_targets, target_Cij[:,0,0], '-', color='r', linewidth=2, marker='x',
              label=r' - 00  computed')
 plt.plot(poisson_targets, homogenized_Cij[0,0,:], '-', color='b', linewidth=2, marker='x',
              label=r' - 00  target')
 
-plt.plot(poisson_targets, target_Cij[1,1,:], '-', color='r', linewidth=2, marker='o',
+plt.plot(poisson_targets, target_Cij[:,1,1], '-', color='r', linewidth=2, marker='o',
              label=r' - 11  computed')
 plt.plot(poisson_targets, homogenized_Cij[1,1,:], '-', color='b', linewidth=2, marker='o',
              label=r' - 11  target')
-plt.plot(poisson_targets, target_Cij[2,2,:], '-', color='r', linewidth=2, marker='>',
+plt.plot(poisson_targets, target_Cij[:,2,2], '-', color='r', linewidth=2, marker='>',
              label=r' - 22  computed')
 plt.plot(poisson_targets, homogenized_Cij[2,2,:], '-', color='b', linewidth=2, marker='>',
              label=r' - 22  target')
 
-plt.plot(poisson_targets, target_Cij[0,1,:], '-', color='r', linewidth=2, marker='^',
+plt.plot(poisson_targets, target_Cij[:,0,1 ], '-', color='r', linewidth=2, marker='^',
              label=r' - 01  computed')
 plt.plot(poisson_targets, homogenized_Cij[0,1,:], '-', color='b', linewidth=2, marker='^',
              label=r' - 01  target')
@@ -188,7 +228,7 @@ plt.plot(poisson_targets, homogenized_Cij[0,1,:], '-', color='b', linewidth=2, m
 
 plt.yscale('linear')
 plt.legend(loc='best')
-plt.xlabel(r'Weight $a$')
+plt.xlabel(r'Poisson')
 plt.xlim(-0.51, 0.51)
 plt.ylim(-0.5, 2)
 plt.title(r'Square grid : 3 load cases' + f' N={N}, poisson={poison_target}')
@@ -202,22 +242,22 @@ plt.figure()
 # plt.plot(poisson_targets, np.asarray(nu12_target), '-', color='b', linewidth=2, marker='|',
 #              label=r' - Poisson ratio target')
 
-plt.plot(poisson_targets, abs(target_Cij[0,0,:]- homogenized_Cij[0,0,:])/abs(target_Cij[0,0,:]), '-', color='r', linewidth=2, marker='x',
+plt.plot(poisson_targets, abs(target_Cij[:,0,0]- homogenized_Cij[0,0,:])/abs(target_Cij[:,0,0]), '-', color='r', linewidth=2, marker='x',
              label=r' - 00  computed')
 
-plt.plot(poisson_targets, abs(target_Cij[1,1,:]- homogenized_Cij[1,1,:])/abs(target_Cij[1,1,:]), '-', color='r', linewidth=2, marker='o',
+plt.plot(poisson_targets, abs(target_Cij[:,1,1]- homogenized_Cij[1,1,:])/abs(target_Cij[:,1,1]), '-', color='r', linewidth=2, marker='o',
              label=r' - 11  computed')
 
-plt.plot(poisson_targets,abs( target_Cij[2,2,:]-homogenized_Cij[2,2,:])//abs(target_Cij[2,2,:]), '-', color='r', linewidth=2, marker='>',
+plt.plot(poisson_targets,abs( target_Cij[:,2,2]-homogenized_Cij[2,2,:])//abs(target_Cij[:,2,2]), '-', color='r', linewidth=2, marker='>',
              label=r' - 22  computed')
 
-plt.plot(poisson_targets,abs( target_Cij[0,1,:]-homogenized_Cij[0,1,:])/abs(target_Cij[0,1,:]), '-', color='r', linewidth=2, marker='^',
+plt.plot(poisson_targets,abs( target_Cij[:,0,1]-homogenized_Cij[0,1,:])/abs(target_Cij[:,0,1]), '-', color='r', linewidth=2, marker='^',
              label=r' - 01  computed')
 
 
 plt.yscale('log')
 plt.legend(loc='best')
-plt.xlabel(r'Weight $a$')
+plt.xlabel(r'Target Poisson')
 plt.xlim(-0.51, 0.51)
 plt.ylim(1e-4, 1e1)
 plt.title(r'Square grid : 3 load cases' + f' N={N}, error in C comps')
@@ -283,11 +323,12 @@ for i, poison_target in enumerate(poisson_targets):
         phase_field = np.load(name, allow_pickle=True)
         
         #nb_tiles = 3
-        ax.pcolormesh(x_coords[0], x_coords[1],np.tile(phase_field, (nb_tiles, nb_tiles)),
+        pcm = ax.pcolormesh(x_coords[0], x_coords[1],np.tile(phase_field, (nb_tiles, nb_tiles)),
                      shading='flat',
                      edgecolors='none',
                      lw=0.01,
                      cmap=mpl.cm.Greys,
+                     vmin=0, vmax=1,
                      rasterized=True)
         ax.set_title(f'Target Poisson: {poison_target}')
     else:
@@ -303,7 +344,12 @@ for i, poison_target in enumerate(poisson_targets):
 for j in range(i + 1, len(axes_pf)):
     axes_pf[j].axis('off')
 
-fig_pf.tight_layout()
+# Add unified colorbar for phase fields
+fig_pf.subplots_adjust(right=0.85)
+cbar_ax = fig_pf.add_axes([0.88, 0.15, 0.02, 0.7])
+fig_pf.colorbar(pcm, cax=cbar_ax)
+
+fig_pf.tight_layout(rect=[0, 0, 0.85, 1])
 fname_pf = figure_folder_path+f'{weight}' + 'exp5_square_all_phase_fields.pdf'
 print(f'create figure: {fname_pf}')
 fig_pf.savefig(fname_pf, bbox_inches='tight')
@@ -470,6 +516,7 @@ for i in np.arange(len(poisson_targets)):
                          edgecolors='none',
                          lw=0.01,
                          cmap=mpl.cm.Greys,
+                         vmin=0, vmax=1,
                          rasterized=True)
 
     ax1.set_yticklabels([])

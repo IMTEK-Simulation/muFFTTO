@@ -32,6 +32,7 @@ c23_= []
 E1= []
 nu12= []
 C_22= []
+Cij_=[]
 # weights = np.concatenate(
 #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0])])#, 300.0, 400.0, 500.0
 # weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 10.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
@@ -108,6 +109,7 @@ for w_mult in weights:
     # for Isotropic material
     Cij = info_.f.homogenized_C_ijkl
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
+    Cij_.append(Cij)
     lam, mu = Cij[0, 1], Cij[2, 2]
 
     poison_ratios.append(lam / (2 * (lam + mu)))
@@ -118,11 +120,14 @@ for w_mult in weights:
     # for Orthotropic material
     S_compl = np.linalg.inv(Cij)
 
-    E1.append(1 / S_compl[0, 0])  # ≈ 0.25
-    nu12.append(-S_compl[0, 1] / S_compl[0, 0])  # ≈ -0.33
+    E1.append(1 / S_compl[0, 0])
+    s_temp=-S_compl[0, 1] / S_compl[0, 0]
+    nu12.append(s_temp/(1+s_temp))
     C_22.append(1 / S_compl[2, 2])
     # poison_ratios.append(nu12)
     # Young_modulus.append(E1)
+
+C_computed= np.array(Cij_)
 
 Cij_target = info_.f.target_C_ijkl
 lam, mu = Cij_target[0, 1], Cij_target[2, 2]
@@ -132,28 +137,71 @@ Young_target = mu * (3 * lam + 2 * mu) / (lam + mu)
 
 S_compl_target = np.linalg.inv(Cij_target)
 
-E1_target = 1 / S_compl_target[0, 0]  # ≈ 0.25
-nu12_target = -S_compl_target[0, 1] / S_compl_target[0, 0]  # ≈ -0.33
+E1_target = 1 / S_compl_target[0, 0]
+s_temp = -S_compl_target[0, 1] / S_compl_target[0, 0]
+nu12_target= s_temp / (1 + s_temp)
+
 G_target = 1 / S_compl_target[2, 2]
 
 plt.figure()
+
+for i in range(Cij_target.shape[0]):
+    for j in range(i,Cij_target.shape[1]):
+        label_c = f'$C_{{{i+1}{j+1}}}$'
+        line, = plt.semilogx(weights, C_computed[:, i, j], '-', linewidth=2, marker='|',
+                             label=f' - {label_c}  ')
+        plt.axhline(y=Cij_target[i, j], color=line.get_color(), linestyle='-.', linewidth=2, label=f'Target {label_c}')
+ 
+plt.yscale('linear')
+plt.legend(loc='best')
+plt.xlabel(r'Weight $a$')
+plt.xlim(0.1, 100)
+plt.ylim(-0.5, 1)
+plt.title(r'Hexagonal grid : 3 load cases' + f' N={N}, eta={eta_mult}')
+fname = figure_folder_path + 'exp4_hexa_convergence_cc{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+
+plt.figure()
+
+for i in range(Cij_target.shape[0]):
+    for j in range(i, Cij_target.shape[1]):
+        label_c = f'$C_{{{i + 1}{j + 1}}}$'
+        line, = plt.semilogx(weights, np.abs(C_computed[:, i, j]-Cij_target[i, j]), '-', linewidth=2, marker='|',
+                             label=f' - {label_c}  ')
+        # plt.axhline(y=Cij_target[i, j], color=line.get_color(), linestyle='-.', linewidth=2, label=f'Target {label_c}')
+
+plt.yscale('log')
+plt.legend(loc='best')
+plt.xlabel(r'Weight $a$')
+plt.xlim(0.1, 100)
+plt.ylim(1e-6, 1)
+
+plt.title(r'Hexagonal grid : 3 load cases' + f' N={N}, eta={eta_mult}')
+fname = figure_folder_path + 'exp4_hexa_convergence_rel_cc{}'.format('.pdf')
+print(('create figure: {}'.format(fname)))
+plt.savefig(fname, bbox_inches='tight')
+plt.show()
+
+
+plt.figure()
 plt.semilogx(weights, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
-             label=r' - Poisson ratio difference')
-plt.axhline(y=nu12_target, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
+             label=r' - Poisson ratio  ')
+plt.axhline(y=nu12_target, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio  ')
 
 plt.semilogx(weights, np.asarray(E1), '-', color='k', linewidth=2, marker='|',
-             label=r'C_{11} - Young modulus difference')
-plt.axhline(y=E1_target, color='k', linestyle='-.', linewidth=2, label=r'Target Young modulus difference')
+             label=r'C_{11} - Young modulus  ')
+plt.axhline(y=E1_target, color='k', linestyle='-.', linewidth=2, label=r'Target Young modulus  ')
 
 plt.semilogx(weights, np.asarray(C_22), '-', color='b', linewidth=2, marker='|',
-             label=r'C_{33} - Shear modulus difference')
-plt.axhline(y=G_target, color='b', linestyle='-.', linewidth=2, label=r'Target C_{33} - Shear modulus difference')
+             label=r'C_{33} - Shear modulus  ')
+plt.axhline(y=G_target, color='b', linestyle='-.', linewidth=2, label=r'Target C_{33} - Shear modulus  ')
 
 plt.yscale('linear')
 plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
 plt.xlim(0.1, 100)
-plt.ylim(-0.5, 2)
+plt.ylim(-0.55, 2)
 plt.title(r'Hexagonal grid : 3 load cases' + f' N={N}, eta={eta_mult}')
 fname = figure_folder_path + 'exp4_hexa_convergence{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
@@ -161,10 +209,10 @@ plt.savefig(fname, bbox_inches='tight')
 # plt.show()
 
 plt.figure()
-plt.semilogx(weights, np.abs(np.asarray(poison_ratios)-poison_target), '-', color='r', linewidth=2, marker='|', label=r'Poisson ratio difference')
+plt.semilogx(weights, np.abs(np.asarray(nu12)-nu12_target), '-', color='r', linewidth=2, marker='|', label=r'Poisson ratio difference')
 
 plt.axhline(y=0.0, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
-plt.semilogx(weights, np.abs(np.asarray(Young_modulus)-Young_target), '--', color='k', linewidth=2, marker='|', label=r'Young modulus difference')
+plt.semilogx(weights, np.abs(np.asarray(E1)-E1_target), '--', color='k', linewidth=2, marker='|', label=r'Young modulus difference')
 plt.axhline(y=0.0, color='k', linestyle=':', linewidth=2, label=r'Target Young modulus difference')
 
 plt.semilogx(weights, np.abs(c13_), '--', color='k', linewidth=1, marker='|', label=r'$C_{1,3}$')
@@ -175,7 +223,7 @@ plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
 plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
-# plt.show()
+plt.show()
 
 fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
 

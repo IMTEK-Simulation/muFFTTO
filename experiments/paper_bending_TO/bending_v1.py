@@ -90,7 +90,7 @@ discretization_type = 'finite_element'
 element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # # linear_triangles_tilled
 formulation = 'small_strain'
 
-domain_size = [1, 1]  #
+domain_size = [5, 1]  #
 number_of_pixels = (nb_pixels, nb_pixels)
 if MPI.COMM_WORLD.rank == 0:
     print(number_of_pixels)
@@ -123,10 +123,11 @@ if discretization.fft.communicator.rank == 0:
 # start_time =  MPI.Wtime()
 
 # create material data of solid phase rho=1
-K_0, G_0 = 1, 0.5
-E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
-poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
-
+# K_0, G_0 = 1, 0.5
+E_0 = 1  # 9 * K_0 * G_0 / (3 * K_0 + G_0)
+poison_0 = 0.2  # (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
+K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0,
+                                             poison=poison_0)
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
@@ -159,39 +160,71 @@ def M_fun_Green(x, Px):
 
 
 # set up load cases
-nb_load_cases =2
-macro_gradients = np.zeros([nb_load_cases, dim, dim])
+nb_load_cases = 1
+# macro_gradients = np.zeros([nb_load_cases, dim, dim])
 macro_multip = 1.
-macro_gradients[0] = np.array([[1.0, 0.0],
-                               [0., .0]]) * macro_multip
-macro_gradients[1] = np.array([[.0, 0.5],
-                               [0.5, .0]]) * macro_multip
-# macro_gradients[2] = np.array([[.0, .0],
-#                                [.0, 1.0]]) * macro_multip
-
-left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
-left_macro_gradients[0] = np.array([[.0, .0],
-                                    [.0, 1.0]]) * macro_multip
-# left_macro_gradients[2] = np.array([[1.0, .0],
-#                                     [.0, .0]]) * macro_multip
-left_macro_gradients[1] = np.array([[.0, .5],
-                                    [0.5, 0.0]]) * macro_multip
-if MPI.COMM_WORLD.rank == 0:
-    print('macro_gradients = \n {}'.format(macro_gradients))
+# macro_gradients[0] = np.array([[0.0, 0.0],
+#                                [0., 1.0]]) * macro_multip
+# # macro_gradients[1] = np.array([[.0, 0.5],
+# #                                [0.5, .0]]) * macro_multip
+# # macro_gradients[2] = np.array([[.0, .0],
+# #                                [.0, 1.0]]) * macro_multip
+#
+# left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
+# left_macro_gradients[0] = np.array([[.0, .0],
+#                                     [.0, 1.0]]) * macro_multip
+# # left_macro_gradients[2] = np.array([[1.0, .0],
+# #                                     [.0, .0]]) * macro_multip
+# # left_macro_gradients[1] = np.array([[.0, .5],
+# #                                     [0.5, 0.0]]) * macro_multip
+# if MPI.COMM_WORLD.rank == 0:
+#     print('macro_gradients = \n {}'.format(macro_gradients))
 
 # Set up  macroscopic gradients
 # macro_gradient_fields = []
-macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name=f'macro_gradient_field_')
+
+
+def imposed_bending_gradient_field(grad_field_ijqxyz, kappa=1e-3, nu=0.2, y0=0.5):
+    """
+    Fill grad_field_ijqxyz for bending strain:
+        eps_xx =  kappa (y - y0)
+        eps_yy = -nu kappa (y - y0)
+    """
+    # eps_xx  = kappa * (y -y0 )   #
+    grad_field_ijqxyz.s[0, 0, :] = kappa * (grad_field_ijqxyz.coords[1]-y0)
+
+    # eps_yy =  -nu kappa (y - y0)
+    grad_field_ijqxyz.s[1, 1, :] = -nu*kappa * (grad_field_ijqxyz.coords[1]-y0)
+
+
+
+
+displacement_field_load_case = []
+adjoint_field_load_case = []
+macro_gradient_field_load_case = []
+for load_case in np.arange(nb_load_cases):
+    displacement_field_load_case.append(
+        discretization.get_unknown_size_field(name=f'displacement_field_load_case{load_case}'))
+    adjoint_field_load_case.append(
+        discretization.get_unknown_size_field(name=f'adjoint_field_load_case_{load_case}'))
+    macro_gradient_field_load_case.append(
+        discretization.get_displacement_gradient_sized_field(name=f'macro_gradient_field_load_case_{load_case}'))
+
+
 
 for load_case in np.arange(nb_load_cases):
-    stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
-    if MPI.COMM_WORLD.rank == 0:
-        print('init_stress for load case {} = \n {}'.format(load_case, stress))
+    imposed_bending_gradient_field(grad_field_ijqxyz=macro_gradient_field_load_case[load_case])
+    stress_ijqxyz = np.einsum('ijkl,lkqxy->ijqxy', elastic_C_0, macro_gradient_field_load_case[load_case].s )
+
+
+    # if MPI.COMM_WORLD.rank == 0:
+    #     print('init_stress for load case {} = \n {}'.format(load_case, stress_ijqxyz))
 
 ##### create target material data
 
-G_target_auxet = (3 / 20) * E_0
-E_target = 2 * G_target_auxet * (1 + poison_target)
+poisson_target = poison_0
+E_target = 0.2 * E_0
+
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target,
                                                        poison=poison_target)
 
@@ -202,26 +235,32 @@ elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_
 if MPI.COMM_WORLD.rank == 0:
     print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_target)))
 ##### create target stresses
+phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
+phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
+    name='phase_field_at_quads_in_objective_function_multiple_load_cases')
+material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
+    name='material_data_field_C_0_rho_ijklqxyz_in_objective')
+s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
+rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
+s_stress_and_adjoint_load_case = discretization.get_scalar_field(
+    name='s_stress_and_adjoint_load_case')
+
 target_stresses = np.zeros([nb_load_cases, dim, dim])
-target_energy = np.zeros([nb_load_cases])
-
+target_stresses_field_load_case=[]
 for load_case in np.arange(nb_load_cases):
-    target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
-    target_energy[load_case] = np.einsum('ij,ijkl,lk->', left_macro_gradients[load_case], elastic_C_target,
-                                         macro_gradients[load_case])
-    if MPI.COMM_WORLD.rank == 0:
-        print('target_stress for load case {} = \n {}'.format(load_case, target_stresses[load_case]))
-        print('target stress norm for load case {} = \n {}'.format(load_case,
-                                                                   np.sum(target_stresses[load_case] ** 2)))
-        print('target_energy for load case {} = \n {}'.format(load_case, target_energy[load_case]))
+    target_stresses_field_load_case.append(
+        discretization.get_displacement_gradient_sized_field(name=f'target_stresses_field_load_case_{load_case}'))
 
-displacement_field_load_case = []
-adjoint_field_load_case = []
-for load_case in np.arange(nb_load_cases):
-    displacement_field_load_case.append(
-        discretization.get_unknown_size_field(name=f'displacement_field_load_case{load_case}'))
-    adjoint_field_load_case.append(
-        discretization.get_unknown_size_field(name=f'adjoint_field_load_case_{load_case}'))
+    material_data_field_C_0_rho_ijklqxyz.s = elastic_C_target[
+                                                 ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                             np.power(phase_field_at_quad_poits_1qxyz.s, 0)[0, 0, :, ...]
+
+    target_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
+        material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+        displacement_field_inxyz=displacement_field_load_case[load_case],
+        macro_gradient_field_ijqxyz=macro_gradient_field_load_case[load_case],
+        formulation='small_strain')
+
 
 # Auxetic metamaterials
 p = 2
@@ -244,15 +283,7 @@ info_adjoint['residual_rz'] = []
 # eta_mult = 0.01
 
 
-phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
-    name='phase_field_at_quads_in_objective_function_multiple_load_cases')
-material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-    name='material_data_field_C_0_rho_ijklqxyz_in_objective')
-s_sensitivity_field = discretization.get_scalar_field(name='s_phase_field')
-rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field_at_load_case')
-s_stress_and_adjoint_load_case = discretization.get_scalar_field(
-    name='s_stress_and_adjoint_load_case')
+
 cg_setup = {'cg_tol': 10 ** (-cg_tol_exponent)}
 
 # w_mult=weight
@@ -273,8 +304,9 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     # if zero_small_phases:
     #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
     disp = False
-    phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
-
+    phase_field_1nxyz.s[mask_free_variables] = phase_field_1nxyz_flat
+    # phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+    # apply_filter_zero_boundary(phase_field_1nxyz)
     # Phase field  in quadrature points
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
@@ -352,13 +384,10 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     adjoint_energies_step = 0
     for load_case in np.arange(nb_load_cases):
 
-        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
-                                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-
         rhs_load_case_inxyz.s.fill(0)
         discretization.get_rhs_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            macro_gradient_field_ijqxyz=macro_gradient_field_load_case[load_case],
             rhs_inxyz=rhs_load_case_inxyz)
 
         if MPI.COMM_WORLD.rank == 0:
@@ -406,7 +435,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
         homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
             displacement_field_inxyz=displacement_field_load_case[load_case],
-            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            macro_gradient_field_ijqxyz=macro_gradient_field_load_case[load_case],
             formulation='small_strain')
         # print('homogenized stress = \n'          ' {} '.format(homogenized_stresses[load_case] )) # good in MPI
 
@@ -430,7 +459,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             void_material_data_ijkl=elastic_C_void,
             displacement_field_inxyz=displacement_field_load_case[load_case],
             adjoint_field_inxyz=adjoint_field_load_case[load_case],
-            macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
+            macro_gradient_field_ijqxyz=macro_gradient_field_load_case[load_case],
             phase_field_1nxyz=phase_field_1nxyz,
             target_stress_ij=target_stresses[load_case],
             actual_stress_ij=homogenized_stresses[load_case],
@@ -461,8 +490,9 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     discretization.fft.communicate_ghosts(s_sensitivity_field)
     norms_sigma.append(norm_sigma_step)
     norms_adjoint_energy.append(adjoint_energies_step)
+    # s_sensitivity_field.s[0, 0].reshape(-1)
 
-    return objective_function[0], s_sensitivity_field.s[0, 0].reshape(-1)
+    return objective_function[0], s_sensitivity_field.s[mask_free_variables]
 
 
 if __name__ == '__main__':
@@ -503,8 +533,13 @@ if __name__ == '__main__':
 
 
     def apply_filter_zero_boundary(phase):
-        phase.s[0, 0, :,0] = 0
-        phase.s[0, 0, :, -1] = 0
+        # phase.s[0, 0, :,0] = 0
+        # phase.s[0, 0, :, -1] = 0
+        dx = discretization.fft.coords[0, 1, 0] - discretization.fft.coords[0, 0, 0]
+        phase.s[0, 0, discretization.fft.coords[0] == 0] = 0
+        phase.s[0, 0, discretization.fft.coords[0] == 1 - dx] = 0
+
+
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
     phase_field_0 = discretization.get_scalar_field(name='phase_field_in_initial_')
 
@@ -523,7 +558,7 @@ if __name__ == '__main__':
     elif start > 0:
         # file_data_name = f'eta_1muFFTTO_{problem_type}_random_init_N{number_of_pixels[0]}_E_target_{E_target}_Poisson_{poison_target}_Poisson0_{poison_0}_w{w_mult}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{MPI.COMM_WORLD.size}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}.npy'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
         # file_data_name = f'_iteration_{start}'
-        #file_data_name = f'_eta_{0.01:.2f}' + f'_w_{0.3:.1f}' + f'_iteration_{start}'
+        # file_data_name = f'_eta_{0.01:.2f}' + f'_w_{0.3:.1f}' + f'_iteration_{start}'
         file_data_name = f'_eta_{eta:.2f}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + f'_iteration_{start}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
         # if MPI.COMM_WORLD.size == 1 or None:
@@ -590,17 +625,24 @@ if __name__ == '__main__':
                 np.savez(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'_log.npz', **_info_iter)
 
         iterat += 1
-        plt.figure()
-        plt.contourf(result_norms.reshape([*discretization.nb_of_pixels]), cmap=mpl.cm.Greys)
-        # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-        plt.clim(0, 1)
-        plt.title(f'Iteration {iterat}')
-        plt.colorbar()
-        plt.show()
+        # plt.figure()
+        # plt.contourf(result_norms.reshape([*discretization.nb_of_pixels]), cmap=mpl.cm.Greys)
+        # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+        # plt.clim(0, 1)
+        # plt.title(f'Iteration {iterat}')
+        # plt.colorbar()
+        # plt.show()
 
+
+    mask_free_variables = np.ones_like(phase_field_0.s, dtype=bool)
+    dx = discretization.fft.coords[0, 1, 0] - discretization.fft.coords[0, 0, 0]
+    mask_free_variables[0, 0, discretization.fft.coords[0] == 0] = 0
+    mask_free_variables[0, 0, discretization.fft.coords[0] == 1 - dx] = 0
+
+    # phase_field_0.s
 
     xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
-                                      x=phase_field_0.s.ravel(),
+                                      x=phase_field_0.s[mask_free_variables],
                                       jac=True,
                                       maxcor=20,
                                       gtol=1e-5,
@@ -611,9 +653,9 @@ if __name__ == '__main__':
                                       callback=my_callback
                                       )
     solution_phase = discretization.get_scalar_field(name='phase_field_in_initial_')
-
-    solution_phase.s = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
-    sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
+    sensitivity_sol_FE_MPI = discretization.get_scalar_field(name='sensitivity_sol_FE_MPI')
+    solution_phase.s[mask_free_variables] = xopt_FE_MPI.x
+    sensitivity_sol_FE_MPI.s[mask_free_variables] = xopt_FE_MPI.jac
 
     _info = {}
     if MPI.COMM_WORLD.rank == 0:
@@ -637,7 +679,7 @@ if __name__ == '__main__':
 
     _info['nb_iterations'] = iterat
 
-    file_data_name = f'_eta_{eta}' + f'_w_{weight}'+ f'_p_{poison_target}' + f'_final'
+    file_data_name = f'_eta_{eta}' + f'_w_{weight}' + f'_p_{poison_target}' + f'_final'
     # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
     save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
              solution_phase.s[0].mean(axis=0),
@@ -671,9 +713,7 @@ if __name__ == '__main__':
         rhs_field_final = discretization.get_unknown_size_field(name='rhs_field_final')
         rhs_field_final.s.fill(0)
 
-        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
-                                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-
+        macro_gradient_field_ijqxyz=macro_gradient_field_load_case[load_case]
         discretization.get_rhs_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
@@ -711,7 +751,7 @@ if __name__ == '__main__':
 
         _info['target_stress' + f'{load_case}'] = target_stresses[load_case]
         _info['homogenized_stresses' + f'{load_case}'] = homogenized_stresses[load_case]
-        stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
+        #stress = np.einsum('ijkl,lk->ij', elastic_C_0, macro_gradients[load_case])
         if MPI.COMM_WORLD.rank == 0:
             print(f'target_stresses[load_case] = {target_stresses[load_case]}')
             print(f'homogenized_stresses[load_case]= {homogenized_stresses[load_case]}')
@@ -762,5 +802,6 @@ if __name__ == '__main__':
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weight}'  + f'_p_{poison_target}'+ f'_log.npz',
-                 **_info)  # + f'_its_{start}_{start + iterat}'
+        np.savez(
+            data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weight}' + f'_p_{poison_target}' + f'_log.npz',
+            **_info)  # + f'_its_{start}_{start + iterat}'

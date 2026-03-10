@@ -20,14 +20,14 @@ plt.rcParams["font.family"] = "Arial"
 eta = 0.01
 poison_target = 0.1
 preconditioner_type = "Green_Jacobi"
-nb_pixels = 36
-random_init = True
+nb_pixels = 1024
+random_init = False
 cg_tol_exponent = 8
 soft_phase_exponent = 5
 
 # Paths
 script_dir = os.path.dirname(os.path.realpath(__file__))
-base_script_name = 'exp_paper_TO_exp_6_square'
+base_script_name = 'exp_paper_TO_exp_5_square'
 script_name = f'{base_script_name}_random_{random_init}_N_{nb_pixels}_cgtol_{cg_tol_exponent}_soft_{soft_phase_exponent}'
 data_folder_path = os.path.join(script_dir, 'exp_data', script_name)
 movie_folder_path = os.path.join(script_dir, 'movies', script_name)

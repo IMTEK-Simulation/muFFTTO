@@ -46,7 +46,7 @@ parser.add_argument("-cg_tol", "--cg_tol_exponent", default="8")
 parser.add_argument("-soft", "--soft_phase_exponent", default="5")
 parser.add_argument("-eta", "--eta_parameter", default="0.01")
 parser.add_argument("-w", "--weight_parameter", default="5.")
-parser.add_argument("-poisson", "--target_poisson", default="-0.5")
+parser.add_argument("-poisson", "--target_poisson", default="0.1")
 
 # Preconditioner type (string, choose from a set)
 
@@ -161,7 +161,7 @@ def M_fun_Green(x, Px):
 # set up load cases
 nb_load_cases = 3
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_multip = 1.
+macro_multip = 0.03
 macro_gradients[0] = np.array([[1.0, 0.0],
                                [0., .0]]) * macro_multip
 macro_gradients[1] = np.array([[.0, .0],
