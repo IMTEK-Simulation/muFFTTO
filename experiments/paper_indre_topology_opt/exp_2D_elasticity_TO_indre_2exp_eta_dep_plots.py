@@ -59,10 +59,10 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     for w_mult in weights:  # np.arange(0.1, 1., 0.1):# [1]:
         etas= [0.005,0.01,0.02,0.05]#:# [0.005,0.01,0.02,0.05]#np.concatenate([np.arange(0.005, 0.03, 0.005)])
         for eta  in etas :  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
-            random_init=False
+            random_init=True
             cg_tol_exponent=8
             soft_phase_exponent=5
-            N = 16
+            N = 128
             script_name = 'exp_paper_TO_exp_2_square'+ f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 
 
@@ -73,8 +73,8 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             # name = (
             # f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
-            name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_log.npz'
-            xopt = np.load(name, allow_pickle=True)
+            name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}'+ f'_w_{w_mult}' + f'_log.npz'
+            #xopt = np.load(name, allow_pickle=True)
             #
             # if plot_figs:
             #     phase_field = np.load('../exp_data/' + name + f'.npy', allow_pickle=True)
@@ -183,18 +183,18 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         # f'{optimizer}_muFFTTO_elasticity_{element_type}_{script_name}_N{N}_E_target_{E_target_0}_Poisson_{poison_target}_Poisson0_0.0_w{w_mult:.2f}_eta{eta_mult}_p{p}_bounds={bounds}_FE_NuMPI{cores}_nb_load_cases_{nb_load_cases}_energy_objective_{energy_objective}_random_{random_initial_geometry}')
 
         #name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}'+ f'_w_{weight}'  +'_final' + f'.npy'
-        name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}'  +'_final' + f'.npy'
+        name =  data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}' + f'_w_{w_mult}' +'_final' + f'.npy'
 
         phase_field = np.load(name, allow_pickle=True)
 
         nb_reps = 1
         if i == 0:
-            roll_x = 0
-            roll_y = -0
+            roll_x = -9
+            roll_y = -35
             ax1 = fig.add_subplot(gs[1, i + 1])
             ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
-                         xy=(18, 1.0),
-                         xytext=(23., 0.6),
+                         xy=(37.5, 0.98),
+                         xytext=(52., 0.75),
                          arrowprops=dict(arrowstyle='->',
                                          color=colors[i],
                                          lw=1,
@@ -210,12 +210,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
                          )
             ax0.text(letter_offset, 1.05, '(b)', transform=ax1.transAxes)
         if i == 1:
-            roll_x = 10
-            roll_y = 8
+            roll_x = -18
+            roll_y = -54
             ax1 = fig.add_subplot(gs[1, i + 1])
             ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
-                         xy=(20, 0.3),
-                         xytext=(12., 0.1),
+                         xy=(37, 0.9),
+                         xytext=(45., 0.5),
                          arrowprops=dict(arrowstyle='->',
                                          color=colors[i],
                                          lw=1,
@@ -231,12 +231,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             ax0.text(letter_offset, 1.05, '(c)', transform=ax1.transAxes)
 
         elif i == 2:
-            roll_x = 52
-            roll_y = 44
+            roll_x = 5
+            roll_y = -62
             ax1 = fig.add_subplot(gs[1, i + 1])
             ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
-                         xy=(18, 0.85),
-                         xytext=(11., 0.4),
+                         xy=(36.5, 0.87),
+                         xytext=(25., 0.4),
                          arrowprops=dict(arrowstyle='->',
                                          color=colors[i],
                                          lw=1,
@@ -252,12 +252,12 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             ax0.text(letter_offset, 1.05, '(d)', transform=ax1.transAxes)
 
         elif i == 3:
-            roll_x = 0
-            roll_y = 50
+            roll_x = -16
+            roll_y = -17
             ax1 = fig.add_subplot(gs[1, i + 1])
             ax0.annotate(text=r'$\eta = $' + f'{eta_mult}' + r'$L$',
-                         xy=(15, 0.85),
-                         xytext=(5., 0.5),
+                         xy=(30, 0.88),
+                         xytext=(15., 0.7),
                          arrowprops=dict(arrowstyle='->',
                                          color=colors[i],
                                          lw=1,
@@ -345,13 +345,13 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
         arrowprops=dict(arrowstyle='<->', color='black')
     )
     ax0.text(
-        0.31, 1.12, "5h",
+        0.31, 1.12, "10h",
         ha="center", va="center",
         # bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="black"),
         transform=ax0.transAxes
     )
 
-    fname = figure_folder_path + 'exp1_rectangles{}'.format('.pdf')
+    fname = figure_folder_path +f'{N}_' +'exp1_rectangles_{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     # plt.show()

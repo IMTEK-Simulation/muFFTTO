@@ -5,6 +5,7 @@ import scipy as sc
 import time
 import sys
 import matplotlib as mpl
+from matplotlib.animation import FFMpegWriter
 
 from matplotlib import pyplot as plt
 
@@ -20,7 +21,7 @@ from muFFTTO import microstructure_library
 compute = False
 plot = True
 
-grid_type ='square' # 'hex'  # 'square'
+grid_type ='hex' # 'hex'  # 'square'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -74,12 +75,13 @@ N = number_of_pixels[0]
 cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
-poison_target = -0.3
+poison_target = -0.5
 
 if grid_type == 'hex':
     script_name = 'exp_paper_TO_exp_5_hexa' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 elif grid_type == 'square':
     script_name = 'exp_paper_TO_exp_5_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
+
 preconditioner_type = "Green_Jacobi"
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
@@ -170,11 +172,11 @@ if compute:
 
         M_fun = M_fun_Green_Jacobi
 
-    for inc_index in range(10):
-        load_increment = inc_index / 10
+    for inc_index in range(20):
+        load_increment = inc_index / 20
         # Set up right hand side
         # set macroscopic gradient
-        macro_gradient = np.array([[0.05, 0], [0, 0.0]]) * load_increment
+        macro_gradient = np.array([[0.5, 0], [0, 0.0]]) * load_increment
         macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -204,7 +206,7 @@ if compute:
             b=rhs_field,
             x=solution_field,
             P=M_fun,
-            tol=1e-3,
+            tol=1e-7,
             maxiter=2000,
             callback=callback,
         )
@@ -225,22 +227,29 @@ if compute:
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
-
-        print('homogenized stress = \n {}'.format(homogenized_stress))
-        print('homogenized stress in Voigt notation = \n {}'.format(
+        if MPI.COMM_WORLD.rank == 0:
+            print('homogenized stress = \n {}'.format(homogenized_stress))
+            print('homogenized stress in Voigt notation = \n {}'.format(
             domain.compute_Voigt_notation_2order(homogenized_stress)))
 
 if plot:
-
-
-
+    if MPI.COMM_WORLD.rank == 0:
+        fig = plt.figure(figsize=(11, 6.5))
+        gs = fig.add_gridspec(1, 1, hspace=0.1)
+        ax1 = fig.add_subplot(gs[0])
+        metadata = dict(title=f'Deformation Movie w_{weight}_p_{poison_target}', artist='Junie', comment='Deformation evolution')
+        writer = FFMpegWriter(fps=5, metadata=metadata)
+        movie_name = figure_folder_path + f'movie_w_{weight}_p_{poison_target}.mp4'
 
     for inc_index in range(10):
-        load_increment = inc_index / 10
+        load_increment = inc_index / 20
         # load_increment=0.1
-
-
-
+        # for inc_index in range(20):
+        #     load_increment = inc_index / 20
+        #     # Set up right hand side
+        #     # set macroscopic gradient
+        macro_gradient = np.array([[0.5, 0], [0, 0.0]]) * load_increment
+        #macro_gradient = np.array([[0.2, 0], [0, 0.0]]) * load_increment
         file_data_name_it = f'_w_{weight}' + f'_p_{poison_target}' + f'_load_increment_{load_increment}'
 
         displacement = load_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
@@ -249,69 +258,93 @@ if plot:
                                 components_are_leading=True,
                                 comm=MPI.COMM_WORLD)
 
-        nb_tiles = 3
-        x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
-        x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, nb_tiles, nb_tiles * (N) + 1),
-                                         np.linspace(0, nb_tiles, nb_tiles * (N) + 1), indexing='ij')
-        shift = 0.5 * np.linspace(0, nb_tiles, nb_tiles * (N) + 1)
-        x_coords = np.copy(x_ref)
-        if grid_type == 'hex':
-            # Apply shift to each row
-            x_coords[0] += shift[None, :] - 2
-            x_coords[1] *= np.sqrt(3) / 2
-
-
-        # Add linear displacement from macro gradient x*macro_grad
-        macro_gradient = np.array([[0.05, 0], [0, 0.0]]) * load_increment
-
-        lin_disp_ixy = np.einsum('ij...,j...->i...', macro_gradient, x_coords)
-
-        x_coords[0] += lin_disp_ixy[0]
-        x_coords[1] += lin_disp_ixy[1]
-
-        # add fluctuation of displacement
-        # np.tile(displacement[0], (nb_tiles, nb_tiles))
-        x_coords[0, :-1, :-1] += np.tile(displacement[0], (nb_tiles, nb_tiles))
-        x_coords[1, :-1, :-1] += np.tile(displacement[1], (nb_tiles, nb_tiles))
-
-        fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
-
-        gs = fig.add_gridspec(1, 1, hspace=0.1)  # increase rows from 3 → 4
-        ax1 = fig.add_subplot(gs[0])
-
-        pcm = ax1.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field.s[0, 0], (nb_tiles, nb_tiles)),
-                             shading='flat',
-                             edgecolors='none',
-                             lw=0.01,
-                             cmap=mpl.cm.Greys,
-                             vmin=0, vmax=1,
-                             rasterized=True)
-        fig.colorbar(pcm, ax=ax1)
-
-        ax1.xaxis.set_ticks_position('none')
-        ax1.yaxis.set_ticks_position('none')
-        ax1.set_xlim(-0.5, nb_tiles+0.5 )
-        ax1.set_ylim(-0.5, nb_tiles + 0.5)
-        # ax1.set_aspect('equal')
-        ax1.set_title(f'Load_incerment {load_increment}')
-
-        # Add horizontal and vertical liner indicated initial shape
-        for i in range(nb_tiles + 1):
+        if MPI.COMM_WORLD.rank == 0:
+            nb_tiles = 4
+            x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
+            x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, nb_tiles, nb_tiles * (N) + 1),
+                                             np.linspace(0, nb_tiles, nb_tiles * (N) + 1), indexing='ij')
+            shift = 0.5 * np.linspace(0, nb_tiles, nb_tiles * (N) + 1)
+            x_coords = np.copy(x_ref)
             if grid_type == 'hex':
-                # Initial horizontal lines in hex grid
-                y_val = i * np.sqrt(3) / 2
-                ax1.plot([0 - 2, nb_tiles + 0.5 * nb_tiles - 2], [y_val, y_val], color='k', linestyle='--', linewidth=1, alpha=0.5)
+                # Apply shift to each row
+                x_coords[0] += shift[None, :] - 2
+                x_coords[1] *= np.sqrt(3) / 2
 
-                # Initial vertical lines in hex grid (tilted)
-                # x_coords[0] += shift[None, :] - 2
-                # shift = 0.5 * linspace(0, nb_tiles, ...)
-                x_start = i - 2
-                x_end = i + 0.5 * nb_tiles - 2
-                ax1.plot([x_start, x_end], [0, nb_tiles * np.sqrt(3) / 2], color='k', linestyle='--', linewidth=1, alpha=0.5)
+            # Add linear displacement from macro gradient x*macro_grad
 
-            else:
-                ax1.axhline(y=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
-                ax1.axvline(x=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
+            lin_disp_ixy = np.einsum('ij...,j...->i...', macro_gradient, x_coords)
 
-        plt.show()
-        print()
+            x_coords[0] += lin_disp_ixy[0]
+            x_coords[1] += lin_disp_ixy[1]
+
+            # add fluctuation of displacement
+            #build a periodic displacemet
+            tilled_disp_x = np.tile(displacement[0], (nb_tiles, nb_tiles))
+            tilled_disp_y = np.tile(displacement[1], (nb_tiles, nb_tiles))
+
+            # extend to [N+1, N+1] to simulate periodicity
+            nx, ny = tilled_disp_x.shape
+            tilled_disp_x_ext = np.zeros((nx + 1, ny + 1))
+            tilled_disp_y_ext = np.zeros((nx + 1, ny + 1))
+
+            tilled_disp_x_ext[:-1, :-1] = tilled_disp_x
+            tilled_disp_y_ext[:-1, :-1] = tilled_disp_y
+
+            # Fill last row and column with first row and column
+            tilled_disp_x_ext[-1, :-1] = tilled_disp_x[0, :]
+            tilled_disp_x_ext[:-1, -1] = tilled_disp_x[:, 0]
+            tilled_disp_x_ext[-1, -1] = tilled_disp_x[0, 0]
+
+            tilled_disp_y_ext[-1, :-1] = tilled_disp_y[0, :]
+            tilled_disp_y_ext[:-1, -1] = tilled_disp_y[:, 0]
+            tilled_disp_y_ext[-1, -1] = tilled_disp_y[0, 0]
+
+            x_coords[0] += tilled_disp_x_ext
+            x_coords[1] += tilled_disp_y_ext
+
+            ax1.clear()
+            pcm = ax1.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field.s[0, 0], (nb_tiles, nb_tiles)),
+                                 shading='flat',
+                                 edgecolors='none',
+                                 lw=0.01,
+                                 cmap=mpl.cm.Greys,
+                                 vmin=0, vmax=1,
+                                 rasterized=True)
+            if inc_index == 0:
+                fig.colorbar(pcm, ax=ax1)
+
+            ax1.xaxis.set_ticks_position('none')
+            ax1.yaxis.set_ticks_position('none')
+            ax1.set_xlim(-0.5, nb_tiles+0.5 )
+            ax1.set_ylim(-0.5, nb_tiles + 0.5)
+            # ax1.set_aspect('equal')
+            ax1.set_title(f'Load_incerment {load_increment:.1f}')
+
+            # Add horizontal and vertical liner indicated initial shape
+            for i in range(nb_tiles + 1):
+                if grid_type == 'hex':
+                    # Initial horizontal lines in hex grid
+                    y_val = i * np.sqrt(3) / 2
+                    ax1.plot([0 - 2, nb_tiles + 0.5 * nb_tiles - 2], [y_val, y_val], color='k', linestyle='--', linewidth=1, alpha=0.5)
+
+                    # Initial vertical lines in hex grid (tilted)
+                    # x_coords[0] += shift[None, :] - 2
+                    # shift = 0.5 * linspace(0, nb_tiles, ...)
+                    x_start = i - 2
+                    x_end = i + 0.5 * nb_tiles - 2
+                    ax1.plot([x_start, x_end], [0, nb_tiles * np.sqrt(3) / 2], color='k', linestyle='--', linewidth=1, alpha=0.5)
+
+                else:
+                    ax1.axhline(y=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
+                    ax1.axvline(x=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
+
+            if inc_index == 0:
+                writer.setup(fig, movie_name, dpi=100)
+
+            print(f'Adding frame for load increment: {load_increment:.2f}')
+            writer.grab_frame()
+
+    if MPI.COMM_WORLD.rank == 0:
+        writer.finish()
+        plt.close(fig)
+        print(f'Movie saved: {movie_name}')

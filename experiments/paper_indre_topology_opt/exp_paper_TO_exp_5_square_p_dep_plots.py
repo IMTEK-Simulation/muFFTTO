@@ -42,7 +42,10 @@ bulk_K_target=[]
 # weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
 
 poisson_targets =np.array([-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4])
+# poisson_targets =poisson_targets[: :-1]
+
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
+
 target_Cij=np.zeros((poisson_targets.shape[0],3,3))
 weight=2.0
 index=0
@@ -330,12 +333,12 @@ for i, poison_target in enumerate(poisson_targets):
     if name and os.path.exists(name):
         print(f"Loading phase field data from {name}")
         phase_field = np.load(name, allow_pickle=True)
-        if i==1:
-            phase_field_0 = np.copy(phase_field )
-        elif i==0:
-            phase_field_0 = np.copy(phase_field)
+        # if i==1:
+        #     phase_field_0 = np.copy(phase_field )
+        # elif i==0:
+        #     phase_field_0 = np.copy(phase_field)
         nb_tiles = 1
-        pcm = ax.pcolormesh(np.tile(phase_field-phase_field_0, (nb_tiles, nb_tiles)),
+        pcm = ax.pcolormesh(np.tile(phase_field, (nb_tiles, nb_tiles)),
                      shading='flat',
                      edgecolors='none',
                      lw=0.01,

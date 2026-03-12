@@ -63,7 +63,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
             pixel_size = 0.0078125
             # eta = 0.03125  # eta_mult * pixel_size
             E_target_0 = 0.3
-            N = 64
+            N = 128
             cores = 6
             p = 2
             nb_load_cases = 3
