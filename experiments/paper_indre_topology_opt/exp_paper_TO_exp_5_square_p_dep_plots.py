@@ -47,11 +47,11 @@ poisson_targets =np.array([-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
 
 target_Cij=np.zeros((poisson_targets.shape[0],3,3))
-weight=2.0
+weight=3.0
 index=0
 
 # weights=[5]
-N = 1024
+N = 64
 for poison_target in poisson_targets:
 
     eta_mult = 0.01
@@ -139,19 +139,14 @@ for poison_target in poisson_targets:
     bulk_K_target.append(Cij_target[0, 1]+Cij_target[2,2]*2/3)
 
 
-    lam, mu = Cij_target[0, 1], Cij_target[2, 2]
+   # lam, mu = Cij_target[0, 1], Cij_target[2, 2]
 
-    # poison_target_aparent.append( lam / (2 * (lam + mu)))
-    #
-    #
-    # Young_target = mu * (3 * lam + 2 * mu) / (lam + mu)
-    #
     S_compl_target = np.linalg.inv(Cij_target)
 
     E1_target = 1 / S_compl_target[0, 0]
     s_temp = -S_compl_target[0, 1] / S_compl_target[0, 0]
     nu12_target.append(s_temp / (1 + s_temp))
-    G_target = 1 / S_compl_target[2, 2]
+    #G_target = 1 / S_compl_target[2, 2]
     index += 1
 
 
@@ -187,12 +182,15 @@ plt.plot(poisson_targets, np.asarray(bulk_K_target), '-.', color='r', linewidth=
              label=r'Target - Bulk K')
 plt.plot(poisson_targets, np.asarray(bulk_K_computed), '-', color='r', linewidth=2, marker='|',
              label=r'Computed - Bulk K')
-
-plt.yscale('log')
+plt.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='|',
+         label=r'Target - Poisson')
+plt.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='|',
+         label=r'Computed - Poisson')
+# plt.yscale('log')
 plt.legend(loc='best')
 plt.xlabel(r'Target Poisson')
-plt.xlim(-0.51, 0.51)
-plt.ylim(1e-10, 1)
+plt.xlim(-0.51, 0.31)
+plt.ylim(-0.5, 1)
 plt.title(r'W'+ f'{weight}')
 fname = figure_folder_path +f'{weight}' +'exp5_square_KG{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
@@ -310,8 +308,8 @@ for i, poison_target in enumerate(poisson_targets):
     ax = axes_pf[i]
     
     # Try to load the final phase field
-    name = data_folder_path + f'{preconditioner_type}'+ f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'.npy'
-    
+    #name = data_folder_path + f'{preconditioner_type}'+ f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'.npy'
+    name =data_folder_path + f'{preconditioner_type}'
     if not os.path.exists(name):
         # Fallback to searching for the highest iteration if _final doesn't exist
         prefix = f"{preconditioner_type}_eta_{eta_mult}_w_{weight:.1f}_p_{poison_target}_iteration_"

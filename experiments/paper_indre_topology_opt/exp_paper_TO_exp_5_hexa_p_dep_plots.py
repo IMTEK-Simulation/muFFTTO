@@ -46,7 +46,7 @@ shear_G_computed=np.zeros(poisson_targets.shape[0])
 bulk_K_computed=np.zeros(poisson_targets.shape[0])
 shear_G_target=np.zeros(poisson_targets.shape[0])
 bulk_K_target=np.zeros(poisson_targets.shape[0])
-weight=5.0
+weight=10.0
 # weights=[5]
 N = 1024
 index=0
@@ -200,13 +200,19 @@ if plot_data_anal:
     plt.plot(poisson_targets, np.asarray(bulk_K_computed), '-', color='r', linewidth=2, marker='|',
              label=r'Computed - Bulk K')
 
-    plt.yscale('log')
+
+    plt.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='|',
+             label=r'Target - Poisson')
+    plt.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='|',
+             label=r'Computed - Poisson')
+
+    #plt.yscale('log')
     plt.legend(loc='best')
     plt.xlabel(r'Target Poisson')
-    plt.xlim(-0.51, 0.51)
-    plt.ylim(1e-10, 1)
+    plt.xlim(-0.51, 0.31)
+    plt.ylim(-0.5, 1)
     plt.title(r'W' + f'{weight}')
-    fname = figure_folder_path + f'{weight}' + 'exp5_square_KG{}'.format('.pdf')
+    fname = figure_folder_path + f'{weight}' + 'exp5_hexa_KG{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(fname, bbox_inches='tight')
     plt.show()

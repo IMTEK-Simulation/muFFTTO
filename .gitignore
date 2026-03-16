@@ -32,3 +32,5 @@ experiments/exp_data/
 *.iml
 
 .junie/
+
+.output.txt

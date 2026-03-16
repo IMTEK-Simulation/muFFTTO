@@ -30,6 +30,8 @@ Young_modulus = []
 c13_ = []
 c23_ = []
 
+nu_xy= []
+nu_yx= []
 E1= []
 nu12= []
 C_22= []
@@ -76,14 +78,19 @@ for w_mult in weights:
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
     Cij_.append(Cij)
     lam, mu = Cij[0, 1], Cij[2, 2]
+    # for Orthotropic material
+    S_compl = np.linalg.inv(Cij)
+
+    nu_xy.append(-S_compl[0, 1] / S_compl[0, 0])
+    nu_yx.append(-S_compl[1, 0] / S_compl[1, 1])
+
 
     poison_ratios.append(lam / (2 * (lam + mu)))
     Young_modulus.append(mu * (3 * lam + 2 * mu) / (lam + mu))
 
     c13_.append(Cij[0, 2])
     c23_.append(Cij[1, 2])
-    # for Orthotropic material
-    S_compl = np.linalg.inv(Cij)
+
 
     E1.append(1 / S_compl[0, 0])
     s_temp = -S_compl[0, 1] / S_compl[0, 0]
@@ -193,9 +200,9 @@ plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
 # plt.show()
 
-fig = plt.figure(figsize=(11, 6.5))  # slightly taller to fit the extra subplot
+fig = plt.figure(figsize=(11, 7.5))  # slightly taller to fit the extra subplot
 
-gs = fig.add_gridspec(4, 4, hspace=0.1)  # increase rows from 3 → 4
+gs = fig.add_gridspec(5, 4, hspace=0.1)  # increase rows from 3 → 4
 ax5 = fig.add_subplot(gs[0:3, :])  # keep original plot spanning first 3 rows
 
 # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
@@ -204,14 +211,15 @@ ax5.loglog(weights, f_pfs, '--', color='k', linewidth=1, marker='|', label=r'pha
 
 # ax5.legend([r'stress difference -  $f_{\sigma}$', r'phase field - $f_{\rho}$'], loc='lower center')
 # ax.set_aspect('equal')
-ax5.set_title(r'Square grid : 3 load cases'+ f' N={N}, eta={eta_mult}')
+#plt.title(r'Square grid zero poisson: 3 load cases' + f' N={N}, eta={eta_mult}')
+
 ax5.set_xlabel(r'Weight $a$')
 ax5.set_xlim(0.1, 100)
-ax5.set_ylim(1e-4, 1e1)
+ax5.set_ylim(1e-6, 3e1)
 ax5.set_xticklabels([])
 
 ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
-             xy=(0.6, f_sigmas[np.where(weights == 1)[0][0]]),
+             xy=(weights[3], f_sigmas[np.where(weights == 1)[0][0]]),
              xytext=(1.0, 5.),
              arrowprops=dict(arrowstyle='->',
                              color='red',
@@ -219,7 +227,7 @@ ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
                              ls='-')
              )
 ax5.annotate(r'Phase field - $f_{\rho}$',
-             xy=(50., f_pfs[np.where(weights == 70.0)[0][0]]),
+             xy=(weights[8], f_pfs[np.where(weights == 70.0)[0][0]]),
              xytext=(20., 5.),
              arrowprops=dict(arrowstyle='->',
                              color='black',
@@ -230,15 +238,16 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 
 letter_offset = -0.15
 
+#for upper_ax in np.arange(5):
 for upper_ax in np.arange(5):
-    weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
-    #weight = weights[upper_ax]
-    #weight = np.array([0.1, 1, 10, 30, 100])[upper_ax]
+    weight = np.array([weights[0], weights[1], weights[4], weights[6], weights[-2]])[upper_ax]
+    #weight = weights[upper_ax] 10
+
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
-        ax1 = fig.add_axes([0.12, 0.5, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = -20
-        roll_y = 5
+        ax1 = fig.add_axes([0.12, 0.55, 0.18, 0.18], transform=ax5.transAxes)
+        roll_x = -128
+        roll_y = -128
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.23, 0.1),
@@ -250,9 +259,9 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{A}}$', transform=ax1.transAxes)  #
 
     elif upper_ax == 1:
-        ax1 = fig.add_axes([0.28, 0.39, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = -26
-        roll_y = 2
+        ax1 = fig.add_axes([0.28, 0.5, 0.18, 0.18], transform=ax5.transAxes)
+        roll_x = 128
+        roll_y = -430
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.8, 0.01),
@@ -264,9 +273,9 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{B}}$', transform=ax1.transAxes)
 
     elif upper_ax == 2:
-        ax1 = fig.add_axes([0.44, 0.32, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 30
-        roll_y = 16
+        ax1 = fig.add_axes([0.44, 0.45, 0.18, 0.18], transform=ax5.transAxes)
+        roll_x = -64
+        roll_y = 332
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(5., 5e-4),
@@ -278,12 +287,12 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{C}}$', transform=ax1.transAxes)
 
     elif upper_ax == 3:
-        ax1 = fig.add_axes([0.56, 0.55, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 25
-        roll_y = 10
+        ax1 = fig.add_axes([0.60, 0.43, 0.18, 0.18], transform=ax5.transAxes)
+        roll_x = 340
+        roll_y = -180
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
-                     xytext=(10., 3e-2),
+                     xytext=(14., 3e-4),
                      arrowprops=dict(arrowstyle='->',
                                      color='black',
                                      lw=1,
@@ -292,12 +301,12 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{D}}$', transform=ax1.transAxes)
 
     elif upper_ax == 4:
-        ax1 = fig.add_axes([0.72, 0.5, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.74, 0.46, 0.18, 0.18], transform=ax5.transAxes)
         roll_x = 0
         roll_y = 0
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
-                     xytext=(50., 1e-2),
+                     xytext=(50., 1e-3),
                      arrowprops=dict(arrowstyle='->',
                                      color='black',
                                      lw=1,
@@ -330,13 +339,13 @@ for upper_ax in np.arange(5):
 
     print(f"Loading phase field data from {latest_file}")
     phase_field = np.load(latest_file, allow_pickle=True)
+    # plotting part
     # center the inclusion
     phase_opt = phase_field
     print(f'min = {phase_opt.min()}, max = {phase_opt.max()}')
-
     phase_opt = np.roll(phase_opt, roll_x, axis=0)
     phase_opt = np.roll(phase_opt, roll_y, axis=1)
-    phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
+    #phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
     # create repeatable cells
     nb_cells = [3, 3]
     nb_additional_cells = 2
@@ -345,12 +354,18 @@ for upper_ax in np.arange(5):
     # ax1.set_ylim(0, nb_cells[1] * +ymax)
     # plot solution
     nb_tiles = 3
-    pcm = ax1.pcolormesh(np.tile(phase_field, (nb_tiles, nb_tiles)),
+    pcm = ax1.pcolormesh(np.linspace(0, nb_tiles, phase_opt.shape[0] * nb_tiles + 1),
+                         np.linspace(0, nb_tiles, phase_opt.shape[1] * nb_tiles + 1),
+                         np.tile(phase_opt, (nb_tiles, nb_tiles)),
                          shading='flat',
                          edgecolors='none',
                          lw=0.01,
                          cmap=mpl.cm.Greys,
                          rasterized=True)
+
+    # parall.set_alpha(1.0)  # Set alpha to fully opaque
+    ax1.hlines(np.arange(1, nb_tiles), 0, nb_tiles, colors='w', linestyles='--', linewidth=0.5)
+    ax1.vlines(np.arange(1, nb_tiles), 0, nb_tiles, colors='w', linestyles='--', linewidth=0.5)
 
     ax1.set_yticklabels([])
     ax1.set_xticklabels([])
@@ -366,22 +381,52 @@ for upper_ax in np.arange(5):
 # --- new subplot underneath ---
 ax6 = fig.add_subplot(gs[3, :])  # bottom row
 ax6.semilogx(weights, zener_ratios, '-', color='b', linewidth=2, marker='|', label=r'Zener ratio')
-ax6.set_xlabel(r'Weight $a$')
+#ax6.set_xlabel(r'Weight $a$')
 # ax6.set_ylabel(r'$a_r$')
 # ax6.legend(loc='best')
 # ax6.grid(True, which="both", ls="--", linewidth=0.5)
 # ax6.grid(axis='y', which="both", visible=False)  # remove y-grid
 ax6.set_xlim(0.1, 100)
-ax6.set_ylim(0.6, 1.2)
+ax6.set_ylim(0.5, 1.2)
 ax6.annotate(r'Zener ratio', color='b',
              xy=(1., zener_ratios[np.where(weights == 1.0)[0][0]]),
-             xytext=(0.5, 0.7),
+             xytext=(0.5, 1.0),
              arrowprops=dict(arrowstyle='->',
                              color='b',
                              lw=1,
                              ls='-')
              )
 ax6.text(0.01, 0.82, r'$\textbf{{(b)}}$', transform=ax6.transAxes)
+ax6.set_xticklabels([])
+
+# --- new subplot underneath ---
+ax_poisson = fig.add_subplot(gs[4, :])  # bottom row
+ax_poisson.semilogx(weights, np.asarray(nu12), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
+ax_poisson.set_xlabel(r'Weight $a$')
+ax_poisson.set_xlim(0.1, 100)
+ax_poisson.set_ylim(-0.55, 0.4)
+ax_poisson.annotate(r"Poisson's ratio", color='olivedrab',
+             xy=(3.,  np.asarray(nu12)[np.where(weights == 3.0)[0][0]]),
+             xytext=(7.0, 0.1),
+             arrowprops=dict(arrowstyle='->',
+                             color='olivedrab',
+                             lw=1,
+                             ls='-')
+             )
+ax_poisson.axhline(y=-0.5, color='black', linestyle='--', linewidth=1)
+ax_poisson.annotate(r"Target Poisson's ratio", color='black',
+             xy=(0.5, -0.5),
+             xytext=(0.12, -0.4),
+             arrowprops=dict(arrowstyle='->',
+                             color='black',
+                             lw=1,
+                             ls='-')
+             )
+
+ax_poisson.text(0.01, 0.65, r'$\textbf{{(c)}}$', transform=ax_poisson.transAxes)
+
+
+
 
 fname = figure_folder_path + 'exp4_square{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))

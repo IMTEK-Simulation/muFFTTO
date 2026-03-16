@@ -100,6 +100,8 @@ for w_mult in weights:
     S_compl = np.linalg.inv(Cij)
     nu_xy.append(-S_compl[0, 1] / S_compl[0, 0])
     nu_yx.append(-S_compl[1, 0] / S_compl[1, 1])
+    s_temp = -S_compl[0, 1] / S_compl[0, 0]
+    nu12.append(s_temp / (1 + s_temp))  # ≈ -0.33
 
     lam, mu = Cij[0, 1], Cij[2, 2]
 
@@ -111,7 +113,8 @@ for w_mult in weights:
 
 
     E1.append(1 / S_compl[0, 0])  # ≈ 0.25
-    nu12.append(-S_compl[0, 1] / S_compl[0, 0])  # ≈ -0.33
+
+
     C_22.append(1 / S_compl[2, 2])
     # poison_ratios.append(nu12)
     # Young_modulus.append(E1)
@@ -150,7 +153,7 @@ plt.title(r'Square grid zero poisson: 3 load cases' + f' N={N}, eta={eta_mult}')
 fname = figure_folder_path + 'exp2_square_convergence{}'.format('.pdf')
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
-plt.show()
+# plt.show()
 
 plt.figure()
 plt.semilogx(weights, np.abs(np.asarray(poison_ratios) - poison_target), '-', color='r', linewidth=2, marker='|',
@@ -169,7 +172,10 @@ plt.legend(loc='best')
 plt.xlabel(r'Weight $a$')
 plt.xlim(0.1, 100)
 plt.ylim(1e-5, 10)
-plt.show()
+# plt.show()
+
+
+#- ---------------------------------
 
 fig = plt.figure(figsize=(11, 7.5))  # slightly taller to fit the extra subplot
 
@@ -217,8 +223,8 @@ for upper_ax in np.arange(5):
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
         ax1 = fig.add_axes([0.12, 0.55, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 0
-        roll_y = 5
+        roll_x = -128
+        roll_y = -128
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.23, 0.1),
@@ -231,8 +237,8 @@ for upper_ax in np.arange(5):
 
     elif upper_ax == 1:
         ax1 = fig.add_axes([0.28, 0.5, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = -26
-        roll_y = 2
+        roll_x = 128
+        roll_y = -430
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.8, 0.01),
@@ -245,8 +251,8 @@ for upper_ax in np.arange(5):
 
     elif upper_ax == 2:
         ax1 = fig.add_axes([0.44, 0.45, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 30
-        roll_y = 16
+        roll_x = -64
+        roll_y = 332
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(5., 5e-4),
@@ -259,8 +265,8 @@ for upper_ax in np.arange(5):
 
     elif upper_ax == 3:
         ax1 = fig.add_axes([0.60, 0.43, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 25
-        roll_y = 10
+        roll_x = 340
+        roll_y = -180
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(14., 3e-4),
@@ -316,7 +322,7 @@ for upper_ax in np.arange(5):
     print(f'min = {phase_opt.min()}, max = {phase_opt.max()}')
     phase_opt = np.roll(phase_opt, roll_x, axis=0)
     phase_opt = np.roll(phase_opt, roll_y, axis=1)
-    phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
+    #phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
     # create repeatable cells
     nb_cells = [3, 3]
     nb_additional_cells = 2
@@ -324,8 +330,10 @@ for upper_ax in np.arange(5):
     # ax1.set_xlim(0, nb_cells[0])
     # ax1.set_ylim(0, nb_cells[1] * +ymax)
     # plot solution
-    nb_tiles = 2
-    pcm = ax1.pcolormesh(np.tile(phase_field, (nb_tiles, nb_tiles)),
+    nb_tiles = 3
+    pcm = ax1.pcolormesh(np.linspace(0, nb_tiles, phase_opt.shape[0] * nb_tiles + 1),
+                         np.linspace(0, nb_tiles, phase_opt.shape[1] * nb_tiles + 1),
+                         np.tile(phase_opt, (nb_tiles, nb_tiles)),
                          shading='flat',
                          edgecolors='none',
                          lw=0.01,
@@ -333,7 +341,8 @@ for upper_ax in np.arange(5):
                          rasterized=True)
 
     # parall.set_alpha(1.0)  # Set alpha to fully opaque
-    ax1.hlines(1, 0, nb_tiles, colors='w', linestyles='--', linewidth=0.5)
+    ax1.hlines(np.arange(1, nb_tiles), 0, nb_tiles, colors='w', linestyles='--', linewidth=0.5)
+    ax1.vlines(np.arange(1, nb_tiles), 0, nb_tiles, colors='w', linestyles='--', linewidth=0.5)
 
     ax1.set_yticklabels([])
     ax1.set_xticklabels([])
@@ -372,18 +381,26 @@ ax_poisson = fig.add_subplot(gs[4, :])  # bottom row
 ax_poisson.semilogx(weights, np.asarray(nu_xy), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
 ax_poisson.set_xlabel(r'Weight $a$')
 ax_poisson.set_xlim(0.1, 100)
-ax_poisson.set_ylim(-0.5, 0.49)
+ax_poisson.set_ylim(-0.2, 0.4)
 ax_poisson.annotate(r"Poisson's ratio", color='olivedrab',
-             xy=(1.,  np.asarray(nu_xy)[np.where(weights == 1.0)[0][0]]),
-             xytext=(0.5, 0.2),
+             xy=(3.,  np.asarray(nu_xy)[np.where(weights == 3.0)[0][0]]),
+             xytext=(7.0, 0.25),
              arrowprops=dict(arrowstyle='->',
                              color='olivedrab',
                              lw=1,
                              ls='-')
              )
+ax_poisson.axhline(y=0, color='black', linestyle='--', linewidth=1)
+ax_poisson.annotate(r"Target Poisson's ratio", color='black',
+             xy=(0.5, 0),
+             xytext=(0.15, -0.15),
+             arrowprops=dict(arrowstyle='->',
+                             color='black',
+                             lw=1,
+                             ls='-')
+             )
+
 ax_poisson.text(0.01, 0.65, r'$\textbf{{(c)}}$', transform=ax_poisson.transAxes)
-
-
 
 
 fname = figure_folder_path + 'exp2_square{}'.format('.pdf')
