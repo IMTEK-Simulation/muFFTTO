@@ -57,6 +57,7 @@ plot = True
 enforce_mean = False
 save_results = False
 save_in_iteration = False
+plot_strain_evols = True
 
 if compute:
 
@@ -445,8 +446,9 @@ if compute:
                 np.savez(data_folder_path + results_name + f'_log.npz', **_info)
                 print(data_folder_path + results_name + f'_log.npz')
 
-plot_strain_evols = True
 if plot_strain_evols:
+
+    number_of_pixels = (1024, 1024)
     ratios = np.array([0, 2, 5, 8])
     colors = ['red', 'blue', 'green', 'orange', 'purple']
 

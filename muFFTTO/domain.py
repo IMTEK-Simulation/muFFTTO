@@ -2517,6 +2517,54 @@ def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
             # https://en.wikipedia.org/wiki/Linear_elasticity
     return mat
 
+# ------------------------------------------------------------
+# Elastic stiffness tensors from Lamé parameters
+# ------------------------------------------------------------
+def get_elastic_tensor_from_lame(dim, lam, mu):
+    """
+    Construct linear elastic stiffness tensor from Lamé parameters.
+
+    Parameters
+    ----------
+    dim : int
+        Spatial dimension (2 or 3).
+    lam : float
+        First Lamé parameter (λ).
+    mu : float
+        Second Lamé parameter (μ), shear modulus.
+
+    Returns
+    -------
+    C : ndarray (dim, dim, dim, dim)
+        Elastic stiffness tensor.
+
+    Notes
+    -----
+    The stiffness tensor is computed as:
+    C_ijkl = λ δ_ij δ_kl + μ (δ_ik δ_jl + δ_il δ_jk)
+
+    For 2D, this assumes plane strain conditions.
+    """
+    C = np.zeros((dim, dim, dim, dim))
+    for i in range(dim):
+        for j in range(dim):
+            for k in range(dim):
+                for l in range(dim):
+                    delta_ij = 1 if i == j else 0
+                    delta_kl = 1 if k == l else 0
+                    delta_ik = 1 if i == k else 0
+                    delta_jl = 1 if j == l else 0
+                    delta_il = 1 if i == l else 0
+                    delta_jk = 1 if j == k else 0
+
+                    C[i, j, k, l] = (lam * delta_ij * delta_kl +
+                                     mu * (delta_ik * delta_jl + delta_il * delta_jk))
+    return C
+
+
+
+
+
 
 def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
     """

@@ -24,8 +24,154 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 plot_time_vs_dofs = False
 plot_stress_field = False
 plot_data_vs_CG = False
-plot_data_vs_CG_3D= True
+plot_data_vs_CG_3D= False
 plot_3D_geometry = False
+
+plot_iterations_vs_grids_size = True
+if plot_iterations_vs_grids_size:
+
+    # print time vs DOFS
+    its_G = []
+    its_GJ = []
+    stress_diff_norm = []
+    strain_fluc_norm = []
+    strain_total_norm = []
+    diff_rhs_norm = []
+    norm_rhs_G = []
+    norm_rhs_GJ = []
+    rhs_inf_G = []
+    rhs_inf_GJ = []
+    norm_newrton_stop_G = []
+    norm_newrton_stop_GJ = []
+
+
+    it_max = 10
+    n_exponents = np.array([5])
+    iterations = np.arange(it_max)  # numbers of grids points
+
+    grid_sizes= np.array( [16,32,64,128,200])#,200
+    its_G = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
+    its_GJ = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
+
+    norm_newton_stop_G= np.zeros([len(grid_sizes),it_max,  len(n_exponents)])
+    norm_newton_stop_GJ = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
+
+    unique_components = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
+    total_contrast = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
+
+
+    for i, n in enumerate(grid_sizes):
+        print(i, n)
+
+        Nx = n
+        Ny = Nx
+        Nz = Nx
+
+        for j in np.arange(len(n_exponents)):
+            n_exp = n_exponents[j]
+            for iteration_total in iterations:
+
+                preconditioner_type = 'Green'
+
+                data_folder_path = (
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        + f'_{preconditioner_type}' + '/')
+                if iteration_total < it_max:
+                    if Nx == 256:
+                        _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
+
+                    else:
+                        _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                                allow_pickle=True)
+
+
+                results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
+
+                K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+
+                unique_components[i,iteration_total, j]  = np.unique(K4_xyz_G).size
+                total_contrast[i,iteration_total, j]  = np.max(K4_xyz_G)/np.min(K4_xyz_G)
+                #counts = np.bincount(K4_xyz_G.flatten())
+                # hist_norm, bins = np.histogram(K4_xyz_G, density=True)
+                #
+                # plt.plot()
+                # #plt.hist(K4_xyz_G.flatten(), bins='auto')
+                # #plt.hist(K4_xyz_G.flatten(), bins='auto', density=True)
+                # plt.title(f"Histogram of K4_ijklqyz -{n}, {n_exp}, {iteration_total} ")
+                # plt.xlabel("Value")
+                # plt.ylabel("Frequency")
+                # plt.show()
+
+
+                its_G[i,iteration_total, j] = _info_final_G.f.nb_it_comb
+                norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
+                norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
+                norm_newton_stop_G[i,iteration_total, j]=_info_final_G.f.newton_stop_crit
+                info_log_final_G = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+
+                preconditioner_type = 'Green_Jacobi'
+
+                data_folder_path = (
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        + f'_{preconditioner_type}' + '/')
+                if iteration_total < it_max:
+                    if Nx == 256:
+                        _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
+                                                 allow_pickle=True)
+
+                    else:
+                        _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                                                 allow_pickle=True)
+                # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+                # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
+                #                          allow_pickle=True)
+                # strain_total_GJ = np.load(data_folder_path + f'total_strain_field' + f'_it{iteration_total}' + f'.npy',
+                #                           allow_pickle=True)
+                # rhs_field_GJ = np.load(data_folder_path + f'rhs_field' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
+
+                its_GJ[i,iteration_total, j] = _info_final_GJ.f.nb_it_comb
+                norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
+                norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
+                norm_newton_stop_GJ[i,iteration_total, j]=_info_final_GJ.f.newton_stop_crit
+
+                info_log_final_GJ = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+
+
+    fig = plt.figure(figsize=(8.3, 8.0))
+    gs = fig.add_gridspec(4, 1, hspace=0.2, wspace=0.1, width_ratios=[1],
+                          height_ratios=[1,1,1,1])
+    gs_fnorm_vs_iteration = fig.add_subplot(gs[0, 0])
+    for i, n in enumerate(grid_sizes):
+        gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_G[i, :,0] , '-', marker='x', label=f'Green - {n}')
+        gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_GJ[i, :,0], '--', marker='o', markerfacecolor='none', label=f'Green-Jacobi - {n}')
+    gs_fnorm_vs_iteration.legend()
+
+    gs_iter_vs_mesh_size = fig.add_subplot(gs[1, 0])
+    for i, n in enumerate(grid_sizes):
+        gs_iter_vs_mesh_size.plot(iterations, its_G[i, :,0], '-', marker='x', label=f'Green - {n}')
+        gs_iter_vs_mesh_size.plot(iterations, its_GJ[i, :,0], '--', marker='o', markerfacecolor='none',
+                                   label=f'Green-Jacobi - {n}')
+    gs_iter_vs_mesh_size.legend()
+    gs_iter_vs_mesh_size.set_ylim([0, 1000])
+    gs_iter_vs_mesh_size.set_title('Iterations vs Mesh Size')
+
+    gs_iter_vs_unique_ = fig.add_subplot(gs[2, 0])
+    for i, n in enumerate(grid_sizes):
+        gs_iter_vs_unique_.semilogy(iterations, unique_components[i, :,0], '-', marker='x', label=f' {n}')
+    gs_iter_vs_unique_.legend()
+    gs_iter_vs_unique_.set_title('Unique vsIterations')
+
+    gs_iter_vs_contrast = fig.add_subplot(gs[3, 0])
+    for i, n in enumerate(grid_sizes):
+        gs_iter_vs_contrast.semilogy(iterations, total_contrast[i, :, 0], '-', marker='x', label=f' {n}')
+    gs_iter_vs_contrast.legend()
+    gs_iter_vs_contrast.set_title('Contrast vs Iterations')
+
+    plt.show()
+
+    print()
+
+
 
 if plot_3D_geometry:
     from muFFTTO import domain
@@ -330,7 +476,7 @@ if plot_data_vs_CG_3D:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx =200 # 2 ** 7# 8
+    Nx =128#3200 # 2 ** 7# 8
     Ny = Nx
     Nz = Nx
     it_max = 10

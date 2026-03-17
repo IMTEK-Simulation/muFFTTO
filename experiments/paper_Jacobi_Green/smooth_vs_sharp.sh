@@ -2,7 +2,7 @@
 
 
 
- mpirun -np 10 python ././exp_paper_smooth_vs_sharp_interphases_1024.py -r 4 -cg_tol 1
+mpirun -np 12 python ././exp_paper_smooth_vs_sharp_interphases_1024.py -r 5 -cg_tol 15
 #
 #NUM_RUNS=3
 #

@@ -36,14 +36,15 @@ formulation = 'small_strain'
 domain_size = [1, 1, 1]
 # Variables to be set up
 
-max_size=12
-for nb_pixels_power in np.arange(12, max_size + 1):
+max_size=6
+pixel_sizes =np.array([50,100,150,200])
+for nb_pixels_power in pixel_sizes:
 
    # nb_laminates = 2 ** nb_pixels_power
-    nb_laminates=200
+    #nb_laminates=200
     #
-   # number_of_pixels = (2 ** nb_pixels_power, 2 ** nb_pixels_power, 2 ** nb_pixels_power)
-    number_of_pixels =  (nb_laminates, nb_laminates, nb_laminates)
+    #number_of_pixels = (2 ** nb_pixels_power, 2 ** nb_pixels_power, 2 ** nb_pixels_power)
+    number_of_pixels =  (nb_pixels_power, nb_pixels_power, nb_pixels_power)
 
     geometry_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                             problem_type=problem_type)
@@ -124,7 +125,7 @@ for nb_pixels_power in np.arange(12, max_size + 1):
         seed=42
     )
 
-    results_name = (f'bubbles_' + f'dof={nb_laminates}')
+    results_name = (f'bubbles_' + f'dof={nb_pixels_power}')
     to_save = np.copy(geometry)
     np.save(data_folder_path + results_name + f'.npy', to_save)
 
@@ -171,7 +172,7 @@ for nb_pixels_power in np.arange(12, max_size + 1):
         print(f"Volume fraction: {vf:.2%}")
 
 
-    #visualize_inclusions_voxels(geometry)
+    # visualize_inclusions_voxels(geometry)
 
     # Or with custom options
     #visualize_inclusions_voxels(geometry, color='red', edgecolor=None, alpha=0.7)
