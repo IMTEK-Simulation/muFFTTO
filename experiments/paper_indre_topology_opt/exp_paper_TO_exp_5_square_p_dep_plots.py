@@ -47,7 +47,7 @@ poisson_targets =np.array([-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])#, 
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
 
 target_Cij=np.zeros((poisson_targets.shape[0],3,3))
-weight=20.0
+weight=10.0
 index=0
 
 # weights=[5]

@@ -346,70 +346,100 @@ if plot:
         #'Green_Jacobi_w_1.0_p_-0.5_load_increment_0.2_tilled1_log_plotting'
         print(f'macro_gradient = {macro_gradient}')
         if MPI.COMM_WORLD.rank == 0:
+            repetition = 3
            # nb_tiles = 1
-           #  x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
-           #  x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, nb_tiles, nb_tiles * (N) + 1),
-           #                                   np.linspace(0, nb_tiles, nb_tiles * (N) + 1), indexing='ij')
-           #  shift = 0.5 * np.linspace(0, nb_tiles, nb_tiles * (N) + 1)
-            x_ref = np.zeros([2,number_of_pixels[0] + 1, number_of_pixels[1]  + 1])
-            x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, 1,number_of_pixels[0]  + 1),
-                                             np.linspace(0, 1, number_of_pixels[0]  + 1), indexing='ij')
-            shift = 0.5 * np.linspace(0, 1,number_of_pixels[0]  + 1)
+            x_ref = np.zeros([2, repetition * (N) + 1, repetition * (N) + 1])
+            x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, repetition, repetition * (N) + 1),
+                                             np.linspace(0, repetition, repetition * (N) + 1), indexing='ij')
+            shift = 0.5 * np.linspace(0, repetition, repetition * (N) + 1)
+            # x_ref = np.zeros([2,number_of_pixels[0] + 1, number_of_pixels[1]  + 1])
+            # x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, 1,number_of_pixels[0]  + 1),
+            #                                  np.linspace(0, 1, number_of_pixels[0]  + 1), indexing='ij')
+            # shift = 0.5 * np.linspace(0, 1,number_of_pixels[0]  + 1)
 
             x_coords = np.copy(x_ref)
             if grid_type == 'hex':
                 # Apply shift to each row
-                x_coords[0] += shift[None, :] - 2
+                x_coords[0] += shift[None, :]
                 x_coords[1] *= np.sqrt(3) / 2
 
-            # Add linear displacement from macro gradient x*macro_grad
+
+
 
             lin_disp_ixy = np.einsum('ij...,j...->i...', macro_gradient, x_coords)
 
             x_coords[0] += lin_disp_ixy[0]
             x_coords[1] += lin_disp_ixy[1]
 
-            # add fluctuation of displacement
+            # Add linear displacement from macro gradient x*macro_grad
+            # x_repeated = np.zeros([2, repetition * number_of_pixels[0] + 1, repetition * number_of_pixels[1] + 1])
+            # for x_pad in np.arange(0, repetition):
+            #     x_start = x_pad * number_of_pixels[0]
+            #     x_end = x_start + number_of_pixels[0]  # + 1
+            #     for y_pad in np.arange(0, repetition):
+            #         y_start = y_pad * number_of_pixels[1]
+            #         y_end = y_start + number_of_pixels[1]  # + 1
+            #
+            #         x_coords[0, x_start:x_end, y_start:y_end] += lin_disp_ixy[0] #+ x_pad
+            #         x_coords[1, x_start:x_end, y_start:y_end] += lin_disp_ixy[1]# + y_pad
+            #         print()
+
+            # add fluctuation of
+            x_coords[0,:-1, :-1] +=np.tile(displacement[0], (repetition, repetition))
+            x_coords[1,:-1, :-1] +=np.tile(displacement[1], (repetition, repetition))
+
             #build a periodic displacement
-            tilled_disp_x =  displacement[0]
-            tilled_disp_y =  displacement[1]
+            tilled_disp_x = np.tile(displacement[0], (repetition, repetition))
+            tilled_disp_y = np.tile(displacement[1], (repetition, repetition))
 
             # extend to [N+1, N+1] to simulate periodicity
-            nx, ny = tilled_disp_x.shape
-            tilled_disp_x_ext = np.zeros((nx + 1, ny + 1))
-            tilled_disp_y_ext = np.zeros((nx + 1, ny + 1))
-
-            tilled_disp_x_ext[:-1, :-1] = tilled_disp_x
-            tilled_disp_y_ext[:-1, :-1] = tilled_disp_y
+            # nx, ny = tilled_disp_x.shape
+            # tilled_disp_x_ext = np.zeros((nx + 1, ny + 1))
+            # tilled_disp_y_ext = np.zeros((nx + 1, ny + 1))
+            #
+            # tilled_disp_x_ext[:-1, :-1] = tilled_disp_x
+            # tilled_disp_y_ext[:-1, :-1] = tilled_disp_y
 
             # Fill last row and column with first row and column
-            tilled_disp_x_ext[-1, :-1] = tilled_disp_x[0, :]
-            tilled_disp_x_ext[:-1, -1] = tilled_disp_x[:, 0]
-            tilled_disp_x_ext[-1, -1] = tilled_disp_x[0, 0]
+            x_coords[0,-1, :-1] += tilled_disp_x[0, :]
+            x_coords[0,:-1, -1] += tilled_disp_x[:, 0]
+            x_coords[0,-1, -1] += tilled_disp_x[0, 0]
 
-            tilled_disp_y_ext[-1, :-1] = tilled_disp_y[0, :]
-            tilled_disp_y_ext[:-1, -1] = tilled_disp_y[:, 0]
-            tilled_disp_y_ext[-1, -1] = tilled_disp_y[0, 0]
+            x_coords[1,-1, :-1] += tilled_disp_y[0, :]
+            x_coords[1,:-1, -1] += tilled_disp_y[:, 0]
+            x_coords[1,-1, -1] += tilled_disp_y[0, 0]
 
-            x_coords[0] += tilled_disp_x_ext
-            x_coords[1] += tilled_disp_y_ext
+            # x_coords[0] += tilled_disp_x_ext
+            # x_coords[1] += tilled_disp_y_ext
+            #
+            # # build a periodic displacement
+            # tilled_disp_x = displacement[0]
+            # tilled_disp_y = displacement[1]
+            #
+            # # extend to [N+1, N+1] to simulate periodicity
+            # nx, ny = tilled_disp_x.shape
+            # tilled_disp_x_ext = np.zeros((nx + 1, ny + 1))
+            # tilled_disp_y_ext = np.zeros((nx + 1, ny + 1))
+            #
+            # tilled_disp_x_ext[:-1, :-1] = tilled_disp_x
+            # tilled_disp_y_ext[:-1, :-1] = tilled_disp_y
+            #
+            # # Fill last row and column with first row and column
+            # tilled_disp_x_ext[-1, :-1] = tilled_disp_x[0, :]
+            # tilled_disp_x_ext[:-1, -1] = tilled_disp_x[:, 0]
+            # tilled_disp_x_ext[-1, -1] = tilled_disp_x[0, 0]
+            #
+            # tilled_disp_y_ext[-1, :-1] = tilled_disp_y[0, :]
+            # tilled_disp_y_ext[:-1, -1] = tilled_disp_y[:, 0]
+            # tilled_disp_y_ext[-1, -1] = tilled_disp_y[0, 0]
+            #
+            # x_coords[0] += tilled_disp_x_ext
+            # x_coords[1] += tilled_disp_y_ext
 
-            repetition = 2
-            x_repeated = np.zeros([2, repetition* number_of_pixels[0] + 1, repetition* number_of_pixels[1] + 1])
-            for x_pad in np.arange(0, repetition):
-                x_start = x_pad * number_of_pixels[0]
-                x_end = x_start + number_of_pixels[0] + 1
-                for y_pad in np.arange(0, repetition):
-                    y_start = y_pad * number_of_pixels[1]
-                    y_end = y_start + number_of_pixels[1] + 1
-
-                    x_repeated[0,x_start:x_end,y_start:y_end]=    x_coords[0] + x_pad
-                    x_repeated[1, x_start:x_end, y_start:y_end] = x_coords[1] + y_pad
-                    print()
 
 
             ax1.clear()
-            pcm = ax1.pcolormesh(x_repeated[0], x_repeated[1], np.tile(phase_field.s[0, 0], (repetition, repetition)),
+            pcm = ax1.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field.s[0, 0], (repetition, repetition)),
                                  shading='flat',
                                  edgecolors='none',
                                  lw=0.01,
@@ -421,8 +451,12 @@ if plot:
 
             ax1.xaxis.set_ticks_position('none')
             ax1.yaxis.set_ticks_position('none')
-            ax1.set_xlim(-0.15, 1+0.35 )#nb_tiles
-            ax1.set_ylim(-0.15, 1 + 0.35)#nb_tiles
+            if grid_type == 'hex':
+                ax1.set_xlim(-0.15, repetition + repetition * 0.8)  # nb_tiles
+                ax1.set_ylim(-0.15, repetition + repetition * 0.05)  # nb_tiles
+            else:
+                ax1.set_xlim(-0.15, repetition+repetition*0.2 )#nb_tiles
+                ax1.set_ylim(-0.15, repetition + repetition*0.2)#nb_tiles
             # ax1.set_aspect('equal')
             ax1.set_title(r"Poisson's ratio" + f' Load_incerment {load_increment:.1f}')
 
