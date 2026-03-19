@@ -39,8 +39,8 @@ elif grid_type == 'square':
     element_type = 'linear_triangles'
 
     domain_size = [1, 1]
-nb_tiles = 3
-number_of_pixel_PUC = 256 # this is resolution of original unit cell
+nb_tiles = 1
+number_of_pixel_PUC = 1024 # this is resolution of original unit cell
 number_of_pixels = 2 * (nb_tiles*number_of_pixel_PUC,)# this is resolution with repeated images
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -75,13 +75,13 @@ if MPI.COMM_WORLD.rank == 0:
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 eta_mult = 0.01
-weight = 1.0
+weight = 20.0
 N = number_of_pixel_PUC
 cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
 poison_target = -0.5
-experiment=4
+experiment=5
 if grid_type == 'hex':
     script_name = f'exp_paper_TO_exp_{experiment}_hexa' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 elif grid_type == 'square':
@@ -100,7 +100,7 @@ if not os.path.exists(figure_folder_path):
 
 name = data_folder_path + f'{preconditioner_type_data}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'.npy'
 name_tilled = data_folder_path + f'{preconditioner_type_data}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + f'_final_tilled{nb_tiles}' + f'.npy'
-name_log =  data_folder_path + f'{preconditioner_type_data}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'_log.npz'
+name_log =  data_folder_path + f'{preconditioner_type_data}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}'  + f'_log.npz' #+ '_final'
 # Load, tile, and save in serial computation only (rank 0)
 if MPI.COMM_WORLD.rank == 0:
     if not os.path.exists(name_tilled) and os.path.exists(name):
@@ -221,7 +221,7 @@ if compute:
 
         M_fun = M_fun_Green_Jacobi
 
-    for inc_index in range(0,10):
+    for inc_index in range(0,10+1):
         load_increment = inc_index / 10
         # Set up right hand side
         # set macroscopic gradient
@@ -319,7 +319,7 @@ if plot:
         writer = FFMpegWriter(fps=5, metadata=metadata)
         movie_name = figure_folder_path + f'movie_w_{weight}_p_{poison_target}_N{N}_{nb_tiles}.mp4'
     init_load_index=1
-    for inc_index in range(init_load_index,10):
+    for inc_index in range(init_load_index,10+1):
         load_increment = inc_index / 10
         # load_increment=0.1
         # for inc_index in range(20):
@@ -394,8 +394,22 @@ if plot:
             x_coords[0] += tilled_disp_x_ext
             x_coords[1] += tilled_disp_y_ext
 
+            repetition = 2
+            x_repeated = np.zeros([2, repetition* number_of_pixels[0] + 1, repetition* number_of_pixels[1] + 1])
+            for x_pad in np.arange(0, repetition):
+                x_start = x_pad * number_of_pixels[0]
+                x_end = x_start + number_of_pixels[0] + 1
+                for y_pad in np.arange(0, repetition):
+                    y_start = y_pad * number_of_pixels[1]
+                    y_end = y_start + number_of_pixels[1] + 1
+
+                    x_repeated[0,x_start:x_end,y_start:y_end]=    x_coords[0] + x_pad
+                    x_repeated[1, x_start:x_end, y_start:y_end] = x_coords[1] + y_pad
+                    print()
+
+
             ax1.clear()
-            pcm = ax1.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field.s[0, 0], (1, 1)),
+            pcm = ax1.pcolormesh(x_repeated[0], x_repeated[1], np.tile(phase_field.s[0, 0], (repetition, repetition)),
                                  shading='flat',
                                  edgecolors='none',
                                  lw=0.01,
