@@ -215,14 +215,14 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 
 letter_offset = -0.15
 
-#for upper_ax in np.arange(5):
+inset_size=0.16
 for upper_ax in np.arange(5):
     weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-2]])[upper_ax]
     #weight = weights[upper_ax] 10
 
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
-        ax1 = fig.add_axes([0.12, 0.55, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.13, 0.58, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = -128
         roll_y = -128
         ax5.annotate('',
@@ -236,9 +236,9 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{A}}$', transform=ax1.transAxes)  #
 
     elif upper_ax == 1:
-        ax1 = fig.add_axes([0.28, 0.5, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 128
-        roll_y = -430
+        ax1 = fig.add_axes([0.28, 0.53, inset_size, inset_size], transform=ax5.transAxes)
+        roll_x = -128
+        roll_y = -160
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.8, 0.01),
@@ -250,7 +250,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{B}}$', transform=ax1.transAxes)
 
     elif upper_ax == 2:
-        ax1 = fig.add_axes([0.44, 0.45, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.44, 0.48, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = -64
         roll_y = 332
         ax5.annotate('',
@@ -264,7 +264,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{C}}$', transform=ax1.transAxes)
 
     elif upper_ax == 3:
-        ax1 = fig.add_axes([0.60, 0.43, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.60, 0.43, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = 340
         roll_y = -180
         ax5.annotate('',
@@ -278,7 +278,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{D}}$', transform=ax1.transAxes)
 
     elif upper_ax == 4:
-        ax1 = fig.add_axes([0.74, 0.6, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.76, 0.62, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = 0
         roll_y = 0
         ax5.annotate('',

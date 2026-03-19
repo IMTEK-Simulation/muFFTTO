@@ -199,6 +199,11 @@ elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_
                                                       K=K_targer,
                                                       mu=G_target,
                                                       kind='linear')
+elastic_Cij_target=domain.compute_Voigt_notation_4order(elastic_C_target)
+shear_G_target  = elastic_Cij_target[2, 2]
+bulk_K_target  = elastic_Cij_target[0, 1] + elastic_Cij_target[2, 2] * 2 / 3
+
+
 if MPI.COMM_WORLD.rank == 0:
     print('Target elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_target)))
 ##### create target stresses

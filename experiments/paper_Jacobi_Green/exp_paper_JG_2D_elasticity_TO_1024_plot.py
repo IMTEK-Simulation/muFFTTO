@@ -183,6 +183,9 @@ plt.rcParams["font.family"] = "Arial"
 
 gs = fig.add_gridspec(4, 6, width_ratios=[3, 3, 3,3,3, 0.2]
                       , height_ratios=[1, 1.7,0.7 ,0.7], hspace=0.13)
+
+
+
 ax_iterations = fig.add_subplot(gs[1, :])
 ax_iterations.text(-0.12, 1.0, rf'\textbf{{(b)}}', transform=ax_iterations.transAxes)
 ax_iterations.plot(np.linspace(1, max_it, nb_iterations_G.shape[0]), nb_iterations_G, "g", label='Green N=1024',

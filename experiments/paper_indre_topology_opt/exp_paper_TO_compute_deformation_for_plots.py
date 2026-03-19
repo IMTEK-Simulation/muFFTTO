@@ -39,8 +39,8 @@ elif grid_type == 'square':
     element_type = 'linear_triangles'
 
     domain_size = [1, 1]
-nb_tiles = 1
-number_of_pixel_PUC = 1024 # this is resolution of original unit cell
+nb_tiles = 3
+number_of_pixel_PUC = 256 # this is resolution of original unit cell
 number_of_pixels = 2 * (nb_tiles*number_of_pixel_PUC,)# this is resolution with repeated images
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -75,17 +75,19 @@ if MPI.COMM_WORLD.rank == 0:
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 eta_mult = 0.01
-weight = 3.0
+weight = 1.0
 N = number_of_pixel_PUC
 cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
 poison_target = -0.5
-
+experiment=4
 if grid_type == 'hex':
-    script_name = 'exp_paper_TO_exp_4_hexa' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
+    script_name = f'exp_paper_TO_exp_{experiment}_hexa' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 elif grid_type == 'square':
-    script_name = 'exp_paper_TO_exp_4_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
+    script_name = f'exp_paper_TO_exp_{experiment}_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
+
+
 
 preconditioner_type_data = "Green_Jacobi" #Green_Jacobi
 preconditioner_type = "Green" #Green_Jacobi
@@ -226,16 +228,21 @@ if compute:
         macro_gradient = np.array([[0.2, 0.0],
                                    [0.0, 0.0]]) * load_increment
         # compute stress relaxation
-        macro_gradient_voigt=np.array([macro_gradient[0,0],macro_gradient[1,1],macro_gradient[1,0]+macro_gradient[0,1]])* load_increment
+        macro_gradient_voight=np.array([macro_gradient[0,0],macro_gradient[1,1],macro_gradient[1,0]+macro_gradient[0,1]])* load_increment
 
-        macro_stress_voigt= C_eff_ij @ macro_gradient_voigt
+        macro_stress_voight= C_eff_ij @ macro_gradient_voight
         S_eff_ij=np.linalg.inv(C_eff_ij)
-        macro_stress_voigt_x=np.zeros_like(macro_stress_voigt)
-        macro_stress_voigt_x[1]=macro_stress_voigt[1]
-        strain_correction=S_eff_ij @ macro_stress_voigt_x
+        macro_stress_voight_y=np.zeros_like(macro_stress_voight)
+        macro_stress_voight_y[1]=macro_stress_voight[1]
+        strain_correction_voight=S_eff_ij @ macro_stress_voight_y
         # add stain correction to reduce stress in y direction
+#TODO[A] substratct whole straincorrection
+        strain_correction=np.zeros([discretization.domain_dimension,discretization.domain_dimension] )
+        strain_correction[0,0]=strain_correction_voight[0]
+        strain_correction[1, 1] = strain_correction_voight[1]
+        strain_correction[0, 1] = strain_correction[1, 0] =strain_correction_voight[2]/2
 
-        macro_gradient[1,1]=-strain_correction[1]
+        macro_gradient -= strain_correction
 
 
 
@@ -270,6 +277,7 @@ if compute:
             x=solution_field,
             P=M_fun,
             tol=1e-4,
+            rtol=True,
             maxiter=2000,
             callback=callback,
         )
@@ -309,9 +317,9 @@ if plot:
         ax1 = fig.add_subplot(gs[0])
         metadata = dict(title=f'Deformation Movie w_{weight}_p_{poison_target}', artist='Junie', comment='Deformation evolution')
         writer = FFMpegWriter(fps=5, metadata=metadata)
-        movie_name = figure_folder_path + f'movie_w_{weight}_p_{poison_target}.mp4'
-
-    for inc_index in range(0,10):
+        movie_name = figure_folder_path + f'movie_w_{weight}_p_{poison_target}_N{N}_{nb_tiles}.mp4'
+    init_load_index=1
+    for inc_index in range(init_load_index,10):
         load_increment = inc_index / 10
         # load_increment=0.1
         # for inc_index in range(20):
@@ -336,7 +344,7 @@ if plot:
         _info=np.load(data_folder_path + f'{preconditioner_type_data}' + file_data_name_it + f'_log_plotting.npz', allow_pickle=True)
         macro_gradient = _info.f.macro_grads_corrected
         #'Green_Jacobi_w_1.0_p_-0.5_load_increment_0.2_tilled1_log_plotting'
-
+        print(f'macro_gradient = {macro_gradient}')
         if MPI.COMM_WORLD.rank == 0:
            # nb_tiles = 1
            #  x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
@@ -394,13 +402,13 @@ if plot:
                                  cmap=mpl.cm.Greys,
                                  vmin=0, vmax=1,
                                  rasterized=True)
-            if inc_index == 0:
+            if inc_index == init_load_index:
                 fig.colorbar(pcm, ax=ax1)
 
             ax1.xaxis.set_ticks_position('none')
             ax1.yaxis.set_ticks_position('none')
-            ax1.set_xlim(-0.5, nb_tiles+0.5 )
-            ax1.set_ylim(-0.5, nb_tiles + 0.5)
+            ax1.set_xlim(-0.15, 1+0.35 )#nb_tiles
+            ax1.set_ylim(-0.15, 1 + 0.35)#nb_tiles
             # ax1.set_aspect('equal')
             ax1.set_title(r"Poisson's ratio" + f' Load_incerment {load_increment:.1f}')
 
@@ -421,8 +429,9 @@ if plot:
                 else:
                     ax1.axhline(y=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
                     ax1.axvline(x=i, color='k', linestyle='--', linewidth=1, alpha=0.5)
-
-            if inc_index == 0:
+                    ax1.axhline(y=i+0.1, color='k', linestyle='--', linewidth=1, alpha=0.5)
+                    ax1.axvline(x=i+0.2, color='k', linestyle='--', linewidth=1, alpha=0.5)
+            if inc_index == init_load_index:
                 writer.setup(fig, movie_name, dpi=100)
 
             print(f'Adding frame for load increment: {load_increment:.2f}')

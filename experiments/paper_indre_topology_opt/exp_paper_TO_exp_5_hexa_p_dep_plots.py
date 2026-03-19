@@ -37,7 +37,7 @@ Cij_= []
 #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0, 300.0, 400.0, 500.0])])
 # weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
 
-poisson_targets =np.array([-0.5,-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4])
+poisson_targets =np.array([-0.5,-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])#, 0.4
 # poisson_targets=poisson_targets[::-1]
 #0.5,
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
@@ -121,6 +121,20 @@ for poison_target in poisson_targets:
     # for Isotropic material
     Cij = info_.f.homogenized_C_ijkl
     homogenized_Cij[..., index] = info_.f.homogenized_C_ijkl
+
+    # compliance tensors for Orthotropic material
+    Sij  = np.linalg.inv(Cij)
+
+    young_1_S = 1/Sij[0,0]
+    young_2_S = 1/Sij[1,1]
+    poison_ratios_1_S= - Sij[0, 1] / Sij[0, 0]
+    poison_ratios_2_S= - Sij[1, 0] / Sij[1, 1]
+    shear_S = 1/Sij[2,2]
+    print(f'check symmetry condition {poison_target}  {poison_ratios_1_S/young_1_S-poison_ratios_2_S/young_2_S}')
+    print(f'check shear coupling {poison_target}  S_13 {Sij[0,2]}  S_23 {Sij[1,2]}')
+    print(f'check isotropu {poison_target}  S_11-S_22 {Sij[0,0]-Sij[1,1]}')
+
+
     shear_G_computed[ index]=Cij[2,2]
     bulk_K_computed[ index]=Cij[0, 1]+Cij[2,2]*2/3
 
@@ -274,18 +288,231 @@ if plot_data_anal:
     plt.savefig(fname, bbox_inches='tight')
     plt.show()
 
+fig = plt.figure(figsize=(5.5, 3.5))
+gs_global = fig.add_gridspec(1, 1, width_ratios=[1], hspace=0.00)
+
+G_0 = 0.5
+K_0 = 1.0
+ax_modulus = fig.add_subplot(gs_global[0, 0])
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='x',
+                label=r'Target - Shear G')
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='x',
+                label=r'Computed - Shear G')
+ax_modulus.annotate(r'$\mu_\mathrm{{eff}}/\mu_0$', color='blue',
+             xy=(-0.4, shear_G_computed[np.where(poisson_targets == -0.4)[0][0]] / G_0),
+             xytext=(-0.3, 0.15),
+            arrowprops=dict(arrowstyle='->',
+                     color='blue',
+                     lw=1,
+                     ls='-')
+             )
+ax_modulus.annotate(r'$\mu_\mathrm{{target}}/\mu_0$', color='blue',
+             xy=(-0.4, shear_G_target[np.where(poisson_targets == -0.4)[0][0]] / G_0),
+             xytext=(-0.32, 0.44),
+            arrowprops=dict(arrowstyle='->',
+                     color='blue',
+                     lw=1,
+                     ls='--')
+             )
+
+# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='r', linewidth=1, marker='|',
+#                 label=r'Target - Bulk K')
+# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='r', linewidth=2, marker='|',
+#                 label=r'Computed - Bulk K')
+# ax_modulus.annotate(r'$K_\mathrm{{eff}}/K_0$', color='red',
+#              xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
+#              xytext=(-0.46,  0.15),
+#             arrowprops=dict(arrowstyle='->',
+#                      color='red',
+#                      lw=1,
+#                      ls='-')
+#              )
+# ax_modulus.annotate(r'$K_\mathrm{{target}}/K_0$', color='red',
+#              xy=(-0.3, bulk_K_target[np.where(poisson_targets == -0.3)[0][0]]),
+#              xytext=(-0.43, -0.1),
+#             arrowprops=dict(arrowstyle='->',
+#                      color='red',
+#                      lw=1,
+#                      ls='--')
+#              )
+
+ax_modulus.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
+                label=r'Target - Poisson')
+ax_modulus.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='o',
+                label=r'Computed - Poisson')
+ax_modulus.annotate(r'$\nu_\mathrm{{eff}}$', color='green',
+             xy=(-0.3, nu12[np.where(poisson_targets == -0.3)[0][0]]),
+             xytext=(-0.4, -0.2),
+            arrowprops=dict(arrowstyle='->',
+                     color='green',
+                     lw=1,
+                     ls='-')
+             )
+ax_modulus.annotate(r'$\nu_\mathrm{{target}}$', color='green',
+             xy=(-0.3, nu12_target[np.where(poisson_targets == -0.3)[0][0]]),
+             xytext=(-0.2, -0.4),
+            arrowprops=dict(arrowstyle='->',
+                     color='green',
+                     lw=1,
+                     ls='--')
+             )
+
+ax_modulus.annotate(r'$1024^2$ grid points'+'\n'+rf'$w={weight}$',
+             xy=(0.2, -0.35),
+             xytext=(0.0, -0.45))
+ax_modulus.set_title(r"Hexagonal grid")
+
+ax_modulus.set_xlabel(r"Target Poisson's ratio "+fr'- $\nu_\mathrm{{target}}$')
+ax_modulus.set_xlim(-0.5, 0.3)
+ax_modulus.set_ylim(-0.5, 0.5)
+ax_modulus.set_yticks([-0.5,-0.25, 0.0,0.25, 0.5])
+ax_modulus.set_xticks([-0.5, -0.3, -0.1,0.1, 0.3])
+ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7)
+
+fname_pf = figure_folder_path  + 'exp5_hexa_'+ f'w{weight:.0f}'+'_graph.pdf'
+print(f'create figure: {fname_pf}')
+fig.savefig(fname_pf, bbox_inches='tight')
+plt.show()
+
 
 # --- New figure for phase fields of all poisson_targets ---
 n_targets = len(poisson_targets)
-n_cols = 5
-n_rows = (n_targets + n_cols - 1) // n_cols
-fig_pf, axes_pf = plt.subplots(n_rows, n_cols, figsize=(15, 3 * n_rows))
-axes_pf = axes_pf.flatten()
+n_cols = 3
+# n_rows = (n_targets + n_cols - 1) // n_cols
+# fig_pf, axes_pf = plt.subplots(n_rows, n_cols, figsize=(15, 3 * n_rows))
 
+fig = plt.figure(figsize=(11,8.5))
+gs_global = fig.add_gridspec(1, 1, width_ratios=[ 1], hspace=0.00)
+
+# Top: 2×4 subgrid
+gs = gs_global[0].subgridspec(nrows=3, ncols=3,
+                              wspace=0.05,
+                              hspace=0.05)
+
+# Bottom: 1×2 subgrid
+# gs_graphs = gs_global[0].subgridspec(2, 1)
+# ax5 =   fig.add_subplot(gs[0:3, :])
+# k
 for i, poison_target in enumerate(poisson_targets):
-    ax = axes_pf[i]
-    
-    # Try to load the final phase field
+    print(f'i org = {i}')
+    j = i // n_cols
+    k = i % n_cols
+    print(f'j = {j}')
+    print(f'k = {k}')
+    # ax = axes_pf[i]
+    ax = fig.add_subplot(gs[j, k])
+    # Try to load the final phase fielda
+    name = data_folder_path + f'{preconditioner_type}' + f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'.npy'
+
+    if not os.path.exists(name):
+        # Fallback to searching for the highest iteration if _final doesn't exist
+        prefix = f"{preconditioner_type}_eta_{eta_mult}_w_{weight:.1f}_p_{poison_target}_iteration_"
+        suffix = ".npy"
+        highest_iteration = -1
+        latest_file = None
+        if os.path.exists(data_folder_path):
+            for filename in os.listdir(data_folder_path):
+                if filename.startswith(prefix) and filename.endswith(suffix):
+                    try:
+                        iteration = int(filename[len(prefix):-len(suffix)])
+                        if iteration > highest_iteration:
+                            highest_iteration = iteration
+                            latest_file = os.path.join(data_folder_path, filename)
+                    except ValueError:
+                        continue
+        name = latest_file
+
+    if name and os.path.exists(name):
+        print(f"Loading phase field data from {name}")
+        phase_field = np.load(name, allow_pickle=True)
+
+        # nb_tiles = 3
+        pcm = ax.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field, (nb_tiles, nb_tiles)),
+                            shading='flat',
+                            edgecolors='none',
+                            lw=0.01,
+                            cmap=mpl.cm.Greys,
+                            vmin=0, vmax=1,
+                            rasterized=True)
+
+
+    else:
+        ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')
+    computed_poisson = np.asarray(nu12)[i]
+    ax.text(0.7, 1.07, fr'$\nu_\mathrm{{target}}=$ {poison_target}', transform=ax.transAxes, ha='center', fontsize=16)
+    #ax.text(0.3, -0.15, fr'$\nu =$ {computed_poisson:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
+    ax.text(.15, 0.6, fr'$\nu_{{01}} =$ {computed_poisson:0.2f}',
+            transform=ax.transAxes,
+            rotation=60,
+            ha='center', va='center',
+            fontsize=16)
+
+    letter_offset =   0.1
+    import string
+    letter = string.ascii_uppercase[i]   # 'A', 'B', 'C', ...
+    ax.text(letter_offset, 1.05,  rf'$\textbf{{{letter}}}$', transform=ax.transAxes)
+
+
+    ax.set_aspect('equal')
+    ax.yaxis.set_visible(False)
+
+    # Hide any extra subplots
+    if j > 1:
+        ax.set_xlabel('Unit cell size  -  L')
+    ax.set_xticks([-2,-1,0,1 ])
+    ax.set_xticklabels([0,1,2,3])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+
+fname_pf = figure_folder_path + f'{weight}' + 'exp5_hexa_9.pdf'
+print(f'create figure: {fname_pf}')
+fig.savefig(fname_pf, bbox_inches='tight')
+plt.show()
+
+
+
+
+
+
+# --- New figure for phase fields of all poisson_targets ---
+n_targets = len(poisson_targets)
+n_cols = 4
+# n_rows = (n_targets + n_cols - 1) // n_cols
+#fig_pf, axes_pf = plt.subplots(n_rows, n_cols, figsize=(15, 3 * n_rows))
+
+fig = plt.figure(figsize=(11, 6.5))
+gs_global = fig.add_gridspec(2, 1, height_ratios=[3, 1],hspace=0.00   )
+
+# Top: 2×4 subgrid
+gs = gs_global[0].subgridspec(nrows=2,ncols= 4,
+                                wspace=0.0,
+                                hspace=0.0)
+
+# Bottom: 1×2 subgrid
+gs_graphs = gs_global[1].subgridspec(1, 2)
+# ax5 =   fig.add_subplot(gs[0:3, :])
+ # k
+for i, poison_target  in enumerate(poisson_targets):
+    print(f'i org = {i}')
+    j=i//n_cols
+    k=i%n_cols
+    print(f'j = {j }')
+    print(f'k = {k}')
+    #ax = axes_pf[i]
+    ax = fig.add_subplot(gs[j, k])
+    # Make subplots bigger by reducing outer padding
+    # fig.subplots_adjust(
+    #     left=0.0,
+    #     right=1.0,
+    #     top=1.0,
+    #     bottom=0.00 ,
+    #     wspace=0.0 ,
+    #     hspace=0.00
+    # )
+
+    # Try to load the final phase fielda
     name = data_folder_path + f'{preconditioner_type}'+ f'_eta_{eta_mult}' + f'_w_{weight:.1f}' + f'_p_{poison_target}' + '_final' + f'.npy'
     
     if not os.path.exists(name):
@@ -318,29 +545,59 @@ for i, poison_target in enumerate(poisson_targets):
                      cmap=mpl.cm.Greys,
                      vmin=0, vmax=1,
                      rasterized=True)
-        ax.set_title(f'Target Poisson: {poison_target}')
+
+
     else:
         ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')
-    
+    computed_poisson = np.asarray(nu12)[i]
+    ax.text(0.7, 1.1, fr'$\nu_\mathrm{{target}}=$ {poison_target}', transform=ax.transAxes, ha='center', fontsize=16)
+    ax.text(0.3, -0.15, fr'$\nu =$ {computed_poisson:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
+
     ax.set_aspect('equal')
     ax.set_yticklabels([])
     ax.set_xticklabels([])
     ax.xaxis.set_ticks_position('none')
     ax.yaxis.set_ticks_position('none')
-
-# Hide any extra subplots
-for j in range(i + 1, len(axes_pf)):
-    axes_pf[j].axis('off')
+    ax.axis('off')
+    # Hide any extra subplots
 
 # Add unified colorbar for phase fields
-fig_pf.subplots_adjust(right=0.85)
-cbar_ax = fig_pf.add_axes([0.88, 0.15, 0.02, 0.7])
-fig_pf.colorbar(pcm, cax=cbar_ax)
+# fig.subplots_adjust(left=0.02)
+# cbar_ax = fig.add_axes([-0.03 , 0.42, 0.01, 0.4])
+# fig.colorbar(pcm, cax=cbar_ax)
+#fig.tight_layout(rect=[0, 0, 0.85, 1])
+G_0=0.5
+K_0=1.0
+ax_modulus = fig.add_subplot(gs_graphs[0, 0])
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_target)/G_0, '-.', color='b', linewidth=1, marker='|',
+         label=r'Target - Shear G')
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed)/G_0, '-', color='b', linewidth=2, marker='|',
+         label=r'Computed - Shear G')
 
-fig_pf.tight_layout(rect=[0, 0, 0.85, 1])
-fname_pf = figure_folder_path+f'{weight}' + 'exp5_square_all_phase_fields.pdf'
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target)/K_0, '-.', color='r', linewidth=1, marker='|',
+         label=r'Target - Bulk K')
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed)/K_0, '-', color='r', linewidth=2, marker='|',
+         label=r'Computed - Bulk K')
+
+
+ax_poisson = fig.add_subplot(gs_graphs[0, 1])
+
+ax_poisson.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='|',
+         label=r'Target - Poisson')
+ax_poisson.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='o',
+         label=r'Computed - Poisson')
+
+# ax_poisson.yaxis.tick_right()
+# ax_poisson.legend(loc='best')
+ax_poisson.set_xlabel(r"Target Poisson's ratio")
+ax_poisson.set_xlim(-0.51, 0.21)
+ax_poisson.set_ylim(-0.5, 0.5)
+
+
+fname_pf = figure_folder_path+f'{weight}' + 'exp5_hexa_all_phase_fields.png'
 print(f'create figure: {fname_pf}')
-fig_pf.savefig(fname_pf, bbox_inches='tight')
+fig.savefig(fname_pf, bbox_inches='tight')
+plt.show()
 
 # Keep original combined plots but update them if needed or just let them be.
 # The user specifically asked to change it such that it plots for all poisson_targets.
@@ -373,7 +630,7 @@ ax5.annotate(r'Stress difference -  $f_{\sigma}$', color='red',
                              ls='-')
              )
 ax5.annotate(r'Phase field - $f_{\rho}$',
-             xy=(50., f_pfs[np.where(poisson_targets == 0.4)[0][0]]),
+             xy=(50., f_pfs[np.where(poisson_targets == 0.2)[0][0]]),
              xytext=(20., 5.),
              arrowprops=dict(arrowstyle='->',
                              color='black',

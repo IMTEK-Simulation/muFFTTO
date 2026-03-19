@@ -30,6 +30,7 @@ def conjugate_gradients_mugrid(
         x: Field,
         P: callable,
         tol: float = 1e-6,
+        rtol: bool = True,
         maxiter: int = 1000,
         callback: callable = None,
         norm_metric: callable = None,
@@ -69,6 +70,7 @@ def conjugate_gradients_mugrid(
     x : array_like
         Approximate solution to the system Ax = b. (Same as input field x.)
     """
+
     tol_sq = tol * tol
     p = fc.real_field(
         unique_name="cg-search-direction",  # name of the field
@@ -96,6 +98,7 @@ def conjugate_gradients_mugrid(
     P(r, z)
     p.s = np.copy(z.s)  # residual
 
+
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
 
@@ -108,11 +111,15 @@ def conjugate_gradients_mugrid(
         norm_metric(r, Pr)
         stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
 
+
     elif norm_metric is None:
         stop_crit = rr
 
     if stop_crit < tol_sq:
         return x
+
+    if rtol:
+        tol_sq = tol_sq * stop_crit
 
     if callback:
         #callback(0, x.s, r.s, p.s, z.s, stop_crit)

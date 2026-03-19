@@ -228,16 +228,16 @@ ax5.annotate(r'Phase field - $f_{\rho}$',
 ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 
 letter_offset = -0.15
-
+inset_size=0.15
 for upper_ax in np.arange(5):
     weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
     # weight = weights[upper_ax] 10
 
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
-        ax1 = fig.add_axes([0.12, 0.55, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = -128
-        roll_y = -128
+        ax1 = fig.add_axes([0.14, 0.55, inset_size, inset_size], transform=ax5.transAxes)
+        roll_x = 128
+        roll_y = -330
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.23, 0.01),
@@ -249,9 +249,9 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{A}}$', transform=ax1.transAxes)  #
 
     elif upper_ax == 1:
-        ax1 = fig.add_axes([0.28, 0.5, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = 128
-        roll_y = -430
+        ax1 = fig.add_axes([0.29, 0.5, inset_size, inset_size], transform=ax5.transAxes)
+        roll_x = 0
+        roll_y = -0
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.8, 0.001),
@@ -263,9 +263,9 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{B}}$', transform=ax1.transAxes)
 
     elif upper_ax == 2:
-        ax1 = fig.add_axes([0.44, 0.45, 0.18, 0.18], transform=ax5.transAxes)
-        roll_x = -64
-        roll_y = 332
+        ax1 = fig.add_axes([0.44, 0.45,inset_size, inset_size], transform=ax5.transAxes)
+        roll_x = -0
+        roll_y =  0
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(5., 5e-4),
@@ -277,7 +277,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{C}}$', transform=ax1.transAxes)
 
     elif upper_ax == 3:
-        ax1 = fig.add_axes([0.60, 0.43, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.60, 0.43,inset_size, inset_size], transform=ax5.transAxes)
         roll_x = 340
         roll_y = -180
         ax5.annotate('',
@@ -291,7 +291,7 @@ for upper_ax in np.arange(5):
         ax5.text(letter_offset, 0.9, r'$\textbf{{D}}$', transform=ax1.transAxes)
 
     elif upper_ax == 4:
-        ax1 = fig.add_axes([0.74, 0.6, 0.18, 0.18], transform=ax5.transAxes)
+        ax1 = fig.add_axes([0.76, 0.65, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = 0
         roll_y = 0
         ax5.annotate('',
@@ -339,18 +339,26 @@ for upper_ax in np.arange(5):
 
     phase_opt = np.roll(phase_opt, roll_x, axis=0)
     phase_opt = np.roll(phase_opt, roll_y, axis=1)
-    phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
+   # phase_opt = phase_opt.transpose((1, 0)).flatten(order='F')
     # create repeatable cells
-    ax1.set_aspect('equal')
+    #ax1.set_aspect('equal')
     ax1.set_xlim(0, 3)
-    ax1.set_ylim(0, 3)
+    ax1.set_ylim(0, 3*np.sqrt(3) / 2)
     # plot solution
-    pcm=ax1.pcolormesh( x_coords[0], x_coords[1],np.tile(phase_field, (nb_tiles, nb_tiles)),
+    pcm=ax1.pcolormesh( x_coords[0], x_coords[1],np.tile(phase_opt, (nb_tiles, nb_tiles)),
                            shading='flat',
                            edgecolors='none',
                            lw=0.01,
                            cmap=mpl.cm.Greys,
                             rasterized=True)
+    # Hexagonal grid lines (transformed like x_coords)
+    for i in range(1, nb_tiles):
+        # Horizontal lines (constant y in transformed coordinates)
+        ax1.hlines(i * np.sqrt(3) / 2, -2, nb_tiles-2, colors='w', linestyles='--', linewidth=0.5)
+        # Slanted vertical lines (accounting for the row shift)
+        y_line = np.array([0, nb_tiles]) * np.sqrt(3) / 2
+        x_line = np.array([i, i]) + 0.5 * np.array([0, nb_tiles]) - 2
+        ax1.plot(x_line, y_line, 'w--', linewidth=0.5)
 
 
     ax1.set_yticklabels([])
@@ -410,6 +418,7 @@ ax_poisson.text(0.01, 0.65, r'$\textbf{{(c)}}$', transform=ax_poisson.transAxes)
 
 
 fname = figure_folder_path+ 'exp2_hexa{}'.format('.pdf')
+# fname = figure_folder_path+ 'exp2_hexa{}'.format('.png')
 
 print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
