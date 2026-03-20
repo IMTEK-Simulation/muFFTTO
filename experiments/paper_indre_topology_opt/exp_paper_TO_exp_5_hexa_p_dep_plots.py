@@ -123,17 +123,29 @@ for poison_target in poisson_targets:
     homogenized_Cij[..., index] = info_.f.homogenized_C_ijkl
 
     # compliance tensors for Orthotropic material
-    Sij  = np.linalg.inv(Cij)
+    # compliance tensors for Orthotropic material
+    # Cij[0, 2] = Cij[1, 2] = Cij[2, 0] = Cij[2, 1] = 0
 
-    young_1_S = 1/Sij[0,0]
-    young_2_S = 1/Sij[1,1]
-    poison_ratios_1_S= - Sij[0, 1] / Sij[0, 0]
-    poison_ratios_2_S= - Sij[1, 0] / Sij[1, 1]
-    shear_S = 1/Sij[2,2]
-    print(f'check symmetry condition {poison_target}  {poison_ratios_1_S/young_1_S-poison_ratios_2_S/young_2_S}')
-    print(f'check shear coupling {poison_target}  S_13 {Sij[0,2]}  S_23 {Sij[1,2]}')
-    print(f'check isotropu {poison_target}  S_11-S_22 {Sij[0,0]-Sij[1,1]}')
+    Sij = np.linalg.inv(Cij)
 
+    young_1_S = 1 / Sij[0, 0]
+    young_2_S = 1 / Sij[1, 1]
+    poison_ratios_1_S = - Sij[0, 1] / Sij[0, 0]
+    poison_ratios_2_S = - Sij[1, 0] / Sij[1, 1]
+    shear_S = 1 / Sij[2, 2]
+    print(f'check symmetry condition {poison_target}  {poison_ratios_1_S / young_1_S - poison_ratios_2_S / young_2_S}')
+    print(f'check shear coupling {poison_target}  S_13 {Sij[0, 2]}  S_23 {Sij[1, 2]}')
+    print(f'check isotropy {poison_target}  S_11-S_22 {Sij[0, 0] - Sij[1, 1]}')
+
+    bulk_K_e_poisson = young_1_S / (3 * (1 - 2 * poison_ratios_1_S))
+    bulk_K_mu_poisson = (2 * shear_S * (1 + poison_ratios_1_S)) / (3 * (1 - 2 * poison_ratios_1_S))
+    bulk_K_mu_e = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
+
+    K_E_nu = young_1_S / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_G_nu = (2 * shear_S * (1 + poison_ratios_1_S)) / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_E_G = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
 
     shear_G_computed[ index]=Cij[2,2]
     bulk_K_computed[ index]=Cij[0, 1]+Cij[2,2]*2/3

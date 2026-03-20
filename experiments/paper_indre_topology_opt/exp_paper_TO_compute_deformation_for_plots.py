@@ -25,7 +25,16 @@ if MPI.COMM_WORLD.size == 1:
 else:
     plot = False
     compute = True
-grid_type ='square' # 'hex'  # 'square'
+
+# Parse command line arguments first to get grid_type
+import argparse
+parser = argparse.ArgumentParser(description='Compute deformation for different poison_target and weight values')
+parser.add_argument('--poison_target', type=float, default=-0.5, help='Poison target value')
+parser.add_argument('--weight', type=float, default=20.0, help='Weight value')
+parser.add_argument('--grid_type', type=str, default='square', choices=['hex', 'square'], help='Grid type')
+args = parser.parse_args()
+
+grid_type = args.grid_type
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -75,12 +84,15 @@ if MPI.COMM_WORLD.rank == 0:
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 eta_mult = 0.01
-weight = 20.0
 N = number_of_pixel_PUC
 cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
-poison_target = -0.5
+
+# Get parsed arguments
+poison_target = args.poison_target
+weight = args.weight
+
 experiment=5
 if grid_type == 'hex':
     script_name = f'exp_paper_TO_exp_{experiment}_hexa' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
@@ -317,7 +329,7 @@ if plot:
         ax1 = fig.add_subplot(gs[0])
         metadata = dict(title=f'Deformation Movie w_{weight}_p_{poison_target}', artist='Junie', comment='Deformation evolution')
         writer = FFMpegWriter(fps=5, metadata=metadata)
-        movie_name = figure_folder_path + f'movie_w_{weight}_p_{poison_target}_N{N}_{nb_tiles}.mp4'
+        movie_name = figure_folder_path + f'grid_{grid_type}_movie_w_{weight}_p_{poison_target}_N{N}_{nb_tiles}.mp4'
     init_load_index=1
     for inc_index in range(init_load_index,10+1):
         load_increment = inc_index / 10

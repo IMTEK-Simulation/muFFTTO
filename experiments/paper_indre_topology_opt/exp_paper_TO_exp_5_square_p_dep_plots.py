@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
     # "font.family": "helvetica",  # Use a serif font
@@ -47,7 +48,7 @@ poisson_targets =np.array([-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])#, 
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
 
 target_Cij=np.zeros((poisson_targets.shape[0],3,3))
-weight=10.0
+weight=3.0
 index=0
 
 # weights=[5]
@@ -113,6 +114,8 @@ for poison_target in poisson_targets:
 
 
     # compliance tensors for Orthotropic material
+    Cij[0,2]=Cij[1,2]=Cij[2,0]=Cij[2,1]=0
+
     Sij  = np.linalg.inv(Cij)
 
     young_1_S = 1/Sij[0,0]
@@ -122,8 +125,17 @@ for poison_target in poisson_targets:
     shear_S = 1/Sij[2,2]
     print(f'check symmetry condition {poison_target}  {poison_ratios_1_S/young_1_S-poison_ratios_2_S/young_2_S}')
     print(f'check shear coupling {poison_target}  S_13 {Sij[0,2]}  S_23 {Sij[1,2]}')
-    print(f'check isotropu {poison_target}  S_11-S_22 {Sij[0,0]-Sij[1,1]}')
+    print(f'check isotropy {poison_target}  S_11-S_22 {Sij[0,0]-Sij[1,1]}')
 
+    bulk_K_e_poisson=                        young_1_S /(3*(1-2*poison_ratios_1_S)  )
+    bulk_K_mu_poisson=(2*shear_S*(1+poison_ratios_1_S))/(3*(1-2*poison_ratios_1_S))
+    bulk_K_mu_e= (young_1_S*shear_S)/(3*(3*shear_S- young_1_S))
+
+    K_E_nu = young_1_S / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_G_nu = (2 * shear_S * (1 + poison_ratios_1_S)) / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_E_G = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
 
     shear_G_computed.append(shear_S)
     bulk_K_computed.append(Cij[0, 1]+Cij[2,2]*2/3)
@@ -339,26 +351,26 @@ ax_modulus.annotate(r'$\mu_\mathrm{{target}}/\mu_0$', color='blue',
                      ls='--')
              )
 
-# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='r', linewidth=1, marker='|',
-#                 label=r'Target - Bulk K')
-# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='r', linewidth=2, marker='|',
-#                 label=r'Computed - Bulk K')
-# ax_modulus.annotate(r'$K_\mathrm{{eff}}/K_0$', color='red',
-#              xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
-#              xytext=(-0.46,  0.15),
-#             arrowprops=dict(arrowstyle='->',
-#                      color='red',
-#                      lw=1,
-#                      ls='-')
-#              )
-# ax_modulus.annotate(r'$K_\mathrm{{target}}/K_0$', color='red',
-#              xy=(-0.3, bulk_K_target[np.where(poisson_targets == -0.3)[0][0]]),
-#              xytext=(-0.43, -0.1),
-#             arrowprops=dict(arrowstyle='->',
-#                      color='red',
-#                      lw=1,
-#                      ls='--')
-#              )
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='r', linewidth=1, marker='|',
+                label=r'Target - Bulk K')
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='r', linewidth=2, marker='|',
+                label=r'Computed - Bulk K')
+ax_modulus.annotate(r'$K_\mathrm{{eff}}/K_0$', color='red',
+             xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
+             xytext=(-0.46,  0.15),
+            arrowprops=dict(arrowstyle='->',
+                     color='red',
+                     lw=1,
+                     ls='-')
+             )
+ax_modulus.annotate(r'$K_\mathrm{{target}}/K_0$', color='red',
+             xy=(-0.3, bulk_K_target[np.where(poisson_targets == -0.3)[0][0]]),
+             xytext=(-0.43, -0.1),
+            arrowprops=dict(arrowstyle='->',
+                     color='red',
+                     lw=1,
+                     ls='--')
+             )
 
 ax_modulus.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
                 label=r'Target - Poisson')
