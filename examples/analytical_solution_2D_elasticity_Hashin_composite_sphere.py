@@ -10,7 +10,7 @@ def hashin_kappa_hom_2d(kappa1, kappa2, mu2, R1, R2):
     """
     d = 2
     phi = (R1 / R2)**d
-    alpha = d * (kappa2 - kappa1) / ((d - 1) * 2.0 * mu2 + d * kappa2)
+    alpha = d * (kappa2 - kappa1) / ((d - 1) * 2.0 * mu2 + d * kappa1)
     return kappa2 * (1.0 - (d * alpha * phi) / (1.0 + alpha * phi))
 
 

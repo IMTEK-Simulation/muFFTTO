@@ -37,29 +37,30 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 macro_gradient = np.array([[1.0, 0], [0, 1.0]])
 
 # inclusion radii
-r_1 = 0.2
+r_1 = 0.3
 r_2 = 0.4
 # create material data
 # core
-# lambda_1 = 0.01  # first Lamé
-# mu_1 = 0.05  # second Lamé
-# kappa_1 = lambda_1 + 2 * mu_1 / dim  # bulk
-# C_core=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_1, mu=mu_1)
-# # shell
-# lambda_2 = 1.
-# mu_2 = 0.5
-# kappa_2 = lambda_2 + 2 * mu_2 / dim
-# C_shell=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_2, mu=mu_2)
-#
-# # matrix = should be equal to homogenized data
-# mu_3= 0.5
-# phi = (r_1 / r_2) ** dim
-# alpha = dim * (kappa_2 - kappa_1) / ((dim - 1) * 2.0 * mu_2 + dim * kappa_2)
-# kappa_3 = kappa_2 * (1.0 - (dim * alpha * phi) / (1.0 + alpha * phi))
-# # kappa_3=0.9
-# lambda_3 = kappa_3 -   2 * mu_3/ dim
-# C_matrix=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
-# print('C_matrix = \n {}'.format(domain.compute_Voigt_notation_4order(C_matrix)))
+lambda_1 = 0.001  # first Lamé
+mu_1 = 0.005  # second Lamé
+kappa_1 = lambda_1 + 2 * mu_1 / dim  # bulk
+#C_core=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_1, mu=mu_1)
+# shell
+lambda_2 = 1.
+mu_2 = 0.5
+kappa_2 = lambda_2 + 2 * mu_2 / dim
+#C_shell=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_2, mu=mu_2)
+
+# matrix = should be equal to homogenized data
+
+phi = (r_1 / r_2) ** dim
+alpha = dim * (kappa_2 - kappa_1) / ((dim - 1) * 2.0 * mu_2 + dim * kappa_2)
+kappa_3 = kappa_2 * (1.0 - (dim * alpha * phi) / (1.0 + alpha * phi))
+# kappa_3=0.9
+mu_3= 0.3
+lambda_3 = kappa_3 -   2 * mu_3/ dim
+C_matrix=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
+print('C_matrix = \n {}'.format(domain.compute_Voigt_notation_4order(C_matrix)))
 kappa_1 = 0.1
 lambda_1 = mu_1= 3*  kappa_1/5#   Lamé
 C_core = domain.get_elastic_tensor_from_lame(dim=2, lam=lambda_1, mu=mu_1)

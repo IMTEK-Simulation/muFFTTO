@@ -158,8 +158,10 @@ def conjugate_gradients_mugrid(
         # Update search direction
         # beta = next_rr / rr
         beta = next_rz / rz
-        p.s = z.s + beta * p.s
+
         rz = next_rz
+
+        p.s = z.s + beta * p.s
         # p.s *= beta
         # p.s += z.s
 

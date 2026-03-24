@@ -23,7 +23,7 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 
 plot_time_vs_dofs = False
 plot_stress_field = False
-plot_data_vs_CG = False
+plot_data_vs_CG = True
 plot_data_vs_CG_3D= False
 plot_3D_geometry = False
 
@@ -45,11 +45,13 @@ if plot_iterations_vs_grids_size:
     norm_newrton_stop_GJ = []
 
 
-    it_max = 10
-    n_exponents = np.array([5])
+    it_max = 9
+    n_exponents = np.array([3])
     iterations = np.arange(it_max)  # numbers of grids points
 
-    grid_sizes= np.array( [16,32,64,128,200])#,200
+    grid_sizes= np.array( [ 32, 64, 128 ])#,200,128,200
+    #grid_sizes= np.array( [ 50, 100, 150 ])#,200,128,200
+
     its_G = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
     its_GJ = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
 
@@ -77,11 +79,11 @@ if plot_iterations_vs_grids_size:
                         file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
-                    if Nx == 256:
-                        _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
-
-                    else:
-                        _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                    # if Nx == 256:
+                    #     _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
+                    #
+                    # else:
+                    _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
                                                 allow_pickle=True)
 
 
@@ -107,7 +109,7 @@ if plot_iterations_vs_grids_size:
                 norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
                 norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
                 norm_newton_stop_G[i,iteration_total, j]=_info_final_G.f.newton_stop_crit
-                info_log_final_G = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+              #  info_log_final_G = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
 
                 preconditioner_type = 'Green_Jacobi'
 
@@ -115,12 +117,12 @@ if plot_iterations_vs_grids_size:
                         file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
-                    if Nx == 256:
-                        _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
-                                                 allow_pickle=True)
-
-                    else:
-                        _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                    # if Nx == 256:
+                    #     _info_final_GJ = np.load(data_folder_path + f'info_log_it{iteration_total}.npz',
+                    #                              allow_pickle=True)
+                    #
+                    # else:
+                    _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
                                                  allow_pickle=True)
                 # stress_GJ = np.load(data_folder_path + f'stress' + f'_it{iteration_total}' + f'.npy', allow_pickle=True)
                 # strain_fluc_GJ = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
@@ -134,9 +136,19 @@ if plot_iterations_vs_grids_size:
                 norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
                 norm_newton_stop_GJ[i,iteration_total, j]=_info_final_GJ.f.newton_stop_crit
 
-                info_log_final_GJ = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
-
-
+               # info_log_final_GJ = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz', allow_pickle=True)
+# plot convergence lines
+                # plt.figure(figsize=(10, 4.50))
+                # plt.semilogy(_info_final_G.f.norm_rr/_info_final_G.f.norm_rr[0], color='green', linestyle='-', label=f'rr Green-Jacobi - {n}')
+                # plt.semilogy(_info_final_G.f.norm_rz/_info_final_G.f.norm_rz[0], color='green', linestyle='--', label=f'rz Green-Jacobi - {n}')
+                #
+                # plt.semilogy(_info_final_GJ.f.norm_rr/_info_final_GJ.f.norm_rr[0],color='black',linestyle='-', label=f'rr Green-Jacobi - {n}')
+                # plt.semilogy(_info_final_GJ.f.norm_rz/_info_final_GJ.f.norm_rz[0],color='black', linestyle='--',label=f'rz Green-Jacobi - {n}')
+                # plt.legend()
+                # plt.ylim([1e-11, 10])
+                # plt.xlim([0, 250])
+                #
+                # plt.show()
     fig = plt.figure(figsize=(8.3, 8.0))
     gs = fig.add_gridspec(4, 1, hspace=0.2, wspace=0.1, width_ratios=[1],
                           height_ratios=[1,1,1,1])
@@ -152,7 +164,7 @@ if plot_iterations_vs_grids_size:
         gs_iter_vs_mesh_size.plot(iterations, its_GJ[i, :,0], '--', marker='o', markerfacecolor='none',
                                    label=f'Green-Jacobi - {n}')
     gs_iter_vs_mesh_size.legend()
-    gs_iter_vs_mesh_size.set_ylim([0, 1000])
+    gs_iter_vs_mesh_size.set_ylim([0, 300])
     gs_iter_vs_mesh_size.set_title('Iterations vs Mesh Size')
 
     gs_iter_vs_unique_ = fig.add_subplot(gs[2, 0])
@@ -1061,18 +1073,19 @@ if plot_data_vs_CG:
     rhs_inf_GJ = []
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
+    #grid_sizes= np.array( [ 50, 100, 150,200])#,200,128,200
 
-    Nx = 2 ** 4#8
+    Nx = 40#2 ** 4#8
     Ny = Nx
     Nz = Nx
     it_max = 10
     n_exponents = np.array([5])
     iterations = np.arange(it_max) # numbers of grids points
 
-    its_G = np.zeros([it_max, len(n_exponents)])
-    its_GJ = np.zeros([it_max, len(n_exponents)])
+    its_G = np.zeros([it_max,  len(n_exponents)])
+    its_GJ = np.zeros([it_max,  len(n_exponents)])
 
-    for j in np.arange(len(n_exponents)):
+    for j in np.arange(int(len(n_exponents))):
         n_exp = n_exponents[j]
         for iteration_total in iterations:
 
@@ -1089,9 +1102,9 @@ if plot_data_vs_CG:
                     _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
                                             allow_pickle=True)
 
-            with open(data_folder_path + f'stress' + f'_exp_{n_exp}_it{iteration_total+1}' + f'.npy', 'rb') as f:
-                magic = f.read(6)
-                print(f"Magic number: {magic}")
+            # with open(data_folder_path + f'stress' + f'_exp_{n_exp}_it{iteration_total+1}' + f'.npy', 'rb') as f:
+            #     magic = f.read(6)
+            #     print(f"Magic number: {magic}")
 
             # strain_fluc_G = np.load(data_folder_path + f'strain_fluc_field' + f'_it{iteration_total}' + f'.npy',
             #                         allow_pickle=True)
@@ -1253,6 +1266,8 @@ if plot_data_vs_CG:
     results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
 
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+    K4_xyz_G_50= np.load(  file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={50}' + f'Ny={50}' + f'Nz={50}'
+                        + f'_{preconditioner_type}' + '/'  + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
 
     # ax_geom_0 = fig.add_axes([0.3, 0.75, 0.2, 0.2])
     ax_geom_0 = fig.add_subplot(gs[0, 2])

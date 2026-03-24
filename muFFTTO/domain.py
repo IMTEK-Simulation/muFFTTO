@@ -1198,7 +1198,7 @@ class Discretization:
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
-            # for the case of ref material, we need only one single material tensor
+            # for the case of ref material, we need only one single material tensorF
             if material_data.ndim == 2:
                 gradient_field.s = np.einsum('ij,uj...->ui...', material_data,
                                              gradient_field.s)  # 'u' just to keep the size of array consistent

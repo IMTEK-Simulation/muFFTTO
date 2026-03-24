@@ -435,6 +435,7 @@ for inc in range(ninc):
                 x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
                 x_jacobi_temp.s = K_diag_alg.s * x.s
+                discretization.fft.communicate_ghosts(x_jacobi_temp)
                 discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                            input_nodal_field_fnxyz=x_jacobi_temp,
                                                            output_nodal_field_fnxyz=Px)
@@ -496,8 +497,9 @@ for inc in range(ninc):
             tol=1e-5,
             maxiter=20000,
             callback=callback,
-            # norm_metric=M_fun_Green
-        )
+            rtol=False
+            # norm_metric=M_fun_Green,
+                    )
 
         nb_it_comb = len(norms['residual_rr'])
         if len(norms['residual_rr']) > 1:
