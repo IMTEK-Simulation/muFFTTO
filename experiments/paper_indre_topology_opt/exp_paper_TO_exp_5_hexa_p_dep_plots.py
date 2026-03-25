@@ -25,28 +25,26 @@ f_pfs = []
 f_adjoint = []
 zener_ratios = []
 poison_ratios = []
-Young_modulus = []
+E1_target = []
 c13_ = []
 c23_ = []
-nu12_target= []
-E1= []
-nu12= []
-C_22= []
-Cij_= []
-# weights = np.concatenate(
-#     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0, 300.0, 400.0, 500.0])])
-# weights = np.array([0.1, 0.5, 1.0, 1.5, 2.0, 5.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.])
+nu12_target = []
+nu21_target= []
+E1 = []
+E2 = []
+nu12 = []
+nu21 = []
+shear_G_computed = []
+bulk_K_computed = []
+shear_G_target = []
+bulk_K_target = []
 
 poisson_targets =np.array([-0.5,-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])#, 0.4
-# poisson_targets=poisson_targets[::-1]
-#0.5,
+
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
-target_Cij=np.zeros((poisson_targets.shape[0],3,3))
-shear_G_computed=np.zeros(poisson_targets.shape[0])
-bulk_K_computed=np.zeros(poisson_targets.shape[0])
-shear_G_target=np.zeros(poisson_targets.shape[0])
-bulk_K_target=np.zeros(poisson_targets.shape[0])
-weight=10.0
+target_Cij = np.zeros((poisson_targets.shape[0], 3, 3))
+
+weight=20.0
 # weights=[5]
 N = 1024
 index=0
@@ -123,7 +121,6 @@ for poison_target in poisson_targets:
     homogenized_Cij[..., index] = info_.f.homogenized_C_ijkl
 
     # compliance tensors for Orthotropic material
-    # compliance tensors for Orthotropic material
     # Cij[0, 2] = Cij[1, 2] = Cij[2, 0] = Cij[2, 1] = 0
 
     Sij = np.linalg.inv(Cij)
@@ -133,6 +130,7 @@ for poison_target in poisson_targets:
     poison_ratios_1_S = - Sij[0, 1] / Sij[0, 0]
     poison_ratios_2_S = - Sij[1, 0] / Sij[1, 1]
     shear_S = 1 / Sij[2, 2]
+    bulk_S = 1 / (Sij[0, 0] + 2 * Sij[1, 0] + Sij[1, 1])
     print(f'check symmetry condition {poison_target}  {poison_ratios_1_S / young_1_S - poison_ratios_2_S / young_2_S}')
     print(f'check shear coupling {poison_target}  S_13 {Sij[0, 2]}  S_23 {Sij[1, 2]}')
     print(f'check isotropy {poison_target}  S_11-S_22 {Sij[0, 0] - Sij[1, 1]}')
@@ -147,158 +145,30 @@ for poison_target in poisson_targets:
 
     K_E_G = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
 
-    shear_G_computed[ index]=Cij[2,2]
-    bulk_K_computed[ index]=Cij[0, 1]+Cij[2,2]*2/3
+    shear_G_computed.append(shear_S)
+    bulk_K_computed.append(bulk_S)
 
+    nu12.append(poison_ratios_1_S)
+    nu21.append(poison_ratios_2_S)
+    E1.append(young_1_S)
+    E2.append(young_2_S)
 
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
     lam, mu = Cij[0, 1], Cij[2, 2]
 
-    poison_ratios.append(lam / (2 * (lam + mu)))
-    Young_modulus.append(mu * (3 * lam + 2 * mu) / (lam + mu))
-
-    c13_.append(Cij[0, 2])
-    c23_.append(Cij[1, 2])
     # for Orthotropic material
-    S_compl = np.linalg.inv(Cij)
-
-    E1.append(1 / S_compl[0, 0])  # ≈ 0.25
-    s_temp = -S_compl[0, 1] / S_compl[0, 0]
-    nu12.append(s_temp / (1 + s_temp))
-
-    C_22.append(1 / S_compl[2, 2])
-    # poison_ratios.append(nu12)
-    # Young_modulus.append(E1)
-
     Cij_target = info_.f.target_C_ijkl
     target_Cij[index, ...] = info_.f.target_C_ijkl
-    shear_G_target[ index]=Cij_target[2,2]
-    bulk_K_target[ index]=Cij_target[0, 1]+Cij_target[2,2]*2/3
 
-
-    lam, mu = Cij_target[0, 1], Cij_target[2, 2]
-
-    # poison_target_aparent.append( lam / (2 * (lam + mu)))
-    #
-    #
-    # Young_target = mu * (3 * lam + 2 * mu) / (lam + mu)
-    #
     S_compl_target = np.linalg.inv(Cij_target)
 
-    E1_target = 1 / S_compl_target[0, 0]
-    s_temp = -S_compl_target[0, 1] / S_compl_target[0, 0]
-    nu12_target.append(s_temp / (1 + s_temp))
-    G_target = 1 / S_compl_target[2, 2]
+    nu12_target.append(- S_compl_target[0, 1] / S_compl_target[0, 0])
+    nu21_target.append(- S_compl_target[1, 0] / S_compl_target[1, 1])
+    E1_target.append(1 / S_compl_target[0, 0])
+    shear_G_target.append(1 / S_compl_target[2, 2])
+    bulk_K_target.append(1 / (S_compl_target[0, 0] + 2 * S_compl_target[1, 0] + S_compl_target[1, 1]))
+
     index += 1
-
-plot_data_anal = True
-if plot_data_anal:
-    plt.figure()
-    for i, j in [[0, 0], [1, 1], [0, 1], [2, 2]]:
-        label_c = f'$C_{{{i + 1}{j + 1}}}$'
-        markers = {(0, 0): 'x', (1, 1): '|', (0, 1): '^', (2, 2): '>'}
-        marker = markers.get((i, j), 'o')
-        line, = plt.plot(poisson_targets, homogenized_Cij[i, j, :], '-', linewidth=2, marker=marker,
-                         label=f' - {label_c}  ')
-        plt.plot(poisson_targets, target_Cij[:, i, j], color=line.get_color(), linestyle='-.', linewidth=2,
-                 marker=marker,
-                 label=f'Target {label_c}')
-
-    plt.yscale('linear')
-    plt.legend(loc='best')
-    plt.xlabel(r'Poisson targets')
-    plt.xlim(-0.5, 0.3)
-    plt.ylim(-0.5, 1)
-    plt.title(r'W' + f'{weight}')
-    fname = figure_folder_path + f'{weight}' + 'exp5_hexa_Ccomponnets{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight')
-
-    plt.figure()
-
-    plt.plot(poisson_targets, np.asarray(shear_G_target), '-.', color='b', linewidth=1, marker='|',
-             label=r'Target - Shear G')
-    plt.plot(poisson_targets, np.asarray(shear_G_computed), '-', color='b', linewidth=2, marker='|',
-             label=r'Computed - Shear G')
-
-    plt.plot(poisson_targets, np.asarray(bulk_K_target), '-.', color='r', linewidth=1, marker='|',
-             label=r'Target - Bulk K')
-    plt.plot(poisson_targets, np.asarray(bulk_K_computed), '-', color='r', linewidth=2, marker='|',
-             label=r'Computed - Bulk K')
-
-
-    plt.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='|',
-             label=r'Target - Poisson')
-    plt.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='|',
-             label=r'Computed - Poisson')
-
-    #plt.yscale('log')
-    plt.legend(loc='best')
-    plt.xlabel(r'Target Poisson')
-    plt.xlim(-0.51, 0.31)
-    plt.ylim(-0.5, 1)
-    plt.title(r'W' + f'{weight}')
-    fname = figure_folder_path + f'{weight}' + 'exp5_hexa_KG{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight')
-    plt.show()
-
-    plt.figure()
-
-    plt.plot(poisson_targets, target_Cij[:,0,0], '-', color='r', linewidth=2, marker='x',
-                 label=r' - 00  computed')
-    plt.plot(poisson_targets, homogenized_Cij[0,0,:], '-', color='b', linewidth=2, marker='x',
-                 label=r' - 00  target')
-
-    plt.plot(poisson_targets, target_Cij[:,1,1], '-', color='r', linewidth=2, marker='o',
-                 label=r' - 11  computed')
-    plt.plot(poisson_targets, homogenized_Cij[1,1,:], '-', color='b', linewidth=2, marker='o',
-                 label=r' - 11  target')
-    plt.plot(poisson_targets, target_Cij[:,2,2], '-', color='r', linewidth=2, marker='>',
-                 label=r' - 22  computed')
-    plt.plot(poisson_targets, homogenized_Cij[2,2,:], '-', color='b', linewidth=2, marker='>',
-                 label=r' - 22  target')
-
-    plt.plot(poisson_targets, target_Cij[:,0,1 ], '-', color='r', linewidth=2, marker='^',
-                 label=r' - 01  computed')
-    plt.plot(poisson_targets, homogenized_Cij[0,1,:], '-', color='b', linewidth=2, marker='^',
-                 label=r' - 01  target')
-
-    plt.yscale('linear')
-    plt.legend(loc='best')
-    plt.xlabel(r'Poisson')
-    plt.xlim(-0.51, 0.51)
-    plt.ylim(-0.5, 2)
-    plt.title(r'Square grid : 3 load cases' + f' N={N}, poisson={poison_target}')
-    fname = figure_folder_path +f'{weight}' +'exp5_square_convergence{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight')
-    plt.show()
-
-    plt.figure()
-    plt.plot(poisson_targets, abs(target_Cij[:,0,0]- homogenized_Cij[0,0,:]), '-', color='r', linewidth=2, marker='x',
-                 label=r' - 00  computed')#/abs(target_Cij[:,0,0])
-
-    plt.plot(poisson_targets, abs(target_Cij[:,1,1]- homogenized_Cij[1,1,:]), '-', color='r', linewidth=2, marker='o',
-                 label=r' - 11  computed')#/abs(target_Cij[:,1,1])
-
-    plt.plot(poisson_targets,abs( target_Cij[:,2,2]-homogenized_Cij[2,2,:]), '-', color='r', linewidth=2, marker='>',
-             label=r' - 22  computed')#//abs(target_Cij[:,2,2])
-
-    plt.plot(poisson_targets,abs( target_Cij[:,0,1]-homogenized_Cij[0,1,:]), '-', color='r', linewidth=2, marker='^',
-                 label=r' - 01  computed')#/abs(target_Cij[:,0,1])
-
-
-    plt.yscale('log')
-    plt.legend(loc='best')
-    plt.xlabel(r'Target Poisson')
-    plt.xlim(-0.51, 0.51)
-    plt.ylim(1e-4, 1e1)
-    plt.title(r'Square grid : 3 load cases' + f' N={N}, error in C comps')
-    fname = figure_folder_path+f'{weight}' + 'exp5_square_erros{}'.format('.pdf')
-    print(('create figure: {}'.format(fname)))
-    plt.savefig(fname, bbox_inches='tight')
-    plt.show()
 
 fig = plt.figure(figsize=(5.5, 3.5))
 gs_global = fig.add_gridspec(1, 1, width_ratios=[1], hspace=0.00)
@@ -306,78 +176,100 @@ gs_global = fig.add_gridspec(1, 1, width_ratios=[1], hspace=0.00)
 G_0 = 0.5
 K_0 = 1.0
 ax_modulus = fig.add_subplot(gs_global[0, 0])
-ax_modulus.plot(poisson_targets, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='x',
-                label=r'Target - Shear G')
-ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='x',
-                label=r'Computed - Shear G')
-ax_modulus.annotate(r'$\mu_\mathrm{{eff}}/\mu_0$', color='blue',
-             xy=(-0.4, shear_G_computed[np.where(poisson_targets == -0.4)[0][0]] / G_0),
-             xytext=(-0.3, 0.15),
-            arrowprops=dict(arrowstyle='->',
-                     color='blue',
-                     lw=1,
-                     ls='-')
-             )
-ax_modulus.annotate(r'$\mu_\mathrm{{target}}/\mu_0$', color='blue',
-             xy=(-0.4, shear_G_target[np.where(poisson_targets == -0.4)[0][0]] / G_0),
-             xytext=(-0.32, 0.44),
-            arrowprops=dict(arrowstyle='->',
-                     color='blue',
-                     lw=1,
-                     ls='--')
-             )
 
-# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='r', linewidth=1, marker='|',
-#                 label=r'Target - Bulk K')
-# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='r', linewidth=2, marker='|',
-#                 label=r'Computed - Bulk K')
-# ax_modulus.annotate(r'$K_\mathrm{{eff}}/K_0$', color='red',
-#              xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
-#              xytext=(-0.46,  0.15),
-#             arrowprops=dict(arrowstyle='->',
-#                      color='red',
-#                      lw=1,
-#                      ls='-')
-#              )
-# ax_modulus.annotate(r'$K_\mathrm{{target}}/K_0$', color='red',
-#              xy=(-0.3, bulk_K_target[np.where(poisson_targets == -0.3)[0][0]]),
-#              xytext=(-0.43, -0.1),
-#             arrowprops=dict(arrowstyle='->',
-#                      color='red',
-#                      lw=1,
-#                      ls='--')
-#              )
+ax_modulus.plot(poisson_targets, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
+                label=r'Target - Shear G')
+ax_modulus.plot(poisson_targets, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
+                label=r'Computed - Shear G')
+ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
+                    xy=(0.1, E1[np.where(poisson_targets == 0.1)[0][0]]),
+                    xytext=(-0.1, 0.55),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='red',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
+                    xy=(0.3, E1_target[np.where(poisson_targets == 0.3)[0][0]]),
+                    xytext=(0.05, 0.62),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='red',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='^',
+                label=r'Target - Shear G')
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='^',
+                label=r'Computed - Shear G')
+ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/\mu^0$', color='blue',
+                    xy=(-0.3, shear_G_computed[np.where(poisson_targets == -0.3)[0][0]] / G_0),
+                    xytext=(-0.25, 0.6),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='blue',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$\mu^\mathrm{{target}}/\mu^0$', color='blue',
+                    xy=(-0.4, shear_G_target[np.where(poisson_targets == -0.4)[0][0]] / G_0),
+                    xytext=(-0.45, 0.57),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='blue',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
+                label=r'Target - Bulk K')
+ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
+                label=r'Computed - Bulk K')
+ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
+                    xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
+                    xytext=(-0.46, 0.16),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='k',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
+                    xy=(-0.4, bulk_K_target[np.where(poisson_targets == -0.4)[0][0]]),
+                    xytext=(-0.43, -0.1),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='k',
+                                    lw=1,
+                                    ls='--')
+                    )
 
 ax_modulus.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
                 label=r'Target - Poisson')
 ax_modulus.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, marker='o',
                 label=r'Computed - Poisson')
-ax_modulus.annotate(r'$\nu_\mathrm{{eff}}$', color='green',
-             xy=(-0.3, nu12[np.where(poisson_targets == -0.3)[0][0]]),
-             xytext=(-0.4, -0.2),
-            arrowprops=dict(arrowstyle='->',
-                     color='green',
-                     lw=1,
-                     ls='-')
-             )
-ax_modulus.annotate(r'$\nu_\mathrm{{target}}$', color='green',
-             xy=(-0.3, nu12_target[np.where(poisson_targets == -0.3)[0][0]]),
-             xytext=(-0.2, -0.4),
-            arrowprops=dict(arrowstyle='->',
-                     color='green',
-                     lw=1,
-                     ls='--')
-             )
-
+ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
+                    xy=(-0.2, nu12[np.where(poisson_targets == -0.2)[0][0]]),
+                    xytext=(-0.1, -0.22),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='green',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$\nu^\mathrm{{target}}_{12}$', color='green',
+                    xy=(-0.3, nu12_target[np.where(poisson_targets == -0.3)[0][0]]),
+                    xytext=(-0.2, -0.4),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='green',
+                                    lw=1,
+                                    ls='--')
+                    )
 ax_modulus.annotate(r'$1024^2$ grid points'+'\n'+rf'$w={weight}$',
              xy=(0.2, -0.35),
              xytext=(0.0, -0.45))
 ax_modulus.set_title(r"Hexagonal grid")
 
-ax_modulus.set_xlabel(r"Target Poisson's ratio "+fr'- $\nu_\mathrm{{target}}$')
+ax_modulus.set_xlabel(r"Target Poisson's ratio "+fr'- $\nu^\mathrm{{target}}$')
 ax_modulus.set_xlim(-0.5, 0.3)
-ax_modulus.set_ylim(-0.5, 0.5)
-ax_modulus.set_yticks([-0.5,-0.25, 0.0,0.25, 0.5])
+ax_modulus.set_ylim(-0.5, 0.75)
+# ax_modulus.set_yticks([-0.5,-0.25, 0.0,0.25, 0.5])
 ax_modulus.set_xticks([-0.5, -0.3, -0.1,0.1, 0.3])
 ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7)
 

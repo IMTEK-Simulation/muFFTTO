@@ -46,11 +46,11 @@ if plot_iterations_vs_grids_size:
 
 
     it_max = 9
-    n_exponents = np.array([3])
+    n_exponents = np.array([4])
     iterations = np.arange(it_max)  # numbers of grids points
 
-    grid_sizes= np.array( [ 32, 64, 128 ])#,200,128,200
-    #grid_sizes= np.array( [ 50, 100, 150 ])#,200,128,200
+    grid_sizes= np.array( [ 32, 64, 128 , 256])#,200,128,200
+    #grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
     its_GJ = np.zeros([len(grid_sizes),it_max, len(n_exponents)])
@@ -164,7 +164,7 @@ if plot_iterations_vs_grids_size:
         gs_iter_vs_mesh_size.plot(iterations, its_GJ[i, :,0], '--', marker='o', markerfacecolor='none',
                                    label=f'Green-Jacobi - {n}')
     gs_iter_vs_mesh_size.legend()
-    gs_iter_vs_mesh_size.set_ylim([0, 300])
+    gs_iter_vs_mesh_size.set_ylim([0,350])
     gs_iter_vs_mesh_size.set_title('Iterations vs Mesh Size')
 
     gs_iter_vs_unique_ = fig.add_subplot(gs[2, 0])
