@@ -216,7 +216,7 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 letter_offset = -0.15
 
 for upper_ax in np.arange(5):
-    weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
+    weight = np.array([weights[1], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
     #weight = weights[upper_ax] #10
 
     if upper_ax == 0:

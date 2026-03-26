@@ -287,6 +287,8 @@ gs = gs_global[0].subgridspec(nrows=3, ncols=3,
                               hspace=0.35)
 
 for i, poison_target in enumerate(poisson_targets):
+    nu12_target_i=np.asarray(nu12_target)[i]
+
     print(f'i org = {i}')
     j = i // n_cols
     k = i % n_cols
@@ -335,9 +337,9 @@ for i, poison_target in enumerate(poisson_targets):
     else:
         ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')
     computed_poisson = np.asarray(nu12)[i]
-    ax.text(0.5, 1.07, fr'$\nu_\mathrm{{target}}=$ {poison_target}', transform=ax.transAxes, ha='center', fontsize=16)
+    ax.text(0.5, 1.07, fr'$\nu_{{12}}^\mathrm{{target}}=$ {nu12_target_i:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
     # ax.text(0.3, -0.15, fr'$\nu =$ {computed_poisson:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
-    ax.text(-.10, 0.5, fr'$\nu_{{01}} =$ {computed_poisson:0.2f}',
+    ax.text(-.10, 0.5, fr'$\nu_{{12}} =$ {computed_poisson:0.2f}',
             transform=ax.transAxes,
             rotation=90,
             ha='center', va='center',
@@ -371,19 +373,10 @@ for i, poison_target in enumerate(poisson_targets):
     ax.set_xlim(0, 3 * N)
     ax.set_ylim(0, 3 * N)
 
-# # Hide any extra subplots
-# for j in range(i + 1, len(axes_pf)):
-#     axes_pf[j].axis('off')
-#
-# # Add unified colorbar for phase fields
-# fig_pf.subplots_adjust(right=0.85)
-# cbar_ax = fig_pf.add_axes([0.88, 0.15, 0.02, 0.7])
-# fig_pf.colorbar(pcm, cax=cbar_ax)
-#
-# fig_pf.tight_layout(rect=[0, 0, 0.85, 1])
-fname_pf = figure_folder_path + f'{weight}' + 'exp5_square_9.pdf'
+plt.tight_layout()
+fname_pf = figure_folder_path  + 'exp5_square_' + f'w{weight:0.0f}' +'.pdf'
 print(f'create figure: {fname_pf}')
-fig.savefig(fname_pf, bbox_inches='tight')
+fig.savefig(fname_pf, bbox_inches='tight', dpi=1200 )
 
 # --- New figure for phase fields of all poisson_targets ---
 n_targets = len(poisson_targets)
@@ -432,7 +425,7 @@ for i, poison_target in enumerate(poisson_targets):
                             vmin=0, vmax=1,
                             rasterized=True)
         # ax.set_title(r'$\nu_{{\text{target}=$'+f'{poison_target}')
-        ax.set_title(fr'$\nu_\mathrm{{target}}=$ {poison_target}')
+        ax.set_title(fr'$\nu^\mathrm{{target}}=$ {poison_target}')
 
     else:
         ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')

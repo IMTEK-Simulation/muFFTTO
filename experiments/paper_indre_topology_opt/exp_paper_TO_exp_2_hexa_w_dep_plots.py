@@ -26,20 +26,29 @@ f_pfs = []
 f_adjoint = []
 zener_ratios = []
 poison_ratios = []
-Young_modulus= []
-c13_= []
-c23_= []
-E1= []
-nu12= []
-C_22= []
+E1_target = []
+c13_ = []
+c23_ = []
+nu12_target = []
+nu21_target= []
+E1 = []
+E2 = []
+nu12 = []
+nu21 = []
 
-nu_xy= []
-nu_yx= []
+C_22 = []
+shear_G_computed = []
+bulk_K_computed = []
+shear_G_target = []
+bulk_K_target = []
 # weights = np.concatenate(
 #     [np.arange(0.1, 2., 0.1), np.arange(2, 3, 1), np.arange(3, 10, 2), np.arange(10, 110, 20), np.array([150.0, 200.0])])#, 300.0, 400.0, 500.0
 #weights=np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0,  300.0, 700.0, 1000.])
 weights=np.array([0.1,  0.3,  0.7,  1.0, 3.0, 7.0, 10.0, 30.0, 70.0, 100.0])
 
+homogenized_Cij = np.zeros((3, 3, weights.shape[0]))
+target_Cij = np.zeros((3, 3,weights.shape[0], ))
+index = 0
 
 # weights=[5]
 N = 1024
@@ -111,84 +120,205 @@ for w_mult in weights:
     f_adjoint.append(info_.f.norms_adjoint_energy[-1])
     # for Isotropic material
     Cij = info_.f.homogenized_C_ijkl
+    homogenized_Cij[..., index] = info_.f.homogenized_C_ijkl
+
+    Sij = np.linalg.inv(Cij)
+
+    young_1_S = 1 / Sij[0, 0]
+    young_2_S = 1 / Sij[1, 1]
+    poison_ratios_1_S = - Sij[0, 1] / Sij[0, 0]
+    poison_ratios_2_S = - Sij[1, 0] / Sij[1, 1]
+    shear_S = 1 / Sij[2, 2]
+    bulk_S = 1 / (Sij[0, 0] + 2 * Sij[1, 0] + Sij[1, 1])
+    print(f'check symmetry condition {weight}  {poison_ratios_1_S / young_1_S - poison_ratios_2_S / young_2_S}')
+    print(f'check shear coupling {weight}  S_13 {Sij[0, 2]}  S_23 {Sij[1, 2]}')
+    print(f'check isotropy {weight}  S_11-S_22 {Sij[0, 0] - Sij[1, 1]}')
+
+    bulk_K_e_poisson = young_1_S / (3 * (1 - 2 * poison_ratios_1_S))
+    bulk_K_mu_poisson = (2 * shear_S * (1 + poison_ratios_1_S)) / (3 * (1 - 2 * poison_ratios_1_S))
+    bulk_K_mu_e = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
+
+    K_E_nu = young_1_S / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_G_nu = (2 * shear_S * (1 + poison_ratios_1_S)) / (3 * (1 - 2 * poison_ratios_1_S))
+
+    K_E_G = (young_1_S * shear_S) / (3 * (3 * shear_S - young_1_S))
+
+    shear_G_computed.append(shear_S)
+    bulk_K_computed.append(bulk_S)
+
+    nu12.append(poison_ratios_1_S)
+    nu21.append(poison_ratios_2_S)
+    E1.append(young_1_S)
+    E2.append(young_2_S)
+
     zener_ratios.append(2 * Cij[2, 2] / (Cij[0, 0] - Cij[0, 1]))
     lam, mu = Cij[0, 1], Cij[2, 2]
+
     # for Orthotropic material
+    Cij_target = info_.f.target_C_ijkl
+    target_Cij[..., index] = info_.f.target_C_ijkl
 
-    S_compl = np.linalg.inv(Cij)
-    nu_xy.append(-S_compl[0, 1] / S_compl[0, 0])
-    nu_yx.append(-S_compl[1, 0] / S_compl[1, 1])
-    s_temp = -S_compl[0, 1] / S_compl[0, 0]
-    nu12.append(s_temp / (1 + s_temp))  # ≈ -0.33
+    S_compl_target = np.linalg.inv(Cij_target)
 
+    nu12_target.append(- S_compl_target[0, 1] / S_compl_target[0, 0])
+    nu21_target.append(- S_compl_target[1, 0] / S_compl_target[1, 1])
+    E1_target.append(1 / S_compl_target[0, 0])
+    shear_G_target.append(1 / S_compl_target[2, 2])
+    bulk_K_target.append(1 / (S_compl_target[0, 0] + 2 * S_compl_target[1, 0] + S_compl_target[1, 1]))
 
-    poison_ratios.append(lam / (2 * (lam + mu)))
-    Young_modulus.append(mu * (3 * lam + 2 * mu) / (lam + mu))
-
-    c13_.append(Cij[0, 2])
-    c23_.append(Cij[1, 2])
-    # for Orthotropic material
-    S_compl = np.linalg.inv(Cij)
-
-    E1.append(1 / S_compl[0, 0])  # ≈ 0.25
-    #nu12.append(-S_compl[0, 1] / S_compl[0, 0])  # ≈ -0.33
-    C_22.append(1 / S_compl[2, 2])
-    # poison_ratios.append(nu12)
-    # Young_modulus.append(E1)
-
-Cij_target = info_.f.target_C_ijkl
-lam, mu = Cij_target[0, 1], Cij_target[2, 2]
-
-poison_target = lam / (2 * (lam + mu))
-Young_target = mu * (3 * lam + 2 * mu) / (lam + mu)
-
-S_compl_target = np.linalg.inv(Cij_target)
-
-E1_target = 1 / S_compl_target[0, 0]  # ≈ 0.25
-nu12_target = -S_compl_target[0, 1] / S_compl_target[0, 0]  # ≈ -0.33
-G_target = 1 / S_compl_target[2, 2]
-
-plt.figure()
-plt.semilogx(weights, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
-             label=r' - Poisson ratio difference')
-plt.axhline(y=nu12_target, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
-
-plt.semilogx(weights, np.asarray(E1), '-', color='k', linewidth=2, marker='|',
-             label=r'C_{11} - Young modulus difference')
-plt.axhline(y=E1_target, color='k', linestyle='-.', linewidth=2, label=r'Target Young modulus difference')
-
-plt.semilogx(weights, np.asarray(C_22), '-', color='b', linewidth=2, marker='|',
-             label=r'C_{33} - Shear modulus difference')
-plt.axhline(y=G_target, color='b', linestyle='-.', linewidth=2, label=r'Target C_{33} - Shear modulus difference')
-
-plt.yscale('linear')
-plt.legend(loc='best')
-plt.xlabel(r'Weight $a$')
-plt.xlim(0.1, 100)
-plt.ylim(-0.5, 2)
-plt.title(r'Hexagonal grid zero poisson: 3  load cases'+ f' N={N}, eta={eta_mult}')
-fname = figure_folder_path + 'exp2_hexa_convergence{}'.format('.pdf')
-print(('create figure: {}'.format(fname)))
-plt.savefig(fname, bbox_inches='tight')
-# plt.show()
-plt.figure()
-plt.semilogx(weights, np.abs(np.asarray(poison_ratios)-poison_target), '-', color='r', linewidth=2, marker='|', label=r'Poisson ratio difference')
-
-plt.axhline(y=0.0, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
-plt.semilogx(weights, np.abs(np.asarray(Young_modulus)-Young_target), '--', color='k', linewidth=2, marker='|', label=r'Young modulus difference')
-plt.axhline(y=0.0, color='k', linestyle=':', linewidth=2, label=r'Target Young modulus difference')
-
-plt.semilogx(weights, np.abs(c13_), '--', color='k', linewidth=1, marker='|', label=r'$C_{1,3}$')
-plt.semilogx(weights, np.abs(c23_), '--', color='k', linewidth=1, marker='|', label=r'$C_{2,3}$')
-
-plt.yscale('log')
-plt.legend(loc='best')
-plt.xlabel(r'Weight $a$')
-plt.xlim(0.1, 100)
-plt.ylim(1e-5, 10)
+    index += 1
+#
+# plt.figure()
+# plt.semilogx(weights, np.asarray(nu12), '-', color='r', linewidth=2, marker='|',
+#              label=r' - Poisson ratio difference')
+# plt.axhline(y=nu12_target, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
+#
+# plt.semilogx(weights, np.asarray(E1), '-', color='k', linewidth=2, marker='|',
+#              label=r'C_{11} - Young modulus difference')
+# plt.axhline(y=E1_target, color='k', linestyle='-.', linewidth=2, label=r'Target Young modulus difference')
+#
+# plt.semilogx(weights, np.asarray(C_22), '-', color='b', linewidth=2, marker='|',
+#              label=r'C_{33} - Shear modulus difference')
+# plt.axhline(y=G_target, color='b', linestyle='-.', linewidth=2, label=r'Target C_{33} - Shear modulus difference')
+#
+# plt.yscale('linear')
+# plt.legend(loc='best')
+# plt.xlabel(r'Weight $a$')
+# plt.xlim(0.1, 100)
+# plt.ylim(-0.5, 2)
+# plt.title(r'Hexagonal grid zero poisson: 3  load cases'+ f' N={N}, eta={eta_mult}')
+# fname = figure_folder_path + 'exp2_hexa_convergence{}'.format('.pdf')
+# print(('create figure: {}'.format(fname)))
+# plt.savefig(fname, bbox_inches='tight')
+# # plt.show()
+# plt.figure()
+# plt.semilogx(weights, np.abs(np.asarray(poison_ratios)-poison_target), '-', color='r', linewidth=2, marker='|', label=r'Poisson ratio difference')
+#
+# plt.axhline(y=0.0, color='r', linestyle='-.', linewidth=2, label=r'Target Poisson ratio difference')
+# plt.semilogx(weights, np.abs(np.asarray(Young_modulus)-Young_target), '--', color='k', linewidth=2, marker='|', label=r'Young modulus difference')
+# plt.axhline(y=0.0, color='k', linestyle=':', linewidth=2, label=r'Target Young modulus difference')
+#
+# plt.semilogx(weights, np.abs(c13_), '--', color='k', linewidth=1, marker='|', label=r'$C_{1,3}$')
+# plt.semilogx(weights, np.abs(c23_), '--', color='k', linewidth=1, marker='|', label=r'$C_{2,3}$')
+#
+# plt.yscale('log')
+# plt.legend(loc='best')
+# plt.xlabel(r'Weight $a$')
+# plt.xlim(0.1, 100)
+# plt.ylim(1e-5, 10)
 # plt.show()
 
+# ----------------------------------------------------------------------------------------------------- #
+fig = plt.figure(figsize=(5.5, 3.5))
+gs_global = fig.add_gridspec(1, 1, width_ratios=[1], hspace=0.00)
 
+G_0 = 0.5
+K_0 = 1.0
+ax_modulus = fig.add_subplot(gs_global[0, 0])
+
+ax_modulus.plot(weights, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
+                label=r'Target - Shear G')
+ax_modulus.plot(weights, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
+                label=r'Computed - Shear G')
+ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
+                    xy=(0.1, E1[np.where(weights == 0.1)[0][0]]),
+                    xytext=(0.1, 0.55),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='red',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
+                    xy=(0.3, E1_target[np.where(weights == 0.3)[0][0]]),
+                    xytext=(0.05, 0.62),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='red',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+
+ax_modulus.plot(weights, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='^',
+                label=r'Target - Shear G')
+ax_modulus.plot(weights, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='^',
+                label=r'Computed - Shear G')
+ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/\mu^0$', color='blue',
+                    xy=(0.3, shear_G_computed[np.where(weights ==0.3)[0][0]] / G_0),
+                    xytext=(0.25, 0.6),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='blue',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$\mu^\mathrm{{target}}/\mu^0$', color='blue',
+                    xy=(0.7, shear_G_target[np.where(weights == 0.7)[0][0]] / G_0),
+                    xytext=(0.45, 0.57),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='blue',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+ax_modulus.plot(weights, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
+                label=r'Target - Bulk K')
+ax_modulus.plot(weights, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
+                label=r'Computed - Bulk K')
+ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
+                    xy=(0.3, bulk_K_computed[np.where(weights == 0.3)[0][0]]),
+                    xytext=(0.46, 0.16),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='k',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
+                    xy=(0.7, bulk_K_target[np.where(weights == 0.7)[0][0]]),
+                    xytext=(0.43, 0.1),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='k',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+ax_modulus.semilogx(weights, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
+                label=r'Target - Poisson')
+ax_modulus.semilogx(weights, np.asarray(nu12), '-', color='g', linewidth=2, marker='o',
+                label=r'Computed - Poisson')
+ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
+                    xy=(0.2, nu12[np.where(weights == 3.0)[0][0]]),
+                    xytext=(0.1, 0.22),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='green',
+                                    lw=1,
+                                    ls='-')
+                    )
+ax_modulus.annotate(r'$\nu^\mathrm{{target}}_{12}$', color='green',
+                    xy=(1.0, nu12_target[np.where(weights == 1.0)[0][0]]),
+                    xytext=(1.2, 0.4),
+                    arrowprops=dict(arrowstyle='->',
+                                    color='green',
+                                    lw=1,
+                                    ls='--')
+                    )
+
+ax_modulus.annotate(r'$1024^2$ grid points' + '\n' + rf'$w={weight}$',
+                    xy=(0.2, -0.35),
+                    xytext=(0.0, -0.45))
+ax_modulus.set_title(r"Hexagonal grid")
+
+ax_modulus.set_xlabel(r'Weight $a$')
+ax_modulus.set_xlim(weights[0], weights[-1])
+ax_modulus.set_ylim(-0.1, 1.1)
+# ax_modulus.set_yticks([-0.5, -0.25, 0.0, 0.25, 0.5])
+# ax_modulus.set_xticks([-0.5, -0.3, -0.1, 0.1, 0.3])
+ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7)
+# ax_modulus.set_xscale('log')
+#ax_modulus.set_yscale('linear')
+fname_pf = figure_folder_path + 'exp2_hexa_' + f'w{weight:.0f}' + '_graph.pdf'
+print(f'create figure: {fname_pf}')
+fig.savefig(fname_pf, bbox_inches='tight')
+plt.show()
 #- ---------------------------------
 
 fig = plt.figure(figsize=(11, 7.5))  # slightly taller to fit the extra subplot
@@ -230,7 +360,7 @@ ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
 letter_offset = -0.15
 inset_size=0.15
 for upper_ax in np.arange(5):
-    weight = np.array([weights[0], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
+    weight = np.array([weights[1], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
     # weight = weights[upper_ax] 10
 
     if upper_ax == 0:
@@ -392,12 +522,12 @@ ax6.set_xticklabels([])
 
 # --- new subplot underneath ---
 ax_poisson = fig.add_subplot(gs[4, :])  # bottom row
-ax_poisson.semilogx(weights, np.asarray(nu_xy), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
+ax_poisson.semilogx(weights, np.asarray(nu12), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
 ax_poisson.set_xlabel(r'Weight $a$')
 ax_poisson.set_xlim(0.1, 100)
 ax_poisson.set_ylim(-0.2, 0.4)
-ax_poisson.annotate(r"Poisson's ratio", color='olivedrab',
-             xy=(3.,  np.asarray(nu_xy)[np.where(weights == 3.0)[0][0]]),
+ax_poisson.annotate(r"Poisson's ratio - $\nu^\mathrm{{eff}}_{12}$", color='olivedrab',
+             xy=(3.,  np.asarray(nu12)[np.where(weights == 3.0)[0][0]]),
              xytext=(7.0, 0.25),
              arrowprops=dict(arrowstyle='->',
                              color='olivedrab',
@@ -405,9 +535,9 @@ ax_poisson.annotate(r"Poisson's ratio", color='olivedrab',
                              ls='-')
              )
 ax_poisson.axhline(y=0, color='black', linestyle='--', linewidth=1)
-ax_poisson.annotate(r"Target Poisson's ratio", color='black',
+ax_poisson.annotate(r"Target Poisson's ratio  - $\nu^\mathrm{{target}}_{12}$", color='black',
              xy=(1.0, 0),
-             xytext=(0.3, -0.15),
+             xytext=(0.2, -0.15),
              arrowprops=dict(arrowstyle='->',
                              color='black',
                              lw=1,

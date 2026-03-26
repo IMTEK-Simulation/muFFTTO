@@ -298,6 +298,8 @@ gs = gs_global[0].subgridspec(nrows=3, ncols=3,
 # ax5 =   fig.add_subplot(gs[0:3, :])
 # k
 for i, poison_target in enumerate(poisson_targets):
+    nu12_target_i=np.asarray(nu12_target)[i]
+
     print(f'i org = {i}')
     j = i // n_cols
     k = i % n_cols
@@ -343,9 +345,9 @@ for i, poison_target in enumerate(poisson_targets):
     else:
         ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')
     computed_poisson = np.asarray(nu12)[i]
-    ax.text(0.7, 1.07, fr'$\nu_\mathrm{{target}}=$ {poison_target}', transform=ax.transAxes, ha='center', fontsize=16)
+    ax.text(0.7, 1.07, fr'$\nu_{{12}}^\mathrm{{target}}=$ {nu12_target_i:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
     #ax.text(0.3, -0.15, fr'$\nu =$ {computed_poisson:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
-    ax.text(.15, 0.6, fr'$\nu_{{01}} =$ {computed_poisson:0.2f}',
+    ax.text(.15, 0.6, fr'$\nu_{{12}} =$ {computed_poisson:0.2f}',
             transform=ax.transAxes,
             rotation=60,
             ha='center', va='center',
@@ -369,10 +371,11 @@ for i, poison_target in enumerate(poisson_targets):
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
 
+plt.tight_layout()
 
-fname_pf = figure_folder_path + f'{weight}' + 'exp5_hexa_9.pdf'
+fname_pf = figure_folder_path  + 'exp5_hexa_' + f'w{weight:0.0f}' +'.pdf'
 print(f'create figure: {fname_pf}')
-fig.savefig(fname_pf, bbox_inches='tight')
+fig.savefig(fname_pf, bbox_inches='tight', dpi=1200 )
 plt.show()
 
 
