@@ -30,9 +30,9 @@ if MPI.COMM_WORLD.size == 1:
 import argparse
 
 parser = argparse.ArgumentParser(description='Compute deformation for different poison_target and weight values')
-parser.add_argument('--poison_target', type=float, default=0.2, help='Poison target value')
+parser.add_argument('--poison_target', type=float, default=  -0.3, help='Poison target value')
 parser.add_argument('--weight', type=float, default=20.0, help='Weight value')
-parser.add_argument('--grid_type', type=str, default='hex', choices=['hex', 'square'], help='Grid type')
+parser.add_argument('--grid_type', type=str, default='square', choices=['hex', 'square'], help='Grid type')
 args = parser.parse_args()
 
 grid_type = args.grid_type
@@ -143,9 +143,9 @@ plot_deformation_with_insets = True
 if plot_deformation_with_insets:
     fig = plt.figure(figsize=(11, 4.0))  # Height for 2 rows8.3
     if grid_type == 'hex':
-        gs = fig.add_gridspec(2, 4, hspace=0.05, wspace=0.05, width_ratios=[1, 1, 1, 1], height_ratios=[1, 0.6])
+        gs = fig.add_gridspec(2, 4, hspace=0.05, wspace=0.05, width_ratios=[1, 1, 1, 1], height_ratios=[1, 1. ])
     else:
-        gs = fig.add_gridspec(2, 4, hspace=0.2, wspace=0.07, width_ratios=[1, 1, 1, 1], height_ratios=[1, 0.6])
+        gs = fig.add_gridspec(2, 4, hspace=0.2, wspace=0.0 , width_ratios=[1, 1, 1, 1], height_ratios=[1, 1.])
 
     axes = [fig.add_subplot(gs[0, i]) for i in range(4)]
     axes_insets = [fig.add_subplot(gs[1, i]) for i in range(4)]
@@ -249,7 +249,15 @@ if plot_deformation_with_insets:
             if weight == 20 and poison_target == -0.5:
                 point_hinge = np.array([2.055, 0.92])
                 point_hinge = point_hinge + macro_gradient @ point_hinge
+            if weight == 10 and poison_target == -0.5:
+                point_hinge = np.array([1.82, 1.07])#single
+                #point_hinge = np.array([1.95, 1.12])
 
+                point_hinge = point_hinge + macro_gradient @ point_hinge
+            if weight == 10 and poison_target == 0.1:
+                point_hinge = np.array([1.56, 0.93]) #single
+               # point_hinge = np.array([1.8, 0.8])
+                point_hinge = point_hinge + macro_gradient @ point_hinge
         else:
             if weight == 20 and poison_target == -0.5:
                 point_hinge = np.array([1.8, 1.0])
@@ -262,9 +270,12 @@ if plot_deformation_with_insets:
 
         import string
 
-        letter_offset = -0.05
-        letter = string.ascii_uppercase[plot_idx]
-        ax.text(letter_offset, 1.1, rf'$\mathbf{{{letter}}}$', transform=ax.transAxes)
+        if grid_type == 'hex':
+            letter_offset = 0.1
+        else:
+            letter_offset = -0.05
+        letter = string.ascii_lowercase[plot_idx]
+        ax.text(letter_offset, 1.1, rf'$\mathbf{{({letter})}}$', transform=ax.transAxes)
 
         # Create zoomed detail in second row
         if point_hinge is not None:
@@ -307,8 +318,14 @@ if plot_deformation_with_insets:
                     # axins.plot([A[0], B[0]], [A[1], B[1]], 'r--', lw=1)
                     # axins.plot([B[0], C[0]], [B[1], C[1]], 'r--', lw=1)
                     # axins.plot([C[0], A[0]], [C[1], A[1]], 'r--', lw=1)
-
-
+                if weight == 10 and poison_target == -0.5:
+                    A = point_hinge + (0.00, 0.03)
+                    B = point_hinge + (-0.08, -0.05)
+                    C = point_hinge + (0.08, -0.05)
+                if weight == 10 and poison_target == 0.1:
+                    A = point_hinge + (0.00, 0.03)
+                    B = point_hinge + (-0.08, -0.05)
+                    C = point_hinge + (0.08, -0.05)
             # Create mask for points inside triangle
             def point_in_triangle(x, y, A, B, C):
                 """Check if point (x,y) is inside triangle ABC using barycentric coordinates"""
@@ -339,6 +356,11 @@ if plot_deformation_with_insets:
 
             if plot_idx == 0 and grid_type == 'hex':
                 mask_marker = point_in_triangle(x_coords[0], x_coords[1], A, B, C)
+                #mask_marker_left = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (0., -0.05) ,
+                #                                    width=0.01)
+                # mask_marker_right = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (0.12, -0.02),
+                #                                       width=0.01)
+                #mask_marker = mask_marker_left #| mask_marker_right
             if plot_idx == 0 and grid_type == 'square' and weight == 20 and poison_target == -0.3:
                 mask_marker_left = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.12, -0.02),
                                                      width=0.01)
@@ -351,7 +373,25 @@ if plot_deformation_with_insets:
                 mask_marker = mask_marker_bottom | mask_marker_top
             if grid_type == 'square' and weight == 20 and poison_target == -0.5:
                 # Plot the circle around the hinge point
-                axins.plot(point_hinge[0], point_hinge[1]+0.33, 'ro', linestyle='--', mew=1, ms=25, fillstyle='none')
+                axins.plot(point_hinge[0], point_hinge[1]+0.35, 'ro', linestyle='--', mew=1, ms=25, fillstyle='none')
+
+            if plot_idx == 0 and grid_type == 'square' and weight == 10 and poison_target == -0.5:
+                mask_marker_bottom = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, -0.22))
+                mask_marker_top = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, 0.05))
+                mask_marker = mask_marker_bottom | mask_marker_top
+            if grid_type == 'square' and weight == 10 and poison_target == -0.5:
+                # Plot the circle around the hinge point
+                axins.plot(point_hinge[0], point_hinge[1] + 0.33, 'ro', linestyle='--', mew=1, ms=25, fillstyle='none')
+
+            if plot_idx == 0 and grid_type == 'square' and weight == 10 and poison_target ==  0.1:
+                mask_marker_bottom = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, -0.22))
+                mask_marker_top = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, 0.05))
+                mask_marker = mask_marker_bottom | mask_marker_top
+            if grid_type == 'square' and weight == 10 and poison_target == 0.1:
+                # Plot the circle around the hinge point
+                axins.plot(point_hinge[0], point_hinge[1] + 0.33, 'ro', linestyle='--', mew=1, ms=25, fillstyle='none')
+
+
             # Apply mask to tilled_phase
             tilled_phase_masked = tilled_phase.copy()
             tilled_phase_masked[mask_marker[:-1, :-1]] = 2
@@ -387,8 +427,8 @@ if plot_deformation_with_insets:
                 spine.set_linewidth(2)
 
             # Add label
-            letter_bottom = string.ascii_uppercase[plot_idx + 4]
-            axins.text(-0.2, 1.05, rf'$\mathbf{{{letter_bottom}}}$', transform=axins.transAxes)
+            letter_bottom = string.ascii_uppercase[plot_idx ]
+            axins.text(-0.15, 0.85, rf'$\mathbf{{{letter_bottom}}}$', transform=axins.transAxes)
             # Draw lines connecting inset to zoomed region
             mark_inset(ax, axins, loc1=1, loc2=2, fc="none", ec="blue", lw=1, ls='--')
 

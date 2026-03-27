@@ -4,8 +4,8 @@ set -euo pipefail
 # Get the directory where the script is located to ensure relative paths work
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
-etas=(0.005 0.01 0.02 0.05)
-weights=(0.1 1.0)
+etas=( 0.01 0.02 0.05 0.005)
+weights=(0.1 )
 
 for eta in "${etas[@]}"; do
   for w in "${weights[@]}"; do
@@ -16,7 +16,7 @@ for eta in "${etas[@]}"; do
       
       # Use full path to the python script for better portability
       mpirun -np 4 python "$SCRIPT_DIR/exp_paper_TO_exp_2_square.py" \
-        -n 16 \
+        -n 64 \
         -eta "$eta" \
         -w "$w" \
         -start "$start" \

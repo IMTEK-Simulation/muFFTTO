@@ -610,7 +610,7 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-6,
+                                      gtol=1e-4,
                                       ftol=1e-12,
                                       maxiter=stop - start,
                                       comm=MPI.COMM_WORLD,

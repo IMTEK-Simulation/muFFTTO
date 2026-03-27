@@ -59,10 +59,10 @@ cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
 
-N = 128
+N = 32
 for i in np.arange(0, len(etas)):  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
     eta_mult = etas[i]
-    weight = 1.0
+    weight = 0.1
     script_name = 'exp_paper_TO_exp_2_square' + f'_random_{random_init}' + f'_N_{N}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
 
     preconditioner_type = "Green_Jacobi"

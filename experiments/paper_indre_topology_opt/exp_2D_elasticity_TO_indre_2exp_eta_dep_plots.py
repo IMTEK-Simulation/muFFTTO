@@ -167,7 +167,7 @@ for ration in [0.0]:  # 0.2,0.1,0.0,-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9
     etas = [0.005,0.01,0.02,0.05]#
     cg_tol_exponent = 8
     soft_phase_exponent = 5
-    N = 128
+    N = 64
     for i in np.arange(0,len(etas)):  # np.arange(0.05, 0.5, 0.05):#[0.1 ]: [0.01]
         eta_mult = etas[i]
         weight=1.

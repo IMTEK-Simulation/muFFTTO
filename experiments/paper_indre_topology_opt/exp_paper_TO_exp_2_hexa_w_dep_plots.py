@@ -217,77 +217,77 @@ G_0 = 0.5
 K_0 = 1.0
 ax_modulus = fig.add_subplot(gs_global[0, 0])
 
-ax_modulus.plot(weights, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
-                label=r'Target - Shear G')
-ax_modulus.plot(weights, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
-                label=r'Computed - Shear G')
-ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
-                    xy=(0.1, E1[np.where(weights == 0.1)[0][0]]),
-                    xytext=(0.1, 0.55),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='red',
-                                    lw=1,
-                                    ls='-')
-                    )
-ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
-                    xy=(0.3, E1_target[np.where(weights == 0.3)[0][0]]),
-                    xytext=(0.05, 0.62),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='red',
-                                    lw=1,
-                                    ls='--')
-                    )
+# ax_modulus.plot(weights, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
+#                 label=r'Target - Shear G')
+# ax_modulus.plot(weights, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
+#                 label=r'Computed - Shear G')
+# ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
+#                     xy=(0.1, E1[np.where(weights == 0.1)[0][0]]),
+#                     xytext=(0.1, 0.55),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='red',
+#                                     lw=1,
+#                                     ls='-')
+#                     )
+# ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
+#                     xy=(0.3, E1_target[np.where(weights == 0.3)[0][0]]),
+#                     xytext=(0.05, 0.62),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='red',
+#                                     lw=1,
+#                                     ls='--')
+#                     )
 
 
-ax_modulus.plot(weights, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='^',
+ax_modulus.plot(weights, np.asarray(shear_G_target) / K_0, '-.', color='b', linewidth=1, marker='^',
                 label=r'Target - Shear G')
-ax_modulus.plot(weights, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='^',
+ax_modulus.plot(weights, np.asarray(shear_G_computed) / K_0, '-', color='b', linewidth=2, marker='^',
                 label=r'Computed - Shear G')
-ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/\mu^0$', color='blue',
-                    xy=(0.3, shear_G_computed[np.where(weights ==0.3)[0][0]] / G_0),
-                    xytext=(0.25, 0.6),
+ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/K^0$', color='blue',
+                    xy=(7., shear_G_computed[np.where(weights ==7.0)[0][0]] / K_0),
+                    xytext=(10, 0.11),
                     arrowprops=dict(arrowstyle='->',
                                     color='blue',
                                     lw=1,
                                     ls='-')
                     )
-ax_modulus.annotate(r'$\mu^\mathrm{{target}}/\mu^0$', color='blue',
-                    xy=(0.7, shear_G_target[np.where(weights == 0.7)[0][0]] / G_0),
-                    xytext=(0.45, 0.57),
+ax_modulus.annotate(r'$\mu^\mathrm{{target}}/K^0$', color='blue',
+                    xy=(3.0, shear_G_target[np.where(weights == 3.0)[0][0]] / K_0),
+                    xytext=(7, 0.25),
                     arrowprops=dict(arrowstyle='->',
                                     color='blue',
                                     lw=1,
                                     ls='--')
                     )
 
-ax_modulus.plot(weights, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
-                label=r'Target - Bulk K')
-ax_modulus.plot(weights, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
-                label=r'Computed - Bulk K')
-ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
-                    xy=(0.3, bulk_K_computed[np.where(weights == 0.3)[0][0]]),
-                    xytext=(0.46, 0.16),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='k',
-                                    lw=1,
-                                    ls='-')
-                    )
-ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
-                    xy=(0.7, bulk_K_target[np.where(weights == 0.7)[0][0]]),
-                    xytext=(0.43, 0.1),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='k',
-                                    lw=1,
-                                    ls='--')
-                    )
+# ax_modulus.plot(weights, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
+#                 label=r'Target - Bulk K')
+# ax_modulus.plot(weights, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
+#                 label=r'Computed - Bulk K')
+# ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
+#                     xy=(0.3, bulk_K_computed[np.where(weights == 0.3)[0][0]]),
+#                     xytext=(0.46, 0.16),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='k',
+#                                     lw=1,
+#                                     ls='-')
+#                     )
+# ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
+#                     xy=(0.7, bulk_K_target[np.where(weights == 0.7)[0][0]]),
+#                     xytext=(0.43, 0.1),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='k',
+#                                     lw=1,
+#                                     ls='--')
+#                     )
 
 ax_modulus.semilogx(weights, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
                 label=r'Target - Poisson')
 ax_modulus.semilogx(weights, np.asarray(nu12), '-', color='g', linewidth=2, marker='o',
                 label=r'Computed - Poisson')
 ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
-                    xy=(0.2, nu12[np.where(weights == 3.0)[0][0]]),
-                    xytext=(0.1, 0.22),
+                    xy=(3.0, nu12[np.where(weights == 3.0)[0][0]]),
+                    xytext=(1.0, 0.05),
                     arrowprops=dict(arrowstyle='->',
                                     color='green',
                                     lw=1,
@@ -295,21 +295,22 @@ ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
                     )
 ax_modulus.annotate(r'$\nu^\mathrm{{target}}_{12}$', color='green',
                     xy=(1.0, nu12_target[np.where(weights == 1.0)[0][0]]),
-                    xytext=(1.2, 0.4),
+                    xytext=(1.2, -0.07),
                     arrowprops=dict(arrowstyle='->',
                                     color='green',
                                     lw=1,
                                     ls='--')
                     )
 
-ax_modulus.annotate(r'$1024^2$ grid points' + '\n' + rf'$w={weight}$',
-                    xy=(0.2, -0.35),
-                    xytext=(0.0, -0.45))
+ax_modulus.text(0.65, 0.85, r'$1024^2$ grid points' + '\n' + rf'$\eta={eta_mult}L$',
+                transform=ax_modulus.transAxes, fontsize=13)
 ax_modulus.set_title(r"Hexagonal grid")
 
 ax_modulus.set_xlabel(r'Weight $a$')
 ax_modulus.set_xlim(weights[0], weights[-1])
-ax_modulus.set_ylim(-0.1, 1.1)
+ax_modulus.set_ylim(-0.1, 0.4)
+ax_modulus.text(0.01, 1.05, r'$\textbf{{(b)}}$', transform=ax_modulus.transAxes)
+
 # ax_modulus.set_yticks([-0.5, -0.25, 0.0, 0.25, 0.5])
 # ax_modulus.set_xticks([-0.5, -0.3, -0.1, 0.1, 0.3])
 ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7)
@@ -318,9 +319,8 @@ ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7
 fname_pf = figure_folder_path + 'exp2_hexa_' + f'w{weight:.0f}' + '_graph.pdf'
 print(f'create figure: {fname_pf}')
 fig.savefig(fname_pf, bbox_inches='tight')
-plt.show()
+# plt.show()
 #- ---------------------------------
-
 fig = plt.figure(figsize=(11, 7.5))  # slightly taller to fit the extra subplot
 
 gs = fig.add_gridspec(5, 4, hspace=0.1)  # increase rows from 3 → 4
@@ -356,18 +356,20 @@ ax5.annotate(r'Phase field - $f_{\rho}$',
                              ls='-')
              )
 ax5.text(0.01, 0.95, r'$\textbf{{(a)}}$', transform=ax5.transAxes)
+ax5.text(0.81, 0.05, r'$1024^2$ grid points' + '\n' + rf'$\eta={eta_mult}L$',
+         transform=ax5.transAxes, fontsize=14)
 
 letter_offset = -0.15
 inset_size=0.15
 for upper_ax in np.arange(5):
-    weight = np.array([weights[1], weights[2], weights[4], weights[6], weights[-1]])[upper_ax]
+    weight = np.array([weights[0], weights[3], weights[5], weights[7], weights[-1]])[upper_ax]
     # weight = weights[upper_ax] 10
 
     if upper_ax == 0:
         # ax1 = fig.add_subplot(gs[0, upper_ax])
         ax1 = fig.add_axes([0.14, 0.55, inset_size, inset_size], transform=ax5.transAxes)
         roll_x = 128
-        roll_y = -330
+        roll_y = 512
         ax5.annotate('',
                      xy=(weight, f_sigmas[np.where(weights == weight)[0][0]]),
                      xytext=(0.23, 0.01),
@@ -517,34 +519,34 @@ ax6.annotate(r'Zener ratio', color='b',
                              ls='-')
              )
 ax6.text(0.01, 0.82, r'$\textbf{{(b)}}$', transform=ax6.transAxes)
-ax6.set_xticklabels([])
-
+# ax6.set_xticklabels([])
+ax6.set_xlabel(r'Weight $a$')
 
 # --- new subplot underneath ---
-ax_poisson = fig.add_subplot(gs[4, :])  # bottom row
-ax_poisson.semilogx(weights, np.asarray(nu12), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
-ax_poisson.set_xlabel(r'Weight $a$')
-ax_poisson.set_xlim(0.1, 100)
-ax_poisson.set_ylim(-0.2, 0.4)
-ax_poisson.annotate(r"Poisson's ratio - $\nu^\mathrm{{eff}}_{12}$", color='olivedrab',
-             xy=(3.,  np.asarray(nu12)[np.where(weights == 3.0)[0][0]]),
-             xytext=(7.0, 0.25),
-             arrowprops=dict(arrowstyle='->',
-                             color='olivedrab',
-                             lw=1,
-                             ls='-')
-             )
-ax_poisson.axhline(y=0, color='black', linestyle='--', linewidth=1)
-ax_poisson.annotate(r"Target Poisson's ratio  - $\nu^\mathrm{{target}}_{12}$", color='black',
-             xy=(1.0, 0),
-             xytext=(0.2, -0.15),
-             arrowprops=dict(arrowstyle='->',
-                             color='black',
-                             lw=1,
-                             ls='-')
-             )
-
-ax_poisson.text(0.01, 0.65, r'$\textbf{{(c)}}$', transform=ax_poisson.transAxes)
+# ax_poisson = fig.add_subplot(gs[4, :])  # bottom row
+# ax_poisson.semilogx(weights, np.asarray(nu12), '-', color='olivedrab', linewidth=2, marker='|', label=r'Poisson ratio')
+# ax_poisson.set_xlabel(r'Weight $a$')
+# ax_poisson.set_xlim(0.1, 100)
+# ax_poisson.set_ylim(-0.2, 0.4)
+# ax_poisson.annotate(r"Poisson's ratio - $\nu^\mathrm{{eff}}_{12}$", color='olivedrab',
+#              xy=(3.,  np.asarray(nu12)[np.where(weights == 3.0)[0][0]]),
+#              xytext=(7.0, 0.25),
+#              arrowprops=dict(arrowstyle='->',
+#                              color='olivedrab',
+#                              lw=1,
+#                              ls='-')
+#              )
+# ax_poisson.axhline(y=0, color='black', linestyle='--', linewidth=1)
+# ax_poisson.annotate(r"Target Poisson's ratio  - $\nu^\mathrm{{target}}_{12}$", color='black',
+#              xy=(1.0, 0),
+#              xytext=(0.2, -0.15),
+#              arrowprops=dict(arrowstyle='->',
+#                              color='black',
+#                              lw=1,
+#                              ls='-')
+#              )
+#
+# ax_poisson.text(0.01, 0.65, r'$\textbf{{(c)}}$', transform=ax_poisson.transAxes)
 
 
 fname = figure_folder_path+ 'exp2_hexa{}'.format('.pdf')

@@ -44,7 +44,7 @@ poisson_targets =np.array([-0.5,-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])#, 0
 homogenized_Cij=np.zeros((3,3,poisson_targets.shape[0]))
 target_Cij = np.zeros((poisson_targets.shape[0], 3, 3))
 
-weight=20.0
+weight=10.0
 # weights=[5]
 N = 1024
 index=0
@@ -177,69 +177,69 @@ G_0 = 0.5
 K_0 = 1.0
 ax_modulus = fig.add_subplot(gs_global[0, 0])
 
-ax_modulus.plot(poisson_targets, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
-                label=r'Target - Shear G')
-ax_modulus.plot(poisson_targets, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
-                label=r'Computed - Shear G')
-ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
-                    xy=(0.1, E1[np.where(poisson_targets == 0.1)[0][0]]),
-                    xytext=(-0.1, 0.55),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='red',
-                                    lw=1,
-                                    ls='-')
-                    )
-ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
-                    xy=(0.3, E1_target[np.where(poisson_targets == 0.3)[0][0]]),
-                    xytext=(0.05, 0.62),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='red',
-                                    lw=1,
-                                    ls='--')
-                    )
+# ax_modulus.plot(poisson_targets, np.asarray(E1_target) / K_0, '-.', color='r', linewidth=1, marker='x',
+#                 label=r'Target - Shear G')
+# ax_modulus.plot(poisson_targets, np.asarray(E1) / K_0, '-', color='r', linewidth=2, marker='x',
+#                 label=r'Computed - Shear G')
+# ax_modulus.annotate(r'$E_1^\mathrm{{eff}}/K^0$', color='red',
+#                     xy=(0.1, E1[np.where(poisson_targets == 0.1)[0][0]]),
+#                     xytext=(-0.1, 0.55),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='red',
+#                                     lw=1,
+#                                     ls='-')
+#                     )
+# ax_modulus.annotate(r'$E_1^\mathrm{{target}}/K^0$', color='red',
+#                     xy=(0.3, E1_target[np.where(poisson_targets == 0.3)[0][0]]),
+#                     xytext=(0.05, 0.62),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='red',
+#                                     lw=1,
+#                                     ls='--')
+#                     )
 
 
-ax_modulus.plot(poisson_targets, np.asarray(shear_G_target) / G_0, '-.', color='b', linewidth=1, marker='^',
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_target) / K_0, '-.', color='b', linewidth=1, marker='^',
                 label=r'Target - Shear G')
-ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed) / G_0, '-', color='b', linewidth=2, marker='^',
+ax_modulus.plot(poisson_targets, np.asarray(shear_G_computed) / K_0, '-', color='b', linewidth=2, marker='^',
                 label=r'Computed - Shear G')
-ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/\mu^0$', color='blue',
-                    xy=(-0.3, shear_G_computed[np.where(poisson_targets == -0.3)[0][0]] / G_0),
-                    xytext=(-0.25, 0.6),
+ax_modulus.annotate(r'$\mu^\mathrm{{eff}}/K^0$', color='blue',
+                    xy=(-0.3, shear_G_computed[np.where(poisson_targets == -0.3)[0][0]] / K_0),
+                    xytext=(-0.25, 0.03),
                     arrowprops=dict(arrowstyle='->',
                                     color='blue',
                                     lw=1,
                                     ls='-')
                     )
-ax_modulus.annotate(r'$\mu^\mathrm{{target}}/\mu^0$', color='blue',
-                    xy=(-0.4, shear_G_target[np.where(poisson_targets == -0.4)[0][0]] / G_0),
-                    xytext=(-0.45, 0.57),
+ax_modulus.annotate(r'$\mu^\mathrm{{target}}/K^0$', color='blue',
+                    xy=(-0.4, shear_G_target[np.where(poisson_targets == -0.4)[0][0]] / K_0),
+                    xytext=(-0.45, 0.32),
                     arrowprops=dict(arrowstyle='->',
                                     color='blue',
                                     lw=1,
                                     ls='--')
                     )
 
-ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
-                label=r'Target - Bulk K')
-ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
-                label=r'Computed - Bulk K')
-ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
-                    xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
-                    xytext=(-0.46, 0.16),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='k',
-                                    lw=1,
-                                    ls='-')
-                    )
-ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
-                    xy=(-0.4, bulk_K_target[np.where(poisson_targets == -0.4)[0][0]]),
-                    xytext=(-0.43, -0.1),
-                    arrowprops=dict(arrowstyle='->',
-                                    color='k',
-                                    lw=1,
-                                    ls='--')
-                    )
+# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_target) / K_0, '-.', color='k', linewidth=1, marker='|',
+#                 label=r'Target - Bulk K')
+# ax_modulus.plot(poisson_targets, np.asarray(bulk_K_computed) / K_0, '-', color='k', linewidth=2, marker='|',
+#                 label=r'Computed - Bulk K')
+# ax_modulus.annotate(r'$K^\mathrm{{eff}}/K^0$', color='k',
+#                     xy=(-0.3, bulk_K_computed[np.where(poisson_targets == -0.3)[0][0]]),
+#                     xytext=(-0.46, 0.16),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='k',
+#                                     lw=1,
+#                                     ls='-')
+#                     )
+# ax_modulus.annotate(r'$K^\mathrm{{target}}/K^0$', color='k',
+#                     xy=(-0.4, bulk_K_target[np.where(poisson_targets == -0.4)[0][0]]),
+#                     xytext=(-0.43, -0.1),
+#                     arrowprops=dict(arrowstyle='->',
+#                                     color='k',
+#                                     lw=1,
+#                                     ls='--')
+#                     )
 
 ax_modulus.plot(poisson_targets, np.asarray(nu12_target), '-.', color='g', linewidth=1, marker='o',
                 label=r'Target - Poisson')
@@ -247,7 +247,7 @@ ax_modulus.plot(poisson_targets, np.asarray(nu12), '-', color='g', linewidth=2, 
                 label=r'Computed - Poisson')
 ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
                     xy=(-0.2, nu12[np.where(poisson_targets == -0.2)[0][0]]),
-                    xytext=(-0.1, -0.22),
+                    xytext=(-0.3, -0.1),
                     arrowprops=dict(arrowstyle='->',
                                     color='green',
                                     lw=1,
@@ -255,23 +255,23 @@ ax_modulus.annotate(r'$\nu^\mathrm{{eff}}_{12}$', color='green',
                     )
 ax_modulus.annotate(r'$\nu^\mathrm{{target}}_{12}$', color='green',
                     xy=(-0.3, nu12_target[np.where(poisson_targets == -0.3)[0][0]]),
-                    xytext=(-0.2, -0.4),
+                    xytext=(-0.2, -0.3),
                     arrowprops=dict(arrowstyle='->',
                                     color='green',
                                     lw=1,
                                     ls='--')
                     )
-ax_modulus.annotate(r'$1024^2$ grid points'+'\n'+rf'$w={weight}$',
-             xy=(0.2, -0.35),
-             xytext=(0.0, -0.45))
+ax_modulus.annotate(r'$1024^2$ grid points'+'\n'+rf'$\eta={eta_mult}L$'+'\n'+rf'$a={weight}$',
+             xy=(0.02, -0.32))
 ax_modulus.set_title(r"Hexagonal grid")
 
 ax_modulus.set_xlabel(r"Target Poisson's ratio "+fr'- $\nu^\mathrm{{target}}$')
 ax_modulus.set_xlim(-0.5, 0.3)
-ax_modulus.set_ylim(-0.5, 0.75)
+ax_modulus.set_ylim(-0.4, 0.5)
 # ax_modulus.set_yticks([-0.5,-0.25, 0.0,0.25, 0.5])
 ax_modulus.set_xticks([-0.5, -0.3, -0.1,0.1, 0.3])
 ax_modulus.grid(axis='y', which='major', linestyle='-', linewidth=0.5, alpha=0.7)
+ax_modulus.text(0.01, 1.05,r'$\textbf{{(b)}}$', transform=ax_modulus.transAxes)
 
 fname_pf = figure_folder_path  + 'exp5_hexa_'+ f'w{weight:.0f}'+'_graph.pdf'
 print(f'create figure: {fname_pf}')
@@ -345,18 +345,19 @@ for i, poison_target in enumerate(poisson_targets):
     else:
         ax.text(0.5, 0.5, f'Data missing for\np={poison_target}', ha='center', va='center')
     computed_poisson = np.asarray(nu12)[i]
-    ax.text(0.7, 1.07, fr'$\nu_{{12}}^\mathrm{{target}}=$ {nu12_target_i:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
-    #ax.text(0.3, -0.15, fr'$\nu =$ {computed_poisson:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
-    ax.text(.15, 0.6, fr'$\nu_{{12}} =$ {computed_poisson:0.2f}',
-            transform=ax.transAxes,
-            rotation=60,
-            ha='center', va='center',
-            fontsize=16)
+    ax.text(0.7, 1.07, fr'$\nu^\mathrm{{target}}=$ {poison_target:0.1f}', transform=ax.transAxes, ha='center', fontsize=16)
+    # below is for computed quantities
+    #ax.text(0.7, 1.07, fr'$\nu_{{12}}^\mathrm{{target}}=$ {nu12_target_i:0.2f}', transform=ax.transAxes, ha='center', fontsize=16)
+    # #ax.text(.15, 0.6, fr'$\nu_{{12}}^\mathrm{{eff}} =$ {computed_poisson:0.2f}',
+    #         transform=ax.transAxes,
+    #         rotation=60,
+    #         ha='center', va='center',
+    #         fontsize=16)
 
     letter_offset =   0.1
     import string
-    letter = string.ascii_uppercase[i]   # 'A', 'B', 'C', ...
-    ax.text(letter_offset, 1.05,  rf'$\textbf{{{letter}}}$', transform=ax.transAxes)
+    letter = string.ascii_lowercase[i]   # 'A', 'B', 'C', ...
+    ax.text(letter_offset, 1.05,  rf'$\textbf{{({letter})}}$', transform=ax.transAxes,fontsize=16)
 
 
     ax.set_aspect('equal')
