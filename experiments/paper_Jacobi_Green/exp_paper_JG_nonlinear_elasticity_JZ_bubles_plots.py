@@ -46,7 +46,7 @@ if plot_iterations_vs_grids_size:
 
 
     it_max = 9
-    n_exponents = np.array([4])
+    n_exponents = np.array([3])
     iterations = np.arange(it_max)  # numbers of grids points
 
     grid_sizes= np.array( [ 32, 64, 128 , 256])#,200,128,200
@@ -149,10 +149,11 @@ if plot_iterations_vs_grids_size:
                 # plt.xlim([0, 250])
                 #
                 # plt.show()
-    fig = plt.figure(figsize=(8.3, 8.0))
-    gs = fig.add_gridspec(4, 1, hspace=0.2, wspace=0.1, width_ratios=[1],
+    fig = plt.figure(figsize=(8.3, 12.0))
+    gs = fig.add_gridspec(4, 1, hspace=0.4, wspace=0.1, width_ratios=[1],
                           height_ratios=[1,1,1,1])
     gs_fnorm_vs_iteration = fig.add_subplot(gs[0, 0])
+    plt.title(f' exponent = {n_exp}')
     for i, n in enumerate(grid_sizes):
         gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_G[i, :,0] , '-', marker='x', label=f'Green - {n}')
         gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_GJ[i, :,0], '--', marker='o', markerfacecolor='none', label=f'Green-Jacobi - {n}')
@@ -164,7 +165,7 @@ if plot_iterations_vs_grids_size:
         gs_iter_vs_mesh_size.plot(iterations, its_GJ[i, :,0], '--', marker='o', markerfacecolor='none',
                                    label=f'Green-Jacobi - {n}')
     gs_iter_vs_mesh_size.legend()
-    gs_iter_vs_mesh_size.set_ylim([0,350])
+    #gs_iter_vs_mesh_size.set_ylim([0,350])
     gs_iter_vs_mesh_size.set_title('Iterations vs Mesh Size')
 
     gs_iter_vs_unique_ = fig.add_subplot(gs[2, 0])
@@ -179,6 +180,10 @@ if plot_iterations_vs_grids_size:
     gs_iter_vs_contrast.legend()
     gs_iter_vs_contrast.set_title('Contrast vs Iterations')
 
+    fig.tight_layout()
+    fname = f'fig_temp'+ f'ex{n_exp}' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
     plt.show()
 
     print()

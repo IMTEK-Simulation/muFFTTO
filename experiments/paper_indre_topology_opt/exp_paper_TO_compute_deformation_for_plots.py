@@ -29,7 +29,7 @@ else:
 # Parse command line arguments first to get grid_type
 import argparse
 parser = argparse.ArgumentParser(description='Compute deformation for different poison_target and weight values')
-parser.add_argument('--poison_target', type=float, default=-0.5, help='Poison target value')
+parser.add_argument('--poison_target', type=float, default=-0.3, help='Poison target value')
 parser.add_argument('--weight', type=float, default=20.0, help='Weight value')
 parser.add_argument('--grid_type', type=str, default='square', choices=['hex', 'square'], help='Grid type')
 args = parser.parse_args()

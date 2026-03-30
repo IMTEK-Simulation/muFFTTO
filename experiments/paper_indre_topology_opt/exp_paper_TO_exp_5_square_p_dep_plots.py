@@ -286,6 +286,14 @@ gs = gs_global[0].subgridspec(nrows=3, ncols=3,
                               wspace=0.2,
                               hspace=0.35)
 
+nb_tiles = 3
+x_ref = np.zeros([2, nb_tiles * (N) + 1, nb_tiles * (N) + 1])
+x_ref[0], x_ref[1] = np.meshgrid(np.linspace(0, nb_tiles, nb_tiles * (N) + 1),
+                                 np.linspace(0, nb_tiles, nb_tiles * (N) + 1), indexing='ij')
+# shift = 0.5 * np.linspace(0, nb_tiles, nb_tiles * (N) + 1)
+x_coords = np.copy(x_ref)
+
+
 for i, poison_target in enumerate(poisson_targets):
     nu12_target_i=np.asarray(nu12_target)[i]
 
@@ -325,9 +333,9 @@ for i, poison_target in enumerate(poisson_targets):
         #     phase_field_0 = np.copy(phase_field )
         # elif i==0:
         #     phase_field_0 = np.copy(phase_field)
-        nb_tiles = 3
+        # nb_tiles = 3
 
-        pcm = ax.pcolormesh(np.tile(phase_field, (nb_tiles, nb_tiles)).transpose(),
+        pcm = ax.pcolormesh(x_coords[0], x_coords[1], np.tile(phase_field, (nb_tiles, nb_tiles)),
                             shading='flat',
                             edgecolors='none',
                             lw=0.01,
@@ -361,9 +369,10 @@ for i, poison_target in enumerate(poisson_targets):
     # ax.yaxis.set_ticks_position('none')
     # ax.axis('off')
     # Apply identical limits
-    ax.set_xticks([0, 1 * N, 2 * N, 3 * N])
-    ax.set_yticks([0, 1 * N, 2 * N, 3 * N])
-
+    # ax.set_xticks([0, 1 * N, 2 * N, 3 * N])
+    # ax.set_yticks([0, 1 * N, 2 * N, 3 * N])
+    ax.set_xticks([0, 1, 2 , 3 ])
+    ax.set_yticks([0, 1, 2 , 3 ])
     ax.set_xticklabels([0, 1, 2, 3])
     ax.set_yticklabels([0, 1, 2, 3])
     if j > 1:
@@ -373,8 +382,8 @@ for i, poison_target in enumerate(poisson_targets):
     ax.yaxis.set_label_position("right")
     ax.yaxis.tick_right()
 
-    ax.set_xlim(0, 3 * N)
-    ax.set_ylim(0, 3 * N)
+    ax.set_xlim(0, 3)# * N
+    ax.set_ylim(0, 3 )# * N
 
 plt.tight_layout()
 fname_pf = figure_folder_path  + 'exp5_square_' + f'w{weight:0.0f}' +'.pdf'

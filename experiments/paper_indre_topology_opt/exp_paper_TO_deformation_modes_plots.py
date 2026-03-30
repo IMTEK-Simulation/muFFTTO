@@ -265,8 +265,9 @@ if plot_deformation_with_insets:
                 zoom_size = 0.5
 
             if weight == 20 and poison_target == -0.3:
-                point_hinge = np.array([1.37, 0.65])
+                point_hinge = np.array([1.5, 1.53])
                 point_hinge = point_hinge + macro_gradient @ point_hinge
+                zoom_size = 0.5
 
         import string
 
@@ -362,11 +363,9 @@ if plot_deformation_with_insets:
                 #                                       width=0.01)
                 #mask_marker = mask_marker_left #| mask_marker_right
             if plot_idx == 0 and grid_type == 'square' and weight == 20 and poison_target == -0.3:
-                mask_marker_left = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.12, -0.02),
-                                                     width=0.01)
-                mask_marker_right = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (0.12, -0.02),
-                                                      width=0.01)
-                mask_marker = mask_marker_left | mask_marker_right
+                mask_marker_top = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.13, -0.05))
+                mask_marker_bottom = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.13, -0.28))
+                mask_marker = mask_marker_bottom | mask_marker_top
             if plot_idx == 0 and grid_type == 'square' and weight == 20 and poison_target == -0.5:
                 mask_marker_bottom = create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, -0.22) )
                 mask_marker_top= create_cross_mask(x_coords[0], x_coords[1], center=point_hinge + (-0.16, 0.05) )
