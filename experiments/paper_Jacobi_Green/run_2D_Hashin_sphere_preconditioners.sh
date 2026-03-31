@@ -12,7 +12,7 @@ export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 N=1024
 PRECS=(Green Green_Jacobi)
-TOLS=(0 1 2 3 4 5 6 8 )
+TOLS=(  12 ) #0 1 2 3 4 5 6
 
 for prec in "${PRECS[@]}"; do
     for tol in "${TOLS[@]}"; do

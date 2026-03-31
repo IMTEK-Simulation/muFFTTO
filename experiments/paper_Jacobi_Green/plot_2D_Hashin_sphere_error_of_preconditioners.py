@@ -151,12 +151,79 @@ if __name__ == '__main__':
                           mu2=mu_2, lam2=lambda_2, R1=R1, R2=R2, center=center)
 
     import matplotlib.colors as mcolors
+    import matplotlib.animation as animation
     xlin = np.linspace(0, 1, n + 1)
     X, Y = np.meshgrid(xlin, xlin, indexing='ij')
     circ_offset = 0.5 / np.array(number_of_pixels)
 
     # ---------------------------------------------------------------------------
-    # Loop over preconditioners and tolerances
+    # Movie: evolution wrt CG iteration
+    # ---------------------------------------------------------------------------
+    cmap = 'RdBu_r'#'Reds'
+    norm = mcolors.LogNorm(vmin=1e-8, vmax=1)
+    idx_pairs = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    comp_labels = [r'$\varepsilon_{xx}$', r'$\varepsilon_{xy}$',
+                   r'$\varepsilon_{yx}$', r'$\varepsilon_{yy}$']
+
+    for prec in ['Green', 'Green_Jacobi']:
+        for tol in [12]:
+            fname_log = os.path.join(data_dir, f'{prec}_n_{n}_cgtol_{tol}_log.npz')
+            info = np.load(fname_log, allow_pickle=True)
+            nb_it_total = len(info.f.norm_rr)
+
+            # collect iterations that have saved .npy files
+            valid_iterations = []
+            for iteration in np.arange(1, nb_it_total):
+                fname_npy = os.path.join(data_dir,
+                    f'{prec}_n_{n}_cgtol_{tol}_it_{iteration}.npy')
+                if os.path.exists(fname_npy):
+                    valid_iterations.append(iteration)
+                else:
+                    print(f'Missing {os.path.basename(fname_npy)}, skipping')
+
+            if not valid_iterations:
+                print(f'No frames for {prec}, tol={tol} — skipping movie')
+                continue
+
+            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+            dummy = np.ones((n, n))
+            meshes = [ax.pcolormesh(X, Y, dummy, cmap=cmap, norm=norm, shading='flat')
+                      for ax in axes.flat]
+            for m, ax in zip(meshes, axes.flat):
+                plt.colorbar(m, ax=ax)
+            for ax, label in zip(axes.flat, comp_labels):
+                ax.set_xlabel('x')
+                ax.set_ylabel('y')
+                ax.set_title(label)
+            suptitle = fig.suptitle('', fontsize=13)
+            plt.tight_layout()
+
+            def update(iteration, prec=prec, tol=tol):
+                fname_npy = os.path.join(data_dir,
+                    f'{prec}_n_{n}_cgtol_{tol}_it_{iteration}.npy')
+                strain_G = np.load(fname_npy, allow_pickle=True)
+                for mesh, (i, j) in zip(meshes, idx_pairs):
+                    component = eps[..., i, j]
+                    fem_sol = strain_G[i, j, 0]
+                    err = np.abs(component - fem_sol)
+                    err_pos = np.where(err > 0, err, np.min(err[err > 0]))
+                    mesh.set_array(err_pos.ravel())
+                suptitle.set_text(
+                    f'Preconditioner: {prec},  $n={n}$,  '
+                    f'tol=$10^{{-{tol}}}$,  it={iteration}')
+                return meshes + [suptitle]
+
+            ani = animation.FuncAnimation(
+                fig, update, frames=valid_iterations, blit=False)
+
+            fname_movie = os.path.join(
+                fig_dir, f'error_{prec}_n{n}_cgtol{tol}_cmap{cmap}.mp4')
+            ani.save(fname_movie, writer=animation.FFMpegWriter(fps=5), dpi=150)
+            plt.close(fig)
+            print(f'Saved {fname_movie}')
+    quit()
+    # ---------------------------------------------------------------------------
+    # Plot eolution wrt precitioner
     # ---------------------------------------------------------------------------
     for prec in ['Green',   'Green_Jacobi']:
         for tol in [0, 1, 2, 3, 4, 5, 6,7,8 ]:

@@ -64,7 +64,8 @@ def objective_function_phase_field(discretization,
                                    phase_field_1nxyz,
                                    eta,
                                    double_well_depth=1,
-                                   disp=False):
+                                   disp=False,
+                                   split_results=False):
     # evaluate objective functions
     # f =  w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
     # f =  eta* f_rho_grad  + f_dw/eta
@@ -92,6 +93,10 @@ def objective_function_phase_field(discretization,
     f_rho = eta * f_rho_grad + double_well_depth * f_dw / eta
     if disp and MPI.COMM_WORLD.rank == 0:
         print('f_rho= '          ' {} '.format(f_rho))  # good in MPI
+
+    if split_results:
+        return  f_rho, f_rho_grad, f_dw
+
     return f_rho
 
 

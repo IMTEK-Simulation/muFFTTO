@@ -359,7 +359,7 @@ if compute:
                 norms_G['residual_rz'] = []
 
 
-                def callback(it, x, r, p, z):
+                def callback(it, x, r, p, z,stop_criterion):
                     global norms_G
                     """
                     Callback function to print the current solution, residual, and search direction.
@@ -474,7 +474,7 @@ if compute:
                 norms_GJ['residual_rz'] = []
 
 
-                def callback_GJ(it, x, r, p, z):
+                def callback_GJ(it, x, r, p, z,stop_criterion):
                     global norms_GJ
                     """
                     Callback function to print the current solution, residual, and search direction.
@@ -555,7 +555,7 @@ if compute:
                 norms_J['residual_rz'] = []
 
 
-                def callback(it, x, r, p, z):
+                def callback(it, x, r, p, z,stop_criterion):
                     global norms_J
                     """
                     Callback function to print the current solution, residual, and search direction.

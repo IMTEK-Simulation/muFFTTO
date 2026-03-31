@@ -187,6 +187,8 @@ discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C
                               macro_gradient_field_ijqxyz=macro_gradient_field,
                               rhs_inxyz=rhs_field)
 
+total_strain_field = discretization.get_gradient_size_field(name='total_strain_field')
+
 _info = {}
 _info['norm_rr']=[]
 def callback(it, x, r, p, z, stop_crit_norm):
@@ -196,6 +198,23 @@ def callback(it, x, r, p, z, stop_crit_norm):
     norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
     _info['norm_rr'].append(norm_of_rr)
 
+
+
+    # compute strain from the displacement increment
+    discretization.apply_gradient_operator_symmetrized_mugrid(
+        u_inxyz=solution_field,
+        grad_u_ijqxyz=total_strain_field)
+
+    total_strain_field.s += macro_gradient_field.s
+
+    file_data_name_it = f'{preconditioner_type}' + f'_n_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}' + f'_it_{it}'
+    data_to_save = np.array(total_strain_field.s[...])
+    save_npy(fn=data_folder_path + file_data_name_it + f'.npy',
+             data=data_to_save,
+             subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+             nb_grid_pts=tuple(discretization.nb_of_pixels_global),
+             components_are_leading=True,
+             comm=MPI.COMM_WORLD)
     # if discretization.fft.communicator.rank == 0:
     #     print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
@@ -216,7 +235,6 @@ solvers.conjugate_gradients_mugrid(
 
 print(len(  _info['norm_rr']))
 
-total_strain_field = discretization.get_gradient_size_field(name='total_strain_field')
 
 # compute strain from the displacement increment
 discretization.apply_gradient_operator_symmetrized_mugrid(
