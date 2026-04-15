@@ -197,14 +197,14 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
 
         _info['norms_G_rr'].append(norm_of_rr)
         _info['norms_G_rz'].append(norm_of_rz)
         _info['norms_G_rGr'].append(stop_crit_norm)
 
-        # if discretization.fft.communicator.rank == 0:
+        # if discretization.communicator.rank == 0:
         #     print(len(_info['norms_G_rr']))
         #     print(norm_of_rr)
 
@@ -213,7 +213,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
 
     solution_field_G.s.fill(0)
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,
@@ -236,8 +236,8 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
         _info['norms_J_rr'].append(norm_of_rr)
         _info['norms_J_rz'].append(norm_of_rz)
         _info['norms_J_rGr'].append(stop_crit_norm)
@@ -247,7 +247,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
     solution_field_J.s.fill(0)
 
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,
@@ -270,8 +270,8 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
         _info['norms_GJ_rr'].append(norm_of_rr)
         _info['norms_GJ_rz'].append(norm_of_rz)
         _info['norms_GJ_rGr'].append(stop_crit_norm)
@@ -280,7 +280,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
     solution_field_GJ = discretization.get_unknown_size_field(name='solution__GJ')
     solution_field_GJ.s.fill(0)
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,
@@ -330,7 +330,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
     grad = discretization.get_gradient_of_scalar_field(name='grad_of_phase_field')
     discretization.apply_gradient_operator_mugrid(u_inxyz=phase_inxyz, grad_u_ijqxyz=grad)
     grad_norm = np.sqrt(
-        discretization.fft.communicator.sum(np.dot(grad.s[0].mean(axis=1).ravel(), grad.s[0].mean(axis=1).ravel())))
+        discretization.communicator.sum(np.dot(grad.s[0].mean(axis=1).ravel(), grad.s[0].mean(axis=1).ravel())))
     grad_max = np.sqrt(
         discretization.mpi_reduction.max(grad.s[0].mean(axis=1)[0] ** 2 + grad.s[0].mean(axis=1)[1] ** 2))
     grad_max_inf = discretization.mpi_reduction.max(grad.s[0].mean(axis=1))
@@ -338,7 +338,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
     _info['grad_max'] = grad_max
     _info['grad_max_inf'] = grad_max_inf
 
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         print(f'nb_of_filters {nb_of_filters} iters = Green ' + '{}'.format(len(_info['norms_G_rr'])))
         print(f'Jacobi_' + '{}'.format(len(_info['norms_J_rr'])))
         print(f'Green_Jacobi_ iters =' + '{}'.format(len(_info['norms_GJ_rr'])))

@@ -524,7 +524,7 @@ for ration in [0.0]:
                                                       gtol=1e-5,
                                                       ftol=1e-12,
                                                       maxiter=1500,
-                                                      comm=discretization.fft.communicator,
+                                                      comm=discretization.communicator,
                                                       disp=True,
                                                       callback=my_callback
                                                       )

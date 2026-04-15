@@ -166,8 +166,8 @@ for anisotropy in [ True]:  #False,
 
             def callback(it, x, r, p, z, stop_crit_norm):
                 # global norms_cg_mech
-                norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
@@ -182,7 +182,7 @@ for anisotropy in [ True]:  #False,
             #                                                        lambda_min=eigen_LB)
             temperatute_field_precise = discretization.get_unknown_size_field(name=f'temperatute_field_precise')
             solvers.conjugate_gradients_mugrid_experimental(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_field,
@@ -219,8 +219,8 @@ for anisotropy in [ True]:  #False,
                     macro_gradient_field_ijqxyz=macro_gradient_field)
                 Aeff_hk.append(homogenized_flux[0, 0])
                 error_in_Aeff_hk.append(homogenized_flux[0, 0] - A_eff)  # J_eff_computed if J_eff is not available
-                norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
@@ -240,7 +240,7 @@ for anisotropy in [ True]:  #False,
             temperatute_field_ = discretization.get_unknown_size_field(name=f'temperatute_field_')
 
             temperatute_field_, norms = solvers.conjugate_gradients_mugrid_experimental(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_field,

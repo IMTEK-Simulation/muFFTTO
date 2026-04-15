@@ -365,9 +365,9 @@ if __name__ == '__main__':
 
     # TODO CREATE random field from the same frequenciess all the same time
     def apply_filter(phase):
-        f_field = discretization.fft.fourier_space_field(
-            unique_name='apply_filter_TO',  # name of the field
-            shape=(1,))
+        f_field = discretization.ffield_collection.complex_field(
+            name='apply_filter_TO',  # name of the field
+            components=(1,))
 
         # f_field = discretization.fft.fft(phase)
 
@@ -438,7 +438,7 @@ if __name__ == '__main__':
                                           gtol=1e-5,
                                           ftol=1e-12,
                                           maxiter=1500,
-                                          comm=discretization.fft.communicator,
+                                          comm=discretization.communicator,
                                           disp=True,
                                           callback=my_callback
                                           )

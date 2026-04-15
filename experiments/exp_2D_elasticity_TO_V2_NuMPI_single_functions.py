@@ -262,7 +262,7 @@ for w in np.arange(0.5) :
                                           jac=True,
                                           gtol=1e-5,
                                           ftol=1e-6,
-                                          comm=discretization.fft.communicator,
+                                          comm=discretization.communicator,
                                           disp=True)
 
         bounds = False

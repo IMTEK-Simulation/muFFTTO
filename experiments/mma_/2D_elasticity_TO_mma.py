@@ -462,7 +462,7 @@ if __name__ == '__main__':
                                               gtol=1e-5,
                                               ftol=1e-10,
                                               maxiter=max_it,
-                                              comm=discretization.fft.communicator,
+                                              comm=discretization.communicator,
                                               disp=True,
                                               callback=my_callback
                                               )

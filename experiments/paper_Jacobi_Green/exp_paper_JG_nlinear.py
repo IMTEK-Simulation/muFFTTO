@@ -217,12 +217,12 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
         norms['residual_rr'].append(norm_of_rr)
         norms['residual_rz'].append(norm_of_rz)
 
-        # if discretization.fft.communicator.rank == 0:
+        # if discretization.communicator.rank == 0:
         # print(f"{it:5} norm of rr = {norm_of_rr:.5}")
         # print(f"{it:5} norm of rz = {norm_of_rz:.5}")
         # print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
@@ -237,7 +237,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
     solution_field = discretization.get_unknown_size_field(name='solution')
     solution_field.s.fill(0)
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,
@@ -254,7 +254,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         print("Elapsed time: ", elapsed_time)
         nb_steps = len(norms['residual_rr'])
         print(f'nb steps = {nb_steps} ')

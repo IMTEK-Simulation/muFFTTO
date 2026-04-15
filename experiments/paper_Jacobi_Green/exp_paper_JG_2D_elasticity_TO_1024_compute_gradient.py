@@ -96,7 +96,7 @@ if compute_results:
     grad = discretization.get_gradient_of_scalar_field(name='grad_of_phase_field')
     discretization.apply_gradient_operator_mugrid(u_inxyz=phase_field, grad_u_ijqxyz=grad)
     grad_norm = np.sqrt(
-        discretization.fft.communicator.sum(np.dot(grad.s[0].mean(axis=1).ravel(), grad.s[0].mean(axis=1).ravel())))
+        discretization.communicator.sum(np.dot(grad.s[0].mean(axis=1).ravel(), grad.s[0].mean(axis=1).ravel())))
     grad_max = np.sqrt(
         discretization.mpi_reduction.max(grad.s[0].mean(axis=1)[0] ** 2 + grad.s[0].mean(axis=1)[1] ** 2))
     grad_max_inf = discretization.mpi_reduction.max(grad.s[0].mean(axis=1))
@@ -106,7 +106,7 @@ if compute_results:
     _info['grad_max'] = grad_max
     _info['grad_max_inf'] = grad_max_inf
 
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         np.savez(data_folder_path + f'grad_info_N_{number_of_pixels[0]}_{preconditioner_type}_it_{iteration}.npz',
                  **_info)
         print(data_folder_path + f'grad_info_N_{number_of_pixels[0]}_{preconditioner_type}_it_{iteration}.npz')

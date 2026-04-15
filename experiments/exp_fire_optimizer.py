@@ -368,7 +368,7 @@ for w in [10, ]:  # np.arange(0.01, 1.5, 0.05):#
             #                                   gtol=1e-5,
             #                                   ftol=1e-6,
             #                                   maxiter=15000,
-            #                                   comm=discretization.fft.communicator,
+            #                                   comm=discretization.communicator,
             #                                   disp=True)
 
             bounds = False

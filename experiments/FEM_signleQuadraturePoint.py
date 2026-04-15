@@ -102,8 +102,8 @@ if __name__ == "__main__":
     fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=(3, 3), sub_pts={"quad_points": 4, "nodal_points": 1})
 
     # max_basis = 4
-    gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
-    temp_field_inxyz = fc.real_field("temperature", components_shape=(1,), sub_division="nodal_points")
+    gradiant_field_ijqxyz = fc.real_field("gradient", components=(1, 2), sub_pt="quad_points")
+    temp_field_inxyz = fc.real_field("temperature", components=(1,), sub_pt="nodal_points")
 
     #### Test field
 

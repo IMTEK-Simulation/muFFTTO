@@ -3,7 +3,7 @@ import warnings
 
 from NuMPI.Tools import Reduction
 from mpi4py import MPI
-from _muGrid import Communicator, Field, FieldCollection
+from muGrid import Communicator, Field, GlobalFieldCollection
 
 
 def donothing(*args, **kwargs):
@@ -24,7 +24,7 @@ def findS(curve, Delta, l):
 
 def conjugate_gradients_mugrid(
         comm: Communicator,
-        fc: FieldCollection,
+        fc: GlobalFieldCollection,
         hessp: callable,
         b: Field,
         x: Field,
@@ -73,30 +73,30 @@ def conjugate_gradients_mugrid(
 
     tol_sq = tol * tol
     p = fc.real_field(
-        unique_name="cg-search-direction",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-search-direction",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     Ap = fc.real_field(
-        unique_name="cg-hessian-product",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-hessian-product",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     r = fc.real_field(
-        unique_name="cg-residual",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-residual",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     z = fc.real_field(
-        unique_name="cg-preconditioned_residual",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-preconditioned_residual",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
 
     hessp(x, Ap)
-    r.s = b.s - Ap.s
+    r.s[...] = b.s - Ap.s
     P(r, z)
-    p.s = np.copy(z.s)  # residual
+    p.s[...] = np.copy(z.s)  # residual
 
 
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
@@ -104,9 +104,9 @@ def conjugate_gradients_mugrid(
 
     if norm_metric is not None:
         Pr = fc.real_field(
-            unique_name="cg-custom_metric_residual",  # name of the field
-            components_shape=(*x.components_shape,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name="cg-custom_metric_residual",  # name of the field
+            components=(*x.components_shape,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
         norm_metric(r, Pr)
         stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
@@ -134,8 +134,8 @@ def conjugate_gradients_mugrid(
             raise RuntimeError("Hessian is not positive definite")
 
         alpha = rz / pAp
-        x.s += alpha * p.s
-        r.s -= alpha * Ap.s
+        x.s[...] += alpha * p.s
+        r.s[...] -= alpha * Ap.s
 
         P(r, z)
 
@@ -161,7 +161,7 @@ def conjugate_gradients_mugrid(
 
         rz = next_rz
 
-        p.s = z.s + beta * p.s
+        p.s[...] = z.s + beta * p.s
         # p.s *= beta
         # p.s += z.s
 
@@ -172,7 +172,7 @@ def conjugate_gradients_mugrid(
 
 def conjugate_gradients_mugrid_experimental(
         comm: Communicator,
-        fc: FieldCollection,
+        fc: GlobalFieldCollection,
         hessp: callable,
         b: Field,
         x: Field,
@@ -219,24 +219,24 @@ def conjugate_gradients_mugrid_experimental(
     """
     tol_sq = tol * tol
     p = fc.real_field(
-        unique_name="cg-search-direction",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-search-direction",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     Ap = fc.real_field(
-        unique_name="cg-hessian-product",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-hessian-product",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     r = fc.real_field(
-        unique_name="cg-residual",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-residual",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
     z = fc.real_field(
-        unique_name="cg-preconditioned_residual",  # name of the field
-        components_shape=(*x.components_shape,),  # shape of components
-        sub_division='nodal_points'  # sub-point type
+        name="cg-preconditioned_residual",  # name of the field
+        components=(*x.components_shape,),  # shape of components
+        sub_pt='nodal_points'  # sub-point type
     )
 
     hessp(x, Ap)
@@ -254,9 +254,9 @@ def conjugate_gradients_mugrid_experimental(
 
     if norm_metric is not None:
         Pr = fc.real_field(
-            unique_name="cg-custom_metric_residual",  # name of the field
-            components_shape=(*x.components_shape,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name="cg-custom_metric_residual",  # name of the field
+            components=(*x.components_shape,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
         norm_metric(r, Pr)
         stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product

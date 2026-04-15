@@ -156,15 +156,15 @@ for i in range(1):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        if discretization.fft.communicator.rank == 0:
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        if discretization.communicator.rank == 0:
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
-    #  print(f"{it:5} {discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel())):.5}")
+    #  print(f"{it:5} {discretization.communicator.sum(np.dot(r.ravel(), r.ravel())):.5}")
 
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,

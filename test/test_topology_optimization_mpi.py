@@ -218,7 +218,7 @@ def my_objective_function(phase_field_1nxyz_flat):
     displacement_field.s.fill(0)
 
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_inxyz,

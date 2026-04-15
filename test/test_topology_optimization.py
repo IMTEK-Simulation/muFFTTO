@@ -14,7 +14,7 @@ from muFFTTO import microstructure_library
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
     problem_type = 'elasticity'
-    element_types = ['linear_triangles', ]  # ,'linear_triangles_tilled',  'bilinear_rectangle'
+    element_types = ['linear_triangles','linear_triangles_tilled']# ,  'bilinear_rectangle'
 
     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                       problem_type=problem_type)
@@ -140,7 +140,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         # print('Objective function:')
         # reshape the field
         phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-        phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+        phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
 
         # Phase field  in quadrature points
         phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -150,7 +150,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         # Material data in quadrature points
         material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
             name='material_data_field_C_0_rho_ijklqxyz_in_objective')
-        material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+        material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                                  np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
         f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
@@ -173,13 +173,13 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
                 discretization.fft.communicate_ghosts(x)
                 x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-                x_jacobi_temp.s = K_diag_alg.s * x.s
+                x_jacobi_temp.s[...] = K_diag_alg.s * x.s
                 discretization.apply_preconditioner_mugrid(
                     preconditioner_Fourier_fnfnqks=preconditioner_Green,
                     input_nodal_field_fnxyz=x_jacobi_temp,
                     output_nodal_field_fnxyz=Px)
 
-                Px.s = K_diag_alg.s * Px.s
+                Px.s[...] = K_diag_alg.s * Px.s
                 discretization.fft.communicate_ghosts(Px)
 
             M_fun = M_fun_Green_Jacobi
@@ -203,7 +203,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         displacement_field.s.fill(0)
 
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_inxyz,
@@ -281,11 +281,11 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
 
     np.random.seed(1)
     phase_field = discretization.get_scalar_field(name='phase_field_0')
-    phase_field.s = np.random.rand(*phase_field.s.shape) ** 1
+    phase_field.s[...] = np.random.rand(*phase_field.s.shape) ** 1
     # phase_field_0.s += 5
     # save a copy of the original phase field
     phase_field_0_fixed = discretization.get_scalar_field(name='phase_field_0_fixed')
-    phase_field_0_fixed.s = np.copy(phase_field.s)
+    phase_field_0_fixed.s[...] = np.copy(phase_field.s)
     # flatten the array --- just nick
     # phase_field_0_flat = phase_field_0.s.ravel()  # TODO: check if this is copy or not
     _, _, _, analytical_sensitivity = my_objective_function(phase_field.s.ravel())
@@ -309,7 +309,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
                 # set phase_field to ones
-                phase_field.s = np.copy(phase_field_0_fixed.s)
+                phase_field.s[...] = np.copy(phase_field_0_fixed.s)
                 #
                 phase_field.s[0, 0, x, y] = phase_field.s[0, 0, x, y] + epsilon / fd_scheme
 

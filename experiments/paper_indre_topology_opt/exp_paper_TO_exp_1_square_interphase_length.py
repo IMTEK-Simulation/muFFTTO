@@ -110,7 +110,7 @@ discretization = domain.Discretization(cell=my_cell,
 if MPI.COMM_WORLD.rank == 0:
     print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
           f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
-if discretization.fft.communicator.rank == 0:
+if discretization.communicator.rank == 0:
     if not os.path.exists(file_folder_path):
         os.makedirs(file_folder_path)
     if not os.path.exists(data_folder_path):
@@ -274,13 +274,13 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     # if zero_small_phases:
     #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
     disp = False
-    phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+    phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
 
     # Phase field  in quadrature points
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     # Material data in quadrature points
-    material_data_field_C_0_rho_ijklqxyz.s = (elastic_C_0 - elastic_C_void)[
+    material_data_field_C_0_rho_ijklqxyz.s[...]  = (elastic_C_0 - elastic_C_void)[
                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
                                              elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
@@ -331,13 +331,13 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             discretization.fft.communicate_ghosts(x)
             x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-            x_jacobi_temp.s = K_diag_alg.s * x.s
+            x_jacobi_temp.s[...]= K_diag_alg.s * x.s
             discretization.apply_preconditioner_mugrid(
                 preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
                 input_nodal_field_fnxyz=x_jacobi_temp,
                 output_nodal_field_fnxyz=Px)
 
-            Px.s = K_diag_alg.s * Px.s
+            Px.s[...] = K_diag_alg.s * Px.s
             discretization.fft.communicate_ghosts(Px)
 
         M_fun = M_fun_Green_Jacobi
@@ -373,14 +373,14 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
         def callback(it, x, r, p, z, stop_crit_norm):
             # global norms_cg_mech
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             if MPI.COMM_WORLD.rank == 0:
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_load_case_inxyz,
@@ -489,9 +489,9 @@ if __name__ == '__main__':
 
     # # material distribution
     def apply_filter(phase):
-        f_field = discretization.fft.fourier_space_field(
-            unique_name='f_field_phase_for_filter',  # name of the field
-            shape=(1,))
+        f_field = discretization.ffield_collection.complex_field(
+            name='f_field_phase_for_filter',  # name of the field
+            components=(1,))
         discretization.fft.fft(phase, f_field)
         # f_field[0, 0, np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
         #                              np.abs(discretization.fft.fftfreq[1]) > 0.25)] = 0
@@ -499,7 +499,7 @@ if __name__ == '__main__':
                                       discretization.fft.ifftfreq[1] > 8)] = 0
         # f_field[0, 0, 12:, 24:] = 0
         discretization.fft.ifft(f_field, phase)
-        phase.s *= discretization.fft.normalisation
+        phase.s[...] *= discretization.fft.normalisation
         phase.s[phase.s > 1] = 1
         phase.s[phase.s < 0] = 0
         # min_ = discretization.mpi_reduction.min(phase)
@@ -536,7 +536,7 @@ if __name__ == '__main__':
         else:
             phase_field_0.s[0, 0] = (np.sin(discretization.fft.coords[0] * 4 * np.pi) + np.sin(
                 discretization.fft.coords[1] * 4 * np.pi) + 2) / 4
-            phase_field_0.s += 0.5 * np.random.rand(*phase_field_0.s.shape) ** 1
+            phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape) ** 1
 
         apply_filter(phase_field_0)
         print()
@@ -640,7 +640,7 @@ if __name__ == '__main__':
                                       )
     solution_phase = discretization.get_scalar_field(name='phase_field_in_initial_')
 
-    solution_phase.s = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
+    solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
     sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
 
     _info = {}
@@ -690,7 +690,7 @@ if __name__ == '__main__':
     #     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_C_0_rho_quad.s[...] = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
                                          elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 
@@ -725,7 +725,7 @@ if __name__ == '__main__':
         # displacement_field.s, norms = solvers.PCG_numpy(K_fun, rhs_field_final.s, x0=None, P=M_fun, steps=int(500),
         #                                                 toler=1e-8)
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field_final,
@@ -769,7 +769,7 @@ if __name__ == '__main__':
                                           rhs_inxyz=rhs_field_final)
 
             solvers.conjugate_gradients_mugrid(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_field_final,

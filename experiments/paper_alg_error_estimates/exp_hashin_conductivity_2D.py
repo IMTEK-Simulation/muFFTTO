@@ -164,14 +164,14 @@ for anisotropy in [False, True]:  # ,True
             norms_cg_mech['residual_rz'] = []
             def callback(it, x, r, p, z, stop_crit_norm):
                 # global norms_cg_mech
-                norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
             temperatute_field_precise = discretization.get_unknown_size_field(name=f'temperatute_field_precise')
             solvers.conjugate_gradients_mugrid(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_load_case_inxyz,
@@ -211,7 +211,7 @@ for anisotropy in [False, True]:  # ,True
             temperatute_field_  = discretization.get_unknown_size_field(name=f'temperatute_field_')
 
             solvers.conjugate_gradients_mugrid(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_load_case_inxyz,

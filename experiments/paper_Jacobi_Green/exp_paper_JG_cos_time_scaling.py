@@ -212,12 +212,12 @@ for repetition in np.arange(1, 10 + 1):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
         norms['residual_rr'].append(norm_of_rr)
         norms['residual_rz'].append(norm_of_rz)
         #
-        # if discretization.fft.communicator.rank == 0:
+        # if discretization.communicator.rank == 0:
         #     print(f"{it:5} norm of rr = {norm_of_rr:.5}")
         #     print(f"{it:5} norm of rz = {norm_of_rz:.5}")
         #     print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
@@ -229,7 +229,7 @@ for repetition in np.arange(1, 10 + 1):
     solution_field.s.fill(0)
 
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,
@@ -247,7 +247,7 @@ for repetition in np.arange(1, 10 + 1):
 end_time = time.time()
 elapsed_time = end_time - start_time
 
-if discretization.fft.communicator.rank == 0:
+if discretization.communicator.rank == 0:
     nb_steps = len(norms['residual_rr'])
     print(f'nb steps = {nb_steps} ')
     _info = {}

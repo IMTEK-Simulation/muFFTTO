@@ -243,10 +243,10 @@ fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=(nb_grid_points,),
                                            "nodal_points": 1})
 # I need  less nodal points than pixel. Exactly one less for degree = 2
 
-gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 1), sub_division="quad_points")
+gradiant_field_ijqxyz = fc.real_field("gradient", components=(1, 1), sub_pt="quad_points")
 
-temp_field_inxyz = fc.real_field("temperature", components_shape=(1,), sub_division="nodal_points")
-temp_coef = fc.real_field("temperature_coef", components_shape=(1,), sub_division="nodal_points")
+temp_field_inxyz = fc.real_field("temperature", components=(1,), sub_pt="nodal_points")
+temp_coef = fc.real_field("temperature_coef", components=(1,), sub_pt="nodal_points")
 
 # create a field elements with size 1 -- coordinates
 # x, y = np.meshgrid(np.arange(nb_grid_points), np.arange(nb_grid_points), indexing="ij")
@@ -357,9 +357,9 @@ nb_grid_points = 10
 fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=(nb_grid_points, nb_grid_points),
                                   sub_pts={"quad_points": nb_quad_points, "nodal_points": 1})
 
-gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
+gradiant_field_ijqxyz = fc.real_field("gradient", components=(1, 2), sub_pt="quad_points")
 
-temp_field_inxyz = fc.real_field("temperature", components_shape=(1,), sub_division="nodal_points")
+temp_field_inxyz = fc.real_field("temperature", components=(1,), sub_pt="nodal_points")
 x, y = np.meshgrid(np.arange(nb_grid_points), np.arange(nb_grid_points), indexing="ij")
 # u_fun= lambda x, y: x**2 + y**2 #+ 2*x*y
 u_fun = lambda x, y: x ** 1  # + y**2 + 2*x*y

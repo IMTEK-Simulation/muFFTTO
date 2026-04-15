@@ -367,12 +367,12 @@ if compute:
                     #   for d in range(3):
                     #      x[d] -= np.mean(x[d], axis=(-1, -2, -3), keepdims=True)
                     # discretization.fft.communicate_ghosts(x)
-                    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                    norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                    norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                    norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                     norms_G['residual_rr'].append(norm_of_rr)
                     norms_G['residual_rz'].append(norm_of_rz)
 
-                    if discretization.fft.communicator.rank == 0:
+                    if discretization.communicator.rank == 0:
                         print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
@@ -385,7 +385,7 @@ if compute:
                 #                                           )
                 print('solvers')
                 solvers.conjugate_gradients_mugrid(
-                    comm=discretization.fft.communicator,
+                    comm=discretization.communicator,
                     fc=discretization.field_collection,
                     hessp=K_fun,  # linear operator
                     b=rhs_field,
@@ -482,12 +482,12 @@ if compute:
                     #   for d in range(3):
                     #      x[d] -= np.mean(x[d], axis=(-1, -2, -3), keepdims=True)
                     # discretization.fft.communicate_ghosts(x)
-                    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                    norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                    norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                    norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                     norms_GJ['residual_rr'].append(norm_of_rr)
                     norms_GJ['residual_rz'].append(norm_of_rz)
 
-                    if discretization.fft.communicator.rank == 0:
+                    if discretization.communicator.rank == 0:
                         print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
@@ -502,7 +502,7 @@ if compute:
                 displacement_field_green_jacobi.s.fill(0)
 
                 solvers.conjugate_gradients_mugrid(
-                    comm=discretization.fft.communicator,
+                    comm=discretization.communicator,
                     fc=discretization.field_collection,
                     hessp=K_fun,  # linear operator
                     b=rhs_field,
@@ -563,19 +563,19 @@ if compute:
                     #   for d in range(3):
                     #      x[d] -= np.mean(x[d], axis=(-1, -2, -3), keepdims=True)
                     # discretization.fft.communicate_ghosts(x)
-                    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-                    norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+                    norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+                    norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
                     norms_J['residual_rr'].append(norm_of_rr)
                     norms_J['residual_rz'].append(norm_of_rz)
 
-                    if discretization.fft.communicator.rank == 0:
+                    if discretization.communicator.rank == 0:
                         print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
                 displacement_field_jacobi.s.fill(0)
 
                 solvers.conjugate_gradients_mugrid(
-                    comm=discretization.fft.communicator,
+                    comm=discretization.communicator,
                     fc=discretization.field_collection,
                     hessp=K_fun,  # linear operator
                     b=rhs_field,

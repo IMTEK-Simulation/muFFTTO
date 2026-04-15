@@ -112,7 +112,7 @@ discretization = domain.Discretization(cell=my_cell,
 if MPI.COMM_WORLD.rank == 0:
     print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
           f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
-if discretization.fft.communicator.rank == 0:
+if discretization.communicator.rank == 0:
     if not os.path.exists(file_folder_path):
         os.makedirs(file_folder_path)
     if not os.path.exists(data_folder_path):
@@ -373,14 +373,14 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
         def callback(it, x, r, p, z, stop_crit_norm):
             # global norms_cg_mech
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             if MPI.COMM_WORLD.rank == 0:
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_load_case_inxyz,
@@ -489,9 +489,9 @@ if __name__ == '__main__':
 
     # # material distribution
     def apply_filter(phase):
-        f_field = discretization.fft.fourier_space_field(
-            unique_name='f_field_phase_for_filter',  # name of the field
-            shape=(1,))
+        f_field = discretization.ffield_collection.complex_field(
+            name='f_field_phase_for_filter',  # name of the field
+            components=(1,))
         discretization.fft.fft(phase, f_field)
         # f_field[0, 0, np.logical_and(np.abs(discretization.fft.fftfreq[0]) > 0.25,
         #                              np.abs(discretization.fft.fftfreq[1]) > 0.25)] = 0
@@ -706,7 +706,7 @@ if __name__ == '__main__':
         # displacement_field.s, norms = solvers.PCG_numpy(K_fun, rhs_field_final.s, x0=None, P=M_fun, steps=int(500),
         #                                                 toler=1e-8)
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field_final,
@@ -750,7 +750,7 @@ if __name__ == '__main__':
                                           rhs_inxyz=rhs_field_final)
 
             solvers.conjugate_gradients_mugrid(
-                comm=discretization.fft.communicator,
+                comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,  # linear operator
                 b=rhs_field_final,

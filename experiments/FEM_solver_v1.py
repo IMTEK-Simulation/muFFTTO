@@ -214,10 +214,10 @@ fc = muGrid.GlobalFieldCollection(nb_domain_grid_pts=nb_grid_points,
                                            "nodal_points": nb_nodal_points})
 # I need  less nodal points than pixel. Exactly one less for degree = 2
 
-gradiant_field_ijqxyz = fc.real_field("gradient", components_shape=(1, 2), sub_division="quad_points")
+gradiant_field_ijqxyz = fc.real_field("gradient", components=(1, 2), sub_pt="quad_points")
 
-temp_field_inxyz = fc.real_field("temperature", components_shape=(1,), sub_division="nodal_points")
-temp_coef = fc.real_field("temperature_coef", components_shape=(1,), sub_division="nodal_points")
+temp_field_inxyz = fc.real_field("temperature", components=(1,), sub_pt="nodal_points")
+temp_coef = fc.real_field("temperature_coef", components=(1,), sub_pt="nodal_points")
 
 print('----------------------------------------------')  # for i in range(2):
 
@@ -233,8 +233,8 @@ grad_op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
 
 # xq_coords = np.zeros([nb_quad_points, nb_grid_points])
 
-rhs = fc.real_field("rhs", components_shape=(1,), sub_division="nodal_points")
-solution = fc.real_field("solution", components_shape=(1,), sub_division="nodal_points")
+rhs = fc.real_field("rhs", components=(1,), sub_pt="nodal_points")
+solution = fc.real_field("solution", components=(1,), sub_pt="nodal_points")
 
 x_coords = np.zeros([2, nb_nodal_points, nb_grid_points[0], nb_grid_points[1]])
 for n_p in range(nb_nodal_points):

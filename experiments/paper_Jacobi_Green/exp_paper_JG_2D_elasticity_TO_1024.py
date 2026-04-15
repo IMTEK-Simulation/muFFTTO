@@ -197,13 +197,13 @@ if compute_results:
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
         norms['residual_rr'].append(norm_of_rr)
         norms['residual_rz'].append(norm_of_rz)
         norms['residual_rGr'].append(stop_crit_norm)
 
-        # if discretization.fft.communicator.rank == 0:
+        # if discretization.communicator.rank == 0:
         # print(f"{it:5} norm of rr = {norm_of_rr:.5}")
         # print(f"{it:5} norm of rz = {norm_of_rz:.5}")
         # print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
@@ -211,7 +211,7 @@ if compute_results:
 
     solution_field = discretization.get_unknown_size_field(name='solution')
     solvers.conjugate_gradients_mugrid(
-        comm=discretization.fft.communicator,
+        comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=hessian_fun,  # linear operator
         b=rhs_field,
@@ -222,7 +222,7 @@ if compute_results:
         callback=callback,
         norm_metric=preconditioner_fun_green
     )
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         nb_steps = len(norms['residual_rr'])
         print(f'nb steps = {nb_steps} ')
         _info['norm_rr'] = norms['residual_rr']

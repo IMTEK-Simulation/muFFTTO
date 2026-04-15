@@ -195,7 +195,7 @@ def callback(it, x, r, p, z, stop_crit_norm):
     """
     Callback function to print the current solution, residual, and search direction.
     """
-    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+    norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
     _info['norm_rr'].append(norm_of_rr)
 
 
@@ -215,14 +215,14 @@ def callback(it, x, r, p, z, stop_crit_norm):
              nb_grid_pts=tuple(discretization.nb_of_pixels_global),
              components_are_leading=True,
              comm=MPI.COMM_WORLD)
-    # if discretization.fft.communicator.rank == 0:
+    # if discretization.communicator.rank == 0:
     #     print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
 solution_field = discretization.get_unknown_size_field(name='solution')
 
 solvers.conjugate_gradients_mugrid(
-    comm=discretization.fft.communicator,
+    comm=discretization.communicator,
     fc=discretization.field_collection,
     hessp=K_fun,  # linear operator
     b=rhs_field,
@@ -342,7 +342,7 @@ for i in range(dim):
         # rhs_ij = discretization.get_rhs(material_data_field_C_0_rh, macro_gradient_field)
 
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field,

@@ -509,7 +509,7 @@ for w_mult in [4.0, ]:  # np.arange(0.1, 1., 0.1):#[1, ]:  # np.arange(1, 2, 1):
                                                   gtol=1e-5,
                                                   ftol=1e-12,
                                                   maxiter=1500,
-                                                  comm=discretization.fft.communicator,
+                                                  comm=discretization.communicator,
                                                   disp=True,
                                                   callback=my_callback
                                                   )

@@ -731,7 +731,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 # solution, norms = solvers.conjugate_gradients_mugrid(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
                 solution_field = discretization.get_unknown_size_field(name='solution')
-                solvers.conjugate_gradients_mugrid(comm=discretization.fft.communicator,
+                solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
                                                    fc=discretization.field_collection,
                                                    hessp=K_fun,  # linear operator
                                                    b=rhs_field,
@@ -771,7 +771,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 solution_field_M = discretization.get_unknown_size_field(name='solution_M')
 
-                solvers.conjugate_gradients_mugrid(comm=discretization.fft.communicator,
+                solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
                                                    fc=discretization.field_collection,
                                                    hessp=K_fun,  # linear operator
                                                    b=rhs_field,
@@ -960,7 +960,7 @@ class DiscretizationTestCase(unittest.TestCase):
                 x_0.s[0, 0, 0, 0] = 1
                 K_fun(x_0, f_0)
 
-                ffield = discretization.fft.fourier_space_field('vector-field', (x_0.nb_components,))
+                ffield = discretization.ffield_collection.complex_field('vector-field', (x_0.nb_components,))
 
                 discretization.fft.fft(f_0, ffield)
 

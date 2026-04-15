@@ -67,7 +67,7 @@ discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
-if discretization.fft.communicator.rank == 0:
+if discretization.communicator.rank == 0:
     print(f'preconditioer {preconditioner_type}')
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = (
@@ -75,7 +75,7 @@ data_folder_path = (
         + f'_{preconditioner_type}' + '/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
                       + f'_{preconditioner_type}' + '/')
-if discretization.fft.communicator.rank == 0:
+if discretization.communicator.rank == 0:
     if not os.path.exists(file_folder_path):
         os.makedirs(file_folder_path)
     if not os.path.exists(data_folder_path):
@@ -290,7 +290,7 @@ iteration_total = 0
 
 # incremental loading
 for inc in range(ninc):
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         print(f'Increment {inc}')
         print(f'==========================================================================')
 
@@ -342,17 +342,17 @@ for inc in range(ninc):
     # print('save_results')
     # En = np.sqrt(np.linalg.norm(total_strain_field.s.mean(axis=2)))
     En = np.sqrt(
-        discretization.fft.communicator.sum(np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
+        discretization.communicator.sum(np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
 
     # rhs_t_norm = np.linalg.norm(rhs_field.s)
-    rhs_t_norm = np.sqrt(discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+    rhs_t_norm = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
     # print(f'rhs_t_norm {rhs_t_norm}')
     # print(f'norm_rhs {norm_rhs}')
     # incremental deformation  newton loop
     iiter = 0
 
-    norm_rhs = np.sqrt(discretization.fft.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
-    if discretization.fft.communicator.rank == 0:
+    norm_rhs = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+    if discretization.communicator.rank == 0:
         print('Rhs at new laod step {0:10.2e}'.format(norm_rhs))
         print('En at new laod step {0:10.2e}'.format(En))
     # preconditioer = 'Green'
@@ -417,12 +417,12 @@ for inc in range(ninc):
             #   for d in range(3):
             #      x[d] -= np.mean(x[d], axis=(-1, -2, -3), keepdims=True)
             # discretization.fft.communicate_ghosts(x)
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             norms['residual_rr'].append(norm_of_rr)
             norms['residual_rz'].append(norm_of_rz)
 
-            if discretization.fft.communicator.rank == 0:
+            if discretization.communicator.rank == 0:
                 # print(f"{it:5} norm of rr = {norm_of_rr:.5}")
                 # print(f"{it:5} norm of rz = {norm_of_rz:.5}")
                 print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
@@ -431,7 +431,7 @@ for inc in range(ninc):
         displacement_increment_field.s.fill(0)
         # print('solvers')
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field,
@@ -450,7 +450,7 @@ for inc in range(ninc):
         else:
             norm_rz = 0
             norm_rr = 0
-        if discretization.fft.communicator.rank == 0:
+        if discretization.communicator.rank == 0:
             print(f'nb iteration CG = {nb_it_comb}')
         sum_CG_its += nb_it_comb
 
@@ -523,11 +523,11 @@ for inc in range(ninc):
         # print('g_norm_stress {}'.format(g_norm_div_stress))
         # print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
         # En = np.linalg.norm(total_strain_field.s)
-        # En = np.sqrt(discretization.fft.communicator.sum(
+        # En = np.sqrt(discretization.communicator.sum(
         #     np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
-        norm_rhs = np.sqrt(discretization.fft.communicator.sum(
+        norm_rhs = np.sqrt(discretization.communicator.sum(
             np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
-        norm_strain_fluc = np.sqrt(discretization.fft.communicator.sum(
+        norm_strain_fluc = np.sqrt(discretization.communicator.sum(
             np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
         _info['norm_strain_fluc_field'] = norm_strain_fluc
         _info['norm_En'] = En
@@ -535,7 +535,7 @@ for inc in range(ninc):
         _info['norm_rhs_field'] = norm_rhs
         _info['newton_stop_crit'] = norm_rhs / En
 
-        if discretization.fft.communicator.rank == 0:
+        if discretization.communicator.rank == 0:
             print('=====================')
             print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
                 norm_strain_fluc / En))
@@ -568,7 +568,7 @@ for inc in range(ninc):
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    if discretization.fft.communicator.rank == 0:
+    if discretization.communicator.rank == 0:
         print("element_type : ", element_type)
         print("number_of_pixels: ", number_of_pixels)
         print(f'preconditioner_type: {preconditioner_type}')

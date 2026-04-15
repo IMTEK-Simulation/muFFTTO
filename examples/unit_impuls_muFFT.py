@@ -94,11 +94,11 @@ gradient_op.transpose(quadrature_point_field=quad_field,
 
 fft.communicate_ghosts(nodal_field)
 
-f_nodal_field = fft.fourier_space_field(
-    unique_name='unit_impulse_response_inqks',  # name of the field
+f_nodal_field = ffield_collection.complex_field(
+    name='unit_impulse_response_inqks',  # name of the field
     # nb_components=(self.domain_dimension,),  # shape of components
     # nb_dof_per_pixel= nb_dofs_per_voxel,
-    shape=(2,),  # shape of components
+    components=(2,),  # shape of components
     # sub_division='nodal_points'
 )
 

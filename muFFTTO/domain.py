@@ -9,10 +9,11 @@ from muFFTTO import discretization_library
 from NuMPI.Tools import Reduction
 
 from mpi4py import MPI
-from muGrid import ConvolutionOperator
-from _muGrid import Field
-from muFFT import FFT
-import muFFT
+import muGrid
+from muGrid import GenericLinearOperator#ConvolutionOperator
+from muGrid import Field
+#from muFFT import FFT
+#import muFFT
 
 
 # import pyfftw  TODO ask about FFTW or numpy FFT
@@ -63,7 +64,7 @@ class Discretization:
                  nb_of_pixels_global=None,
                  discretization_type='finite_element',
                  element_type='linear_triangles',
-                 communicator=muFFT.Communicator(MPI.COMM_WORLD)):
+                 communicator=muGrid.Communicator(MPI.COMM_WORLD)):
 
         self.cell = cell
         self.domain_dimension = cell.domain_dimension
@@ -72,20 +73,26 @@ class Discretization:
         self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
         # my_tuple =
         # print('nb_of_pixels_global = \n {} core {}'.format(nb_of_pixels_global, MPI.COMM_WORLD.rank))
-        left_ghosts = [0, ] * self.domain_dimension
-        right_ghosts = [0, ] * self.domain_dimension
-        left_ghosts[-1] = 1
-        right_ghosts[-1] = 1
+        left_ghosts = [1, ] * self.domain_dimension
+        right_ghosts = [1, ] * self.domain_dimension
+        # left_ghosts[-1] = 1
+        # right_ghosts[-1] = 1
 
         ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
-        engine_ = 'fftwmpi'  # 'fftw' #'fftwmpi'  # 'fftwmpi'  #'fftwmpi'  # 'fftw' #
-        self.fft = FFT(nb_grid_pts=nb_of_pixels_global,
-                       engine=engine_,  #
-                       communicator=communicator,
-                       nb_ghosts_left=left_ghosts,
-                       nb_ghosts_right=right_ghosts,
-                       )
+        #engine_ = 'fftwmpi'  # 'fftw' #'fftwmpi'  # 'fftwmpi'  #'fftwmpi'  # 'fftw' #
+        # self.fft = FFT(nb_grid_pts=nb_of_pixels_global,
+        #                engine=engine_,  #
+        #                communicator=communicator,
+        #                nb_ghosts_left=left_ghosts,
+        #                nb_ghosts_right=right_ghosts,
+        #                )
 
+        self.fft=muGrid.FFTEngine(nb_domain_grid_pts=nb_of_pixels_global,
+                          communicator=communicator,
+                          nb_ghosts_left=left_ghosts,
+                          nb_ghosts_right=right_ghosts,
+                          )
+        self.communicator = communicator
         # self.fft.create_plan(1)
 
         # self.fft.communicator.max(self.fft.nb_subdomain_grid_pts)
@@ -112,9 +119,8 @@ class Discretization:
         # MPI.COMM_WORLD.Barrier()
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
-        if engine_ == 'fftwmpi':
-            if MPI.COMM_WORLD.rank == 0:
-                warnings.warn(message='Be carefull about change in number of poitns ')
+        if MPI.COMM_WORLD.size > 1:
+            warnings.warn(message='Be carefull about change in number of poitns ')
             # adjust the number of points
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1] - 2  # TODO this is for buffer of size 1x1
             # adjust subdomain location to not take into account buffers
@@ -179,8 +185,8 @@ class Discretization:
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
                                        *self.nb_of_pixels]
 
-            self.field_collection = self.fft.real_field_collection
-            self.ffield_collection = self.fft.fourier_field_collection
+            self.field_collection = self.fft.real_space_collection
+            self.ffield_collection = self.fft.fourier_space_collection
             # self.field_collection = self.fft.real_field_collection
             #
             self.field_collection.set_nb_sub_pts('quad_points', self.nb_quad_points_per_pixel)
@@ -188,9 +194,12 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('quad_points', self.nb_quad_points_per_pixel)
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
-            self.conv_op = ConvolutionOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+
+            #self.conv_op = ConvolutionOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+            self.conv_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+
             try:
-                self.interpolation_op = ConvolutionOperator(point_of_origin, self.N_at_quad_points_qnijk)
+                self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_qnijk)
             except:
                 print(f'self.interpolation_op does not exist ')
             #
@@ -198,18 +207,18 @@ class Discretization:
             # print(self.field_collection.get_nb_sub_pts('quad_points'))
             # print(self.field_collection.get_nb_sub_pts('nodal_points'))
             #
-            # u_ = self.fft.real_space_field(unique_name='dicky',  # name of the field
+            # u_ = self.fft.real_space_field(name='dicky',  # name of the field
             #                                shape=(3,),
-            #                                sub_division='quad_points')
+            #                                sub_pt='quad_points')
             #
-            # u_grad = self.fft.real_space_field(unique_name='dicky2',  # name of the field
+            # u_grad = self.fft.real_space_field(name='dicky2',  # name of the field
             #                                    shape=(*self.cell.gradient_shape,),
-            #                                    sub_division='quad_points')
+            #                                    sub_pt='quad_points')
 
             # u_inxyz = self.field_collection.real_space_field(
-            #     unique_name='dicky',  # name of the field
-            #     components_shape=(*self.cell.unknown_shape,),  # shape of components
-            #     sub_division='nodal_points'  # sub-point type
+            #     name='dicky',  # name of the field
+            #     components=(*self.cell.unknown_shape,),  # shape of components
+            #     sub_pt='nodal_points'  # sub-point type
             # )
 
             # self.field_collection = muGrid.GlobalFieldCollection(nb_domain_grid_pts=nb_of_pixels_global,
@@ -260,9 +269,9 @@ class Discretization:
         dim = self.domain_dimension
         # creates a field with coordinates of all quadrature points
         nodal_points_coordinates_inxyz = self.field_collection.real_field(
-            unique_name="nodal_points_coordinates_iqxyz",  # name of the field
-            components_shape=(*self.cell.displacement_shape,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name="nodal_points_coordinates_iqxyz",  # name of the field
+            components=(*self.cell.displacement_shape,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
 
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
@@ -285,9 +294,9 @@ class Discretization:
         """
         # creates a field with coordinates of all quadrature points
         quad_points_coordinates_iqxyz = self.field_collection.real_field(
-            unique_name="quad_points_coordinates_iqxyz",  # name of the field
-            components_shape=(*self.cell.displacement_shape,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+            name="quad_points_coordinates_iqxyz",  # name of the field
+            components=(*self.cell.displacement_shape,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
 
         for q in range(0, self.nb_quad_points_per_pixel):
@@ -340,13 +349,13 @@ class Discretization:
         # print('fft.fft(u)= {} \n   core {}'.format(fft.fft(u), MPI.COMM_WORLD.rank))
         #
         # print('np.exp(1j * phase) = {} \n   core {}'.format(np.exp(1j * phase), MPI.COMM_WORLD.rank))
-        f_field_inqrs = self.fft.fourier_space_field(
-            unique_name='f_field_phase_roll_temp',  # name of the field
-            shape=(u_inxyz.shape[0],))
+        f_field_inqrs = self.ffield_collection.complex_field(
+            name='f_field_phase_roll_temp',  # name of the field
+            components=(u_inxyz.shape[0],))
         fft.fft(u_inxyz, f_field_inqrs)
         f_field_inqrs.s *= np.exp(1j * phase)
         return_field_inxyz = self.fft.real_space_field(
-            unique_name='field_phase_roll_temp',  # name of the field
+            name='field_phase_roll_temp',  # name of the field
             shape=(u_inxyz.shape[0],))
 
         fft.ifft(f_field_inqrs, return_field_inxyz)
@@ -439,7 +448,7 @@ class Discretization:
                                             grad_u_ijqxyz=grad_u_ijqxyz)
 
         # 2. symmetrize it
-        grad_u_ijqxyz.s = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
+        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
 
     # def apply_gradient_transposed_operator(self,
     #                                        gradient_field_ijqxyz,
@@ -806,7 +815,7 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz shape.  =' f'{rhs_inxyz.s.shape}')
         #       print('rank' f'{MPI.COMM_WORLD.rank:6} get_rhs_mugrid rhs_inxyz.s[0] =' f'{rhs_inxyz.s[0]}')
         #
-        rhs_inxyz.s *= -1
+        rhs_inxyz.s[...] *= -1
 
         self.fft.communicate_ghosts(field=rhs_inxyz)
 
@@ -948,7 +957,7 @@ class Discretization:
                                                 grad_u_ijqxyz=gradient_field_ijqxyz)
 
         # compute total strain
-        gradient_field_ijqxyz.s = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
 
         mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
         if isinstance(material_data_field_ijklqxyz, np.ndarray):
@@ -1011,9 +1020,9 @@ class Discretization:
             self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
                                                 grad_u_ijqxyz=output_stress_field_ijqxyz)
 
-        output_stress_field_ijqxyz.s = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
         # output_stress_field_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, output_stress_field_ijqxyz)
-        output_stress_field_ijqxyz.s = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
+        output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
                                                  output_stress_field_ijqxyz.s)
 
     def get_stress_field(self,
@@ -1130,7 +1139,7 @@ class Discretization:
 
     def apply_quadrature_weights_on_gradient_field_mugrid(self, grad_field):
         # apply quadrature weights without material data
-        grad_field.s = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
+        grad_field.s[...] = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
 
     def apply_material_data(self, material_data, gradient_field):
         if self.cell.problem_type == 'conductivity':
@@ -1215,11 +1224,11 @@ class Discretization:
         if isinstance(material_data, np.ndarray):
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                gradient_field.s = np.einsum('ijkl,lk...->ij...', material_data, gradient_field.s)
+                gradient_field.s[...] = np.einsum('ijkl,lk...->ij...', material_data, gradient_field.s)
             elif material_data.ndim > 4:
                 raise ("apply_material_data_elasticity_mugrid does not support global ndarray")
         else:
-            gradient_field.s = np.einsum('ijkl...,lk...->ij...', material_data.s, gradient_field.s)
+            gradient_field.s[...] = np.einsum('ijkl...,lk...->ij...', material_data.s, gradient_field.s)
 
     def get_system_matrix(self, material_data_field):
         """
@@ -1368,9 +1377,9 @@ class Discretization:
     #         MPI.COMM_WORLD.Barrier()
     #
     #     # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-    #     preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
-    #         unique_name='Greens_diagonal_f',  # name of the field
-    #         # components_shape=(self.domain_dimension,),  # shape of components
+    #     preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
+    #         name='Greens_diagonal_f',  # name of the field
+    #         # components=(self.domain_dimension,),  # shape of components
     #         shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
     #     )  #
     #     preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
@@ -1409,9 +1418,9 @@ class Discretization:
 
             # preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
             preconditioner_diagonals_injnxyz = self.field_collection.real_field(
-                unique_name="green_assembly-preconditioner_diagonals_fnfnxyz",  # name of the field
-                components_shape=(*unit_impulse_inxyz.shape[:2], *unit_impulse_inxyz.shape[:1],),  # shape of components
-                sub_division='nodal_points'  # sub-point type
+                name="green_assembly-preconditioner_diagonals_fnfnxyz",  # name of the field
+                components=(*unit_impulse_inxyz.shape[:2], *unit_impulse_inxyz.shape[:1],),  # shape of components
+                sub_pt='nodal_points'  # sub-point type
             )
 
             for impulse_position in np.ndindex(unit_impulse_inxyz.sg.shape[0:2]):
@@ -1450,10 +1459,10 @@ class Discretization:
             # construct diagonals from unit impulses responses using FFT
 
             # preconditioner_diagonals_fnfnqks_NEW = self.fft.fft(preconditioner_diagonals_fnfnxyz)
-            preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
-                unique_name='Greens_diagonal_fast',  # name of the field
-                # components_shape=(self.domain_dimension,),  # shape of components
-                shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+            preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
+                name='Greens_diagonal_fast',  # name of the field
+                # components=(self.domain_dimension,),  # shape of components
+                components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
             )  #
             # TODO: COMMUnicate buffers
 
@@ -1514,17 +1523,17 @@ class Discretization:
 
             # preconditioner_diagonals_fnfnxyz = np.zeros(unit_impulse_inxyz.shape[:2] + unit_impulse_inxyz.shape)
             # UP TO NOW IT IS ALL GOOD
-            preconditioner_diagonals_ininqks = self.fft.fourier_space_field(
-                unique_name='Greens_diagonal_fast',  # name of the field
-                # components_shape=(self.domain_dimension,),  # shape of components
-                shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+            preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
+                name='Greens_diagonal_fast',  # name of the field
+                # components=(self.domain_dimension,),  # shape of components
+                components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
             )  #
-            unit_impulse_response_inqks = self.fft.fourier_space_field(
-                unique_name='unit_impulse_response_inqks',  # name of the field
+            unit_impulse_response_inqks = self.ffield_collection.complex_field(
+                name='unit_impulse_response_inqks',  # name of the field
                 # nb_components=(self.domain_dimension,),  # shape of components
                 # nb_dof_per_pixel= nb_dofs_per_voxel,
-                shape=(self.unknown_size[0],),  # shape of components
-                # sub_division='nodal_points'
+                components=(self.unknown_size[0],),  # shape of components
+                sub_pt='nodal_points'
             )
             for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
                 # print('rank' f'{MPI.COMM_WORLD.rank:6} get_preconditioner_NEW  impulse_position=' f'{impulse_position}')
@@ -1864,16 +1873,16 @@ class Discretization:
         # FFTn of the input field
         # nodal_field_fnxyz_frq = self.fft.fft(nodal_field_fnxyz)
         # Compute Fourier transform
-        # ffield_fnqks = self.fft.fourier_space_field('force_field',
+        # ffield_fnqks = self.ffield_collection.complex_field('force_field',
         #                                     self.unknown_size[:-4])  # TODO [this is fixed for one node per pixel !!]
         # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
         # allocate field
         temp_nodal_field_fnxyz = self.get_unknown_size_field(name='temp_nodal_field_in_apply_preconditioner_fnxyz')
         temp_ouput_field_fnxyz = self.get_unknown_size_field(name='temp_output_field_in_apply_preconditioner_fnxyz')
 
-        ffield_fnqks = self.fft.fourier_space_field(
-            unique_name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            shape=(*self.cell.unknown_shape,))  # sub-point type
+        ffield_fnqks = self.ffield_collection.complex_field(
+            name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
+            components=(*self.cell.unknown_shape,))  # sub-point type
 
         if isinstance(nodal_field_fnxyz, np.ndarray):
             temp_nodal_field_fnxyz.sg[...] = nodal_field_fnxyz
@@ -1917,14 +1926,14 @@ class Discretization:
         # FFTn of the input field
         # nodal_field_fnxyz_frq = self.fft.fft(nodal_field_fnxyz)
         # Compute Fourier transform
-        # ffield_fnqks = self.fft.fourier_space_field('force_field',
+        # ffield_fnqks = self.ffield_collection.complex_field('force_field',
         #                                     self.unknown_size[:-4])  # TODO [this is fixed for one node per pixel !!]
         # self.fft.fft(nodal_field_fnxyz, ffield_fnqks)
         # allocate field
 
-        ffield_fnqks = self.fft.fourier_space_field(
-            unique_name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            shape=(*self.cell.unknown_shape,))  # sub-point type
+        ffield_fnqks = self.ffield_collection.complex_field(
+            name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
+            components=(*self.cell.unknown_shape,))  # sub-point type
 
         if isinstance(input_nodal_field_fnxyz, np.ndarray):
             raise ("apply_preconditioner_mugrid does not support  ndarray")
@@ -1937,11 +1946,11 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
 
         # multiplication with a diagonals of preconditioner
-        ffield_fnqks.s = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
+        ffield_fnqks.s[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:einsum=' f'{ffield_fnqks}')
 
         # normalization
-        ffield_fnqks.s *= self.fft.normalisation
+        ffield_fnqks.s[...] *= self.fft.normalisation
         # iFFTn
         self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
 
@@ -2217,33 +2226,33 @@ class Discretization:
 
     def get_unknown_size_field(self, name):
         # return zero field with the shape of unknown
-        u_inxyz = self.fft.real_space_field(
-            unique_name=name,  # name of the field
-            shape=(*self.cell.unknown_shape,),  # shape of components
-            sub_division='nodal_points')  # sub-point type
+        u_inxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*self.cell.unknown_shape,),  # shape of components
+            sub_pt='nodal_points')  # sub-point type
         # grad_u_ijqxyz = self.fft.real_space_field(
-        #     unique_name=name,  # name of the field
-        #     # components_shape=(self.domain_dimension,),  # shape of components
+        #     name=name,  # name of the field
+        #     # components=(self.domain_dimension,),  # shape of components
         #     shape=(*self.cell.gradient_shape,),  # shape of components
-        #     sub_division='quad_points'  # sub-point type
+        #     sub_pt='quad_points'  # sub-point type
         # )
         return u_inxyz
 
     def get_custom_size_nodal_field(self, name, shape):
         # return zero field with the shape of unknown
-        u_inxyz = self.fft.real_space_field(
-            unique_name=name,  # name of the field
-            shape=shape,  # shape of components
-            sub_division='nodal_points')  # sub-point type
+        u_inxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=shape,  # shape of components
+            sub_pt='nodal_points')  # sub-point type
 
         return u_inxyz
 
     def get_custom_size_quad_field(self, name, shape):
         # return zero field with the shape of unknown
-        u_inxyz = self.fft.real_space_field(
-            unique_name=name,  # name of the field
+        u_inxyz = self.field_collection.real_field(
+            name=name,  # name of the field
             shape=shape,  # shape of components
-            sub_division='quad_points')  # sub-point type
+            sub_pt='quad_points')  # sub-point type
 
         return u_inxyz
 
@@ -2254,15 +2263,15 @@ class Discretization:
     def get_gradient_size_field(self, name):
         # return zero field for  the  (discretized)  gradient of temperature/displacement
         grad_u_ijqxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            # components_shape=(self.domain_dimension,),  # shape of components
-            components_shape=(*self.cell.gradient_shape,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+            name=name,  # name of the field
+            # components=(self.domain_dimension,),  # shape of components
+            components=(*self.cell.gradient_shape,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
-        # u_inxyz = self.fft.real_space_field(
-        #     unique_name=name,  # name of the field
+        # u_inxyz = self.fft.real_field(
+        #     name=name,  # name of the field
         #     shape=(*self.cell.unknown_shape,),  # shape of components
-        #     sub_division='nodal_points'  # sub-point type
+        #     sub_pt='nodal_points'  # sub-point type
         # )
 
         return grad_u_ijqxyz
@@ -2274,9 +2283,9 @@ class Discretization:
                 'Cell problem type is {}. But temperature sized field  is returned !!!'.format(self.cell.problem_type))
 
         u_inxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            components_shape=(*self.cell.unknown_shape,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name=name,  # name of the field
+            components=(*self.cell.unknown_shape,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
 
         return u_inxyz
@@ -2285,27 +2294,27 @@ class Discretization:
         # return zero field with the shape of one scalar per nodal point
         # np.zeros([1, self.nb_nodes_per_pixel, *self.nb_of_pixels])
         return self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            components_shape=(1,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name=name,  # name of the field
+            components=(1,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
 
     def get_gradient_of_scalar_field(self, name):
         # return zero field with the shape of gradeint of one scalar per nodal point
         # np.zeros([dim, self.nb_quad_per_pixel, *self.nb_of_pixels])
-        return self.fft.real_space_field(
-            unique_name=name,  # name of the field
-            shape=(1, self.cell.domain_dimension,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+        return self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(1, self.cell.domain_dimension,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
 
     def get_quad_field_scalar(self, name):
         # return zero field with the shape of gradeint of one scalar per nodal point
         # np.zeros([dim, self.nb_quad_per_pixel, *self.nb_of_pixels])
-        return self.fft.real_space_field(
-            unique_name=name,  # name of the field
-            shape=(1, 1),  # shape of components
-            sub_division='quad_points'  # sub-point type
+        return self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(1, 1),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
 
     def get_temperature_gradient_size_field(self, name):
@@ -2318,9 +2327,9 @@ class Discretization:
         # Get a tensor-field (for example to represent the strain)
 
         grad_u_ijqxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            components_shape=(*self.cell.gradient_shape,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+            name=name,  # name of the field
+            components=(*self.cell.gradient_shape,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
         return grad_u_ijqxyz
 
@@ -2357,9 +2366,9 @@ class Discretization:
                 'Cell problem type is {}. But displacement sized field  is returned !!!'.format(self.cell.problem_type))
 
         u_inxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            components_shape=(*self.cell.displacement_shape,),  # shape of components
-            sub_division='nodal_points'  # sub-point type
+            name=name,  # name of the field
+            components=(*self.cell.displacement_shape,),  # shape of components
+            sub_pt='nodal_points'  # sub-point type
         )
 
         # a=np.zeros([self.domain_dimension, self.nb_nodes_per_pixel, *self.nb_of_pixels])
@@ -2375,10 +2384,10 @@ class Discretization:
 
         # Get a tensor-field (for example to represent the strain)
         grad_u_ijqxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            # components_shape=(self.domain_dimension,),  # shape of components
-            components_shape=(*self.cell.gradient_shape,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+            name=name,  # name of the field
+            # components=(self.domain_dimension,),  # shape of components
+            components=(*self.cell.gradient_shape,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
 
         return grad_u_ijqxyz
@@ -2411,9 +2420,9 @@ class Discretization:
         # return zero muGrid field for the (discretized) material data
         # quadrature point field
         material_data_ijqxyz = self.field_collection.real_field(
-            unique_name=name,  # name of the field
-            components_shape=(*self.cell.material_data_shape,),  # shape of components
-            sub_division='quad_points'  # sub-point type
+            name=name,  # name of the field
+            components=(*self.cell.material_data_shape,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
         )
 
         return material_data_ijqxyz

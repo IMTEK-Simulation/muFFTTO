@@ -149,7 +149,7 @@ if compute:
         discretization.scale_field_mugrid(phase_field,
                                           min_val=1 / (10 ** ratio),
                                           max_val=phase_field_max)
-        if discretization.fft.communicator.rank == 0:
+        if discretization.communicator.rank == 0:
             print(f'ratio={ratio} ')
 
         results_name = (f'phase_field' + f'N1024_{ratio}_sharp_{sharp}')
@@ -244,14 +244,14 @@ if compute:
             """
             Callback function to print the current solution, residual, and search direction.
             """
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
 
             _info['norms_G_rr'].append(norm_of_rr)
             _info['norms_G_rz'].append(norm_of_rz)
             _info['norms_G_rGr'].append(stop_crit_norm)
 
-            if discretization.fft.communicator.rank == 0:
+            if discretization.communicator.rank == 0:
                 print(len(_info['norms_G_rr']))
                 print(norm_of_rr)
 
@@ -261,7 +261,7 @@ if compute:
 
         solution_field_G.s.fill(0)
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field,
@@ -288,9 +288,9 @@ if compute:
             macro_gradient_field_ijqxyz=macro_gradient_field,
             output_stress_field_ijqxyz=stress_field_G)
 
-        norm_disp_G = np.sqrt(discretization.fft.communicator.sum(
+        norm_disp_G = np.sqrt(discretization.communicator.sum(
             np.dot(solution_field_G.s.ravel(), solution_field_G.s.ravel())))
-        norm_strain_G = np.sqrt(discretization.fft.communicator.sum(
+        norm_strain_G = np.sqrt(discretization.communicator.sum(
             np.dot(solution_gradient_field_G.s.ravel(), solution_gradient_field_G.s.ravel())))
 
         _info['norm_disp_G'] = norm_disp_G
@@ -322,8 +322,8 @@ if compute:
             """
             Callback function to print the current solution, residual, and search direction.
             """
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             _info['norms_J_rr'].append(norm_of_rr)
             _info['norms_J_rz'].append(norm_of_rz)
             _info['norms_J_rGr'].append(stop_crit_norm)
@@ -333,7 +333,7 @@ if compute:
         solution_field_J.s.fill(0)
 
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field,
@@ -351,9 +351,9 @@ if compute:
             u_inxyz=solution_field_J,
             grad_u_ijqxyz=solution_gradient_field_J)
 
-        norm_disp_J = np.sqrt(discretization.fft.communicator.sum(
+        norm_disp_J = np.sqrt(discretization.communicator.sum(
             np.dot(solution_field_J.s.ravel(), solution_field_J.s.ravel())))
-        norm_strain_J = np.sqrt(discretization.fft.communicator.sum(
+        norm_strain_J = np.sqrt(discretization.communicator.sum(
             np.dot(solution_gradient_field_J.s.ravel(), solution_gradient_field_J.s.ravel())))
 
         _info['norm_disp_J'] = norm_disp_J
@@ -370,13 +370,13 @@ if compute:
             """
             Callback function to print the current solution, residual, and search direction.
             """
-            norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.fft.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             _info['norms_GJ_rr'].append(norm_of_rr)
             _info['norms_GJ_rz'].append(norm_of_rz)
             _info['norms_GJ_rGr'].append(stop_crit_norm)
 
-            if discretization.fft.communicator.rank == 0:
+            if discretization.communicator.rank == 0:
                 print(len(_info['norms_GJ_rr']))
                 print(norm_of_rr)
 
@@ -384,7 +384,7 @@ if compute:
         solution_field_GJ = discretization.get_unknown_size_field(name='solution__GJ')
         solution_field_GJ.s.fill(0)
         solvers.conjugate_gradients_mugrid(
-            comm=discretization.fft.communicator,
+            comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
             b=rhs_field,
@@ -401,9 +401,9 @@ if compute:
             u_inxyz=solution_field_GJ,
             grad_u_ijqxyz=solution_gradient_field_GJ)
 
-        norm_disp_GJ = np.sqrt(discretization.fft.communicator.sum(
+        norm_disp_GJ = np.sqrt(discretization.communicator.sum(
             np.dot(solution_field_GJ.s.ravel(), solution_field_GJ.s.ravel())))
-        norm_strain_GJ = np.sqrt(discretization.fft.communicator.sum(
+        norm_strain_GJ = np.sqrt(discretization.communicator.sum(
             np.dot(solution_gradient_field_GJ.s.ravel(), solution_gradient_field_GJ.s.ravel())))
         stress_field_GJ = discretization.get_gradient_size_field(name='stress_field_GJ')
 
@@ -428,15 +428,15 @@ if compute:
         #                                                                      steps=int(1000),
         #                                                                      toler=1e-1)
 
-        norm_disp_error = np.sqrt(discretization.fft.communicator.sum(
+        norm_disp_error = np.sqrt(discretization.communicator.sum(
             np.dot(solution_field_GJ.s.ravel() - solution_field_G.s.ravel(),
                    solution_field_GJ.s.ravel() - solution_field_G.s.ravel())))
 
-        norm_disp_error_zero_mean = np.sqrt(discretization.fft.communicator.sum(
+        norm_disp_error_zero_mean = np.sqrt(discretization.communicator.sum(
             np.dot(solution_field_GJ_zero_mean.s.ravel() - solution_field_G.s.ravel(),
                    solution_field_GJ_zero_mean.s.ravel() - solution_field_G.s.ravel())))
 
-        norm_strain_error = np.sqrt(discretization.fft.communicator.sum(
+        norm_strain_error = np.sqrt(discretization.communicator.sum(
             np.dot(solution_gradient_field_GJ.s.ravel() - solution_gradient_field_G.s.ravel(),
                    solution_gradient_field_GJ.s.ravel() - solution_gradient_field_G.s.ravel())))
         if store_fields:
@@ -457,7 +457,7 @@ if compute:
         _info['norm_strain_error'] = norm_strain_error
         _info['norm_disp_error'] = norm_disp_error
         _info['norm_disp_error_zero_mean'] = norm_disp_error_zero_mean
-        if discretization.fft.communicator.rank == 0:
+        if discretization.communicator.rank == 0:
             print(f'Green_{ratio}_sharp_{sharp} iters =' + '{}'.format(len(_info['norms_G_rr'])))
             print(f'Jacobi_{ratio}_sharp_{sharp} iters =' + '{}'.format(len(_info['norms_J_rr'])))
             print(f'Green_Jacobi_{ratio}_sharp_{sharp} iters =' + '{}'.format(len(_info['norms_GJ_rr'])))
