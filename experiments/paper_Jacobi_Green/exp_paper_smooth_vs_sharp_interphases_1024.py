@@ -67,10 +67,10 @@ def scale_field_log(field, min_val, max_val):
 
 plot = False  # plot rediduals
 plot_cg_tol_vs_error = False
-plot_solution_differences = True
+plot_solution_differences = False
 
 store_fields = True
-compute = False
+compute = True
 # enforce_mean = False
 if compute:
     tol_cg = 10 ** (-cg_tol_exponent)
@@ -119,18 +119,23 @@ if compute:
     for sharp in [False, True]:
         _info = {}
         # material distribution
+        phase_field = discretization.get_scalar_field(name='phase_field')
         name = 'microstructure_1024'
         try:
             geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
+            phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
+                                           subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+                                           nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+                                           comm=MPI.COMM_WORLD)
         except:
             geometries_data_folder_path = ''
-
-        phase_field = discretization.get_scalar_field(name='phase_field')
-
-        phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
-                                       subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+            phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
+                                           subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
                                        nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
                                        comm=MPI.COMM_WORLD)
+
+
+
 
         phase_field.s[0, 0] = phase_field.s[0, 0] ** 2
 
@@ -266,7 +271,7 @@ if compute:
             maxiter=20000,
             callback=callback_G,
             norm_metric=M_fun_green,
-            rtol=False
+            rtol=True
 
         )
         #########

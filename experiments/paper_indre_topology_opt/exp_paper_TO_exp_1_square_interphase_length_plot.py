@@ -24,7 +24,7 @@ cg_tol_exponent = 8
 soft_phase_exponent = 5
 random_init = False
 
-weights=[0.5]
+weights=[0.1]
 # eta = 0.07
 index = 0
 N = 64

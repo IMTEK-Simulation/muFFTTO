@@ -152,9 +152,9 @@ if plot_this:
                 elif nb_iterations[i, j] < white_lim:
                     ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
                             ha='center', va='center', color='black')
-                elif nb_iterations[i, j] > 999:
+                elif nb_iterations[i, j] >= 999:
                     ax.text(i + Nx[0], j + Nx[0], f'{999:.0f}', size=8,
-                            ha='center', va='center', color='black')
+                            ha='center', va='center', color='white')
                 else:
                     ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
                             ha='center', va='center', color='white')
@@ -211,7 +211,7 @@ if plot_this:
                 elif nb_iterations[i, j] < white_lim:
                     ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
                             ha='center', va='center', color='black')
-                elif nb_iterations[i, j] > 999:
+                elif nb_iterations[i, j] >= 999:
                     ax.text(i + Nx[0], j + Nx[0], f'{999:.0f}', size=8,
                             ha='center', va='center', color='white')
                 else:
@@ -439,7 +439,7 @@ if plot_this:
                             ha='center', va='center', color='black')
                 elif nb_iterations[i, j] > 999:
                     ax.text(i + Nx[0], j + Nx[0], f'{999:.0f}', size=8,
-                            ha='center', va='center', color='black')
+                            ha='center', va='center', color='white')
                 else:
                     ax.text(i + Nx[0], j + Nx[0], f'{nb_iterations[i, j]:.0f}', size=8,
                             ha='center', va='center', color='white')

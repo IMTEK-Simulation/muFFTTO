@@ -6,7 +6,7 @@ NUM_RUNS=5
 
 # List of preconditioner types (strings)
 #PRECONDS=("Green")# "Jacobi"
-PRECONDS=("Green")     # "Green" "Green_Jacobi"
+PRECONDS=("Jacobi")     # "Green" "Green_Jacobi"
 NORMS=("norm_rr")
 # List of numeric p values
 PVALUES=(4 1)

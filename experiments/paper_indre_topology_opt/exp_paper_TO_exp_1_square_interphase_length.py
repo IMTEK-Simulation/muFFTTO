@@ -122,9 +122,13 @@ if discretization.fft.communicator.rank == 0:
 
 # create material data of solid phase rho=1
 # create material data of solid phase rho=1
-K_0, G_0 = 1, 0.5
+# K_0, G_0 = 1, 0.5
+#
+# poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
+
+K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1,
+                                                       poison=0)
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
-poison_0 = (3 * K_0 - 2 * G_0) / (2 * (3 * K_0 + G_0))
 
 elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
@@ -627,7 +631,7 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-6,
+                                      gtol=1e-4,
                                       ftol=1e-12,
                                       maxiter=stop - start,
                                       comm=MPI.COMM_WORLD,

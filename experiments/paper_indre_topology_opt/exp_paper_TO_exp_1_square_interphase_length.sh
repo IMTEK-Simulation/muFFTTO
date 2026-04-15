@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 #etas=( 0.05)
-weights=(5.0 )
+weights=(1.0 )
 N=(64)
 etas=$(echo "3 *sqrt(2) / $N" | bc -l)
 
