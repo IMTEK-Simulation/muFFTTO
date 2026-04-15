@@ -24,6 +24,150 @@ figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
 plot_time_vs_dofs = False
 plot_stress_field = False
 plot_data_vs_CG = True
+plot_3D_geometry = True
+
+if plot_3D_geometry:
+    from muFFTTO import domain
+
+    number_of_pixels = 3*(64,)
+    domain_size = [1, 1, 1]
+    Nx = number_of_pixels[0]
+    Ny = number_of_pixels[1]
+    Nz = number_of_pixels[2]
+
+    problem_type = 'elasticity'
+    discretization_type = 'finite_element'
+    element_type = 'trilinear_hexahedron'
+    formulation = 'small_strain'
+
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           nb_of_pixels_global=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    def generate_circular_inclusions(coords, num_inclusions, radius, seed=None):
+        """
+        Generate a boolean array with randomly distributed spherical inclusions
+        with periodic boundary conditions.
+
+        Parameters
+        ----------
+        coords : ndarray, shape [3, Nx, Ny, Nz]
+            Grid coordinates
+        num_inclusions : int
+            Number of inclusions to place
+        radius : float
+            Radius of each inclusion
+        seed : int, optional
+            Random seed for reproducibility
+
+        Returns
+        -------
+        ndarray, shape [Nx, Ny, Nz]
+            Boolean array where 1 indicates inclusion, 0 indicates matrix
+        """
+        if seed is not None:
+            np.random.seed(seed)
+
+        # Get domain bounds and size
+        x_min, x_max = coords[0].min(), coords[0].max()
+        y_min, y_max = coords[1].min(), coords[1].max()
+        z_min, z_max = coords[2].min(), coords[2].max()
+
+        # Domain lengths
+        Lx = x_max - x_min
+        Ly = y_max - y_min
+        Lz = z_max - z_min
+
+        # Initialize output array
+        inclusions = np.zeros(coords.shape[1:], dtype=np.int32)
+
+        # Generate random center positions
+        centers_x = np.random.uniform(x_min, x_max, num_inclusions)
+        centers_y = np.random.uniform(y_min, y_max, num_inclusions)
+        centers_z = np.random.uniform(z_min, z_max, num_inclusions)
+
+        # Mark points inside each inclusion with periodic images
+        for cx, cy, cz in zip(centers_x, centers_y, centers_z):
+            # Compute minimum distance considering periodic images
+            dx = coords[0] - cx
+            dy = coords[1] - cy
+            dz = coords[2] - cz
+
+            # Apply minimum image convention
+            dx = dx - Lx * np.round(dx / Lx)
+            dy = dy - Ly * np.round(dy / Ly)
+            dz = dz - Lz * np.round(dz / Lz)
+
+            distance_sq = dx ** 2 + dy ** 2 + dz ** 2
+            inclusions[distance_sq <= radius ** 2] = 1
+
+        return inclusions
+
+
+    inclusions = generate_circular_inclusions(
+        discretization.fft.coords,
+        num_inclusions=10,
+        radius=0.2,
+        seed=42
+    )
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+
+    def visualize_inclusions_voxels(inclusions, color='blue', edgecolor='k', alpha=0.9, figsize=(8, 8)):
+        """
+        Visualize 3D inclusion geometry using voxels.
+
+        Parameters
+        ----------
+        inclusions : ndarray, shape [Nx, Ny, Nz]
+            Boolean array of inclusions
+        color : str
+            Color of the inclusions
+        edgecolor : str
+            Edge color of voxels ('k' for black, None for no edges)
+        alpha : float
+            Transparency (0-1)
+        figsize : tuple
+            Figure size
+        """
+        # Create boolean array
+        voxelarray = inclusions.astype(bool)
+
+        # Set colors
+        colors = np.empty(voxelarray.shape, dtype=object)
+        colors[voxelarray] = color
+
+        # Plot
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(projection='3d')
+        ax.voxels(voxelarray, facecolors=colors, edgecolor=edgecolor, alpha=alpha)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('3D Inclusions')
+
+        plt.tight_layout()
+        plt.show()
+
+        # Print volume fraction
+        vf = inclusions.sum() / inclusions.size
+        print(f"Volume fraction: {vf:.2%}")
+
+
+    visualize_inclusions_voxels(inclusions)
+
+    # Or with custom options
+    visualize_inclusions_voxels(inclusions, color='red', edgecolor=None, alpha=0.7)
 
 if plot_time_vs_dofs:
     # print time vs DOFS
@@ -116,7 +260,7 @@ if plot_data_vs_CG:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx = 2 ** 8
+    Nx = 2 ** 4#8
     Ny = Nx
     Nz = Nx
     it_max = 10

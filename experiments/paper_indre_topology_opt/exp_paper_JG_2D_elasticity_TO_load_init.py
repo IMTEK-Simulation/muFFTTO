@@ -32,10 +32,11 @@ from muFFTTO import microstructure_library
 parser = argparse.ArgumentParser(
     prog="exp_paper_JG_2D_elasticity_TO.py", description="Solve topology optimization of negative poison ratio"
 )
-parser.add_argument("-n", "--nb_pixels", default="32")
+parser.add_argument("-n", "--nb_pixels", default="16")
 parser.add_argument("-start", "--first_iteration", default="0")
-parser.add_argument("-stop", "--last_iteration", default="10")
-parser.add_argument("-cg_tol", "--cg_tol_exponent", default="6")
+parser.add_argument("-stop", "--last_iteration", default="100000")
+parser.add_argument("-cg_tol", "--cg_tol_exponent", default="8")
+parser.add_argument("-soft", "--soft_phase_exponent", default="5")
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
     "-p", "--preconditioner_type",
@@ -59,7 +60,7 @@ parser.add_argument(
 args = parser.parse_args()
 nb_pixels = int(args.nb_pixels)
 cg_tol_exponent = int(args.cg_tol_exponent)
-
+soft_phase_exponent = int(args.soft_phase_exponent)
 preconditioner_type = args.preconditioner_type
 save_data = args.save_phases
 start = int(args.first_iteration)
@@ -110,6 +111,12 @@ elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
+if soft_phase_exponent == 0:
+    soft_phase = 0
+else:
+    soft_phase = 10 ** (-soft_phase_exponent)
+    #soft_phase = 0
+elastic_C_void = elastic_C_0 * soft_phase
 # if MPI.COMM_WORLD.rank == 0:
 # print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 # # material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
@@ -132,23 +139,23 @@ def M_fun_Green(x, Px):
 
 
 # set up load cases
-nb_load_cases = 3
+nb_load_cases = 2
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_multip = 0.01
+macro_multip = 1.
 macro_gradients[0] = np.array([[1.0, 0.0],
                                [0., .0]]) * macro_multip
 macro_gradients[1] = np.array([[.0, .0],
                                [.0, 1.0]]) * macro_multip
-macro_gradients[2] = np.array([[.0, 0.5],
-                               [0.5, .0]]) * macro_multip
+# macro_gradients[2] = np.array([[.0, 0.5],
+#                                [0.5, .0]]) * macro_multip
 
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
 left_macro_gradients[0] = np.array([[.0, .0],
                                     [.0, 1.0]]) * macro_multip
 left_macro_gradients[1] = np.array([[1.0, .0],
                                     [.0, .0]]) * macro_multip
-left_macro_gradients[2] = np.array([[.0, .5],
-                                    [0.5, 0.0]]) * macro_multip
+# left_macro_gradients[2] = np.array([[.0, .5],
+#                                     [0.5, 0.0]]) * macro_multip
 if MPI.COMM_WORLD.rank == 0:
     print('macro_gradients = \n {}'.format(macro_gradients))
 
@@ -176,6 +183,7 @@ E_target = 2 * G_target_auxet * (1 + poison_target)
 # E_target=2*G_target_auxet*(1+poison_target)
 # test materials
 #
+#C_targer = domain.get_elastic_tangent(E=E_target, nu=poison_target, mode="plane_strain")
 K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
 
 elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
@@ -219,7 +227,7 @@ info_mech['residual_rz'] = []
 info_adjoint = {}
 info_adjoint['num_iteration_adjoint'] = []
 info_adjoint['residual_rz'] = []
-weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
+#weights = [5]  # np.concatenate([np.arange(0.1, 2., 1)])
 
 w_mult = 5
 eta_mult = 0.01
@@ -255,8 +263,9 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     # Material data in quadrature points
-    material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                             np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+    material_data_field_C_0_rho_ijklqxyz.s = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                             np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                             elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 
     # objective function phase field terms
     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
@@ -269,6 +278,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     topology_optimization.sensitivity_phase_field_term_FE_NEW(
         discretization=discretization,
         base_material_data_ijkl=elastic_C_0,
+        void_material_data_ijkl=elastic_C_void,
         phase_field_1nxyz=phase_field_1nxyz,
         p=p,
         eta=eta,
@@ -399,6 +409,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             load_case], info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
             discretization=discretization,
             base_material_data_ijkl=elastic_C_0,
+            void_material_data_ijkl=elastic_C_void,
             displacement_field_inxyz=displacement_field_load_case[load_case],
             adjoint_field_inxyz=adjoint_field_load_case[load_case],
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
@@ -437,7 +448,7 @@ if __name__ == '__main__':
     import os
 
     script_name = os.path.splitext(os.path.basename(__file__))[
-                      0] + f'_random_{random_init}' + f'_N_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}'
+                      0] + f'_random_{random_init}' + f'_N_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}' + f'_soft_{soft_phase_exponent}'
     file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
     data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
     figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
@@ -498,6 +509,17 @@ if __name__ == '__main__':
                          nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
                          components_are_leading=True,
                          comm=MPI.COMM_WORLD)
+        # perturbed_geom=phase + phase.transpose() + 0.2 * np.random.rand(*phase.shape)
+        # perturbed_geom/=perturbed_geom.max()
+        # phase_field_0.s[0, 0] = perturbed_geom
+        # save_npy(data_folder_path + f'{preconditioner_type}' +  f'_iteration_{5425}' + f'.npy',
+        #                  perturbed_geom,
+        #                    tuple(discretization.subdomain_locations_no_buffers),
+        #                     tuple(discretization.nb_of_pixels_global),
+        #                 comm=MPI.COMM_WORLD)
+
+        #phase_field_0.s[0, 0]=perturbed_geom
+        #apply_filter(phase_field_0)
         # save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
         #          result_norms.reshape([*discretization.nb_of_pixels]),
         #          tuple(discretization.subdomain_locations_no_buffers),
@@ -525,7 +547,7 @@ if __name__ == '__main__':
     norms_max_delta_x = []
     norms_norm_delta_x = []
 
-    iterat = 0
+    iterat = np.copy(start)
 
     _info_iter = {}
 
@@ -540,7 +562,7 @@ if __name__ == '__main__':
                          result_norms.reshape([*discretization.nb_of_pixels]),
                          tuple(discretization.subdomain_locations_no_buffers),
                          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-                if MPI.COMM_WORLD.size == 1:
+                if MPI.COMM_WORLD.rank == 0:
                     print(data_folder_path + file_data_name_it + f'.npy')
 
             if MPI.COMM_WORLD.rank == 0:
@@ -565,8 +587,8 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-7,
-                                      ftol=1e-7,
+                                      gtol=1e-9,
+                                      ftol=1e-16,
                                       maxiter=stop - start,
                                       comm=MPI.COMM_WORLD,
                                       disp=True,
@@ -595,13 +617,13 @@ if __name__ == '__main__':
 
     _info = {}
     # if MPI.COMM_WORLD.size == 1:
-    # print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f' ')
-    # plt.figure()
-    # plt.contourf(solution_phase.s[0, 0], cmap=mpl.cm.Greys)
-    # # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-    # plt.clim(0, 1)
-    # plt.colorbar()
-    # plt.show()
+    #     print('rank' f'{MPI.COMM_WORLD.rank:6} phase=' f' ')
+    #     plt.figure()
+    #     plt.contourf(solution_phase.s[0, 0], cmap=mpl.cm.Greys)
+    #     # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+    #     plt.clim(0, 1)
+    #     plt.colorbar()
+    #     plt.show()
 
     if MPI.COMM_WORLD.rank == 0:
         _info["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
@@ -622,7 +644,7 @@ if __name__ == '__main__':
     _info['norms_pf'] = norms_pf
     _info['nb_iterations'] = iterat
 
-    file_data_name = f'_iteration_{start + iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
+    file_data_name = f'_iteration_{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
     save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
              solution_phase.s[0].mean(axis=0),
@@ -643,8 +665,9 @@ if __name__ == '__main__':
     #     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+    material_data_field_C_0_rho_quad.s = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                         np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                         elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 
     homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
 

@@ -30,6 +30,7 @@ def conjugate_gradients_mugrid(
         x: Field,
         P: callable,
         tol: float = 1e-6,
+        rtol: bool = True,
         maxiter: int = 1000,
         callback: callable = None,
         norm_metric: callable = None,
@@ -69,6 +70,7 @@ def conjugate_gradients_mugrid(
     x : array_like
         Approximate solution to the system Ax = b. (Same as input field x.)
     """
+
     tol_sq = tol * tol
     p = fc.real_field(
         unique_name="cg-search-direction",  # name of the field
@@ -96,6 +98,7 @@ def conjugate_gradients_mugrid(
     P(r, z)
     p.s = np.copy(z.s)  # residual
 
+
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
 
@@ -108,15 +111,19 @@ def conjugate_gradients_mugrid(
         norm_metric(r, Pr)
         stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
 
+
     elif norm_metric is None:
         stop_crit = rr
 
     if stop_crit < tol_sq:
         return x
 
-    if callback:
-        callback(0, x.s, r.s, p.s, z.s, stop_crit)
+    if rtol:
+        tol_sq = tol_sq * stop_crit
 
+    if callback:
+        #callback(0, x.s, r.s, p.s, z.s, stop_crit)
+        callback(0, x.s, r.s, p.s, z.s, stop_crit)
     for iteration in range(maxiter):
         # Compute Hessian product
         hessp(p, Ap)
@@ -151,8 +158,10 @@ def conjugate_gradients_mugrid(
         # Update search direction
         # beta = next_rr / rr
         beta = next_rz / rz
-        p.s = z.s + beta * p.s
+
         rz = next_rz
+
+        p.s = z.s + beta * p.s
         # p.s *= beta
         # p.s += z.s
 
@@ -235,8 +244,13 @@ def conjugate_gradients_mugrid_experimental(
     P(r, z)
     p.s = np.copy(z.s)  # residual
 
+    norms = dict()
+
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
+
+
+
 
     if norm_metric is not None:
         Pr = fc.real_field(
@@ -254,7 +268,22 @@ def conjugate_gradients_mugrid_experimental(
         return x
 
     if callback:
+        # callback(0, x.s, r.s, p.s, z.s, stop_crit)
         callback(0, x.s, r.s, p.s, z.s, stop_crit)
+
+    #  % in the paper this is denoted as k
+    l = 0
+    d = 0
+    Delta = []
+    curve = []
+    estim = []
+    norms['energy_lower_bound']= []
+    delay = []
+    if "tau" in kwargs:
+        tau = kwargs['tau']
+    else:
+        tau = 0.25
+
 
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -284,18 +313,44 @@ def conjugate_gradients_mugrid_experimental(
         if callback:
             callback(iteration + 1, x.s, r.s, p.s, z.s, stop_crit)
 
-        if stop_crit < tol_sq:
-            return x
+
+
 
         # Update search direction
         # beta = next_rr / rr
         beta = next_rz / rz
         p.s = z.s + beta * p.s
+
+        # Energy - error estimator
+        Delta.append(alpha * rz)
+        curve.append(0)
+        curve = (np.asarray(curve) + Delta[-1]).tolist()
+
+        if iteration > 1:
+            # safety factor
+            S = findS(curve, Delta, l)
+
+            num = S * Delta[-1]
+            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
+            while (d >= 0) and (num / den <= tau):
+                delay.append(d)
+                norms['energy_lower_bound'].append(den + Delta[-1])
+                l = l + 1
+                d = d - 1
+                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
+
+            d = d + 1
+
         rz = next_rz
         # p.s *= beta
         # p.s += z.s
+        if stop_crit < tol_sq:
+            return x, norms
 
-    warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+    if comm.rank == 0:
+        warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+
+    return x, norms
 
 
 def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',

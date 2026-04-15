@@ -92,8 +92,6 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
         print('  ----   ----          ------       ---------        --------')
         print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
               f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
-    # set macroscopic gradient
-    macro_gradient = np.array([[1.0, 0], [0, 1.0]])
 
     # create material data field
     K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -167,7 +165,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):
                                                           material_data_field_C_0.s[0, 0, 0, 0].shape))
 
     # set macroscopic gradient
-    macro_gradient = np.array([[1.0, 0], [0, 1.0]])
+    macro_gradient = np.array([[1.0, 0.5], [0.5, 1.0]])
     macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
                                                    macro_gradient_field_ijqxyz=macro_gradient_field)

@@ -36,8 +36,8 @@ else:
 
 # PLOT CONVERGENCE
 # results set up
-number_of_pixels = (1024, 1024)
-results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2}_mat{mat_contrast}_ani{a_ani}'
+number_of_pixels = (128, 128)
+results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2:.2e}_mat{mat_contrast:.2e}_ani{a_ani:.2e}'
 
 _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
 temp_field = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
@@ -156,7 +156,7 @@ for i in np.arange(rhos.__len__()):
     rho = rhos[i]
     mat_contrast_2 = 10 ** rho
 
-    results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2}_mat{mat_contrast}_ani{a_ani}'
+    results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2:.2e}_mat{mat_contrast:.2e}_ani{a_ani:.2e}'
 
     _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
     temp_field = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
@@ -290,7 +290,7 @@ for i in range(grids_sizes.__len__()):
     # results set up
     number_of_pixels = (2 ** grids_sizes[i], 2 ** grids_sizes[i])
 
-    results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2}_mat{mat_contrast}_ani{a_ani}'
+    results_name = f'N{number_of_pixels[0]}_rho_inc{mat_contrast_2:.2e}_mat{mat_contrast:.2e}_ani{a_ani:.2e}'
     _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
     temp_field = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 

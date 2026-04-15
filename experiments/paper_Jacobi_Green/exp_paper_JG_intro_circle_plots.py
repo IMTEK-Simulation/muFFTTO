@@ -155,9 +155,11 @@ if plot_N32:
     ax_grad.set_xticks([])
     ax_grad.set_xticklabels([])
     ax_grad.set_ylabel(r'$\|\nabla \rho_i \|_{\infty}$')
+    ax_grad.text(0.018 , 0.65, rf'\textbf{{(c)}}', transform=ax_grad.transAxes)
+
     ax_grad.annotate(text=f'Density gradient',  # \n contrast = 100
-                       xy=(filter_ids[3], grad_max_inf[:nb_of_filters][3]),
-                       xytext=(200., 100.),
+                       xy=(filter_ids[100], grad_max_inf[:nb_of_filters][100]),
+                       xytext=(300., 150.),
                        arrowprops=dict(arrowstyle='->',
                                        color='purple',
                                        lw=1,
@@ -179,9 +181,11 @@ if plot_N32:
     ax_contrast.set_xticks([0, rhos[1], rhos[2]])
     ax_contrast.set_xticklabels([0, 'I', 'II'])
     ax_contrast.set_xlabel(r'\# filter applications - $i$')
-    ax_contrast.annotate(text=f'Material contrast',  # \n contrast = 100
+    ax_contrast.text(0.012  , 0.5, rf'\textbf{{(d)}}', transform=ax_contrast.transAxes)
+
+    ax_contrast.annotate(text=f'Total phase contrast',  # \n contrast = 100
                        xy=(filter_ids[1200], max_phase_contrast[:nb_of_filters][1200]),
-                       xytext=(200., 10.),
+                       xytext=(300., 5.),
                        arrowprops=dict(arrowstyle='->',
                                        color='r',
                                        lw=1,
@@ -581,6 +585,8 @@ if plot_v3:
     plt.savefig(figures_folder_path + fname, bbox_inches='tight')
     plt.show()
 
+quit()
+#
 contrast = 1e-4
 nb_of_filters = 110
 filter_ids = np.arange(nb_of_filters)

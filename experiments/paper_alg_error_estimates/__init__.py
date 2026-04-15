@@ -58,7 +58,9 @@ _colors = {
     '2': 'blue',
     '3': 'green',
     '4': 'orange',
-    '5': 'purple'
+    '5': 'purple',
+    '6': 'olive',
+    '7': 'brown'
 }
 
 _markers = {

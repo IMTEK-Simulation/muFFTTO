@@ -1,0 +1,270 @@
+import numpy as np
+import scipy as sc
+import time
+import sys
+
+sys.path.append('..')  # Add parent directory to path
+
+from mpi4py import MPI
+from NuMPI.IO import save_npy, load_npy
+
+from muFFTTO import domain
+from muFFTTO import solvers
+from muFFTTO import microstructure_library
+
+problem_type = 'elasticity'
+discretization_type = 'finite_element'
+element_type = 'linear_triangles_tilled' #linear_triangles_tilled linear_triangles
+formulation = 'small_strain'
+
+domain_size = [1,np.sqrt(3) / 2]
+number_of_pixels = (1024, 1024)
+
+my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                  problem_type=problem_type)
+
+discretization = domain.Discretization(cell=my_cell,
+                                       nb_of_pixels_global=number_of_pixels,
+                                       discretization_type=discretization_type,
+                                       element_type=element_type)
+start_time = time.time()
+print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
+      f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
+# set macroscopic gradient
+macro_gradient = np.array([[1.0, 0], [0, 0.0]])
+# create material data of solid phase rho=1
+
+# create material data field
+# K_0, G_0 = 1, 0.5 #domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+#K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+K_0, G_0 = 1, 0.5
+
+elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                 K=K_0,
+                                                 mu=G_0,
+                                                 kind='linear')
+print(domain.compute_Voigt_notation_4order(elastic_C_1))
+
+material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
+
+# populate the field with C_1 material
+material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                                                        *discretization.nb_of_pixels])))
+
+print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+
+# material distribution
+geometry_ID = 'square_inclusion'
+
+phase_field = discretization.get_scalar_field(name='phase_field')
+# phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+#                                                           microstructure_name=geometry_ID,
+#                                                           coordinates=discretization.fft.coords)
+folder_name = 'experiments/exp_data/'  # s'exp_data/'
+
+#phase_field = np.random.rand(*discretization.get_scalar_sized_field().shape)  # set random distribution#
+#phase_field_l = np.load('../experiments/exp_data/lbfg_muFFTTO_elasticity_exp_2D_elasticity_TO_indre_3exp_N32_E_target_0.15_Poisson_-0.5_Poisson0_0.0_w4.0_eta0.0203_p2_bounds=False_FE_NuMPI6_nb_load_cases_3_energy_objective_False_random_True_it20.npy', allow_pickle=True)
+#phase_field_l = np.load('../experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy', allow_pickle=True)
+# phase_field_l = load_npy('experiments/exp_data/exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy',
+#                      tuple(discretization.fft.subdomain_locations),
+#                      tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
+# phase_field.s[0, 0]  = load_npy('./exp_2D_elasticity_TO_indre_3exp_N1024_Et_0.15_Pt_-0.5_P0_0.0_w5.0_eta0.01_p2_mpi90_nlc_3_e_False_it6398.npy',
+#                          subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+#                          nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+#                  components_are_leading=True,
+#                  comm=MPI.COMM_WORLD)
+phase_field.s[0, 0]  = load_npy('./Green_Jacobi_hexa_1024_iteration_3940.npy',
+                         subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+                         nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+                 components_are_leading=True,
+                 comm=MPI.COMM_WORLD)
+# phase_field.s[0, 0] = load_npy('./Green_Jacobi_iteration_740.npy',
+#                          subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+#                          nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+#                  components_are_leading=True,
+#                  comm=MPI.COMM_WORLD)
+
+# phase = 1 * np.ones(number_of_pixels)
+inc_contrast = 0.
+# phase_field =  0.5*np.random.rand(*number_of_pixels)
+# phase[10:30, 10:30] = phase[10:30, 10:30] * inc_contrast
+# Square inclusion with: Obsonov solution
+# phase[phase.shape[0] * 1 // 4:phase.shape[0] * 3 // 4,
+# phase.shape[1] * 1 // 4:phase.shape[1] * 3 // 4] *= inc_contrast
+
+# phase_fem = np.zeros([2, *number_of_pixels])
+# phase_fem[:] = phase_field_l
+
+#matrix_mask = phase_field.s[0, 0] > 0
+#inc_mask = phase_field.s[0, 0] == 0
+
+# # apply material distribution
+#material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
+#material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
+
+# Material data in quadrature points
+elastic_C_void = elastic_C_1 * 1e-5
+
+# Phase field  in quadrature points
+phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
+    name='phase_field_at_quads_in_objective_function_multiple_load_cases')
+discretization.apply_N_operator_mugrid(phase_field, phase_field_at_quad_poits_1qxyz)
+material_data_field_C_0.s = (elastic_C_1 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                         np.power(phase_field_at_quad_poits_1qxyz.s, 2)[0, 0, :, ...] + \
+                                         elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
+
+
+
+
+def K_fun(x, Ax):
+
+    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
+                                              input_field_inxyz=x,
+                                              output_field_inxyz=Ax,
+                                              formulation='small_strain')
+    discretization.fft.communicate_ghosts(Ax)
+
+preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
+
+def M_fun_Green(x, Px):
+    """
+    Function to compute the product of the Preconditioner matrix with a vector.
+    The Preconditioner is represented by the convolution operator.
+    """
+    discretization.fft.communicate_ghosts(x)
+    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                               input_nodal_field_fnxyz=x,
+                                               output_nodal_field_fnxyz=Px)
+    # Px.s[...] = 1 * x.s[...]
+    # print()
+
+
+
+
+# Set up right hand side
+macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                               macro_gradient_field_ijqxyz=macro_gradient_field)
+
+# Solve mechanical equilibrium constrain
+rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                             macro_gradient_field_ijqxyz=macro_gradient_field,
+                             rhs_inxyz=rhs_field)
+
+preconditioner_type='Green_Jacobi'
+if preconditioner_type == 'Green':
+    M_fun = M_fun_Green
+elif preconditioner_type == 'Jacobi':
+    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+        material_data_field_ijklqxyz=material_data_field_C_0)
+
+
+    def M_fun_Jacobi(x, Px):
+        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+        discretization.fft.communicate_ghosts(Px)
+
+
+    M_fun = M_fun_Jacobi
+
+elif preconditioner_type == 'Green_Jacobi':
+    K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+        material_data_field_ijklqxyz=material_data_field_C_0)
+
+
+    def M_fun_Green_Jacobi(x, Px):
+        discretization.fft.communicate_ghosts(x)
+        x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
+
+        x_jacobi_temp.s = K_diag_alg.s * x.s
+        discretization.apply_preconditioner_mugrid(
+            preconditioner_Fourier_fnfnqks=preconditioner,
+            input_nodal_field_fnxyz=x_jacobi_temp,
+            output_nodal_field_fnxyz=Px)
+
+        Px.s = K_diag_alg.s * Px.s
+        discretization.fft.communicate_ghosts(Px)
+
+
+    M_fun = M_fun_Green_Jacobi
+def callback(it, x, r, p, z, stop_crit_norm):
+    """
+    Callback function to print the current solution, residual, and search direction.
+    """
+    norm_of_rr = discretization.fft.communicator.sum(np.dot(r.ravel(), r.ravel()))
+    if discretization.fft.communicator.rank == 0:
+        print(f"{it:5} norm of residual = {norm_of_rr:.5}")
+
+solution_field = discretization.get_unknown_size_field(name='solution')
+
+solvers.conjugate_gradients_mugrid(
+    comm=discretization.fft.communicator,
+    fc=discretization.field_collection,
+    hessp=K_fun,  # linear operator
+    b=rhs_field,
+    x=solution_field,
+    P=M_fun,
+    tol=1e-3,
+    maxiter=2000,
+    callback=callback,
+)
+
+
+# print(norms)
+# ----------------------------------------------------------------------
+# compute homogenized stress field corresponding to displacement
+homogenized_stress = discretization.get_homogenized_stress_mugrid(
+    material_data_field_ijklqxyz=material_data_field_C_0,
+    displacement_field_inxyz=solution_field,
+    macro_gradient_field_ijqxyz=macro_gradient_field,
+    formulation='small_strain')
+
+print('homogenized stress = \n {}'.format(homogenized_stress))
+print('homogenized stress in Voigt notation = \n {}'.format(domain.compute_Voigt_notation_2order(homogenized_stress)))
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print("Elapsed time: ", elapsed_time)
+start_time = time.time()
+dim = discretization.domain_dimension
+homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
+# compute whole homogenized elastic tangent
+for i in range(dim):
+    for j in range(dim):
+        # set macroscopic gradient
+        macro_gradient = np.zeros([dim, dim])
+        macro_gradient[i, j] = 1
+
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
+        # Set up right hand side
+        # Solve mechanical equilibrium constrain
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                           macro_gradient_field_ijqxyz=macro_gradient_field,
+                                           rhs_inxyz=rhs_field)
+        # rhs_ij = discretization.get_rhs(material_data_field_C_0_rh, macro_gradient_field)
+
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.fft.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,
+            x=solution_field,
+            P=M_fun,
+            tol=1e-3,
+            maxiter=2000,
+            callback=callback,
+        )
+        # ----------------------------------------------------------------------
+        # compute homogenized stress field corresponding
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            displacement_field_inxyz=solution_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            formulation='small_strain')
+
+print('homogenized elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(homogenized_C_ijkl)))
+end_time = time.time()
+elapsed_time = end_time - start_time
+print("Elapsed time: ", elapsed_time)

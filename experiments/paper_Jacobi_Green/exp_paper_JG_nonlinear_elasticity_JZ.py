@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
-parser.add_argument("-n", "--nb_pixel", default="32")
+parser.add_argument("-n", "--nb_pixel", default="16")
 parser.add_argument("-exp", "--exponent_elastic", default="10")
 parser.add_argument(
     "-p", "--preconditioner_type",

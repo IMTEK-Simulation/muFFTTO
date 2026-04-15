@@ -206,7 +206,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                         *quad_point_coords)
 
             my_domain.N_at_quad_points_qnijk = np.expand_dims(np.expand_dims(N_at_quad_points_qijk, axis=1), axis=0)
-            #print()
+            print()
 
         case 'linear_triangles_tilled':
             if my_domain.domain_dimension != 2:
@@ -263,7 +263,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                 [lambda xi, eta:  ((x_1*y_2-y_1*x_2)+ (y_1-y_2)*x_shift(xi*h_x,eta*h_y) +(x_2-x_1)*eta*h_y)/(2*element_area) if eta < 1 - xi else 0 * xi,
                  lambda xi, eta:  ((x_2*y_0-y_2*x_0)+ (y_2-y_0)*x_shift(xi*h_x,eta*h_y) +(x_0-x_2)*eta*h_y)/(2*element_area) if eta < 1 - xi else ((x_3*y_2-y_3*x_2)+ (y_3-y_2)*x_shift(xi*h_x,eta*h_y) +(x_2-x_3)*eta*h_y)/(2*element_area)    ],
                 [lambda xi, eta:  ((x_0*y_1-y_0*x_1)+ (y_0-y_1)*x_shift(xi*h_x,eta*h_y) +(x_1-x_0)*eta*h_y)/(2*element_area)if eta < 1 - xi else ((x_1*y_3-y_1*x_3)+ (y_1-y_3)*x_shift(xi*h_x,eta*h_y) +(x_3-x_1)*eta*h_y)/(2*element_area),
-                 lambda xi, eta:                                                       0 * xi if eta < 1 - xi else ((x_2*y_1-y_2*x_1)+ (y_2-y_1)*x_shift(xi*h_x,eta*h_y) +(x_1-x_2)*eta*h_y)/(2*element_area)]
+                 lambda xi, eta:   0 * xi if eta < 1 - xi else ((x_2*y_1-y_2*x_1)+ (y_2-y_1)*x_shift(xi*h_x,eta*h_y) +(x_1-x_2)*eta*h_y)/(2*element_area)]
             ])
 
             # @formatter:on
@@ -327,10 +327,27 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             if my_domain.domain_dimension == 2:
                 B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 3)
             elif my_domain.domain_dimension == 3:
-                B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
-                warnings.warn('Swapaxes for 3D is not tested.')
+                warnings.warn(f'{element_type} is not implemented in 3D.')
+                #B_at_pixel_dnijkq = np.swapaxes(B_at_pixel_dnijkq, 2, 4)
+                #warnings.warn('Swapaxes for 3D is not tested.')
 
             my_domain.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
+
+            N_at_quad_points_qijk = np.zeros(
+                [my_domain.nb_quad_points_per_pixel, *my_domain.domain_dimension * (2,)])
+            for quad_point_idx in range(my_domain.nb_quad_points_per_pixel):
+                quad_point_coords = my_domain.quad_points_coord_parametric[:, quad_point_idx]
+                # iteration over all voxel corners
+                for pixel_node in np.ndindex(*np.ones(my_domain.domain_dimension, dtype=int) * 2):
+                    N_at_quad_points_qijk[(quad_point_idx, *pixel_node)] = my_domain.N_basis_interpolator_array[
+                        pixel_node](
+                        *quad_point_coords)
+
+            my_domain.N_at_quad_points_qnijk = np.expand_dims(np.expand_dims(N_at_quad_points_qijk, axis=1), axis=0)
+
+
+
+
 
             return
         case 'bilinear_rectangle':

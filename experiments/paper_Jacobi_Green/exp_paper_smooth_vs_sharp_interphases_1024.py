@@ -67,11 +67,11 @@ def scale_field_log(field, min_val, max_val):
 
 plot = False  # plot rediduals
 plot_cg_tol_vs_error = False
-plot_solution_differences = True
+plot_solution_differences = False
 
 store_fields = True
-compute = False
-enforce_mean = False
+compute = True
+# enforce_mean = False
 if compute:
     tol_cg = 10 ** (-cg_tol_exponent)
     domain_size = [1, 1]
@@ -119,15 +119,23 @@ if compute:
     for sharp in [False, True]:
         _info = {}
         # material distribution
-        name = 'microstructure_1024'
-        geometries_data_folder_path = ''
-        geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
         phase_field = discretization.get_scalar_field(name='phase_field')
-
-        phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
-                                       subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+        name = 'microstructure_1024'
+        try:
+            geometries_data_folder_path = '//work/classic/fr_ml1145-martin_workspace_01/muFFTTO/experiments/paper_Jacobi_Green/'
+            phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
+                                           subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
+                                           nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
+                                           comm=MPI.COMM_WORLD)
+        except:
+            geometries_data_folder_path = ''
+            phase_field.s[0, 0] = load_npy(os.path.expanduser(geometries_data_folder_path + name + f'.npy'),
+                                           subdomain_locations=tuple(discretization.subdomain_locations_no_buffers),
                                        nb_subdomain_grid_pts=tuple(discretization.nb_of_pixels),
                                        comm=MPI.COMM_WORLD)
+
+
+
 
         phase_field.s[0, 0] = phase_field.s[0, 0] ** 2
 
@@ -262,13 +270,23 @@ if compute:
             tol=tol_cg,
             maxiter=20000,
             callback=callback_G,
-            norm_metric=M_fun_green
+            norm_metric=M_fun_green,
+            rtol=True
+
         )
         #########
         solution_gradient_field_G = discretization.get_gradient_size_field(name='solution_gradient_field_G')
         discretization.apply_gradient_operator_symmetrized_mugrid(
             u_inxyz=solution_field_G,
             grad_u_ijqxyz=solution_gradient_field_G)
+
+        stress_field_G = discretization.get_gradient_size_field(name='stress')
+
+        discretization.get_stress_field_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho,
+            displacement_field_inxyz=solution_field_G,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            output_stress_field_ijqxyz=stress_field_G)
 
         norm_disp_G = np.sqrt(discretization.fft.communicator.sum(
             np.dot(solution_field_G.s.ravel(), solution_field_G.s.ravel())))
@@ -285,6 +303,11 @@ if compute:
 
             results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'solution_gradient_field_G')
             save_npy(data_folder_path + results_name + f'.npy', solution_gradient_field_G.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'stress_field_G')
+            save_npy(data_folder_path + results_name + f'.npy', stress_field_G.s.mean(axis=1),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
@@ -319,7 +342,8 @@ if compute:
             tol=tol_cg,
             maxiter=1,
             callback=callback_J,
-            norm_metric=M_fun_green
+            norm_metric=M_fun_green,
+            rtol=False
         )
 
         solution_gradient_field_J = discretization.get_gradient_size_field(name='solution_gradient_field_J')
@@ -369,7 +393,8 @@ if compute:
             tol=tol_cg,
             maxiter=20000,
             callback=callback_GJ,
-            norm_metric=M_fun_green
+            norm_metric=M_fun_green,
+            rtol=False
         )
         solution_gradient_field_GJ = discretization.get_gradient_size_field(name='solution_gradient_field_GJ')
         discretization.apply_gradient_operator_symmetrized_mugrid(
@@ -380,6 +405,13 @@ if compute:
             np.dot(solution_field_GJ.s.ravel(), solution_field_GJ.s.ravel())))
         norm_strain_GJ = np.sqrt(discretization.fft.communicator.sum(
             np.dot(solution_gradient_field_GJ.s.ravel(), solution_gradient_field_GJ.s.ravel())))
+        stress_field_GJ = discretization.get_gradient_size_field(name='stress_field_GJ')
+
+        discretization.get_stress_field_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0_rho,
+            displacement_field_inxyz=solution_field_GJ,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            output_stress_field_ijqxyz=stress_field_GJ)
 
         solution_field_GJ_zero_mean = discretization.get_unknown_size_field(name='solution_field_GJ_zero_mean')
 
@@ -417,6 +449,10 @@ if compute:
             save_npy(data_folder_path + results_name + f'.npy', solution_gradient_field_GJ.s.mean(axis=1),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{cg_tol_exponent}' + f'stress_field_GJ')
+            save_npy(data_folder_path + results_name + f'.npy', stress_field_GJ.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         _info['norm_strain_error'] = norm_strain_error
         _info['norm_disp_error'] = norm_disp_error
@@ -452,7 +488,7 @@ if plot_solution_differences:
     # gs = fig.add_gridspec(1, 3)
     gs_global = fig.add_gridspec(1, 2, width_ratios=[0.03, 3.7], wspace=0.2)
 
-    gs_twodplots = gs_global[1].subgridspec(1, 3, width_ratios=[1,1,1.7],  wspace=0.13 )  # 0.1, 1, 4
+    gs_twodplots = gs_global[1].subgridspec(1, 3, width_ratios=[1, 1, 1.7], wspace=0.13)  # 0.1, 1, 4
 
     gs_disp = gs_twodplots[0].subgridspec(2, 1, width_ratios=[1], hspace=0.1, )  # 0.1, 1, 4
 
@@ -464,38 +500,43 @@ if plot_solution_differences:
     row = 0
     max_disp = 0
     min_disp = 1
-    max_grad= 0
-    min_grad= 1
+    max_grad = 0
+    min_grad = 1
 
     for sharp in [False, True]:
 
         ax_disp = fig.add_subplot(gs_disp[row, 0])
-        if row ==0:
+        if row == 0:
             ax_disp.text(
-                0.5, 1.3, f'Displacement  '+fr' $  \tilde{{\mathbf{{u}} }}_{{1}} $',
-                #+fr' $| \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$',
+                0.5, 1.3, f'Displacement  ' + fr' $  \tilde{{\mathbf{{u}} }}_{{1}} $',
+                # +fr' $| \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$',
                 fontsize=13,
                 color="k",
                 ha="center", va="center",
-               # bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.5"),
+                # bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.5"),
                 transform=ax_disp.transAxes
             )
         ax_disp.text(0.00, 1.05, rf'\textbf{{(a.{row + 1}}})  ', transform=ax_disp.transAxes)
 
-        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_field_G')
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'solution_field_G')
         solution_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_field_GJ_zero_mean')
+        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'solution_field_GJ_zero_mean')
         solution_field_GJ_zero_mean = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
-        max_disp = np.max([np.abs((solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0])).max(), max_disp])
-        min_disp = np.min([np.abs((solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0])).min(), min_disp])
-
+        max_disp = np.max([np.abs(
+            (solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0]) / np.abs(solution_field_G[0, 0])).max(),
+                           max_disp])
+        min_disp = np.min([np.abs(
+            (solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0]) / np.abs(solution_field_G[0, 0])).min(),
+                           min_disp])
+        print(f'max disp {max_disp}, {min_disp}')
         divnorm = mpl.colors.LogNorm(vmin=1e-9, vmax=1e-3)
-        #cmap_ = mpl.cm.Reds  # mpl.cm.seismic #mpl.cm.Greys
+        # cmap_ = mpl.cm.Reds  # mpl.cm.seismic #mpl.cm.Greys
         cmap_ = mpl.colors.LinearSegmentedColormap.from_list("white_red", ["white", "red"])
-        pcm = ax_disp.pcolormesh(np.abs(solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0])/np.abs( solution_field_G[0, 0]),
-                                 cmap=cmap_, linewidth=0,
-                                 rasterized=True, norm=divnorm)
+        pcm = ax_disp.pcolormesh(
+            np.abs(solution_field_GJ_zero_mean[0, 0] - solution_field_G[0, 0]) / np.abs(solution_field_G[0, 0]),
+            cmap=cmap_, linewidth=0,
+            rasterized=True, norm=divnorm)
 
         ax_disp.set_yticks([1, 512, 1024])
         if row == 0:
@@ -515,11 +556,11 @@ if plot_solution_differences:
         cbar = plt.colorbar(pcm, location='left', cax=ax_cbar)
         cbar.minorticks_off()
         cbar.ax.yaxis.tick_left()
-        cbar.set_ticks(ticks=[  1e-9, 1e-7,    1e-5,1e-3])
-        cbar.set_ticklabels([   fr'$10^{{{-9}}}$', fr'$10^{{{-7}}}$', fr'$10^{{{-5}}}$', fr'$10^{{{-3}}}$',])
+        cbar.set_ticks(ticks=[1e-9, 1e-7, 1e-5, 1e-3])
+        cbar.set_ticklabels([fr'$10^{{{-9}}}$', fr'$10^{{{-7}}}$', fr'$10^{{{-5}}}$', fr'$10^{{{-3}}}$', ])
         # Add a label to the colorbar
         cbar.set_label(r"Relative error")
-        #cbar.ax.yaxis.set_major_formatter(mpl.ticker.LogFormatterMathtext())
+        # cbar.ax.yaxis.set_major_formatter(mpl.ticker.LogFormatterMathtext())
         # cbar.set_ticks(ticks=[1e-8, 0.5, 1])
         # cbar.set_ticklabels([r'$\frac{1}{\chi^{\rm tot}}$', 0.5, 1])
 
@@ -529,7 +570,7 @@ if plot_solution_differences:
             ax_grad.text(
                 0.5, 1.3,
                 f'Strain  ' + fr' $\nabla_{{\rm{{s}}}}  \tilde{{\mathbf{{u}} }}_{{1}} $',
-                #fr' $|\nabla_{{\rm{{s}}}}  \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$'
+                # fr' $|\nabla_{{\rm{{s}}}}  \tilde{{\mathbf{{u}} }}_{{1}}^{{\mathrm{{Green-Jacobi}}}} - \nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}_{{1}}^{{\mathrm{{Green}}}}|$'
                 fontsize=13,
                 color="k",
                 ha="center", va="center",
@@ -538,28 +579,36 @@ if plot_solution_differences:
             )
         ax_grad.text(0.00, 1.05, rf'\textbf{{(b.{row + 1}}})  ', transform=ax_grad.transAxes)
 
-        #divnorm = mpl.colors.LogNorm(vmin=1e-12, vmax=1e-0)
-        #cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
+        # divnorm = mpl.colors.LogNorm(vmin=1e-12, vmax=1e-0)
+        # cmap_ = mpl.cm.seismic  # mpl.cm.seismic #mpl.cm.Greys
+        plot_strain=True
+        if plot_strain:
+            results_name_G = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'solution_gradient_field_G')
+            results_name_GJ = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'solution_gradient_field_GJ')
+        else:
+            results_name_G = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'stress_field_G')
+            results_name_GJ = (f'N1024_{ratio}_sharp_{sharp}_tol_{10}' + f'stress_field_GJ')
+        solution_gradient_field_G = np.load(data_folder_path + results_name_G + f'.npy', allow_pickle=True)
+        solution_gradient_field_GJ = np.load(data_folder_path + results_name_GJ + f'.npy', allow_pickle=True)
 
-        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_gradient_field_G')
-        solution_gradient_field_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
-        results_name = (f'N1024_{ratio}_sharp_{sharp}_tol_{8}' + f'solution_gradient_field_GJ')
-        solution_gradient_field_GJ = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True)
 
-        max_grad = np.max([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])).max(), max_grad])
-        min_grad = np.min([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])).min(), min_grad])
 
-        pcm = ax_grad.pcolormesh(np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])/np.abs(solution_gradient_field_G[0, 0])),
+        max_grad = np.max([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0]) / np.abs(
+            solution_gradient_field_G[0, 0])).max(), max_grad])
+        min_grad = np.min([np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0]) / np.abs(
+            solution_gradient_field_G[0, 0])).min(), min_grad])
+        print(max_grad, min_grad)
+        pcm = ax_grad.pcolormesh(np.abs((solution_gradient_field_GJ[0, 0] - solution_gradient_field_G[0, 0])) ,#/ np.abs( solution_gradient_field_G[0, 0])
                                  cmap=cmap_, linewidth=0,
                                  rasterized=True, norm=divnorm)
 
-        #ax_grad.set_xticks([1, 512, 1024])
+        # ax_grad.set_xticks([1, 512, 1024])
         ax_grad.set_yticks([])
         if row == 0:
             ax_grad.set_xticks([])
         else:
             ax_grad.set_xticks([1, 512, 1024])
-        #ax_grad.set_yticks([1, 512, 1024])
+        # ax_grad.set_yticks([1, 512, 1024])
         # ax_geom.axis('equal' )
         ax_grad.set_aspect('equal', 'box')
         if sharp:
@@ -569,11 +618,8 @@ if plot_solution_differences:
         else:
             ax_grad.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
 
-
-
-
         row += 1
-# RIGHT ERROR # RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR
+    # RIGHT ERROR # RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR# RIGHT ERROR
     #  gs_disp = gs_global[1].subgridspec(2, 1, width_ratios=[1], hspace=0.3, )
     gs_error = gs_twodplots[-1].subgridspec(1, 1, width_ratios=[1], wspace=0.1)
     ratio = 5
@@ -582,7 +628,7 @@ if plot_solution_differences:
     lines = ['-', '-.', '--', ':', 'dotted', '--', ':', ]
     row = 0
     ax_error = fig.add_subplot(gs_error[0])
-    ax_error.text(-0. , 1.03, rf'\textbf{{(c}})  ', transform=ax_error.transAxes)
+    ax_error.text(-0., 1.03, rf'\textbf{{(c}})  ', transform=ax_error.transAxes)
     for sharp in [False, True]:
 
         norm_strain_error = []
@@ -624,7 +670,7 @@ if plot_solution_differences:
 
         # annotation text
         if row == 0:
-            ax_error.annotate(text=fr' $\tilde{{\mathbf{{u}}}}$' + f' - '+r'$\rho_{\mathrm{smooth}}$',
+            ax_error.annotate(text=fr' $\tilde{{\mathbf{{u}}}}$' + f' - ' + r'$\rho_{\mathrm{smooth}}$',
                               xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
                               xytext=(1e-9, 3e-1),
                               arrowprops=dict(arrowstyle='->',
@@ -634,28 +680,30 @@ if plot_solution_differences:
                               fontsize=13,
                               color='c'
                               )
-            ax_error.annotate(text=f' Zero-mean  ' + f'\n'+ fr'$\tilde{{\mathbf{{u}}}}$' + f' - ' +r'$\rho_{\mathrm{smooth}}$',
-                              xy=(1e-5, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-5)]),
-                              xytext=(1e-5, 4e-8),
-                              arrowprops=dict(arrowstyle='->',
-                                              color='y',
-                                              lw=1,
-                                              ls=lines[row]),
-                              fontsize=13,
-                              color='y'
-                              )
-            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$'+ f'\n'+r'$\rho_{\mathrm{smooth}}$',
-                              xy=(1e-7, rel_norm_strain_error[np.where(tolerances == 1e-7)]),
-                              xytext=(2e-9, 1e-4),
-                              arrowprops=dict(arrowstyle='->',
-                                              color='m',
-                                              lw=1,
-                                              ls=lines[row]),
-                              fontsize=13,
-                              color='m'
-                              )
+            ax_error.annotate(
+                text=f' Zero-mean  ' + f'\n' + fr'$\tilde{{\mathbf{{u}}}}$' + f' - ' + r'$\rho_{\mathrm{smooth}}$',
+                xy=(1e-5, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-5)]),
+                xytext=(1e-5, 4e-8),
+                arrowprops=dict(arrowstyle='->',
+                                color='y',
+                                lw=1,
+                                ls=lines[row]),
+                fontsize=13,
+                color='y'
+                )
+            ax_error.annotate(
+                text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n' + r'$\rho_{\mathrm{smooth}}$',
+                xy=(1e-7, rel_norm_strain_error[np.where(tolerances == 1e-7)]),
+                xytext=(2e-9, 1e-4),
+                arrowprops=dict(arrowstyle='->',
+                                color='m',
+                                lw=1,
+                                ls=lines[row]),
+                fontsize=13,
+                color='m'
+                )
         elif row == 1:
-            ax_error.annotate(text=fr'  $\tilde{{\mathbf{{u}}}}$'  + f' - ' +r'$\rho_{\mathrm{sharp}}$',
+            ax_error.annotate(text=fr'  $\tilde{{\mathbf{{u}}}}$' + f' - ' + r'$\rho_{\mathrm{sharp}}$',
                               xy=(1e-7, rel_norm_disp_error[np.where(tolerances == 1e-7)]),
                               xytext=(4e-10, 4e-3),
                               arrowprops=dict(arrowstyle='->',
@@ -665,26 +713,28 @@ if plot_solution_differences:
                               fontsize=13,
                               color='c'
                               )
-            ax_error.annotate(text=f' Zero-mean   ' + f'\n'+ fr'$\tilde{{\mathbf{{u}}}}$' + f' - '+r'$\rho_{\mathrm{sharp}}$',
-                              xy=(1e-6, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-6)]),
-                              xytext=(1e-7, 2e-10),
-                              arrowprops=dict(arrowstyle='->',
-                                              color='y',
-                                              lw=1,
-                                              ls=lines[row]),
-                              fontsize=13,
-                              color='y'
-                              )
-            ax_error.annotate(text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n'+r'$\rho_{\mathrm{sharp}}$',
-                              xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
-                              xytext=(2e-10, 3e-6),
-                              arrowprops=dict(arrowstyle='->',
-                                              color='m',
-                                              lw=1,
-                                              ls=lines[row]),
-                              fontsize=13,
-                              color='m'
-                              )
+            ax_error.annotate(
+                text=f' Zero-mean   ' + f'\n' + fr'$\tilde{{\mathbf{{u}}}}$' + f' - ' + r'$\rho_{\mathrm{sharp}}$',
+                xy=(1e-6, rel_norm_disp_error_zero_mean[np.where(tolerances == 1e-6)]),
+                xytext=(1e-7, 2e-10),
+                arrowprops=dict(arrowstyle='->',
+                                color='y',
+                                lw=1,
+                                ls=lines[row]),
+                fontsize=13,
+                color='y'
+                )
+            ax_error.annotate(
+                text=fr'$\nabla_{{\rm{{s}}}} \tilde{{\mathbf{{u}}}}$' + f'\n' + r'$\rho_{\mathrm{sharp}}$',
+                xy=(1e-8, rel_norm_strain_error[np.where(tolerances == 1e-8)]),
+                xytext=(2e-10, 3e-6),
+                arrowprops=dict(arrowstyle='->',
+                                color='m',
+                                lw=1,
+                                ls=lines[row]),
+                fontsize=13,
+                color='m'
+                )
         row += 1
     ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
     ax_error.set_xlim([1e-10, 1e-1])
@@ -694,10 +744,10 @@ if plot_solution_differences:
     ax_error.yaxis.set_label_position('right')  # label on right side
     ax_error.set_xlabel(fr'PCG tolerance - $\eta^{{\mathrm{{CG}}}}$')
     ax_error.set_ylabel(fr'Relative error norm')
-    #ax_error.set_ylabel(fr'$||X^{{\mathrm{{G}}}}-X^{{\mathrm{{GJ}}}}|| / ||X^{{\mathrm{{G}}}}|| $')
+    # ax_error.set_ylabel(fr'$||X^{{\mathrm{{G}}}}-X^{{\mathrm{{GJ}}}}|| / ||X^{{\mathrm{{G}}}}|| $')
 
     fig.tight_layout()
-    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot_norm_{norm_}_soldiffs' + '{}'.format('.pdf')
+    fname = f'exp_paper_JG_TO_1024_sharp_vs_smoot_norm_{norm_}_soldiffs_{plot_strain}' + '{}'.format('.pdf')
     print(('create figure: {}'.format(fname)))
     plt.savefig(figure_folder_path + fname, bbox_inches='tight')
     plt.show()

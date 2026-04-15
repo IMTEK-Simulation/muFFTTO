@@ -244,7 +244,7 @@ plt.colorbar(pcm, ax=ax)
 
 plt.show()
 
-quit()
+
 plot_figs = False
 plot_movie = False
 if plot_movie:

@@ -953,7 +953,7 @@ class Discretization:
         mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
         if isinstance(material_data_field_ijklqxyz, np.ndarray):
             # mat_data_temp.sg = material_data_field_ijklqxyz
-            raise ("NOT YET  does not supprot ndarray")
+            raise ("NOT YET  does not support ndarray")
         else:
             mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
 
@@ -1198,7 +1198,7 @@ class Discretization:
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
-            # for the case of ref material, we need only one single material tensor
+            # for the case of ref material, we need only one single material tensorF
             if material_data.ndim == 2:
                 gradient_field.s = np.einsum('ij,uj...->ui...', material_data,
                                              gradient_field.s)  # 'u' just to keep the size of array consistent
@@ -2517,6 +2517,54 @@ def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
             # https://en.wikipedia.org/wiki/Linear_elasticity
     return mat
 
+# ------------------------------------------------------------
+# Elastic stiffness tensors from Lamé parameters
+# ------------------------------------------------------------
+def get_elastic_tensor_from_lame(dim, lam, mu):
+    """
+    Construct linear elastic stiffness tensor from Lamé parameters.
+
+    Parameters
+    ----------
+    dim : int
+        Spatial dimension (2 or 3).
+    lam : float
+        First Lamé parameter (λ).
+    mu : float
+        Second Lamé parameter (μ), shear modulus.
+
+    Returns
+    -------
+    C : ndarray (dim, dim, dim, dim)
+        Elastic stiffness tensor.
+
+    Notes
+    -----
+    The stiffness tensor is computed as:
+    C_ijkl = λ δ_ij δ_kl + μ (δ_ik δ_jl + δ_il δ_jk)
+
+    For 2D, this assumes plane strain conditions.
+    """
+    C = np.zeros((dim, dim, dim, dim))
+    for i in range(dim):
+        for j in range(dim):
+            for k in range(dim):
+                for l in range(dim):
+                    delta_ij = 1 if i == j else 0
+                    delta_kl = 1 if k == l else 0
+                    delta_ik = 1 if i == k else 0
+                    delta_jl = 1 if j == l else 0
+                    delta_il = 1 if i == l else 0
+                    delta_jk = 1 if j == k else 0
+
+                    C[i, j, k, l] = (lam * delta_ij * delta_kl +
+                                     mu * (delta_ik * delta_jl + delta_il * delta_jk))
+    return C
+
+
+
+
+
 
 def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
     """
@@ -2553,6 +2601,68 @@ def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
 
     return C
 
+def get_elastic_tangent(E, nu, mode="3D"):
+    """
+    Returns the elastic constitutive (tangent) matrix C for:
+        mode = "plane_stress"
+        mode = "plane_strain"
+        mode = "3D"
+
+    Parameters
+    ----------
+    E : float
+        Young's modulus
+    nu : float
+        Poisson's ratio
+    mode : str
+        "plane_stress", "plane_strain", or "3D"
+
+    Returns
+    -------
+    C : ndarray
+        Elastic tangent matrix
+    """
+
+    # Lame parameters
+    lam = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+    mu  = E / (2 * (1 + nu))
+
+    if mode.lower() == "3d":
+        # 6x6 matrix in Voigt notation
+        C = np.array([
+            [lam + 2*mu, lam,        lam,        0,      0,      0],
+            [lam,        lam + 2*mu, lam,        0,      0,      0],
+            [lam,        lam + 2*mu, lam + 2*mu, 0,      0,      0],
+            [0,          0,          0,          mu,     0,      0],
+            [0,          0,          0,          0,      mu,     0],
+            [0,          0,          0,          0,      0,      mu]
+        ])
+        return C
+
+    elif mode.lower() == "plane_strain":
+        # 3x3 matrix (σxx, σyy, σxy)
+        C = np.array([
+            [lam + 2*mu, lam,        0],
+            [lam,        lam + 2*mu, 0],
+            [0,          0,          mu]
+        ])
+        return C
+
+    elif mode.lower() == "plane_stress":
+        # Plane stress uses reduced constitutive matrix
+        C11 = E / (1 - nu**2)
+        C12 = nu * C11
+        C66 = E / (2 * (1 + nu))
+
+        C = np.array([
+            [C11, C12, 0],
+            [C12, C11, 0],
+            [0,   0,   C66]
+        ])
+        return C
+
+    else:
+        raise ValueError("mode must be 'plane_stress', 'plane_strain', or '3D'")
 
 def compute_stress_difference(actual_stress, target_stress):
     stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
@@ -2672,3 +2782,6 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
             quad_points_weights[17] = 0.0558144204830443
 
         return quad_points_coord, quad_points_weights
+
+
+
