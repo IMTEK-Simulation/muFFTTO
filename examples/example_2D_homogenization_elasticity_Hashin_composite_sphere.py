@@ -191,7 +191,7 @@ mask_shell =  (r > r_1) & (r < r_2)
 # populate the global data field
 material_data_field_C = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 # populate the field with C_1 material
-material_data_field_C.s = np.einsum('ijkl,qxy->ijklqxy', C_matrix,
+material_data_field_C.s[...] = np.einsum('ijkl,qxy->ijklqxy', C_matrix,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 

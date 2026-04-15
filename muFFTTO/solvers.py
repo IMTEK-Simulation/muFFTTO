@@ -240,9 +240,9 @@ def conjugate_gradients_mugrid_experimental(
     )
 
     hessp(x, Ap)
-    r.s = b.s - Ap.s
+    r.s[...] = b.s - Ap.s
     P(r, z)
-    p.s = np.copy(z.s)  # residual
+    p.s[...] = np.copy(z.s)  # residual
 
     norms = dict()
 
@@ -319,7 +319,7 @@ def conjugate_gradients_mugrid_experimental(
         # Update search direction
         # beta = next_rr / rr
         beta = next_rz / rz
-        p.s = z.s + beta * p.s
+        p.s[...] = z.s + beta * p.s
 
         # Energy - error estimator
         Delta.append(alpha * rz)

@@ -131,7 +131,7 @@ for nb_starting_phases in np.arange(np.size(nb_pix_multips)):
         C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
         material_data_field_C_0_rho = discretization.get_material_data_size_field(name='elastic_tensor')
-        material_data_field_C_0_rho.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+        material_data_field_C_0_rho.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                     *discretization.nb_of_pixels])))
 

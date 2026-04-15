@@ -275,7 +275,7 @@ class Discretization:
         )
 
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
-        nodal_points_coordinates_inxyz.s = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+        nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
 
         ##  tuple([slice(None)] + [np.newaxis] * d)
         return nodal_points_coordinates_inxyz
@@ -421,7 +421,7 @@ class Discretization:
 
         # 2. symmetrize it
         # \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
-        grad_u_ijqxyz.s = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
+        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
         return grad_u_ijqxyz
 
     def apply_gradient_operator_symmetrized_mugrid(self, u_inxyz, grad_u_ijqxyz):
@@ -478,7 +478,7 @@ class Discretization:
     #         shape = (*gradient_field_ijqxyz.shape[:2],)
     #         quad_field_ijqxyz = self.get_custom_size_quad_field(name='temp_quad_field_ijqxyz',
     #                                                             shape=shape)
-    #         quad_field_ijqxyz.s = gradient_field_ijqxyz
+    #         quad_field_ijqxyz.s[...] = gradient_field_ijqxyz
     #     else:
     #         quad_field_ijqxyz = gradient_field_ijqxyz
     #
@@ -492,7 +492,7 @@ class Discretization:
     #         shape = (*div_u_fnxyz.shape[:1],)
     #         nodal_field_inxyz = self.get_custom_size_nodal_field(name='temp_nodal_field_inxyz',
     #                                                              shape=shape)
-    #         nodal_field_inxyz.s = div_u_fnxyz
+    #         nodal_field_inxyz.s[...] = div_u_fnxyz
     #     else:
     #         nodal_field_inxyz = div_u_fnxyz
     #
@@ -961,12 +961,12 @@ class Discretization:
 
         mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
         if isinstance(material_data_field_ijklqxyz, np.ndarray):
-            # mat_data_temp.sg = material_data_field_ijklqxyz
+            # mat_data_temp.sg[...] = material_data_field_ijklqxyz
             raise ("NOT YET  does not support ndarray")
         else:
             mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
 
-        # mat_data_temp.sg = self.apply_quadrature_weights(mat_data_temp)
+        # mat_data_temp.sg[...] = self.apply_quadrature_weights(mat_data_temp)
 
         self.apply_material_data_mugrid(material_data=mat_data_temp,
                                         gradient_field=gradient_field_ijqxyz)
@@ -1065,9 +1065,9 @@ class Discretization:
             output_stress_field_ijqxyz = self.apply_gradient_operator(u_inxyz=displacement_field_inxyz,
                                                                       grad_u_ijqxyz=output_stress_field_ijqxyz)
 
-        output_stress_field_ijqxyz.s = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
         # output_stress_field_ijqxyz = self.apply_material_data(material_data_field_ijklqxyz, output_stress_field_ijqxyz)
-        output_stress_field_ijqxyz.s = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
+        output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
                                                  output_stress_field_ijqxyz.s)
         return output_stress_field_ijqxyz
 
@@ -1209,14 +1209,14 @@ class Discretization:
         if isinstance(material_data, np.ndarray):
             # for the case of ref material, we need only one single material tensorF
             if material_data.ndim == 2:
-                gradient_field.s = np.einsum('ij,uj...->ui...', material_data,
+                gradient_field.s[...] = np.einsum('ij,uj...->ui...', material_data,
                                              gradient_field.s)  # 'u' just to keep the size of array consistent
             else:
                 raise ("apply_material_data_mugrid does not support global ndarray")
 
                 # raise ValueError('The reference material_data for conductivity hase more dimensions than 2')
         else:
-            gradient_field.s = np.einsum('ij...,uj...->ui...', material_data.s,
+            gradient_field.s[...] = np.einsum('ij...,uj...->ui...', material_data.s,
                                          gradient_field.s)  # 'u' just to keep the size of array consistent
 
     def apply_material_data_elasticity_mugrid(self, material_data, gradient_field):
@@ -1382,7 +1382,7 @@ class Discretization:
     #         # components=(self.domain_dimension,),  # shape of components
     #         shape=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
     #     )  #
-    #     preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_fnfnxyz)
+    #     preconditioner_diagonals_ininqks.s[...] = self.fft.fft(preconditioner_diagonals_fnfnxyz)
     #
     #     for pixel_index in np.ndindex(self.fft.ifftfreq[0].shape):  # TODO find the woy to avoid loops
     #
@@ -1471,7 +1471,7 @@ class Discretization:
 
             self.fft.fft(preconditioner_diagonals_injnxyz, preconditioner_diagonals_ininqks)
 
-            # preconditioner_diagonals_ininqks.s = self.fft.fft(preconditioner_diagonals_ininxyz)
+            # preconditioner_diagonals_ininqks.s[...] = self.fft.fft(preconditioner_diagonals_ininxyz)
 
             # if self.cell.problem_type == 'conductivity':  # TODO[LaRs muFFT] FIX THIS
             #     preconditioner_diagonals_fnfnqks_NEW = np.expand_dims(preconditioner_diagonals_fnfnqks_NEW,
@@ -1501,7 +1501,7 @@ class Discretization:
             # Transpose back and reshape to original shape
             A_inv = A_batch.transpose(1, 2, 0).reshape(d_i, d_j, *spatial_dims)
 
-            preconditioner_diagonals_ininqks.s = A_inv.reshape(original_shape_ininqks)
+            preconditioner_diagonals_ininqks.s[...] = A_inv.reshape(original_shape_ininqks)
 
         else:
             raise ValueError(f'The fast assembly of Green preconditioner for does  work yet '
@@ -1900,7 +1900,7 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:nodal_field_fnxyz=' f'{ffield_fnqks}')
 
         # multiplication with a diagonals of preconditioner
-        ffield_fnqks.sg = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.sg, ffield_fnqks.sg)
+        ffield_fnqks.sg[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.sg, ffield_fnqks.sg)
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_preconditioner_NEW:einsum=' f'{ffield_fnqks}')
 
         # normalization
@@ -1981,7 +1981,7 @@ class Discretization:
         # chcek if the field is nump. If yes, make a muGrid array of it
         if isinstance(displacement_field, np.ndarray):
             uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz_temp')
-            uknown_inxyz.sg = displacement_field
+            uknown_inxyz.sg[...] = displacement_field
         else:
             uknown_inxyz = displacement_field  # no copy
 
@@ -2007,7 +2007,7 @@ class Discretization:
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:material_data_field=')  # f'{material_data_field}')
         # compute stress/flux field
 
-        gradient_ijqxyz.sg = self.apply_material_data(material_data=material_data_field,
+        gradient_ijqxyz.sg[...] = self.apply_material_data(material_data=material_data_field,
                                                       gradient_field=gradient_ijqxyz)
 
         # print('rank' f'{MPI.COMM_WORLD.rank:6} apply_system_matrix:stress=')  # f'{stress}')
@@ -2136,7 +2136,7 @@ class Discretization:
         # chcek if the field is nump. If yes, make a muGrid array of it
         if isinstance(displacement_field, np.ndarray):
             uknown_inxyz = self.get_unknown_size_field(name='uknown_inxyz')
-            uknown_inxyz.s = displacement_field
+            uknown_inxyz.s[...] = displacement_field
         else:
             uknown_inxyz = displacement_field
 
@@ -2211,7 +2211,7 @@ class Discretization:
     def integrate_over_cell_mugrid(self, stress_field):
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        stress_field.s = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
+        stress_field.s[...] = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
         #
         # integral = np.einsum('fdqxy...->fd', stress_field)
         # Reductor_numpi = Reduction(MPI.COMM_WORLD)
@@ -2462,7 +2462,7 @@ class Discretization:
         """Scales a 2D random field to be within [min_val, max_val]."""
         field_min = self.mpi_reduction.min(field.s)
         field_max = self.mpi_reduction.max(field.s)
-        field.s = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
+        field.s[...] = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
         field.s *= (max_val - min_val)
         field.s += min_val
 

@@ -91,7 +91,7 @@ C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='material_data_field_C_0')
 
-material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 
@@ -124,7 +124,7 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
                                    tuple(discretization.subdomain_locations_no_buffers),
                                    tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
-    material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.broadcast_to(phase_inxyz.s[0, 0],
                                                           material_data_field_C_0.s[0, 0, 0, 0].shape))
     # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
@@ -174,16 +174,16 @@ for i in np.arange(int(args.start_ratio),int(args.stop_ratio)):
         # discretization.fft.communicate_ghosts(x)
         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-        x_jacobi_temp.s = K_diag_alg.s * x.s
+        x_jacobi_temp.s[...] = K_diag_alg.s * x.s
         discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                    input_nodal_field_fnxyz=x_jacobi_temp,
                                                    output_nodal_field_fnxyz=Px)
 
-        Px.s = K_diag_alg.s * Px.s
+        Px.s[...] = K_diag_alg.s * Px.s
 
 
     def M_fun_Jacobi(x, Px):
-        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+        Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
 
 
     _info['norms_G_rr'] = []

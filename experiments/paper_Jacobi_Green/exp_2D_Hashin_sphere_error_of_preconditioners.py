@@ -113,7 +113,7 @@ mask_shell =  (r > r_1) & (r < r_2)
 # populate the global data field
 material_data_field_C = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 # populate the field with C_1 material
-material_data_field_C.s = np.einsum('ijkl,qxy->ijklqxy', C_matrix,
+material_data_field_C.s[...] = np.einsum('ijkl,qxy->ijklqxy', C_matrix,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 
@@ -152,7 +152,7 @@ elif preconditioner_type == 'Jacobi':
         material_data_field_ijklqxyz=material_data_field_C)
 
     def M_fun_Jacobi(x, Px):
-        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+        Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
         discretization.fft.communicate_ghosts(Px)
 
     M_fun = M_fun_Jacobi
@@ -165,13 +165,13 @@ elif preconditioner_type == 'Green_Jacobi':
         discretization.fft.communicate_ghosts(x)
         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-        x_jacobi_temp.s = K_diag_alg.s * x.s
+        x_jacobi_temp.s[...] = K_diag_alg.s * x.s
         discretization.apply_preconditioner_mugrid(
             preconditioner_Fourier_fnfnqks=preconditioner,
             input_nodal_field_fnxyz=x_jacobi_temp,
             output_nodal_field_fnxyz=Px)
 
-        Px.s = K_diag_alg.s * Px.s
+        Px.s[...] = K_diag_alg.s * Px.s
         discretization.fft.communicate_ghosts(Px)
 
     M_fun = M_fun_Green_Jacobi

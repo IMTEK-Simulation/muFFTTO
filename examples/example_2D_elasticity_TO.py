@@ -58,7 +58,7 @@ print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
-material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
+material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 print('3 = \n   core {}'.format(MPI.COMM_WORLD.rank))
@@ -187,7 +187,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz):
     # print('Objective function:')
     # reshape the field
     phase_field_inxyz = discretization.get_scalar_field(name='phase_field_inxyz_ofmlc')
-    phase_field_inxyz.s = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
+    phase_field_inxyz.s[...] = phase_field_1nxyz.reshape([1, 1, *discretization.nb_of_pixels])
 
     # objective function phase field terms
     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
@@ -353,7 +353,7 @@ if __name__ == '__main__':
     np.random.seed(MPI.COMM_WORLD.rank)
     # phase_field_0 = np.random.rand(*discretization.get_scalar_sized_field().shape) ** 1
     phase_field_0 = discretization.get_scalar_field(name='phase_field_0')
-    phase_field_0.s = np.random.randint(0, high=2, size=phase_field_0.s.shape) ** 1
+    phase_field_0.s[...] = np.random.randint(0, high=2, size=phase_field_0.s.shape) ** 1
     # phase_field_0 = np.random.choice([0, 1], size=discretization.gephase_field_0t_scalar_sized_field().shape,
     #                                  p=[0.5, 0.5])  # equal probability for 0 and 1
 
@@ -397,7 +397,7 @@ if __name__ == '__main__':
     # my_sensitivity_pixel(phase_field_0).reshape([1, 1, *number_of_pixels])
 
     test_init_phase_field = discretization.get_scalar_field(name='test_init_phase_field')
-    test_init_phase_field.s = phase_field_0.s
+    test_init_phase_field.s[...] = phase_field_0.s
     print('Init objective function FE  = {}'.format(
         objective_function_multiple_load_cases(test_init_phase_field.s.reshape(-1))[0]))
     # print('Init objective function pixel  = {}'.format(my_objective_function_pixel(phase_field_00)))

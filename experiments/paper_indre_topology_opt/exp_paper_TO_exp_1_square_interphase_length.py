@@ -318,7 +318,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
 
         def M_fun_Jacobi(x, Px):
-            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
             discretization.fft.communicate_ghosts(Px)
 
         M_fun = M_fun_Jacobi

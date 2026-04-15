@@ -379,12 +379,12 @@ for inc in range(ninc):
                 discretization.fft.communicate_ghosts(x)
                 x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-                x_jacobi_temp.s = K_diag_alg.s * x.s
+                x_jacobi_temp.s[...] = K_diag_alg.s * x.s
                 discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                            input_nodal_field_fnxyz=x_jacobi_temp,
                                                            output_nodal_field_fnxyz=Px)
 
-                Px.s = K_diag_alg.s * Px.s
+                Px.s[...] = K_diag_alg.s * Px.s
                 discretization.fft.communicate_ghosts(Px)
 
 
@@ -392,7 +392,7 @@ for inc in range(ninc):
 
 
         def M_fun_none(x, Px):
-            Px.s = x.s
+            Px.s[...] = x.s
 
 
         M_fun = M_fun_none

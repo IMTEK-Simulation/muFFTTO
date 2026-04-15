@@ -251,7 +251,7 @@ for load_case in np.arange(nb_load_cases):
     target_stresses_field_load_case.append(
         discretization.get_displacement_gradient_sized_field(name=f'target_stresses_field_load_case_{load_case}'))
 
-    material_data_field_C_0_rho_ijklqxyz.s = elastic_C_target[
+    material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_target[
                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
                                              np.power(phase_field_at_quad_poits_1qxyz.s, 0)[0, 0, :, ...]
 
@@ -305,13 +305,13 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
     disp = False
     phase_field_1nxyz.s[mask_free_variables] = phase_field_1nxyz_flat
-    # phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+    # phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
     # apply_filter_zero_boundary(phase_field_1nxyz)
     # Phase field  in quadrature points
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
     # Material data in quadrature points
-    material_data_field_C_0_rho_ijklqxyz.s = (elastic_C_0 - elastic_C_void)[
+    material_data_field_C_0_rho_ijklqxyz.s[...] = (elastic_C_0 - elastic_C_void)[
                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
                                              elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
@@ -345,7 +345,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
 
         def M_fun_Jacobi(x, Px):
-            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
             discretization.fft.communicate_ghosts(Px)
 
         M_fun = M_fun_Jacobi
@@ -358,13 +358,13 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             discretization.fft.communicate_ghosts(x)
             x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-            x_jacobi_temp.s = K_diag_alg.s * x.s
+            x_jacobi_temp.s[...] = K_diag_alg.s * x.s
             discretization.apply_preconditioner_mugrid(
                 preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
                 input_nodal_field_fnxyz=x_jacobi_temp,
                 output_nodal_field_fnxyz=Px)
 
-            Px.s = K_diag_alg.s * Px.s
+            Px.s[...] = K_diag_alg.s * Px.s
             discretization.fft.communicate_ghosts(Px)
 
         M_fun = M_fun_Green_Jacobi
@@ -700,7 +700,7 @@ if __name__ == '__main__':
     #     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_C_0_rho_quad.s[...] = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
                                          elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 

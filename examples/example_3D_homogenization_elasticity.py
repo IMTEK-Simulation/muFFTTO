@@ -45,7 +45,7 @@ elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
 print(domain.compute_Voigt_notation_4order(elastic_C_1))
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
-material_data_field_C_0.s = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
+material_data_field_C_0.s[...] = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))

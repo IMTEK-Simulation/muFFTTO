@@ -117,7 +117,7 @@ if compute_results:
 
     #                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
     #                                                     *discretization.nb_of_pixels])))
-    material_data_field.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
+    material_data_field.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
                                       np.broadcast_to(phase_field.s[0, 0],
                                                       material_data_field.s[0, 0, 0, 0].shape))
 
@@ -161,7 +161,7 @@ if compute_results:
 
 
     def preconditioner_fun_jacobi(x, Px):
-        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+        Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
         discretization.fft.communicate_ghosts(Px)
 
 
@@ -169,12 +169,12 @@ if compute_results:
         discretization.fft.communicate_ghosts(x)
         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-        x_jacobi_temp.s = K_diag_alg.s * x.s
+        x_jacobi_temp.s[...] = K_diag_alg.s * x.s
         discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                    input_nodal_field_fnxyz=x_jacobi_temp,
                                                    output_nodal_field_fnxyz=Px)
 
-        Px.s = K_diag_alg.s * Px.s
+        Px.s[...] = K_diag_alg.s * Px.s
         discretization.fft.communicate_ghosts(Px)
 
 

@@ -37,7 +37,7 @@ conductivity_C_1 = 1 * np.array([[1, 0, 0],
                                  [0, 0, 1]])
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name=' conductivity_tensor')
-material_data_field_C_0.s = np.einsum('ij,qxyz->ijqxyz', conductivity_C_1,
+material_data_field_C_0.s[...] = np.einsum('ij,qxyz->ijqxyz', conductivity_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 

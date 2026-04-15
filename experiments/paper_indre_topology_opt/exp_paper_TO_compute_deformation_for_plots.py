@@ -74,7 +74,7 @@ print(domain.compute_Voigt_notation_4order(elastic_C_1))
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
 # populate the field with C_1 material
-material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 if MPI.COMM_WORLD.rank == 0:
@@ -168,7 +168,7 @@ if compute:
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
         name='phase_field_at_quads_in_objective_function_multiple_load_cases')
     discretization.apply_N_operator_mugrid(phase_field, phase_field_at_quad_poits_1qxyz)
-    material_data_field_C_0.s = (elastic_C_1 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_C_0.s[...] = (elastic_C_1 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
                                 np.power(phase_field_at_quad_poits_1qxyz.s, 2)[0, 0, :, ...] + \
                                 elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 
@@ -206,7 +206,7 @@ if compute:
 
 
         def M_fun_Jacobi(x, Px):
-            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
             discretization.fft.communicate_ghosts(Px)
 
 
@@ -221,13 +221,13 @@ if compute:
             discretization.fft.communicate_ghosts(x)
             x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-            x_jacobi_temp.s = K_diag_alg.s * x.s
+            x_jacobi_temp.s[...] = K_diag_alg.s * x.s
             discretization.apply_preconditioner_mugrid(
                 preconditioner_Fourier_fnfnqks=preconditioner,
                 input_nodal_field_fnxyz=x_jacobi_temp,
                 output_nodal_field_fnxyz=Px)
 
-            Px.s = K_diag_alg.s * Px.s
+            Px.s[...] = K_diag_alg.s * Px.s
             discretization.fft.communicate_ghosts(Px)
 
 

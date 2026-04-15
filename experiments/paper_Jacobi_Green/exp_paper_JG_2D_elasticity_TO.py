@@ -210,7 +210,7 @@ for ration in [-0.5]:
                 #     phase_field_1nxyz[phase_field_1nxyz < 1e-5] = 0
                 disp = False
                 phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-                phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+                phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
 
                 # objective function phase field terms
                 # f = eta * f_rho_grad + f_dw / eta   !! no stress equivalence yet !!
@@ -244,7 +244,7 @@ for ration in [-0.5]:
                 # material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0[..., :, :, :] * np.power(
                 #     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 
-                material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
+                material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
                                                          np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
                 if preconditioer == 'Green':
@@ -254,7 +254,7 @@ for ration in [-0.5]:
                         material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz)
 
                     def M_fun_Jacobi(x, Px):
-                        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+                        Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
                         discretization.fft.communicate_ghosts(Px)
 
                     M_fun = M_fun_Jacobi
@@ -267,13 +267,13 @@ for ration in [-0.5]:
                         discretization.fft.communicate_ghosts(x)
                         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-                        x_jacobi_temp.s = K_diag_alg.s * x.s
+                        x_jacobi_temp.s[...] = K_diag_alg.s * x.s
                         discretization.apply_preconditioner_mugrid(
                             preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
                             input_nodal_field_fnxyz=x_jacobi_temp,
                             output_nodal_field_fnxyz=Px)
 
-                        Px.s = K_diag_alg.s * Px.s
+                        Px.s[...] = K_diag_alg.s * Px.s
                         discretization.fft.communicate_ghosts(Px)
 
                     M_fun = M_fun_Green_Jacobi
@@ -624,7 +624,7 @@ if __name__ == '__main__':
                                       )
     solution_phase = discretization.get_scalar_field(name='phase_field_in_initial_')
 
-    solution_phase.s = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
+    solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
     sensitivity_sol_FE_MPI = xopt_FE_MPI.jac.reshape([1, 1, *discretization.nb_of_pixels])
 
     if MPI.COMM_WORLD.size == 1:
@@ -669,7 +669,7 @@ if __name__ == '__main__':
     #     phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_C_0_rho_quad.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
                                        np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
     homogenized_stresses = np.zeros([nb_load_cases, dim, dim])

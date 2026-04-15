@@ -49,7 +49,7 @@ def scale_field_mugrid(field, min_val, max_val):
     """Scales a 2D random field to be within [min_val, max_val]."""
     field_min = discretization.mpi_reduction.min(field.s)
     field_max = discretization.mpi_reduction.max(field.s)
-    field.s = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
+    field.s[...] = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
     field.s *= (max_val - min_val)
     field.s += min_val
 
@@ -103,7 +103,7 @@ if compute:
     C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
     material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='mat_Data')
-    material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                             *discretization.nb_of_pixels])))
 
@@ -158,7 +158,7 @@ if compute:
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         material_data_field_C_0_rho = discretization.get_material_data_size_field_mugrid(name='mat_data_rho')
-        material_data_field_C_0_rho.s = np.copy(material_data_field_C_0.s[..., :, :, :]) * phase_field.s
+        material_data_field_C_0_rho.s[...] = np.copy(material_data_field_C_0.s[..., :, :, :]) * phase_field.s
 
         # Set up RHS
         discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0_rho,
@@ -200,17 +200,17 @@ if compute:
             # discretization.fft.communicate_ghosts(x)
             x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-            x_jacobi_temp.s = K_diag_alg.s * x.s
+            x_jacobi_temp.s[...] = K_diag_alg.s * x.s
             discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                        input_nodal_field_fnxyz=x_jacobi_temp,
                                                        output_nodal_field_fnxyz=Px)
 
-            Px.s = K_diag_alg.s * Px.s
+            Px.s[...] = K_diag_alg.s * Px.s
             # discretization.fft.communicate_ghosts(Px)
 
 
         def M_fun_Jacobi(x, Px):
-            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
             # discretization.fft.communicate_ghosts(Px)
 
 

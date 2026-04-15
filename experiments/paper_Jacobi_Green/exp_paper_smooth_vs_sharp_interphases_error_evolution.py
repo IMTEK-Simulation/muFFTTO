@@ -133,7 +133,7 @@ if compute:
     C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
     material_data_field_C_0 = discretization.get_material_data_size_field(name='mat_Data')
-    material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                             *discretization.nb_of_pixels])))
     print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
@@ -200,7 +200,7 @@ if compute:
             # apply material distribution
             material_data_field_C_0_rho = discretization.get_material_data_size_field(
                 name='material_data_field_C_0_rho')
-            material_data_field_C_0_rho.s = np.copy(material_data_field_C_0.s[..., :, :, :]) * np.power(
+            material_data_field_C_0_rho.s[...] = np.copy(material_data_field_C_0.s[..., :, :, :]) * np.power(
                 phase_field, 1)
 
             print(f'min ={np.min(material_data_field_C_0_rho)} ')
@@ -263,11 +263,11 @@ if compute:
                         strain_fluc_field_it = discretization.get_displacement_gradient_sized_field(
                             name='strain_fluctuation_field_it_G')
 
-                        strain_fluc_field_it.s = discretization.apply_gradient_operator_symmetrized(
+                        strain_fluc_field_it.s[...] = discretization.apply_gradient_operator_symmetrized(
                             u_inxyz=x_0,
                             grad_u_ijqxyz=strain_fluc_field_it)
-                        strain_fluc_field_it.s = strain_fluc_field_it.s + macro_gradient_field.s
-                        strain_fluc_field_it.s = discretization.apply_material_data(
+                        strain_fluc_field_it.s[...] = strain_fluc_field_it.s + macro_gradient_field.s
+                        strain_fluc_field_it.s[...] = discretization.apply_material_data(
                             material_data=material_data_field_C_0_rho,
                             gradient_field=strain_fluc_field_it)
 
@@ -296,7 +296,7 @@ if compute:
                     strain_fluc_field = discretization.get_displacement_gradient_sized_field(
                         name='strain_fluctuation_field_G')
                     strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                    strain_fluc_field.s[...] = discretization.apply_gradient_operator_symmetrized(
                         u_inxyz=displacement_field,
                         grad_u_ijqxyz=strain_fluc_field)
 
@@ -305,7 +305,7 @@ if compute:
                     np.save(data_folder_path + results_name + f'_G.npy', strain_fluc_field.s)
 
                     # strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
+                    strain_fluc_field.s[...] = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
                                                                              gradient_field=strain_fluc_field)
                     results_name = (
                             f'stress_fluc_field_' + f'ration{i}_sharp{sharp}' + f'cg_tol_exp_{cg_tol_exp}' + f'_n_{number_of_pixels[0]}')
@@ -339,11 +339,11 @@ if compute:
                         strain_fluc_field_it = discretization.get_displacement_gradient_sized_field(
                             name='strain_fluctuation_field_it_GJ')
 
-                        strain_fluc_field_it.s = discretization.apply_gradient_operator_symmetrized(
+                        strain_fluc_field_it.s[...] = discretization.apply_gradient_operator_symmetrized(
                             u_inxyz=x_0,
                             grad_u_ijqxyz=strain_fluc_field_it)
-                        strain_fluc_field_it.s = strain_fluc_field_it.s + macro_gradient_field.s
-                        strain_fluc_field_it.s = discretization.apply_material_data(
+                        strain_fluc_field_it.s[...] = strain_fluc_field_it.s + macro_gradient_field.s
+                        strain_fluc_field_it.s[...] = discretization.apply_material_data(
                             material_data=material_data_field_C_0_rho,
                             gradient_field=strain_fluc_field_it)
 
@@ -372,7 +372,7 @@ if compute:
                     strain_fluc_field = discretization.get_displacement_gradient_sized_field(
                         name='strain_fluctuation_field_GJ')
                     strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                    strain_fluc_field.s[...] = discretization.apply_gradient_operator_symmetrized(
                         u_inxyz=displacement_field_combi,
                         grad_u_ijqxyz=strain_fluc_field)
 
@@ -381,7 +381,7 @@ if compute:
                     np.save(data_folder_path + results_name + f'_GJ.npy', strain_fluc_field.s)
 
                     # strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
+                    strain_fluc_field.s[...] = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
                                                                              gradient_field=strain_fluc_field)
                     results_name = (
                             f'stress_fluc_field_' + f'ration{i}_sharp{sharp}' + f'cg_tol_exp_{cg_tol_exp}' + f'_n_{number_of_pixels[0]}')
@@ -420,7 +420,7 @@ if compute:
                     strain_fluc_field = discretization.get_displacement_gradient_sized_field(
                         name='strain_fluctuation_field_J')
                     strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(
+                    strain_fluc_field.s[...] = discretization.apply_gradient_operator_symmetrized(
                         u_inxyz=displacement_field_Jacobi,
                         grad_u_ijqxyz=strain_fluc_field)
 
@@ -429,7 +429,7 @@ if compute:
                     np.save(data_folder_path + results_name + f'_J.npy', strain_fluc_field.s)
 
                     # strain_fluc_field.s.fill(0)
-                    strain_fluc_field.s = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
+                    strain_fluc_field.s[...] = discretization.apply_material_data(material_data=material_data_field_C_0_rho,
                                                                              gradient_field=strain_fluc_field)
                     results_name = (
                             f'stress_fluc_field_' + f'ration{i}_sharp{sharp}' + f'cg_tol_exp_{cg_tol_exp}' + f'_n_{number_of_pixels[0]}')

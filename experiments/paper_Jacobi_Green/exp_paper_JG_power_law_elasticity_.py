@@ -202,7 +202,7 @@ rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 # evaluate material law
 stress, material_data_field_C_0_np = constitutive(total_strain_field)
 
-material_data_field_C_0.s = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
+material_data_field_C_0.s[...] = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
                                             (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 # set macroscopic gradient
 macro_gradient = np.array([[0.05, 0.05, 0.00],
@@ -268,7 +268,7 @@ while True:
     norm_rr = norms['residual_rr'][-1]
     print(f'nb iteration CG = {nb_it_comb}')
 
-    strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_increment_field,
+    strain_fluc_field.s[...] = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_increment_field,
                                                                              grad_u_ijqxyz=strain_fluc_field)
     # aaa=strain_fluc_field.s+np.transpose(strain_fluc_field.s,axes=(0,1))
     # ar=np.swapaxes(strain_fluc_field.s, 0, 1)
@@ -279,7 +279,7 @@ while True:
     # evaluate material law
     stress, material_data_field_C_0_np = constitutive(total_strain_field)
 
-    material_data_field_C_0.s = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
+    material_data_field_C_0.s[...] = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
                                                 (3, 3, 3, 3, discretization.nb_quad_points_per_pixel,
                                                  *number_of_pixels))
 

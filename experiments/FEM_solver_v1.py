@@ -254,7 +254,7 @@ x_coords[1, 3, ...] += del_y / 2
 rhs.s[0] = ( np.cos(2 * np.pi * x_coords[0]  ) * np.cos(
     2 * np.pi * x_coords[1] ))
 
-#rhs.p = (x_coords[0] ) ** 2#+ x_coords[1]
+#rhs.p[...] = (x_coords[0] ) ** 2#+ x_coords[1]
 rhs.p -= np.mean(rhs.p)
 
 

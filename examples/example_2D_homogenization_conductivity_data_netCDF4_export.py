@@ -41,7 +41,7 @@ conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='conductivity_tensor')
 
 # populate the field with C_1 material
-material_data_field_C_0.s = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
+material_data_field_C_0.s[...] = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                         *discretization.nb_of_pixels])))
 
@@ -57,7 +57,7 @@ inc_mask = phase_field_geom == 0
 
 # apply material distribution
 # print(matrix_mask)
-# material_data_field_C_0.s = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
+# material_data_field_C_0.s[...] = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
 #                                                                                            1)
 # material_data_field_C_0.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 1)
 material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]

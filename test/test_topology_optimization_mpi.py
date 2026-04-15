@@ -140,7 +140,7 @@ discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
 #                                                input_nodal_field_fnxyz=x,
 #                                                output_nodal_field_fnxyz=Px)
 def M_fun(x, Px):
-    Px.s = 1 * x.s
+    Px.s[...] = 1 * x.s
 
 p = 2
 w = 3  # * E_0  # 1 / 10  # 1e-4 Young modulus of solid
@@ -151,7 +151,7 @@ def my_objective_function(phase_field_1nxyz_flat):
     # print('Objective function:')
     # reshape the field
     phase_field_1nxyz = discretization.get_scalar_field(name='phase_field_in_objective')
-    phase_field_1nxyz.s = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+    phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
 
     # Phase field  in quadrature points
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -161,7 +161,7 @@ def my_objective_function(phase_field_1nxyz_flat):
     # Material data in quadrature points
     material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_ijklqxyz_in_objective')
-    material_data_field_C_0_rho_ijklqxyz.s = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
@@ -190,13 +190,13 @@ def my_objective_function(phase_field_1nxyz_flat):
     #         discretization.fft.communicate_ghosts(x)
     #         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
     #
-    #         x_jacobi_temp.s = K_diag_alg.s * x.s
+    #         x_jacobi_temp.s[...] = K_diag_alg.s * x.s
     #         discretization.apply_preconditioner_mugrid(
     #             preconditioner_Fourier_fnfnqks=preconditioner_Green,
     #             input_nodal_field_fnxyz=x_jacobi_temp,
     #             output_nodal_field_fnxyz=Px)
     #
-    #         Px.s = K_diag_alg.s * Px.s
+    #         Px.s[...] = K_diag_alg.s * Px.s
     #         discretization.fft.communicate_ghosts(Px)
     #
     #     M_fun = M_fun_Green_Jacobi
@@ -273,7 +273,7 @@ def my_objective_function(phase_field_1nxyz_flat):
 
     sensitivity_analytical = discretization.get_scalar_field(name='sensitivity_analytical')
 
-    sensitivity_analytical.s = s_phase_field.s + s_stress_and_adjoint.s
+    sensitivity_analytical.s[...] = s_phase_field.s + s_stress_and_adjoint.s
 
     objective_function = w * f_sigma + f_phase_field
     objective_function += adjoint_energies
@@ -308,7 +308,7 @@ print(f'rank = {MPI.COMM_WORLD.rank} ' + 'phase_field_0= '          ' {} '.forma
 # phase_field_0.s += 5
 # save a copy of the original phase field
 phase_field_0_fixed = discretization.get_scalar_field(name='phase_field_0_fixed')
-phase_field_0_fixed.s = np.copy(phase_field.s)
+phase_field_0_fixed.s[...] = np.copy(phase_field.s)
 # flatten the array --- just nick
 # phase_field_0_flat = phase_field_0.s.ravel()  # TODO: check if this is copy or not
 _, _, _, analytical_sensitivity = my_objective_function(phase_field.s.ravel())
@@ -334,7 +334,7 @@ for epsilon in epsilons:
     for x in np.arange(discretization.nb_of_pixels[0]):
         for y in np.arange(discretization.nb_of_pixels[1]):
             # set phase_field to ones
-            phase_field.s = np.copy(phase_field_0_fixed.s)
+            phase_field.s[...] = np.copy(phase_field_0_fixed.s)
             #
             phase_field.s[0, 0, x, y] = phase_field.s[0, 0, x, y] + epsilon / fd_scheme
 

@@ -288,7 +288,7 @@ for w in np.arange(0.5) :
         #  #v = file.createVariable('phase_field_sol_FE_MPI', np.int32, 'dim')
         #  #f_glob = discretization.fft.register_real_field('phase_field', 1, 'pixel')
         #  #rfield =  discretization.fft.real_space_field('phase_field')
-        # # rfield.p = phase_field_sol_FE_MPI[0,0]
+        # # rfield.p[...] = phase_field_sol_FE_MPI[0,0]
         # # discretization.fft.real_field=phase_field_sol_FE_MPI
         #  file.register_field_collection(discretization.fft.real_field_collection)
         #  file.append_frame().write()

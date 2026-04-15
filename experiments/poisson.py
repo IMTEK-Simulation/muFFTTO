@@ -42,7 +42,7 @@ x, y = decomposition.coords  # Domain-local coords for each pixel
 rhs = fc.real_field("rhs")
 solution = fc.real_field("solution")
 
-rhs.p = (1 + np.cos(2 * np.pi * x) * np.cos(2 * np.pi * y)) ** 10
+rhs.p[...] = (1 + np.cos(2 * np.pi * x) * np.cos(2 * np.pi * y)) ** 10
 rhs.p -= np.mean(rhs.p)
 
 

@@ -1048,7 +1048,7 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
     #         p * np.power(phase_field_1nxyz[0, 0], (p - 1)))
     dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field(
         name='data_field_in_partial_derivative_of_energy_equivalence_wrt_phase_field_FE')
-    dmaterial_data_field_drho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * np.power(
+    dmaterial_data_field_drho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * np.power(
         p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
@@ -1062,7 +1062,7 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
     strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdofsewpf')
     strain_ijqxyz = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_field_fnxyz,
                                                                        grad_u_ijqxyz=strain_ijqxyz)
-    strain_ijqxyz.s = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    strain_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
 
     # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
     # strain_ijqxyz = macro_gradient_field_ijqxyz + strain_fluctuation_ijqxyz
@@ -1074,13 +1074,13 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
     # stress_field_ijqxyz_FE = discretization.apply_material_data(dmaterial_data_field_drho_ijklqxyz_FE, strain_ijqxyz)
 
     # Get the stress field (in the strain field name)
-    strain_ijqxyz.s = discretization.apply_material_data_elasticity(material_data=dmaterial_data_field_drho_ijklqxyz,
+    strain_ijqxyz.s[...] = discretization.apply_material_data_elasticity(material_data=dmaterial_data_field_drho_ijklqxyz,
                                                                     gradient_field=strain_ijqxyz)
     # apply quadrature weights
     # stress_ijqxyz_pixel = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz_pixel)
     # stress_field_ijqxyz_FE = np.ones(stress_field_ijqxyz_FE.shape)
     # TODO not sure if this should be here
-    strain_ijqxyz.s = discretization.apply_quadrature_weights_on_gradient_field(grad_field=strain_ijqxyz.s)
+    strain_ijqxyz.s[...] = discretization.apply_quadrature_weights_on_gradient_field(grad_field=strain_ijqxyz.s)
 
     # stress differenc
     double_contraction_stress_qxyz_FE = np.einsum('ij,ijqxy...->qxy...',
@@ -1146,7 +1146,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     dmaterial_data_field_drho_ijklqxyz_FE = discretization.get_material_data_size_field_mugrid(
         name='data_field_drho_partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE')
-    # dmaterial_data_field_drho_ijklqxyz_FE.s = material_data_field_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    # dmaterial_data_field_drho_ijklqxyz_FE.s[...] = material_data_field_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                           np.power(
     #                                               p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
     # TODO{WARNING} here is missing Cvoidd becouse of derivateive
@@ -1599,7 +1599,7 @@ def adjoint_potential(discretization,
 
     weights = discretization.quadrature_weights
     # apply B^transposed via the convolution operator
-    # stress_field_ijqxyz.s = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz.s)
+    # stress_field_ijqxyz.s[...] = discretization.apply_quadrature_weights_on_gradient_field(stress_field_ijqxyz.s)
     force_field_inxyz = discretization.get_displacement_sized_field(
         name='force_field_inxyz_in_adjoint_potential_temporary')
     discretization.fft.communicate_ghosts(stress_field_ijqxyz)
@@ -1724,17 +1724,17 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
 
 
 
-    # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    # material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
     # compute strain field from to displacement and macro gradient
     # strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdapwpf')
     # discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
     #                                                           grad_u_ijqxyz=strain_ijqxyz)
-    # strain_ijqxyz.s = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    # strain_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
     #
     # # compute stress field
     # # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
-    # strain_ijqxyz.s = np.einsum('ijkl...,lk...->ij...',
+    # strain_ijqxyz.s[...] = np.einsum('ijkl...,lk...->ij...',
     #                             dmaterial_data_field_drho_ijklqxyz.s,
     #                             strain_ijqxyz.s)
     stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='stress_ijqxyz_local_at_pdapwpf')
@@ -2379,7 +2379,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_with_adjoint_problem_FE_NEW')
-    material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
     # dmaterial_data_field_drho_ijklqxyz = material_data_field_ijklqxyz[..., :, :, :] *
     # np.power(p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
@@ -2435,9 +2435,9 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
                                   macro_gradient_field_ijqxyz=stress_difference_ijqxyz,
                                   rhs_inxyz=df_du_field)  # minus sign is already there
-    df_du_field.s = -2 * df_du_field.s / discretization.cell.domain_volume  # this is now on the right hand side
+    df_du_field.s[...] = -2 * df_du_field.s / discretization.cell.domain_volume  # this is now on the right hand side
     # Normalization
-    df_du_field.s = weight * df_du_field.s / np.sum(target_stress_ij ** 2)
+    df_du_field.s[...] = weight * df_du_field.s / np.sum(target_stress_ij ** 2)
 
     # solve adjoint problem
     norms_cg_adjoint = dict()
@@ -2562,11 +2562,11 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
 
     # material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field(
     #     name='data_field_in_sensitivity_stress_and_adjoint_FE_NEW')
-    # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    # material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_sensitivity_stress_and_adjoint_FE_NEW')
-    # material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    # material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
     material_data_field_rho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
@@ -2656,7 +2656,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         # norm_metric=res_norm
     )
 
-    # info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
+    info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:
         nb_it = len(norms_cg_adjoint['residual_rr'])
         info_adjoint_['num_iteration_adjoint'] = nb_it
@@ -2736,7 +2736,7 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field(
         name='data_field_in_sensitivity_elastic_energy_and_adjoint_FE_NEW')
-    material_data_field_rho_ijklqxyz.s = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+    material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
                                          np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 
     # strain_fluctuation_ijqxyz = discretization.apply_gradient_operator_symmetrized(displacement_field_fnxyz)
@@ -2810,10 +2810,10 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
                                          macro_gradient_field_ijqxyz=left_macro_gradient_ijqxyz,
                                          rhs_inxyz=df_du_field)
 
-    df_du_field.s = -2 * df_du_field.s / discretization.cell.domain_volume
+    df_du_field.s[...] = -2 * df_du_field.s / discretization.cell.domain_volume
     # Normalization
     # df_du_field = weight * (2 * f_sigmas_energy * 2 * df_du_field_BtSdiff) / target_energy ** 2
-    df_du_field.s = weight * (f_sigmas_energy * df_du_field.s) / (target_energy ** 2)
+    df_du_field.s[...] = weight * (f_sigmas_energy * df_du_field.s) / (target_energy ** 2)
 
     # adjoint_field_inxyz = discretization.get_unknown_size_field(
     #     name='adjoint_field_inxyz_sensitivity_elastic_energy_and_adjoint_FE_NEW')

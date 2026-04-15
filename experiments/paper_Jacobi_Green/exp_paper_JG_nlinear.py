@@ -130,7 +130,7 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
                                       max_val=10 ** total_phase_contrast)
 
 
-    material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                           np.broadcast_to(phase_field.s[0, 0],
                                                           material_data_field_C_0.s[0, 0, 0, 0].shape))
 
@@ -183,21 +183,21 @@ for nb_laminates_power in np.arange(2, nb_pix_multips + 1):  # nb_pix_multips + 
             discretization.fft.communicate_ghosts(x)
             x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-            x_jacobi_temp.s = K_diag_alg.s * x.s
+            x_jacobi_temp.s[...] = K_diag_alg.s * x.s
             discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                        input_nodal_field_fnxyz=x_jacobi_temp,
                                                        output_nodal_field_fnxyz=Px)
 
-            Px.s = K_diag_alg.s * Px.s
+            Px.s[...] = K_diag_alg.s * Px.s
             discretization.fft.communicate_ghosts(Px)
 
 
         def M_fun_Jacobi(x, Px):
-            Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
             discretization.fft.communicate_ghosts(Px)
 
     def M_fun_do_nothing(x, Px):
-        Px.s = 1 * x.s
+        Px.s[...] = 1 * x.s
 
     if preconditioner_type == 'Green':
         M_fun = M_fun_green

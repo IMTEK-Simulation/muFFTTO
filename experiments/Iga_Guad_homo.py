@@ -273,7 +273,7 @@ macro_grad_f = fc.real_field("macro_grad_f", components=(1,2), sub_pt="quad_poin
 macro_grad_f.s[0,:,...]=np.array([1.0,1.])[:,np.newaxis, np.newaxis, np.newaxis]
 
 
-macro_grad_f.s = np.einsum('ij...,uj...->ui...', material_field_ijqxy,
+macro_grad_f.s[...] = np.einsum('ij...,uj...->ui...', material_field_ijqxy,
                                     macro_grad_f.s)  # 'u' just to keep the size of array consistent
 rhs = fc.real_field("rhs", components=(1,), sub_pt="nodal_points")
 
@@ -293,7 +293,7 @@ def hessp(x, Ax):
     gradiant_field_ijqxyz = fc.real_field("gradient", components=(1, 2), sub_pt="quad_points")
 
     grad_op.apply(nodal_field=x, quadrature_point_field=gradiant_field_ijqxyz)
-    gradiant_field_ijqxyz.s = np.einsum('ij...,uj...->ui...', material_field_ijqxy,  gradiant_field_ijqxyz.s)  # 'u' just to keep the size of array consistent
+    gradiant_field_ijqxyz.s[...] = np.einsum('ij...,uj...->ui...', material_field_ijqxy,  gradiant_field_ijqxyz.s)  # 'u' just to keep the size of array consistent
 
     grad_op.transpose(quadrature_point_field=gradiant_field_ijqxyz, nodal_field=Ax, weights=weights)
 

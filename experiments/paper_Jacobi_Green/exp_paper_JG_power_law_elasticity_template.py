@@ -253,7 +253,7 @@ rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 # evaluate material law
 # stress, material_data_field_C_0_np = constitutive_temp(total_strain_field)
 #
-# material_data_field_C_0.s = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
+# material_data_field_C_0.s[...] = np.broadcast_to(material_data_field_C_0_np[:, :, :, :, np.newaxis, ...],
 #                                             (3, 3, 3, 3, discretization.nb_quad_points_per_pixel, *number_of_pixels))
 # set macroscopic loading increment
 ninc = 20
@@ -311,7 +311,7 @@ for inc in range(ninc):
         norm_rr = norms['residual_rr'][-1]
         print(f'nb iteration CG = {nb_it_comb}')
         # compute strain from the displacement increment
-        strain_fluc_field.s = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_increment_field,
+        strain_fluc_field.s[...] = discretization.apply_gradient_operator_symmetrized(u_inxyz=displacement_increment_field,
                                                                                  grad_u_ijqxyz=strain_fluc_field)
 
         total_strain_field.s += strain_fluc_field.s

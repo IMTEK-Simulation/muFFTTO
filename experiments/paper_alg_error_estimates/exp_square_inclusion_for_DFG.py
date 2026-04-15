@@ -86,15 +86,15 @@ for anisotropy in [ True]:  #False,
             material_data_field_C_ref = discretization.get_material_data_size_field_mugrid(
                 name='material_data_field_C_ref')
 
-            material_data_field_C_1.s = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
+            material_data_field_C_1.s[...] = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                     *discretization.nb_of_pixels])))
 
-            material_data_field_C_2.s = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
+            material_data_field_C_2.s[...] = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
                                                   np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                     *discretization.nb_of_pixels])))
 
-            material_data_field_C_ref.s = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
+            material_data_field_C_ref.s[...] = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
                                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                       *discretization.nb_of_pixels])))
             # material distribution

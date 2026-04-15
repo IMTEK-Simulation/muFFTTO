@@ -141,7 +141,7 @@ if compute:
         C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
         material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='mat_Data')
-        material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+        material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                               np.ones(np.array([discretization.nb_quad_points_per_pixel,
                                                                 *discretization.nb_of_pixels])))
 
@@ -191,7 +191,7 @@ if compute:
                 # else:
                 #     phase_field = scale_field(phase_field, min_val=1 / 10 ** ratio, max_val=1.0)
 
-                phase_field.s = np.copy(phase_field_origin.s)
+                phase_field.s[...] = np.copy(phase_field_origin.s)
 
                 if sharp:
                     # phase_field = scale_field(phase_field_origin, min_val=1 / 10 ** ratio, max_val=1.0)
@@ -210,7 +210,7 @@ if compute:
 
                 material_data_field_C_0_rho = discretization.get_material_data_size_field_mugrid(
                     name='material_data_field_C_0_rho')
-                material_data_field_C_0_rho.s = np.copy(material_data_field_C_0.s[..., :, :, :]) * np.power(
+                material_data_field_C_0_rho.s[...] = np.copy(material_data_field_C_0.s[..., :, :, :]) * np.power(
                     phase_field.s[0, 0], 1)
 
                 # plt.figure()
@@ -285,12 +285,12 @@ if compute:
                     discretization.fft.communicate_ghosts(x)
                     x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-                    x_jacobi_temp.s = K_diag_alg.s * x.s
+                    x_jacobi_temp.s[...] = K_diag_alg.s * x.s
                     discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                                input_nodal_field_fnxyz=x_jacobi_temp,
                                                                output_nodal_field_fnxyz=Px)
 
-                    Px.s = K_diag_alg.s * Px.s
+                    Px.s[...] = K_diag_alg.s * Px.s
                     discretization.fft.communicate_ghosts(Px)
 
 
@@ -308,7 +308,7 @@ if compute:
                 def M_fun_Jacobi(x, Px):
                     discretization.fft.communicate_ghosts(x)
 
-                    Px.s = K_diag_alg.s * K_diag_alg.s * Px.s
+                    Px.s[...] = K_diag_alg.s * K_diag_alg.s * Px.s
                     discretization.fft.communicate_ghosts(Px)
 
 
@@ -339,12 +339,12 @@ if compute:
                     # disp_fluctuation_field_it = discretization.get_displacement_sized_field(
                     #     name='disp_fluctuation_field_it')
                     # disp_fluctuation_field_it.s.fill(0)
-                    # disp_fluctuation_field_it.s = x_0
-                    strain_fluc_field_it.s = discretization.apply_gradient_operator_symmetrized(
+                    # disp_fluctuation_field_it.s[...] = x_0
+                    strain_fluc_field_it.s[...] = discretization.apply_gradient_operator_symmetrized(
                         u_inxyz=x_0,
                         grad_u_ijqxyz=strain_fluc_field_it)
-                    strain_fluc_field_it.s = strain_fluc_field_it.s + macro_gradient_field.s
-                    strain_fluc_field_it.s = discretization.apply_material_data(
+                    strain_fluc_field_it.s[...] = strain_fluc_field_it.s + macro_gradient_field.s
+                    strain_fluc_field_it.s[...] = discretization.apply_material_data(
                         material_data=material_data_field_C_0_rho,
                         gradient_field=strain_fluc_field_it)
 
@@ -454,12 +454,12 @@ if compute:
                     # disp_fluctuation_field_it = discretization.get_displacement_sized_field(
                     #     name='disp_fluctuation_field_it')
                     # disp_fluctuation_field_it.s.fill(0)
-                    # disp_fluctuation_field_it.s = x_0
-                    strain_fluc_field_it.s = discretization.apply_gradient_operator_symmetrized(
+                    # disp_fluctuation_field_it.s[...] = x_0
+                    strain_fluc_field_it.s[...] = discretization.apply_gradient_operator_symmetrized(
                         u_inxyz=x_0,
                         grad_u_ijqxyz=strain_fluc_field_it)
-                    strain_fluc_field_it.s = strain_fluc_field_it.s + macro_gradient_field.s
-                    strain_fluc_field_it.s = discretization.apply_material_data(
+                    strain_fluc_field_it.s[...] = strain_fluc_field_it.s + macro_gradient_field.s
+                    strain_fluc_field_it.s[...] = discretization.apply_material_data(
                         material_data=material_data_field_C_0_rho,
                         gradient_field=strain_fluc_field_it)
 

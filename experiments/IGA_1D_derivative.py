@@ -386,7 +386,7 @@ grad_op = muGrid.ConvolutionOperator(point_of_origin, B_dqnijk)
 rhs = fc.real_field("rhs")
 solution = fc.real_field("solution")
 
-rhs.p = (1 + np.cos(2 * np.pi * x / nb_grid_points) * np.cos(2 * np.pi * y / nb_grid_points)) ** 10
+rhs.p[...] = (1 + np.cos(2 * np.pi * x / nb_grid_points) * np.cos(2 * np.pi * y / nb_grid_points)) ** 10
 rhs.p -= np.mean(rhs.p)
 
 grid_spacing = 1 / np.array(nb_grid_points)

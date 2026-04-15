@@ -126,7 +126,7 @@ if total_phase_contrast == 0:
 else:
     material_distribution.s[0, 0,] += 1 / 10 ** total_phase_contrast
 
-material_data_field_C_0.s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
                                       np.broadcast_to(material_distribution.s[0, 0],
                                                       material_data_field_C_0.s[0, 0, 0, 0].shape))
 
@@ -180,17 +180,17 @@ for repetition in np.arange(1, 10 + 1):
         discretization.fft.communicate_ghosts(x)
         x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
 
-        x_jacobi_temp.s = K_diag_alg.s * x.s
+        x_jacobi_temp.s[...] = K_diag_alg.s * x.s
         discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                    input_nodal_field_fnxyz=x_jacobi_temp,
                                                    output_nodal_field_fnxyz=Px)
 
-        Px.s = K_diag_alg.s * Px.s
+        Px.s[...] = K_diag_alg.s * Px.s
         discretization.fft.communicate_ghosts(Px)
 
 
     def M_fun_Jacobi(x, Px):
-        Px.s = K_diag_alg.s * K_diag_alg.s * x.s
+        Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
         discretization.fft.communicate_ghosts(Px)
 
 
