@@ -59,8 +59,8 @@ def test_discretization_init(discretization_fixture):
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([1, 2], 0, [4, 5])])
-# ,([3.1, 6.4], 0, [7, 6])])
+    ([1, 2], 0, [4, 5]),
+    ([3.1, 6.4], 0, [7, 6])])
 def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True):
     problem_type = 'elasticity'
     discretization_type = 'finite_element'
