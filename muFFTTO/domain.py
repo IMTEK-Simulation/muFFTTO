@@ -564,6 +564,8 @@ class Discretization:
         # apply weights manually before transpose
         # weights shape is (nb_quad_points,)
         # field shape is (comp1, comp2, ..., nb_quad_points, nx, ny, nz)
+        # TODO [WEIGHT] remove when muGrid bug is fixed
+
         # we need to broadcast weights to the field shape
         broadcast_shape = [1] * (len(gradient_field_ijqxyz.s.shape) - self.domain_dimension - 1) + [
             self.nb_quad_points_per_pixel] + [1] * self.domain_dimension

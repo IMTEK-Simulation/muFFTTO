@@ -94,7 +94,7 @@ if __name__ == '__main__':
     # CLI
     # ---------------------------------------------------------------------------
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--nb_pixel', nargs='+', default=1024,
+    parser.add_argument('-n', '--nb_pixel', nargs='+', default=64,
                         help='Grid sizes to plot (default: all found in data dir)')
     args = parser.parse_args()
     n = int(args.nb_pixel)

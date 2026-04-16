@@ -267,7 +267,7 @@ discretization.apply_gradient_operator_symmetrized_mugrid(
     u_inxyz=solution_field,
     grad_u_ijqxyz=total_strain_field)
 
-total_strain_field.s += macro_gradient_field.s
+total_strain_field.s[...] += macro_gradient_field.s
 
 # Plot the strain field components
 fig, axes = plt.subplots(2, 2, figsize=(12, 10))

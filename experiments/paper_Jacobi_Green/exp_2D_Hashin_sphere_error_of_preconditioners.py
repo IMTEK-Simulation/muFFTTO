@@ -205,7 +205,7 @@ def callback(it, x, r, p, z, stop_crit_norm):
         u_inxyz=solution_field,
         grad_u_ijqxyz=total_strain_field)
 
-    total_strain_field.s += macro_gradient_field.s
+    total_strain_field.s[...] += macro_gradient_field.s
 
     file_data_name_it = f'{preconditioner_type}' + f'_n_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}' + f'_it_{it}'
     data_to_save = np.array(total_strain_field.s[...])
@@ -241,7 +241,7 @@ discretization.apply_gradient_operator_symmetrized_mugrid(
     u_inxyz=solution_field,
     grad_u_ijqxyz=total_strain_field)
 
-total_strain_field.s += macro_gradient_field.s
+total_strain_field.s[...] += macro_gradient_field.s
 
 file_data_name_it = f'{preconditioner_type}' +f'_n_{number_of_pixels[0]}' + f'_cgtol_{cg_tol_exponent}'
 # save_npy(data_folder_path +  file_data_name_it + f'.npy',
