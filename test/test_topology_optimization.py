@@ -1996,16 +1996,15 @@ def test_fd_check_of_stress_equivalence_potential(discretization_fixture, plot=T
         plt.show()
 
 
-@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([1, 1], 0, [6, 6]),
-    ([2, 5], 0, [12, 7]),
-    ([3, 4], 0, [8, 13]),
-    ([1, 1], 1, [6, 6]),
-    ([2, 5], 1, [9, 8]),
-    ([3, 4], 1, [4, 3])])
-def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture, plot=True):
-    p = 2
-    weight = 7
+@pytest.mark.parametrize('domain_size , element_type, nb_pixels, p', [
+    ([1, 1], 0, [6, 6], 2),
+    ([2, 5], 0, [12, 7], 2),
+    ([3, 4], 0, [8, 13], 3),
+    ([1, 1], 1, [6, 6], 2),
+    ([2, 5], 1, [9, 8], 3),
+    ([3, 4], 1, [4, 3], 3)])
+def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture, p, plot=False ):
+    weight = 1
 
     phase_field_1nxyz = discretization_fixture.get_scalar_field(
         name='phase_field')
@@ -2147,45 +2146,28 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
     gradient_of_adjoint_field_ijqxyz = discretization_fixture.apply_gradient_operator_symmetrized_mugrid(
         u_inxyz=adjoint_field_inxyz, grad_u_ijqxyz=gradient_of_adjoint_field_ijqxyz)
 
-    # get analytical partial derivative of phase field gradient potential for a phase field with respect to phase-field
-    # epsilons = [1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
-    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+    # Phase field lives in [0,1] — large epsilon drives it outside the linearization regime.
+    # O(h^2) convergence is visible only for epsilon << 1.
+    epsilons = [ 1e0,1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
 
-    error_fd_vs_analytical = []
     fd_derivative = discretization_fixture.get_scalar_field(name='fd_derivative_in_fd_test')
-    # allocate fields
-    phase_field_perturbed = discretization_fixture.get_scalar_field(
-        name='phase_field_perturbed')
+    phase_field_perturbed = discretization_fixture.get_scalar_field(name='phase_field_perturbed')
     stress_field_ijqxyz = discretization_fixture.get_gradient_size_field(
         name='stress_field_ijqxyz_in_test_perturbed')
     material_data_field_C_0_rho_ijklqxyz = discretization_fixture.get_material_data_size_field_mugrid(
         name='test_DATA_FIELD')
+
+    error_fd_vs_analytical = []
     for epsilon in epsilons:
-        # loop over every single element of phase field
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
-                # set phase_field to ones
-                phase_field_perturbed.s.fill(0)
+                phase_field_perturbed.s[...] = phase_field_1nxyz.s.copy()
 
-                phase_field_perturbed.s[...] = phase_field_1nxyz.s.copy()  # Phase field has  one  value per pixel
-                # f(x+eps/2)
-                # perturb phase field
-                phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] + epsilon / 2
-                # evaluate to quad points
-                # phase_field_at_quad_poits_1qnxyz, _ = discretization_fixture.evaluate_field_at_quad_points(
-                #     nodal_field_fnxyz=phase_field_perturbed,
-                #     quad_field_fqnxyz=None,
-                #     quad_points_coords_iq=None)
+                # f(x + eps/2)
+                phase_field_perturbed.s[0, 0, x, y] += epsilon / 2
                 discretization_fixture.apply_N_operator_mugrid(phase_field_perturbed, phase_field_at_quad_poits_1qxyz)
-                # material_data_field_C_0_rho_ijklqxyz = material_data_field_C_0_ijklqxyz[..., :, :, :] * (
-                #     np.power(
-                #         phase_field_at_quad_poits_1qnxyz,
-                #         p))[0,
-                # :, 0, ...]
-                # material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                #                                          np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
                 material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+                    np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
                 stress_field_ijqxyz.s.fill(0)
                 discretization_fixture.get_stress_field_mugrid(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
@@ -2193,19 +2175,16 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
                     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                     output_stress_field_ijqxyz=stress_field_ijqxyz,
                     formulation='small_strain')
-
                 adjoint_energy_plus = topology_optimization.adjoint_potential(
                     discretization=discretization_fixture,
                     stress_field_ijqxyz=stress_field_ijqxyz,
                     adjoint_field_inxyz=adjoint_field_inxyz)
 
-                # f(x-eps/2)
-                phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] - epsilon
-                # evaluate to quad points
+                # f(x - eps/2)
+                phase_field_perturbed.s[0, 0, x, y] -= epsilon
                 discretization_fixture.apply_N_operator_mugrid(phase_field_perturbed, phase_field_at_quad_poits_1qxyz)
                 material_data_field_C_0_rho_ijklqxyz.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
-
+                    np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
                 stress_field_ijqxyz.s.fill(0)
                 discretization_fixture.get_stress_field_mugrid(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
@@ -2213,7 +2192,6 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
                     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                     output_stress_field_ijqxyz=stress_field_ijqxyz,
                     formulation='small_strain')
-
                 adjoint_energy_minus = topology_optimization.adjoint_potential(
                     discretization=discretization_fixture,
                     stress_field_ijqxyz=stress_field_ijqxyz,
@@ -2224,39 +2202,57 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
         error_fd_vs_analytical.append(
             np.linalg.norm(fd_derivative.s[0, 0] - dadjoin_drho.s[0, 0], 'fro'))
 
-        # assert error_fd_vs_analytical[-1] < epsilon * 10, (
-        #     "Finite difference derivative do not corresponds to the analytical expression "
-        #     "for partial derivative of gradient of phase-field potential ")
-    print(error_fd_vs_analytical)
-    quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 2)
-    lin_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 1)
+    errors = np.array(error_fd_vs_analytical)
+    epsilons_arr = np.array(epsilons)
+    analytical_norm = np.linalg.norm(dadjoin_drho.s[0, 0], 'fro')
+    relative_errors = errors / analytical_norm
     if plot:
         import matplotlib.pyplot as plt
+        idx_min = np.argmin(errors)  # anchor reference lines at sweet spot
         plt.figure()
-        plt.loglog(epsilons, error_fd_vs_analytical, marker='x',
-                   label=r' error_fd_vs_analytical'.format())
-        plt.loglog(epsilons, quad_fit_of_error, linestyle='--',
-                   label=r' quad_fit_of_error'.format())
-        plt.loglog(epsilons, lin_fit_of_error, linestyle='--',
-                   label=r' lin_fit_of_error'.format())
+        plt.loglog(epsilons, errors, marker='x', label='FD vs analytical error')
+        plt.loglog(epsilons, errors[idx_min] * (epsilons_arr / epsilons_arr[idx_min]) ** 2,
+                   linestyle='--', label=r'$O(h^2)$ reference')
+        plt.loglog(epsilons, errors[idx_min] * (epsilons_arr / epsilons_arr[idx_min]) ** 1,
+                   linestyle='--', label=r'$O(h)$ reference')
         plt.legend(loc='best')
-        plt.xlabel('epsilon - size of Finite Difference step')
-        plt.ylabel('Error')
-
+        plt.xlabel('epsilon (FD step size)')
+        plt.ylabel('Error (Frobenius norm)')
+        plt.title('FD check: adjoint potential w.r.t. phase field')
         plt.show()
+    # Always check: minimum relative error should be small
+    assert np.min(relative_errors) < 1e-4, (
+        f"FD check failed (p={p}): minimum relative error {np.min(relative_errors):.2e} exceeds 1e-4. "
+        f"Analytical derivative may be wrong.")
+
+    # Convergence rate check only for p >= 3: for p=2, the functional is quadratic in rho_nodal
+    # so central differences are near-exact and the truncation error region is negligible.
+    if p >= 3:
+        log_eps = np.log10(epsilons_arr[:3])
+        log_err = np.log10(errors[:3])
+        convergence_rate = np.polyfit(log_eps, log_err, 1)[0]
+        assert convergence_rate > 1.5, (
+            f"FD convergence rate {convergence_rate:.2f} too low for p={p} "
+            f"(expected ~2 for central differences). Analytical derivative may be wrong.")
 
 
-@pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([3, 4], 0, [6, 8]),
-    ([2, 5], 0, [12, 7]),
-    ([3, 4], 1, [6, 8]),
-    ([2, 5], 1, [12, 7])
+
+
+@pytest.mark.parametrize('domain_size , element_type, nb_pixels, p', [
+    ([3, 4], 0, [6, 8], 2),
+    ([2, 5], 0, [12, 7], 2),
+    ([3, 4], 1, [6, 8], 3),
+    ([2, 5], 1, [12, 7], 3),
+    ([1, 1], 0, [6, 6], 2),
+    ([2, 2], 1, [8, 8], 2),
+    ([3, 4], 0, [6, 8], 3),
+    ([2, 5], 1, [12, 7], 2)
 ])
-def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixture, plot=True):
+def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixture, p, plot=False):
     np.random.seed(1234)
-    epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
-    # epsilonminuss = [1e-4] #
-    p = 2
+    # Phase field lives in [0,1] — large epsilon drives it outside the linearization regime.
+    # O(h^2) convergence is visible only for epsilon << 1.
+    epsilons = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     fd_derivative = discretization_fixture.get_scalar_field(name='fd_derivative')
 
     macro_gradient = np.array([[0.01, 0], [0, 0.01]])
@@ -2271,7 +2267,6 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
 
     soft_phase = 0
     elastic_C_void = material_C_0 * soft_phase
-    material_data_field_C_0_rho = discretization_fixture.get_material_data_size_field_mugrid(name='test_DATA_FIELD')
 
     phase_field = discretization_fixture.get_scalar_field(
         name='phase_field')
@@ -2282,9 +2277,6 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
         name='phase_field_at_quad_poits_1qxyz')
     discretization_fixture.apply_N_operator_mugrid(phase_field, phase_field_at_quad_poits_1qxyz)
 
-    material_data_field_C_0_rho.s[...] = material_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                    np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
-
     # Set up the equilibrium system
     macro_gradient_field = discretization_fixture.get_gradient_size_field(name='macro_gradient_field')
     discretization_fixture.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
@@ -2292,15 +2284,12 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
     # create random displacement field
     displacement_field = discretization_fixture.get_displacement_sized_field(
         name='test_displacement_field_in_test')
-    displacement_field.s.fill(0)
     displacement_field.s[...] = np.random.rand(*displacement_field.s.shape)
 
     # ----------------------------------------------------------------------
     # create random adjoint field
     adjoint_field = discretization_fixture.get_displacement_sized_field(
         name='test_adjoint_field_in_test')
-    adjoint_field.s.fill(0)
-
     adjoint_field.s[...] = np.random.rand(*adjoint_field.s.shape) ** 1
 
     # compute partial derivative of adjoint_potential
@@ -2317,100 +2306,89 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
         p=p)
 
     error_fd_vs_analytical = []
-    error_fd_vs_analytical_FE = []
     phase_field_perturbed = discretization_fixture.get_scalar_field(
         name='phase_field_perturbed')
 
     stress_field_per = discretization_fixture.get_gradient_size_field(
         name='stress_field_ijqxyz_in_test_perturbed')
 
+    material_data_field_C_0_rho = discretization_fixture.get_material_data_size_field_mugrid(name='test_DATA_FIELD')
+
     for epsilon in epsilons:
-        # loop over every single element of displacement field
         for x in np.arange(discretization_fixture.nb_of_pixels[0]):
             for y in np.arange(discretization_fixture.nb_of_pixels[1]):
-                phase_field_perturbed.s.fill(0)
-                phase_field_perturbed.s[...] = np.copy(phase_field.s)
-                phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] + epsilon / 2
+                phase_field_perturbed.s[...] = phase_field.s.copy()
 
-                # compute stress field corresponding to equilibrated displacement
-
-                # apply material distribution
-                # phase_field_at_quad_poits_1qnxyz = discretization_fixture.evaluate_field_at_quad_points(
-                #     nodal_field_fnxyz=phase_field_perturbed,
-                #     quad_field_fqnxyz=None,
-                #     quad_points_coords_iq=None)[0]
-                # #
-                # material_data_field_C_0_rho.s[...] = material_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                #                                 np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+                # f(x + eps/2)
+                phase_field_perturbed.s[0, 0, x, y] += epsilon / 2
                 discretization_fixture.apply_N_operator_mugrid(phase_field_perturbed, phase_field_at_quad_poits_1qxyz)
-
                 material_data_field_C_0_rho.s[...] = material_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
                                                 np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
-
-                #
                 discretization_fixture.get_stress_field_mugrid(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
                     displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     output_stress_field_ijqxyz=stress_field_per,
                     formulation='small_strain')
-
                 adjoint_potential_perturbed_plus = topology_optimization.adjoint_potential(
                     discretization=discretization_fixture,
                     stress_field_ijqxyz=stress_field_per,
                     adjoint_field_inxyz=adjoint_field)
 
-                # - epsilon 2
-                phase_field_perturbed.s[0, 0, x, y] = phase_field_perturbed.s[0, 0, x, y] - epsilon
-
-                # apply material distribution
+                # f(x - eps/2)
+                phase_field_perturbed.s[0, 0, x, y] -= epsilon
                 discretization_fixture.apply_N_operator_mugrid(phase_field_perturbed, phase_field_at_quad_poits_1qxyz)
                 material_data_field_C_0_rho.s[...] = material_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
                                                 np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
-
                 discretization_fixture.get_stress_field_mugrid(
                     material_data_field_ijklqxyz=material_data_field_C_0_rho,
                     displacement_field_inxyz=displacement_field,
                     macro_gradient_field_ijqxyz=macro_gradient_field,
                     output_stress_field_ijqxyz=stress_field_per,
                     formulation='small_strain')
-
                 adjoint_potential_perturbed_minus = topology_optimization.adjoint_potential(
                     discretization=discretization_fixture,
                     stress_field_ijqxyz=stress_field_per,
                     adjoint_field_inxyz=adjoint_field)
 
-                fd_derivative.s[0, 0, x, y] = (adjoint_potential_perturbed_plus
-                                               -
-                                               adjoint_potential_perturbed_minus) / epsilon
+                fd_derivative.s[0, 0, x, y] = (adjoint_potential_perturbed_plus - adjoint_potential_perturbed_minus) / epsilon
 
-        fd_norm_FE = np.sum(np.linalg.norm((fd_derivative.s[0, 0] - dg_drho_analytical_inxyz.s[0, 0]), 'fro'))
+        error_fd_vs_analytical.append(np.linalg.norm(fd_derivative.s[0, 0] - dg_drho_analytical_inxyz.s[0, 0], 'fro'))
 
-        error_fd_vs_analytical.append(fd_norm_FE)
-        # print('fd_norm: ', fd_norm)
-        print('error_fd_vs_analytical_FE: ', error_fd_vs_analytical_FE)
-        #
-        # assert error_fd_vs_analytical_FE[-1] < epsilon * 1e5, (
-        #     "Finite difference derivative  do not corresponds to the analytical expsression "
-        #     "for partial derivative of adjoint potential  w.r.t. displacement "
-        #     "for epsilon = {} and p = {}".format(epsilon, p))
+    errors = np.array(error_fd_vs_analytical)
+    epsilons_arr = np.array(epsilons)
+    analytical_norm = np.linalg.norm(dg_drho_analytical_inxyz.s[0, 0], 'fro')
+    relative_errors = errors / analytical_norm
+
     if plot:
-        quad_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 2)
-        lin_fit_of_error = np.multiply(error_fd_vs_analytical[6], np.asarray(epsilons) ** 1)
         import matplotlib.pyplot as plt
+        idx_min = np.argmin(errors)
         plt.figure()
-        plt.loglog(epsilons, error_fd_vs_analytical, marker='x',
-                   label=r' error_fd_vs_analytical'.format())
-        plt.loglog(epsilons, quad_fit_of_error, linestyle='--',
-                   label=r' quad_fit_of_error'.format())
-        plt.loglog(epsilons, lin_fit_of_error, linestyle='--',
-                   label=r' lin_fit_of_error'.format())
-        plt.xlabel('epsilon - size of Finite Difference step')
-        plt.ylabel('Error')
+        plt.loglog(epsilons, errors, marker='x', label='FD vs analytical error')
+        plt.loglog(epsilons, errors[idx_min] * (epsilons_arr / epsilons_arr[idx_min]) ** 2,
+                   linestyle='--', label=r'$O(h^2)$ reference')
+        plt.loglog(epsilons, errors[idx_min] * (epsilons_arr / epsilons_arr[idx_min]) ** 1,
+                   linestyle='--', label=r'$O(h)$ reference')
         plt.legend(loc='best')
-        plt.ylim([1e-16, 1e10])
-        plt.xlim([epsilons[-1], epsilons[0]])
+        plt.xlabel('epsilon (FD step size)')
+        plt.ylabel('Error (Frobenius norm)')
+        plt.title('FD check: adjoint potential w.r.t. phase field (fixed displacement)')
         plt.show()
+
+    # Always check: minimum relative error should be small
+    assert np.min(relative_errors) < 1e-4, (
+        f"FD check failed (p={p}): minimum relative error {np.min(relative_errors):.2e} exceeds 1e-4. "
+        f"Analytical derivative may be wrong.")
+
+    # Convergence rate check only for p >= 3: for p=2, the functional is quadratic in rho_nodal
+    # so central differences are near-exact and the truncation error region is negligible.
+    if p >= 3:
+        log_eps = np.log10(epsilons_arr[:3])
+        log_err = np.log10(errors[:3])
+        convergence_rate = np.polyfit(log_eps, log_err, 1)[0]
+        assert convergence_rate > 1.5, (
+            f"FD convergence rate {convergence_rate:.2f} too low for p={p} "
+            f"(expected ~2 for central differences). Analytical derivative may be wrong.")
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
