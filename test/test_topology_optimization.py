@@ -1283,8 +1283,8 @@ def test_integration_of_double_well_potential(plot=True):
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [25, 28]),
     ([2, 5], 0, [12, 7]),
-    #   ([3, 4], 1, [6, 8]),
-    #    ([2, 5], 1, [12, 7])
+      ([3, 4], 1, [6, 8]),
+       ([2, 5], 1, [12, 7])
 ])
 def test_fd_check_of_gradient_of_phase_field_potential(discretization_fixture, plot=True):
     # partial derivative of  phase field gradient potential = 2/eta int (  (grad(rho))^2 )    dx

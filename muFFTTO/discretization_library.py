@@ -461,6 +461,19 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
 
             my_domain.B_grad_at_pixel_dqnijk = np.moveaxis(B_at_pixel_dnijkq, [-1], [1])
 
+            N_at_quad_points_qijk = np.zeros(
+                [my_domain.nb_quad_points_per_pixel, *my_domain.domain_dimension * (2,)])
+            for qp in range(0, my_domain.nb_quad_points_per_pixel):
+                x_q = my_domain.quad_points_coord_parametric[:, qp]
+                xi = x_q[0]
+                eta = x_q[1]
+                N_at_quad_points_qijk[qp, 0, 0] = (1 - xi) * (1 - eta) / 4
+                N_at_quad_points_qijk[qp, 1, 0] = (1 + xi) * (1 - eta) / 4
+                N_at_quad_points_qijk[qp, 1, 1] = (1 + xi) * (1 + eta) / 4
+                N_at_quad_points_qijk[qp, 0, 1] = (1 - xi) * (1 + eta) / 4
+
+            my_domain.N_at_quad_points_qnijk = np.expand_dims(np.expand_dims(N_at_quad_points_qijk, axis=1), axis=0)
+
             return
         case 'trilinear_hexahedron':
             if my_domain.domain_dimension != 3:

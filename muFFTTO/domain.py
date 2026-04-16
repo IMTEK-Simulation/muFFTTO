@@ -561,6 +561,13 @@ class Discretization:
         else:
             weights = np.ones(self.quadrature_weights.shape)
 
+        # apply weights manually before transpose
+        # weights shape is (nb_quad_points,)
+        # field shape is (comp1, comp2, ..., nb_quad_points, nx, ny, nz)
+        # we need to broadcast weights to the field shape
+        broadcast_shape = [1] * (len(gradient_field_ijqxyz.s.shape) - self.domain_dimension - 1) + [
+            self.nb_quad_points_per_pixel] + [1] * self.domain_dimension
+        gradient_field_ijqxyz.s[...] *= weights.reshape(broadcast_shape)
         #   convolution operator
         self.fft.communicate_ghosts(field=gradient_field_ijqxyz)
         # apply B^transposed via the convolution operator
@@ -756,12 +763,21 @@ class Discretization:
         else:
             weights = np.ones(self.quadrature_weights.shape)
 
+
+        # apply B^transposed via the convolution operator
+        # apply weights manually before transpose
+        # weights shape is (nb_quad_points,)
+        # field shape is (comp1, comp2, ..., nb_quad_points, nx, ny, nz)
+        # we need to broadcast weights to the field shape
+        broadcast_shape = [1] * (len(quad_field_ijqxyz.s.shape) - self.domain_dimension - 1) + [
+            self.nb_quad_points_per_pixel] + [1] * self.domain_dimension
+        quad_field_ijqxyz.s[...] *= weights.reshape(broadcast_shape)
         #   convolution operator
         self.fft.communicate_ghosts(field=quad_field_ijqxyz)
-        # apply B^transposed via the convolution operator
+
         self.interpolation_op.transpose(quadrature_point_field=quad_field_ijqxyz,
                                         nodal_field=nodal_field_inxyz,
-                                        weights=weights)
+                                        weights=weights )
 
         self.fft.communicate_ghosts(field=nodal_field_inxyz)
 
