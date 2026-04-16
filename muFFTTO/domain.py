@@ -353,10 +353,10 @@ class Discretization:
             name='f_field_phase_roll_temp',  # name of the field
             components=(u_inxyz.shape[0],))
         fft.fft(u_inxyz, f_field_inqrs)
-        f_field_inqrs.s *= np.exp(1j * phase)
-        return_field_inxyz = self.fft.real_space_field(
+        f_field_inqrs.s[...] *= np.exp(1j * phase)
+        return_field_inxyz = self.field_collection.real_field(
             name='field_phase_roll_temp',  # name of the field
-            shape=(u_inxyz.shape[0],))
+            components=(u_inxyz.shape[0],))
 
         fft.ifft(f_field_inqrs, return_field_inxyz)
 
@@ -1465,9 +1465,9 @@ class Discretization:
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
             )  #
             # TODO: COMMUnicate buffers
-
-            preconditioner_diagonals_injnxyz.sg[..., 0] = np.copy(preconditioner_diagonals_injnxyz.s[..., -1])
-            preconditioner_diagonals_injnxyz.sg[..., -1] = np.copy(preconditioner_diagonals_injnxyz.s[..., 0])
+            self.fft.communicate_ghosts(preconditioner_diagonals_ininqks)
+            # preconditioner_diagonals_injnxyz.sg[..., 0] = np.copy(preconditioner_diagonals_injnxyz.s[..., -1])
+            # preconditioner_diagonals_injnxyz.sg[..., -1] = np.copy(preconditioner_diagonals_injnxyz.s[..., 0])
 
             self.fft.fft(preconditioner_diagonals_injnxyz, preconditioner_diagonals_ininqks)
 
