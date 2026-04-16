@@ -2656,10 +2656,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         # norm_metric=res_norm
     )
 
-    # info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:
         nb_it = len(norms_cg_adjoint['residual_rr'])
         info_adjoint_['num_iteration_adjoint'] = nb_it
+        info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
 
         del norms_cg_adjoint
         gc.collect()

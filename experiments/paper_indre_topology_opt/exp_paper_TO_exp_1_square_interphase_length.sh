@@ -6,7 +6,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 #etas=( 0.05)
 weights=(1.0 )
-N=(64)
+N=(32)
 etas=$(echo "3 *sqrt(2) / $N" | bc -l)
 
 for eta in "${etas[@]}"; do
