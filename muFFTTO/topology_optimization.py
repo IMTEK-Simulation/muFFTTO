@@ -1159,7 +1159,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     # TODO{WARNING} here is missing Cvoidd becouse of derivateive
     dmaterial_data_field_drho_ijklqxyz_FE.s[...] = (material_data_field_ijkl - void_material_data_ijkl)[
                                                   ..., np.newaxis, np.newaxis, np.newaxis] * \
-                                              np.power(p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
+                                              (p * np.power(phase_field_at_quad_poits_1qxyz.s, p - 1))[0, 0, :, ...]
 
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
