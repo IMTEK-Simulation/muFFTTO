@@ -106,7 +106,7 @@ for i in range(dim):
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
     # solver
-    def callback(it, x, r, p):
+    def callback(it, x, r, p, z=None, stop_crit=None):
         """
         Callback function to print the current solution, residual, and search direction.
         """

@@ -152,7 +152,7 @@ for i in range(1):
 
     #    solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
     # solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
-    def callback(it, x, r, p):
+    def callback(it, x, r, p, z=None, stop_crit=None):
         """
         Callback function to print the current solution, residual, and search direction.
         """

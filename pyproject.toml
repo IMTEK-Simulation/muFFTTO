@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "muFFTTO"
-description = "Python skeleton project"
+description = "FFT-based micro-scale topology optimization on periodic unit cells"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [

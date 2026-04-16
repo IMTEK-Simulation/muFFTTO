@@ -5,7 +5,6 @@ import sys
 sys.path.append('..')  # Add parent directory to path
 from mpi4py import MPI
 
-from muGrid import ConvolutionOperator
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
@@ -95,7 +94,7 @@ def M_fun(x, Px):
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
 
-def callback(it, x, r, p):
+def callback(it, x, r, p, z=None, stop_crit=None):
     """
     Callback function to print the current solution, residual, and search direction.
     """

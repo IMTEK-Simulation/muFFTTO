@@ -763,16 +763,6 @@ def SphereinCube(*nb_voxels):
     return N
 
 
-def square_frame2D(Nx, k):
-    geom = np.zeros((Nx, Nx))
-    for i in range(Nx):
-        for j in range(Nx):
-            if i < k or Nx - i <= k or j < k or Nx - j <= k:
-                geom[i, j] = 1
-    geom = geom[0:Nx, 0:Nx]
-    return geom
-
-
 def square_frame2D_flexible(Nx, k1, k2):
     geom1 = square_frame2D(Nx, k1)
     geom2 = square_frame2D(Nx, k2)

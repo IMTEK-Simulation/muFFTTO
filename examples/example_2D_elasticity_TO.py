@@ -376,7 +376,7 @@ if __name__ == '__main__':
         f_field.s[0, 0, np.logical_and(np.abs(discretization.fft.ifftfreq[0]) > 8,
                                        np.abs(discretization.fft.ifftfreq[1]) > 8)] = 0
         discretization.fft.ifft(f_field, phase)
-        phase.s *= discretization.fft.normalisation
+        phase.s[...] *= discretization.fft.normalisation
         phase.s[phase.s > 1] = 1
         phase.s[phase.s < 0] = 0
 
