@@ -8,7 +8,7 @@ FFT-based micro-scale topology optimization on periodic unit cells using the [mu
 - **Topology optimization**: Phase-field based optimization with adjoint sensitivity analysis
 - **Multi-dimensional**: Supports 1D, 2D, and 3D problems
 - **FEM discretization**: Triangular and hexahedral finite elements with quadrature-based integration
-- **FFT solvers**: Matrix-free conjugate gradient solvers accelerated by FFT (via muFFT/muGrid)
+- **FFT solvers**: Matrix-free conjugate gradient solvers accelerated by FFT (via muGrid)
 - **MPI parallelism**: Distributed computing support through muGrid's MPI infrastructure
 - **Microstructure library**: Built-in parametric geometries (laminates, inclusions, lattices, etc.)
 

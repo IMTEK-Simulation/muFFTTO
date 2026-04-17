@@ -1,11 +1,6 @@
 import numpy as np
 import time
 # from netCDF4 import Dataset
-import sys
-
-sys.path.append('..')  # Add parent directory to path
-
-
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
@@ -141,13 +136,3 @@ elapsed_time = end_time - start_time
 
 print("Elapsed time: ", elapsed_time)
 print("Elapsed time: ", elapsed_time / 60)
-quit()
-microstructure_library.visualize_voxels(phase_field_xyz=temperature_field.s[0, 0])
-
-grad_field = discretization.get_gradient_size_field(name='solution_gradient')
-discretization.apply_gradient_operator(u_inxyz=temperature_field,
-                                       grad_u_ijqxyz=grad_field)
-
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.s.mean(axis=2)[0, 0])
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.s.mean(axis=2)[0, 1])
-microstructure_library.visualize_voxels(phase_field_xyz=grad_field.s.mean(axis=2)[0, 2])

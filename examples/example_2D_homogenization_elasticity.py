@@ -1,10 +1,6 @@
 import numpy as np
 import scipy as sc
 import time
-import sys
-
-sys.path.append('..')  # Add parent directory to path
-
 from mpi4py import MPI
 from NuMPI.IO import save_npy, load_npy
 
@@ -197,49 +193,6 @@ homogenized_stress = discretization.get_homogenized_stress_mugrid(
 print('homogenized stress = \n {}'.format(homogenized_stress))
 print('homogenized stress in Voigt notation = \n {}'.format(domain.compute_Voigt_notation_2order(homogenized_stress)))
 
-end_time = time.time()
-elapsed_time = end_time - start_time
-print("Elapsed time: ", elapsed_time)
-quit()
-start_time = time.time()
-dim = discretization.domain_dimension
-homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
-# compute whole homogenized elastic tangent
-for i in range(dim):
-    for j in range(dim):
-        # set macroscopic gradient
-        macro_gradient = np.zeros([dim, dim])
-        macro_gradient[i, j] = 1
-
-        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
-                                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
-        # Set up right hand side
-        # Solve mechanical equilibrium constrain
-        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                           macro_gradient_field_ijqxyz=macro_gradient_field,
-                                           rhs_inxyz=rhs_field)
-        # rhs_ij = discretization.get_rhs(material_data_field_C_0_rh, macro_gradient_field)
-
-        solvers.conjugate_gradients_mugrid(
-            comm=discretization.communicator,
-            fc=discretization.field_collection,
-            hessp=K_fun,  # linear operator
-            b=rhs_field,
-            x=solution_field,
-            P=M_fun,
-            tol=1e-6,
-            maxiter=2000,
-            callback=callback,
-        )
-        # ----------------------------------------------------------------------
-        # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
-            material_data_field_ijklqxyz=material_data_field_C_0,
-            displacement_field_inxyz=solution_field,
-            macro_gradient_field_ijqxyz=macro_gradient_field,
-            formulation='small_strain')
-
-print('homogenized elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(homogenized_C_ijkl)))
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)

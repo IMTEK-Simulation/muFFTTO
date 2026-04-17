@@ -1,8 +1,4 @@
-import sys
-
 import matplotlib.pyplot as plt
-
-sys.path.append('..')  # Add parent directory to path
 
 import numpy as np
 import time

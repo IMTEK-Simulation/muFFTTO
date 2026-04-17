@@ -3,10 +3,6 @@ import matplotlib.pyplot as plt
 
 import scipy as sc
 import time
-import sys
-
-sys.path.append('..')  # Add parent directory to path
-
 from mpi4py import MPI
 from NuMPI.IO import save_npy, load_npy
 

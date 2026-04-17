@@ -9,7 +9,7 @@ readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [
     { name = "Lars Pastewka", email = "lars.pastewka@imtek.uni-freiburg.de" },
-    { name = "Martin Ladecky", email = "martin.ladecky@gmail.com" }
+    { name = "Martin Ladecky", email = "martin.ladecky@imtek.uni-freiburg.de" }
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -23,12 +23,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
-    "flake8<5",
-    "pytest",
-    "pytest-cov",
-    "pytest-flake8"
+mpi = [
+    "mpi4py",
+    "NuMPI"
 ]
+test = [
+    "pytest",
+    "pytest-cov"
+]
+
+# Note: muGrid and muFFT must be installed separately from the muSpectre project:
+# https://github.com/muSpectre/muGrid
+# https://github.com/muSpectre/muFFT
 
 [project.urls]
 documentation = "https://imtek-simulation.github.io/muFFTTO/"
