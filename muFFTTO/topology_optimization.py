@@ -524,12 +524,7 @@ def partial_derivative_of_gradient_of_phase_field_potential(discretization,
                                  quadrature_point_field=phase_field_grad_1jqxyz)
 
     weights = discretization.quadrature_weights
-    # discretization.fft.communicate_ghosts(phase_field_grad_1jqxyz)
-    # TODO [WEIGHT] remove when muGrid bug is fixed
-    # we need to broadcast weights to the field shape
-    broadcast_shape = [1] * (len(phase_field_grad_1jqxyz.s.shape) - discretization.domain_dimension - 1) + [
-        discretization.nb_quad_points_per_pixel] + [1] * discretization.domain_dimension
-    phase_field_grad_1jqxyz.s[...] *= weights.reshape(broadcast_shape)
+
     discretization.fft.communicate_ghosts(phase_field_grad_1jqxyz)
 
     discretization.conv_op.transpose(quadrature_point_field=phase_field_grad_1jqxyz,
@@ -780,16 +775,7 @@ def adjoint_potential(discretization,
         name='force_field_inxyz_in_adjoint_potential_temporary')
     discretization.fft.communicate_ghosts(stress_field_ijqxyz)
 
-    # because .conv_op.transpose does not apply quadrature weights we need to do this
-    # TODO [WEIGHT] remove when muGrid bug is fixed
-    broadcast_shape = [1] * (len(stress_field_ijqxyz.s.shape) - discretization.domain_dimension - 1) + [
-        discretization.nb_quad_points_per_pixel] + [1] * discretization.domain_dimension
-
-    stress_weighted=discretization.get_gradient_size_field(name='stress_field_mugrid_in_adjoint_potential_temporary')
-    stress_weighted.s[...]= stress_field_ijqxyz.s * weights.reshape(broadcast_shape)
-    discretization.fft.communicate_ghosts(stress_weighted)
-    # force_field_inxyz = discretization.apply_gradient_transposed_operator(stress_field_ijqxyz)
-    discretization.conv_op.transpose(quadrature_point_field=stress_weighted,
+    discretization.conv_op.transpose(quadrature_point_field=stress_field_ijqxyz,
                                      nodal_field=force_field_inxyz,
                                      weights=weights)
 
