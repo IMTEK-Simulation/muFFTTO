@@ -58,9 +58,7 @@ print('2 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
-material_data_field_C_0.s[...] = np.einsum('ijkl,qxy->ijklqxy', elastic_C_0,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_0.s[...] = elastic_C_0[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 print('3 = \n   core {}'.format(MPI.COMM_WORLD.rank))
 # Set up preconditioner
 preconditioner_fnfnqks = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0)

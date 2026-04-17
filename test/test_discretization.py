@@ -583,14 +583,10 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field_.s[...] = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                         *discretization.nb_of_pixels])))
+                    material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field_.s[...] = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                         *discretization.nb_of_pixels])))
+                    material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
                 if problem_type == 'elasticity':
                     K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
                 elif problem_type == 'conductivity':
@@ -630,16 +626,10 @@ class DiscretizationTestCase(unittest.TestCase):
                                                                K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field_.s[...] = np.einsum('ijkl,qxyz->ijklqxyz', mat_1,
-                                                       np.ones(np.array(
-                                                           [discretization.nb_quad_points_per_pixel,
-                                                            *discretization.nb_of_pixels])))
+                    material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                    material_data_field_.s[...] = np.einsum('ij,qxyz->ijqxyz', mat_1,
-                                                       np.ones(np.array(
-                                                           [discretization.nb_quad_points_per_pixel,
-                                                            *discretization.nb_of_pixels])))
+                    material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
                 if problem_type == 'elasticity':
                     K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
                 elif problem_type == 'conductivity':
@@ -680,9 +670,7 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field.s[...] = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
                     ref_material_data = np.copy(mat_1)
                     material_data_field.s[:, :, :, :, :, 1, 1] = 2 * material_data_field.s[:, :, :, :, :, 1, 1]
 
@@ -691,9 +679,7 @@ class DiscretizationTestCase(unittest.TestCase):
 
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
                     # TODO do not forget about this magic
                     #  material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
                     #                                 quad_coordinates[0])
@@ -838,16 +824,12 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                      *discretization.nb_of_pixels])))
+                    material_data_field = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 
                     target_stress = np.array([[1, 0.3], [0.3, 2]])
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                      *discretization.nb_of_pixels])))
+                    material_data_field = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
                     target_stress = np.array([2, 0.5])
                     target_stress = target_stress[np.newaxis,]
 
@@ -957,17 +939,13 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field.s[...] = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 
 
 
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
                 ref_material_data = np.copy(mat_1)
 
@@ -1023,14 +1001,10 @@ class DiscretizationTestCase(unittest.TestCase):
                     # I4rt = np.einsum('ik,jl', ii, ii)
                     # mat_1 = (I4 + I4rt) / 2.
 
-                    material_data_field.s[...] = np.einsum('ijkl,qxy->ijklqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = np.einsum('ij,qxy->ijqxy', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
                 ref_material_data = np.copy(mat_1)
 
                 def K_fun(x, Ax):
@@ -1102,17 +1076,13 @@ class DiscretizationTestCase(unittest.TestCase):
                     mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
-                    material_data_field.s[...] = np.einsum('ijkl,qxyz->ijklqxyz', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
 
 
                 elif problem_type == 'conductivity':
                     mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                    material_data_field.s[...] = np.einsum('ij,qxyz->ijqxyz', mat_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
                 # ref_material_data_field = np.copy(material_data_field)
 

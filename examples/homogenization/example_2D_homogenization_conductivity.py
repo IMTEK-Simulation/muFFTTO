@@ -1,24 +1,22 @@
-import matplotlib.pyplot as plt
-
+from mpi4py import MPI
 import numpy as np
 import time
-# from netCDF4 import Dataset
 
 
-# from muGrid import Solvers
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
-from mpi4py import MPI
+
+# Example of how to usu muFFTTO to solve the homogenization problem for 2D heat conductivity problem
+# We use square inclusion geometry, for which we have analytical solution
 
 problem_type = 'conductivity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'  # #'linear_triangles'# linear_triangles_tilled
-# formulation = 'small_strain'
-geometry_ID = 'square_inclusion'  # 'sine_wave_' #
+element_type = 'linear_triangles'
+geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (1024, 1024)
+number_of_pixels = (128, 128)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -37,9 +35,7 @@ conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='conductivity_tensor')
 
 # populate the field with C_1 material
-material_data_field_C_0.s[...] = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_0.s[...] = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
 # material distribution
 phase_field_geom = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
@@ -52,21 +48,9 @@ matrix_mask = phase_field_geom > 0
 inc_mask = phase_field_geom == 0
 
 # apply material distribution
-# print(matrix_mask)
-# material_data_field_C_0.s[...] = mat_contrast * material_data_field_C_0.s[..., :, :] * np.power(phase_field,
-#                                                                                            1)
-# material_data_field_C_0.s += mat_contrast_2 * material_data_field_C_0.s[..., :, :] * np.power(1 - phase_field, 1)
+
 material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
 material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
-
-
-# material_data_field_C_0.sg += mat_contrast_2 * material_data_field_C_0.sg[..., :, :, :] * (1-phase_field.sg[0, 0])
-# Set up the equilibrium system
-
-
-# K_fun = lambda x: discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
-#                                                      displacement_field=x)
-
 
 def K_fun(x, Ax):
     """
@@ -80,24 +64,7 @@ def K_fun(x, Ax):
     discretization.fft.communicate_ghosts(Ax)
 
 
-# xx__00 = np.zeros([1, discretization.nb_nodes_per_pixel, *discretization.nb_of_pixels])
-# graddd = np.zeros(
-#     [1, discretization.domain_dimension, discretization.nb_quad_points_per_pixel, *discretization.nb_of_pixels])
-#
-# graddd = discretization.apply_gradient_operator(u_inxyz=xx__00, grad_u_ijqxyz=graddd)
-# aa = K_fun(xx__00)
-# M_fun = lambda x: 1 * x
-# K_matrix = discretization.get_system_matrix(material_data_field_C_0)
-# preconditioner_old = discretization.get_preconditioner_DELETE(reference_material_data_field_ijklqxyz=material_data_field_C_0.s)
-
-# preconditioner = discretization.get_preconditioner_Green_fast(reference_material_data_ijkl=conductivity_C_1)
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
-
-
-# preconditioner_old = discretization.get_preconditioner(reference_material_data_field_ijklqxyz=material_data_field_C_0)
-
-# M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner, x)
-
 
 def M_fun(x, Px):
     """
@@ -108,24 +75,16 @@ def M_fun(x, Px):
     discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
-    # Px.s[...] = 1 * x.s[...]
-    # print()
 
 
-#  M_fun = lambda x: 1 * x
-
-# x_1 = K_fun(rhs)
-# initial solution
-# init_x_0 = discretization.get_unknown_size_field(name='init_solution')
 solution_field = discretization.get_unknown_size_field(name='solution')
-# solution_field.s=np.random.rand(*solution_field.s.shape)
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 
-for i in range(1):
+for i in range(dim):
     # set macroscopic gradient
     macro_gradient = np.zeros([dim])
     macro_gradient[i] = 1
@@ -133,21 +92,14 @@ for i in range(1):
     macro_gradient_field.sg.fill(0)
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
                                                    macro_gradient_field_ijqxyz=macro_gradient_field)
-
-    # print('rank' f'{MPI.COMM_WORLD.rank:6} material_data_field_C_0.s[0,0,0] =' f'{material_data_field_C_0.s[0,0,0]}')
-    # print('rank' f'{MPI.COMM_WORLD.rank:6} macro_gradient_field.s[0,0,0] =' f'{macro_gradient_field.s[0, 0,0]}')
     discretization.fft.communicate_ghosts(field=macro_gradient_field)
-    # Solve mechanical equilibrium constrain
+
+    # Solve equilibrium
     rhs_field.sg.fill(0)
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
 
-
-    # print('rank' f'{MPI.COMM_WORLD.rank:6} rhs_field =' f'{rhs_field.s}')
-
-    #    solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
-    # solution_field.sg, norms = solvers.PCG(K_fun, rhs.sg, x0=init_x_0.sg, P=M_fun, steps=int(1500), toler=1e-6)
     def callback(it, x, r, p, z=None, stop_crit=None):
         """
         Callback function to print the current solution, residual, and search direction.
@@ -156,70 +108,55 @@ for i in range(1):
         if discretization.communicator.rank == 0:
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
-
-    #  print(f"{it:5} {discretization.communicator.sum(np.dot(r.ravel(), r.ravel())):.5}")
-
     solvers.conjugate_gradients_mugrid(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
-        b=rhs_field,
+        b=rhs_field, # right-hand side
         x=solution_field,
         P=M_fun,
         tol=1e-6,
         maxiter=2000,
         callback=callback,
     )
-    plt.figure()
-    plt.imshow(solution_field.s[0,0])
-    plt.title('rank' f'{MPI.COMM_WORLD.rank:6} ')
-    plt.colorbar()
-    plt.show()
+
+    if discretization.communicator.size == 1:
+        # Plot the first component of the solution field
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.pcolormesh(discretization.fft.coords[0],
+                       discretization.fft.coords[1],
+                       solution_field.s[0,0])
+
+        plt.title(f'Solution field - macro gradient {macro_gradient} ')
+        plt.xlabel('x  / L')
+        plt.ylabel('y  / L')
+        plt.colorbar(label='Temperature / Potential')
+        plt.show()
     discretization.fft.communicate_ghosts(field=solution_field)
 
     sum_sol = discretization.mpi_reduction.sum(solution_field.s,
                                                axis=tuple(range(-3, 0)))
     print('rank' f'{MPI.COMM_WORLD.rank:6} sum_sol =' f'{sum_sol}')
 
-    # nb_it = len(norms['residual_rz'])
-    # print(solution_field.s)
-    # print(' nb_ steps CG =' f'{nb_it}')
-    # compute homogenized stress field corresponding to displacement
     homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
 
     # ----------------------------------------------------------------------
-    print('homogenized conductivity tangent = \n {}'.format(homogenized_A_ij))
+    print(
+        "homogenized conductivity tangent =\n" +
+        np.array2string(homogenized_A_ij, formatter={'float_kind': lambda x: f"{x:0.8f}"})
+    )
 
-# compute homogenized stress field corresponding to displacement
-homogenized_flux = discretization.get_homogenized_stress_mugrid(
-    material_data_field_ijklqxyz=material_data_field_C_0,  displacement_field_inxyz=solution_field,
-    macro_gradient_field_ijqxyz=macro_gradient_field)
-
-print(homogenized_flux)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
-print("Elapsed time: ", elapsed_time, 'seconds')
-print("Elapsed time: ", elapsed_time / 60, 'minutes')
-J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
-print("J_eff : ", J_eff)
+if discretization.communicator.rank == 0:
+    print("Elapsed time: ", elapsed_time, 'seconds')
+    print("Elapsed time: ", elapsed_time / 60, 'minutes')
+    J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
+    print(f'Analytical solution conductivity - A^eff_11  : {J_eff:0.8f}')
+    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0,0]:0.8f}')
 
-J_eff = mat_contrast * np.sqrt((mat_contrast + 3 * mat_contrast_2) / (3 * mat_contrast + mat_contrast_2))
-print("J_eff : ", J_eff)
-
-# nc = Dataset('temperatures.nc', 'w', format='NETCDF3_64BIT_OFFSET')
-# nc.createDimension('coords', 1)
-# nc.createDimension('number_of_dofs_x', number_of_pixels[0])
-# nc.createDimension('number_of_dofs_y', number_of_pixels[1])
-# nc.createDimension('number_of_dofs_per_pixel', 1)
-# nc.createDimension('time', None)  # 'unlimited' dimension
-# var = nc.createVariable('temperatures', 'f8',
-#                         ('time', 'coords', 'number_of_dofs_per_pixel', 'number_of_dofs_x', 'number_of_dofs_y'))
-# var[0, ...] = temperatute_field[0, ...]
-#
-# print(homogenized_flux)
-# # var[0, ..., 0] = x
-# # var[0, ..., 1] = y

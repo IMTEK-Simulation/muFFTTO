@@ -206,7 +206,10 @@ for i_circles in np.arange(np.size(nbs_of_cirles)):
             # phase_field = scale_field(phase_field, min_val=1, max_val=2)
             # phase_field[phase_field<=1/10**ratio]= 0
             plt.imshow(phase_field, cmap="gray")
-            plt.colorbar( )
+            plt.title(f'Phase Field (Contrast Ratio 10^{ratio})')
+            plt.xlabel('x [pixels]')
+            plt.ylabel('y [pixels]')
+            plt.colorbar(label='Phase value')
             plt.show()
             phase_fem = np.zeros([2, *number_of_pixels])
             phase_fnxyz = discretization.get_scalar_sized_field()

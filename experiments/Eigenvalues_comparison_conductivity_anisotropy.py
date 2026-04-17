@@ -82,24 +82,14 @@ for aniso in np.arange(-4, 7):
         conductivity_C_ref_green_in_jacobi = np.array([[1 , 0], [0, 1.0]])
         conductivity_C_for_rhs = np.array([[1e+4, 0], [0, 1.0]])
 
-        material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_0,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
+        material_data_field_C_0 = conductivity_C_0[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-        material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
+        material_data_field_C_1 = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-        refmaterial_data_field_ = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
-        refmaterial_data_field_JG = np.einsum('ij,qxy->ijqxy', conductivity_C_ref_green_in_jacobi,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
+        refmaterial_data_field_ = conductivity_C_ref[:, :, np.newaxis, np.newaxis, np.newaxis]
+        refmaterial_data_field_JG = conductivity_C_ref_green_in_jacobi[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-        refmaterial_data_field_for_rhs = np.einsum('ij,qxy->ijqxy', conductivity_C_for_rhs,
-                                              np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                *discretization.nb_of_pixels])))
+        refmaterial_data_field_for_rhs = conductivity_C_for_rhs[:, :, np.newaxis, np.newaxis, np.newaxis]
         print('Data = \n {}'.format(conductivity_C_0))
 
         # material distribution

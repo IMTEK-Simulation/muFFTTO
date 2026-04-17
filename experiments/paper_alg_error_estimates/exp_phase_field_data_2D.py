@@ -51,13 +51,9 @@ eigen_UB = np.max([eigen_C1, eigen_C2])
 print(f'eigen_LB = {eigen_LB}')
 print(f'eigen_UB = {eigen_UB}')
 
-material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
+material_data_field_C_1 = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-material_data_field_C_ref = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_ref = conductivity_C_ref[:, :, np.newaxis, np.newaxis, np.newaxis]
 # material distribution
 
 # name = 'lbfg_muFFTTO_elasticity_exp_paper_JG_2D_elasticity_TO_N64_E_target_0.15_Poisson_-0.50_Poisson0_0.29_w5.00_eta0.02_mac_1.0_p2_prec=Green_bounds=False_FE_NuMPI6_nb_load_cases_3_e_obj_False_random_True'
@@ -100,6 +96,10 @@ print(f'min ={np.min(phase_field)} ')
 print(f'max ={np.max(phase_field)} ')
 
 plt.imshow(phase_field, cmap="gray")
+plt.title('Phase Field Distribution')
+plt.xlabel('x [pixels]')
+plt.ylabel('y [pixels]')
+plt.colorbar(label='Phase value')
 plt.show()
 # apply material distribution
 material_data_field = np.copy(material_data_field_C_1[..., :, :, :]) * np.power(phase_field, 1)

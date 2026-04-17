@@ -40,16 +40,10 @@ conductivity_C_matrix = np.array([[1.0, 0], [0, 1.0]])
 conductivity_C_inclusion = np.array([[100., 0], [0, 101.0]])
 conductivity_C_ref = np.array([[1., 0], [0,  1.0]])
 
-material_data_field_C_inclusion = np.einsum('ij,qxy->ijqxy', conductivity_C_inclusion,
-                                            np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                              *discretization.nb_of_pixels])))
-material_data_field_C_matrix = np.einsum('ij,qxy->ijqxy', conductivity_C_matrix,
-                                         np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                           *discretization.nb_of_pixels])))
+material_data_field_C_inclusion = conductivity_C_inclusion[:, :, np.newaxis, np.newaxis, np.newaxis]
+material_data_field_C_matrix = conductivity_C_matrix[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-material_data_field_C_ref = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
-                                         np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                           *discretization.nb_of_pixels])))
+material_data_field_C_ref = conductivity_C_ref[:, :, np.newaxis, np.newaxis, np.newaxis]
 
 # material distribution
 phase_indicator_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,

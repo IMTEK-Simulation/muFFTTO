@@ -18,7 +18,11 @@ fp='exp_data/'+name
 #
 phase_field=np.load(fp)
 plt.figure()
-plt.imshow(phase_field)
+plt.imshow(phase_field, cmap='gray')
+plt.title('Phase Field Distribution')
+plt.xlabel('x [pixels]')
+plt.ylabel('y [pixels]')
+plt.colorbar(label='Phase value')
 #plt.show()
 
 problem_type = 'conductivity'
@@ -51,12 +55,8 @@ conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 # conductivity_C_0 = np.array([[1000., 0], [0, 1.0]])
 # conductivity_C_1 = np.array([[3., 5], [5, 80.0]])
 
-material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_0,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
-material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
+material_data_field_C_0 = conductivity_C_0[:, :, np.newaxis, np.newaxis, np.newaxis]
+material_data_field_C_1 = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 # material distribution
 phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                    microstructure_name=geometry_ID,

@@ -1,14 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-import scipy as sc
 import time
 from mpi4py import MPI
-from NuMPI.IO import save_npy, load_npy
 
 from muFFTTO import domain
 from muFFTTO import solvers
-from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -17,7 +13,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 dim = len(domain_size)
-number_of_pixels = (64,64)
+number_of_pixels = (512,512)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -62,26 +58,6 @@ lambda_3 = kappa_3 -   2 * mu_3/ dim
 C_matrix=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
 print('C_matrix = \n {}'.format(domain.compute_Voigt_notation_4order(C_matrix)))
 
-# kappa_1 = 0.1
-# lambda_1 = mu_1= 3*  kappa_1/5#   Lamé
-# C_core = domain.get_elastic_tensor_from_lame(dim=2, lam=lambda_1, mu=mu_1)
-#
-# kappa_2 = 1.5
-# lambda_2 = mu_2= 3*  kappa_2/5#   Lamé
-# C_shell = domain.get_elastic_tensor_from_lame(dim=2, lam=lambda_2, mu=mu_2)
-#
-# phi_1=(r_1 / r_2) ** dim
-# phi_2=1-phi_1
-#
-# k_eff=kappa_2+phi_1/((1/(kappa_1-kappa_2)+phi_2/(kappa_2+4*mu_2/3)))
-# lambda_3 = mu_3= 3*  k_eff/5#   Lamé
-# C_matrix=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
-# print('C_matrix = \n {}'.format(domain.compute_Voigt_notation_4order(C_matrix)))
-
-
-
-
-
 # reference material data
 C_0_ref = np.sqrt(np.einsum('ijkl,klmn->ijmn', C_core, C_shell))
 # get the geometry
@@ -89,107 +65,12 @@ coordinates = discretization.fft.coords
 center=np.array([0.5,0.5])#-1/np.array( number_of_pixels)
 r = np.sqrt(np.sum((coordinates - center[:, None, None]) ** 2, axis=0))
 
-#
-# def compute_displacement_matti(r, r1, r2,
-#                          K1, mu1,
-#                          K2, mu2,
-#                          K_eff, mu_eff):
-#     """
-#     Compute radial displacement u(r) for a coated inclusion
-#     under macroscopic strain <eps> = Id.
-#
-#     Parameters
-#     ----------
-#     r : array_like
-#         Radial coordinates.
-#     r1, r2 : float
-#         Core radius and outer coating radius.
-#     K1, mu1 : float
-#         Bulk and shear modulus of the core.
-#     K2, mu2 : float
-#         Bulk and shear modulus of the coating.
-#     K_eff, mu_eff : float
-#         Bulk and shear modulus of the matrix.
-#
-#     Returns
-#     -------
-#     u : ndarray
-#         Radial displacement field.
-#     """
-#
-#     r = np.asarray(r)
-#
-#     # Coefficients from the analytical solution
-#     denom = 3 * K2 + 4 * mu2
-#     a2 = (3 * K_eff + 4 * mu2) / denom
-#     b2 = 3 * r2**dim * (K2 - K_eff) / denom
-#     a1 = a2 + b2 / r1**dim
-#     a_eff = 1.0  # macroscopic strain = 1
-#
-#     # Allocate displacement array
-#     u = np.zeros_like(r)
-#
-#     # Region 1: core
-#     mask1 = r < r1
-#     u[mask1] = a1 * r[mask1]
-#
-#     # Region 2: coating
-#     mask2 = (r >= r1) & (r < r2)
-#     u[mask2] = a2 * r[mask2] + b2 / r[mask2]**2
-#
-#     # Region 3: matrix
-#     mask3 = r >= r2
-#     u[mask3] = a_eff * r[mask3]
-#
-#     return u
-#
-# def radial_to_cartesian_displacement(x, y, u_r):
-#     """
-#     Convert radial displacement u(r) to Cartesian components u_x, u_y.
-#
-#     Parameters
-#     ----------
-#     x, y : array_like
-#         Cartesian coordinates.
-#     u_r : array_like
-#         Radial displacement evaluated at r = sqrt(x^2 + y^2).
-#
-#     Returns
-#     -------
-#     u_x, u_y : ndarray
-#         Cartesian displacement components.
-#     """
-#     x = np.asarray(x)
-#     y = np.asarray(y)
-#     u_r = np.asarray(u_r)
-#
-#     r = np.sqrt(x**2 + y**2)
-#
-#     # Avoid division by zero at r = 0
-#     u_x = np.zeros_like(r)
-#     u_y = np.zeros_like(r)
-#
-#     mask = r > 0
-#     u_x[mask] = u_r[mask] * x[mask] / r[mask]
-#     u_y[mask] = u_r[mask] * y[mask] / r[mask]
-#
-#     return u_x, u_y
-
-# # Compute radial displacement
-# u_r = compute_displacement_matti(r, r_1, r_2, kappa_1, mu_1, kappa_2, mu_2, k_eff, mu_3)
-#
-# # Convert to Cartesian
-# u_x, u_y = radial_to_cartesian_displacement(coordinates[0]-center[0, None, None], coordinates[1]-center[1, None, None], u_r)
-
-
 mask_core = r <= r_1
 mask_shell =  (r > r_1) & (r < r_2)
 # populate the global data field
 material_data_field_C = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 # populate the field with C_1 material
-material_data_field_C.s[...] = np.einsum('ijkl,qxy->ijklqxy', C_matrix,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C.s[...] = C_matrix[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 
 # # apply material distribution to all quadrature points at masked locations
 material_data_field_C.s[..., mask_core] = C_core[..., None, None]
@@ -284,9 +165,11 @@ for ax, (component, label) in zip(axes.flat, components):
     ax.set_title(label)
     plt.colorbar(im, ax=ax)
 
+    circ_offset = 0.5 / np.array(number_of_pixels)
+
     # Draw circles for core and shell boundaries
-    circle1 = plt.Circle(center+0.5/np.array( number_of_pixels), r_1, fill=False, edgecolor='black', linestyle='--', linewidth=1.5)
-    circle2 = plt.Circle(center+0.5/np.array( number_of_pixels), r_2, fill=False, edgecolor='black', linestyle='-', linewidth=1.5)
+    circle1 = plt.Circle(center+circ_offset, r_1, fill=False, edgecolor='black', linestyle='--', linewidth=1.5)
+    circle2 = plt.Circle(center+circ_offset, r_2, fill=False, edgecolor='black', linestyle='-', linewidth=1.5)
     ax.add_patch(circle1)
     ax.add_patch(circle2)
 

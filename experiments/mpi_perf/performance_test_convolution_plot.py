@@ -63,6 +63,10 @@ if __name__ == '__main__':
         np.savez(data_folder_path + f'time.npz', **_info)
 
     # plt.imshow(phase_field_0.s[0, 0])
+    # plt.title('Phase Field Distribution')
+    # plt.xlabel('x [pixels]')
+    # plt.ylabel('y [pixels]')
+    # plt.colorbar(label='Phase value')
     # plt.show()
 
     Ns = [256, 512, 1024, 2048, 4096, 8192]  # , 64, 128
@@ -112,4 +116,8 @@ if __name__ == '__main__':
         np.savez(data_folder_path + f'time.npz', **_info)
 
     # plt.imshow(phase_field_0.s[0, 0])
+    # plt.title('Phase Field Distribution')
+    # plt.xlabel('x [pixels]')
+    # plt.ylabel('y [pixels]')
+    # plt.colorbar(label='Phase value')
     # plt.show()

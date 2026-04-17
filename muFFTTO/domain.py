@@ -88,7 +88,7 @@ class Discretization:
         if MPI.COMM_WORLD.size > 1:
             warnings.warn(message='Be carefull about change in number of poitns ')
             # adjust the number of points
-            self.nb_of_pixels[-1] = self.nb_of_pixels[-1] - 2  # TODO this is for buffer of size 1x1
+            self.nb_of_pixels[-1] = self.nb_of_pixels[-1] #- 2  # TODO this is for buffer of size 1x1
             # adjust subdomain location to not take into account buffers
             sub_dom_locations = np.asarray(self.fft.subdomain_locations)
             sub_dom_locations += left_ghosts

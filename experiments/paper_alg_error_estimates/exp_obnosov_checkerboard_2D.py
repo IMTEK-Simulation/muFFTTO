@@ -67,17 +67,11 @@ eigen_UB = np.max([eigen_C1, eigen_C2])
 print(f'eigen_LB = {eigen_LB}')
 print(f'eigen_UB = {eigen_UB}')
 
-material_data_field = np.einsum('ij,qxy->ijqxy', conductivity_C_2,
-                                np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                  *discretization.nb_of_pixels])))
+material_data_field = conductivity_C_2[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-material_data_field_C_1 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
+material_data_field_C_1 = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-material_data_field_C_ref = np.einsum('ij,qxy->ijqxy', conductivity_C_ref,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_ref = conductivity_C_ref[:, :, np.newaxis, np.newaxis, np.newaxis]
 # material distribution
 
 coordinates = discretization.fft.coords
@@ -93,6 +87,10 @@ for center_point in [0.25]:  # , 0.75
 
 
 plt.imshow(material_data_field[0, 0, 0], cmap="gray")
+plt.title('Material Data Field - Checkerboard (Component 0,0,0)')
+plt.xlabel('x [pixels]')
+plt.ylabel('y [pixels]')
+plt.colorbar(label='Conductivity value')
 plt.show()
 
 # Set up the equilibrium system

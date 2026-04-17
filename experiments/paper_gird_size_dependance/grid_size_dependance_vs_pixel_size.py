@@ -32,9 +32,7 @@ mat_contrast=1
 mat_contrast_2=5
 conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 
-material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_1,
-                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                      *discretization.nb_of_pixels])))
+material_data_field_C_0 = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis]
 
 # material distribution
 phase_field = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,

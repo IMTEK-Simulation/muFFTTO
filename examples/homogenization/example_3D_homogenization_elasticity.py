@@ -12,7 +12,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (64, 64,64)
+number_of_pixels = (16,16,16)
 geometry_ID = 'circle_inclusion'  # 'sine_wave_' #
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -41,9 +41,7 @@ elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimen
 print(domain.compute_Voigt_notation_4order(elastic_C_1))
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
-material_data_field_C_0.s[...] = np.einsum('ijkl,qxyz->ijklqxyz', elastic_C_1,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_0.s[...] = elastic_C_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
 # material distribution
@@ -101,27 +99,77 @@ def callback(it, x, r, p, z=None, stop_crit=None):
 
 solution_field = discretization.get_unknown_size_field(name='solution')
 
-solvers.conjugate_gradients_mugrid(
-    comm=discretization.communicator,
-    fc=discretization.field_collection,
-    hessp=K_fun,  # linear operator
-    b=rhs_field,
-    x=solution_field,
-    P=M_fun,
-    tol=1e-6,
-    maxiter=2000,
-    callback=callback,
-)
-# ----------------------------------------------------------------------
-# compute homogenized stress field corresponding to displacement
-homogenized_stress = discretization.get_homogenized_stress_mugrid(
-    material_data_field_ijklqxyz=material_data_field_C_0,
-    displacement_field_inxyz=solution_field,
-    macro_gradient_field_ijqxyz=macro_gradient_field,
-    formulation='small_strain')
-print('homogenized stress = \n {}'.format(homogenized_stress))
-print('homogenized stress in Voigt notation = \n {}'.format(domain.compute_Voigt_notation_2order(homogenized_stress)))
+# compute whole homogenized elastic tangent
+dim = discretization.domain_dimension
+homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
+for i in range(dim):
+    for j in range(dim):
+        # set macroscopic gradient
+        macro_gradient_ij = np.zeros([dim, dim])
+        macro_gradient_ij[i, j] = 1
+        # Set up right hand side
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
+        # Solve mechanical equilibrium constrain
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                      macro_gradient_field_ijqxyz=macro_gradient_field,
+                                      rhs_inxyz=rhs_field)
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,
+            x=solution_field,
+            P=M_fun,
+            tol=1e-6,
+            maxiter=2000,
+            callback=callback,
+        )
+        # ----------------------------------------------------------------------
+        # compute homogenized stress field corresponding
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            displacement_field_inxyz=solution_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            formulation='small_strain')
 
+        if discretization.communicator.size == 1:
+            # Plot the three components of the solution field
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+
+            im0 = ax[0].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                   discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+                                   solution_field.s[0, 0, ..., number_of_pixels[2] // 2])
+            ax[0].set_title(f'Solution field $u_0$ - macro gradient {macro_gradient_ij} ')
+            ax[0].set_xlabel('x  / L')
+            ax[0].set_ylabel('y  / L')
+            fig.colorbar(im0, ax=ax[0], label=rf'Displacement $u_{0}$')
+
+            im1 = ax[1].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                   discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+                                   solution_field.s[1, 0, ..., number_of_pixels[2] // 2])
+            ax[1].set_title(f'Solution field $u_1$ - macro gradient {macro_gradient_ij} ')
+            ax[1].set_xlabel('x  / L')
+            ax[1].set_ylabel('y  / L')
+            fig.colorbar(im1, ax=ax[1], label=rf'Displacement $u_{1}$')
+
+            im2 = ax[2].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                   discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+                                   solution_field.s[2, 0, ..., number_of_pixels[2] // 2])
+            ax[2].set_title(f'Solution field $u_2$ - macro gradient {macro_gradient_ij} ')
+            ax[2].set_xlabel('x  / L')
+            ax[2].set_ylabel('y  / L')
+            fig.colorbar(im2, ax=ax[2], label=rf'Displacement $u_{2}$')
+
+            plt.tight_layout()
+            plt.show()
+if MPI.COMM_WORLD.rank == 0:
+    print(
+        "Homogenized elastic tangent =\n" +
+        np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
+    )
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)

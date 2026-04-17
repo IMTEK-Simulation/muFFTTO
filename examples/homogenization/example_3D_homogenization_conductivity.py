@@ -10,9 +10,8 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (128,)
+number_of_pixels = 3 * (32,)
 
-#geometry_ID = 'sine_wave_'
 geometry_ID = 'square_inclusion'
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -32,9 +31,7 @@ conductivity_C_1 = 1 * np.array([[1, 0, 0],
                                  [0, 0, 1]])
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name=' conductivity_tensor')
-material_data_field_C_0.s[...] = np.einsum('ij,qxyz->ijqxyz', conductivity_C_1,
-                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                        *discretization.nb_of_pixels])))
+material_data_field_C_0.s[...] = conductivity_C_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
 # material distribution
 phase_field = discretization.get_scalar_field(name='phase_field')
@@ -95,7 +92,7 @@ for i in range(dim):
                                                    macro_gradient_field_ijqxyz=macro_gradient_field)
     discretization.fft.communicate_ghosts(field=macro_gradient_field)
 
-    # Solve equilibrium constrain
+    # Solve equilibrium
     rhs_field.s.fill(0)
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
@@ -124,13 +121,31 @@ for i in range(dim):
     discretization.fft.communicate_ghosts(field=solution_field)
 
     # ----------------------------------------------------------------------
-    # compute homogenized stress field corresponding to displacement
+    # compute homogenized flux
     homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
 
-print('homogenized elastic tangent = \n {}'.format(homogenized_A_ij))
+    if discretization.communicator.size == 1:
+        # Plot the first component of the solution field
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.pcolormesh(discretization.fft.coords[0,...,number_of_pixels[2]//2],
+                       discretization.fft.coords[1,...,number_of_pixels[2]//2],
+                       solution_field.s[0,0,...,number_of_pixels[2]//2])
+
+        plt.title(f'Solution field - macro gradient {macro_gradient} ')
+        plt.xlabel('x  / L')
+        plt.ylabel('y  / L')
+        plt.colorbar(label='Temperature / Potential')
+        plt.show()
+# ----------------------------------------------------------------------
+if discretization.communicator.rank == 0:
+    print(
+        "homogenized conductivity tangent =\n" +
+        np.array2string(homogenized_A_ij, formatter={'float_kind': lambda x: f"{x:0.8f}"})
+    )
 end_time = time.time()
 elapsed_time = end_time - start_time
 

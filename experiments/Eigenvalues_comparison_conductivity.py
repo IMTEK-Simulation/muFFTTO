@@ -79,13 +79,9 @@ for kk in np.arange(np.size(nb_pix_multips)):
     # conductivity_C_0 = np.array([[1000., 0], [0, 1.0]])
     # conductivity_C_1 = np.array([[3., 5], [5, 80.0]])
 
-    material_data_field_C_0 = np.einsum('ij,qxy->ijqxy', conductivity_C_0,
-                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                          *discretization.nb_of_pixels])))
+    material_data_field_C_0 = conductivity_C_0[:, :, np.newaxis, np.newaxis, np.newaxis]
 
-    refmaterial_data_field_ = np.einsum('ij,qxy->ijqxy', conductivity_C_0,
-                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                          *discretization.nb_of_pixels])))
+    refmaterial_data_field_ = conductivity_C_0[:, :, np.newaxis, np.newaxis, np.newaxis]
 
 
     print('Data = \n {}'.format(conductivity_C_0))

@@ -7,8 +7,6 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
-from muFFTTO import microstructure_library
-
 
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
