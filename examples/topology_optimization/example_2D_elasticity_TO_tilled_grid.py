@@ -13,11 +13,11 @@ from muFFTTO import topology_optimization
 # Problem Configuration
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'
+element_type = 'linear_triangles_tilled'
 formulation = 'small_strain'
 
 # Domain and Discretization
-domain_size = [1, 1]
+domain_size = [1,  np.sqrt(3) / 2]
 number_of_pixels = (32, 32)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
@@ -26,7 +26,7 @@ pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 soft_phase_exponent = 5
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
-weight = 1.  # Weight for the stress match term
+weight = 5.   # Weight for the stress match term
 cg_setup = {'cg_tol': 1e-6}
 
 # Initialize periodic unit cell and discretization
@@ -88,7 +88,7 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties (Auxetic behavior)
-poison_target = -0.3
+poison_target = -0.5
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poison_target)
@@ -362,16 +362,21 @@ if __name__ == '__main__':
         phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
 
     iterat = 0
+    x_coords=discretization.fft.coords
+    shift = 0.5 * np.linspace(0, domain_size[1], number_of_pixels[1])
+    # Apply shift to each row
+    x_coords[0] += shift[None, :] - 2
+    x_coords[1] *= np.sqrt(3) / 2
 
 
     def my_callback(x_current):
         """Callback to visualize progress during optimization."""
         global iterat
         iterat += 1
-        if MPI.COMM_WORLD.size == 1:
+        if MPI.COMM_WORLD.rank == 0:
             plt.figure()
-            plt.pcolormesh(discretization.fft.coords[0],
-                           discretization.fft.coords[1],
+            plt.pcolormesh(x_coords[0],
+                           x_coords[1],
                            x_current.reshape(discretization.nb_of_pixels),
                            cmap=mpl.cm.Greys)
             plt.clim(0, 1)
@@ -411,7 +416,7 @@ if __name__ == '__main__':
     file_data_name = f'_eta_{eta}' + f'_w_{weight}' + f'_final'
     save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
              solution_phase.s[0].mean(axis=0),
-             tuple(discretization.fft.subdomain_locations),
+             tuple(discretization.subdomain_locations_no_buffers),
              tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
     if MPI.COMM_WORLD.rank == 0:
@@ -514,7 +519,7 @@ if __name__ == '__main__':
                 macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
-        print('Optimized elastic tangent =  :\n' +
+        print('Optimized elastic tangent =  :\n' + 
         np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
                         formatter={'float_kind': lambda x: f"{x:0.5f}"}))
         print(f'Target elastic tangent (Voigt):\n' +

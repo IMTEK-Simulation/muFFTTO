@@ -1427,10 +1427,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     df_du_field.s[...] = weight * df_du_field.s / np.sum(target_stress_ij ** 2)
 
     info_adjoint_ = {}
-    if MPI.COMM_WORLD.rank == 0:
-        norms_cg_adjoint = dict()
-        norms_cg_adjoint['residual_rr'] = []
-        norms_cg_adjoint['residual_rz'] = []
+    #if MPI.COMM_WORLD.rank == 0:
+    norms_cg_adjoint = dict()
+    norms_cg_adjoint['residual_rr'] = []
+    norms_cg_adjoint['residual_rz'] = []
 
     def callback_adjoint(it, x, r, p, z, stop_crit_norm):
         # global norms_cg_mech
