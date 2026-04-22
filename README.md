@@ -59,8 +59,9 @@ pytest
 
 ## Authors
 
+- Martin Ladecky (University of Freiburg)
 - Lars Pastewka (University of Freiburg)
-- Martin Ladecky
+
 
 ## License
 
