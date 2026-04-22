@@ -12,23 +12,14 @@ FFT-based micro-scale topology optimization on periodic unit cells using the [mu
 - **MPI parallelism**: Distributed computing support through muGrid's MPI infrastructure
 - **Microstructure library**: Built-in parametric geometries (laminates, inclusions, lattices, etc.)
 
-## Installation
-
-```bash
-pip install -e .
-```
-
+ 
 ### Dependencies
 
 - Python >= 3.8
 - [numpy](https://numpy.org/), [scipy](https://scipy.org/)
 - [muGrid](https://github.com/muSpectre/muGrid) and [muFFT](https://github.com/muSpectre/muFFT) (must be installed separately)
 
-For running tests:
-
-```bash
-pip install -e .[test]
-```
+ 
 
 ## Package Structure
 
@@ -51,11 +42,7 @@ The `examples/` directory contains working examples:
 - `example_3D_homogenization_elasticity.py` - 3D elastic homogenization
 - `example_2D_homogenization_elasticity_Hashin_composite_sphere.py` - Validation against Hashin analytical bounds
 
-## Tests
-
-```bash
-pytest
-```
+ 
 
 ## Authors
 
