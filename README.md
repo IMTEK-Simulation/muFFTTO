@@ -53,3 +53,8 @@ The `examples/` directory contains working examples:
 ## License
 
 MIT - see [LICENSE.md](LICENSE.md)
+
+## Funding
+
+This development has received funding from the European Commission (Marie Sklodowska-Curie Fellowship 101106585 — microFFTTO).
+
