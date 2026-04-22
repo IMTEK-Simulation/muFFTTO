@@ -135,6 +135,6 @@ if __name__ == "__main__":
         ax.add_patch(circle2)
 
     plt.tight_layout()
-    plt.savefig('hashin_strain_field_2d_v2.png', dpi=150, bbox_inches='tight')
-    print("Plot saved as 'hashin_strain_field_2d.png'")
+    plt.savefig('hashin_strain_field_2d_analytical_v2.png', dpi=150, bbox_inches='tight')
+    print("Plot saved as 'hashin_strain_field_2d_analytical_v2.png'")
     plt.show()
