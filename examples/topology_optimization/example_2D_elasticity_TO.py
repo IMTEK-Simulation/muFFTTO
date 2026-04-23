@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import numpy as np
@@ -359,6 +360,7 @@ if __name__ == '__main__':
     if random_init:
         phase_field_0.s[...] += np.random.rand(*phase_field_0.s.shape)
     else:
+        np.random.seed(MPI.COMM_WORLD.rank)
         coords = discretization.fft.coords
         phase_field_0.s[0, 0] = (np.sin(coords[0] * 4 * np.pi) + np.sin(coords[1] * 4 * np.pi) + 2) / 4
         phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
@@ -519,11 +521,11 @@ if __name__ == '__main__':
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
         print('Optimized elastic tangent =  :\n' +
-        np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
-                        formatter={'float_kind': lambda x: f"{x:0.5f}"}))
+              np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
+                              formatter={'float_kind': lambda x: f"{x:0.5f}"}))
         print(f'Target elastic tangent (Voigt):\n' +
               np.array2string(domain.compute_Voigt_notation_4order(elastic_C_target),
-                        formatter={'float_kind': lambda x: f"{x:0.5f}"}))
+                              formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
     _info['homogenized_C_ijkl'] = domain.compute_Voigt_notation_4order(homogenized_C_ijkl)
     _info['target_C_ijkl'] = domain.compute_Voigt_notation_4order(elastic_C_target)
