@@ -30,7 +30,7 @@ def conjugate_gradients_mugrid(
         x: Field,
         P: callable,
         tol: float = 1e-6,
-        rtol: bool = True,
+        rtol: bool = False,
         maxiter: int = 1000,
         callback: callable = None,
         norm_metric: callable = None,

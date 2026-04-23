@@ -83,7 +83,7 @@ class Discretization:
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
         if MPI.COMM_WORLD.size > 1:
-            warnings.warn(message='Be carefull about change in number of poitns ')
+           # warnings.warn(message='Be carefull about change in number of poitns ')
             # adjust the number of points
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1] #- 2  # TODO this is for buffer of size 1x1
             # adjust subdomain location to not take into account buffers

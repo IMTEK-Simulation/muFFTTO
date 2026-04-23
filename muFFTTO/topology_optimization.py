@@ -1448,7 +1448,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         x=adjoint_field_inxyz,
         P=preconditioner_fun,
         tol=cg_tol,
-        maxiter=int(10000),
+        maxiter=int(10000) ,
         callback=callback_adjoint,
         # norm_metric=res_norm
     )
