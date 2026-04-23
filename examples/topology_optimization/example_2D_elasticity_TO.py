@@ -1,8 +1,7 @@
 import numpy as np
 import time
 import os
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+
 from NuMPI import Optimization
 from NuMPI.IO import save_npy
 from mpi4py import MPI
@@ -369,6 +368,8 @@ if __name__ == '__main__':
         global iterat
         iterat += 1
         if MPI.COMM_WORLD.size == 1:
+            import matplotlib as mpl
+            import matplotlib.pyplot as plt
             plt.figure()
             plt.pcolormesh(discretization.fft.coords[0],
                            discretization.fft.coords[1],
