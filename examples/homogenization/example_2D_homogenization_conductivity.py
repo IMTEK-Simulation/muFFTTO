@@ -1,7 +1,10 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 from mpi4py import MPI
 import numpy as np
 import time
-
 
 from muFFTTO import domain
 from muFFTTO import solvers

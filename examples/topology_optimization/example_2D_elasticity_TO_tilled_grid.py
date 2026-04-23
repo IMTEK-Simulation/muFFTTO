@@ -1,6 +1,9 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 import numpy as np
 import time
-import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from NuMPI import Optimization
