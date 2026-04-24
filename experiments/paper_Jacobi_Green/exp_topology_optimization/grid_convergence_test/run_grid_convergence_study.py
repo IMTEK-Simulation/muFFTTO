@@ -33,7 +33,7 @@ if __name__ == "__main__":
                 # Parameters for this specific run
                 params = {
                     "nb_pixels": n,
-                    "cg_tol_exponent": 7,
+                    "cg_tol_exponent": 5,
                     "soft_phase_exponent": soft_exponent,
                     "preconditioner_type": p_type,
                     "eta": 0.01,
@@ -41,7 +41,7 @@ if __name__ == "__main__":
                     "poison_target": -0.5,
                     "K_0": 1.0,
                     "G_0": 0.5,
-                    "random_init": True, # Fixed init for comparison
+                    "random_init": False, # Fixed init for comparison
                     "save_results": True,
                     "data_folder_path": data_folder_path,
                     "figure_folder_path": figure_folder_path,
