@@ -1,16 +1,16 @@
 import os
 import sys
-from mpi4py import MPI
 
-# Add the directory containing topology_opt_base.py to sys.path
-script_dir = os.path.dirname(os.path.realpath(__file__))
-# If running from a subdirectory (like grid_convergence_test), add the parent directory
+# Add the project root to sys.path to allow imports from muFFTTO
+script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
+project_root = os.path.dirname(os.path.dirname(parent_dir))
 
-if script_dir not in sys.path:
-    sys.path.append(script_dir)
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
+sys.path.insert(0, project_root)
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, script_dir)
+
+from mpi4py import MPI
 
 from topology_opt_base import run_topology_optimization
 

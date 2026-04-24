@@ -6,8 +6,9 @@ import numpy as np
 import time
 from mpi4py import MPI
 
+from muGrid import Solvers
+
 from muFFTTO import domain
-from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 problem_type = 'elasticity'
@@ -91,13 +92,13 @@ rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 solution_field = discretization.get_unknown_size_field(name='solution')
 
 
-def callback(it, x, r, p, z, stop_crit_norm):
+def callback(iteration, fields):
     """
     Callback function to print the current solution, residual, and search direction.
     """
-    norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+    norm_of_rr = fields['rr']
     if discretization.communicator.rank == 0:
-        print(f"{it:5} norm of residual = {norm_of_rr:.5}")
+        print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
 
 dim = discretization.domain_dimension
 homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
@@ -115,17 +116,18 @@ for i in range(dim):
                                       macro_gradient_field_ijqxyz=macro_gradient_field,
                                       rhs_inxyz=rhs_field)
 
-        solvers.conjugate_gradients_mugrid(
+        Solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
-            b=rhs_field,
+            b=rhs_field,  # right-hand side
             x=solution_field,
-            P=M_fun,
-            tol=1e-5,
-            maxiter=1000,
-            callback=callback,
-        )
+            prec=M_fun,
+            tol=1e-6,
+            maxiter=2000,
+            callback=callback)
+
+
         if discretization.communicator.size == 1:
             # Plot the first two components of the solution field
             import matplotlib.pyplot as plt

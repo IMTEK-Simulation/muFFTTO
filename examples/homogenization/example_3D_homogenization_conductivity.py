@@ -4,9 +4,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 import numpy as np
 import time
-# from netCDF4 import Dataset
+from muGrid import Solvers
+
 from muFFTTO import domain
-from muFFTTO import solvers
+
 from muFFTTO import microstructure_library
 
 problem_type = 'conductivity'
@@ -102,25 +103,25 @@ for i in range(dim):
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
     # solver
-    def callback(it, x, r, p, z=None, stop_crit=None):
+    def callback(iteration, fields):
         """
         Callback function to print the current solution, residual, and search direction.
         """
-        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+        norm_of_rr = fields['rr']
         if discretization.communicator.rank == 0:
-            print(f"{it:5} norm of residual = {norm_of_rr:.5}")
+            print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
 
-    solvers.conjugate_gradients_mugrid(
+
+    Solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
-        b=rhs_field,
+        b=rhs_field,  # right-hand side
         x=solution_field,
-        P=M_fun,
+        prec=M_fun,
         tol=1e-6,
         maxiter=2000,
-        callback=callback,
-    )
+        callback=callback)
 
     discretization.fft.communicate_ghosts(field=solution_field)
 
