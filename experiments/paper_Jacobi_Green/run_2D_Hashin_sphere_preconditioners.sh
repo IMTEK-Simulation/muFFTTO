@@ -10,9 +10,9 @@ EXP="$SCRIPT_DIR/exp_2D_Hashin_sphere_error_of_preconditioners.py"
 
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
-N=1024
+N=64
 PRECS=(Green Green_Jacobi)
-TOLS=(  12 ) #0 1 2 3 4 5 6
+TOLS=(  0 1 2 3 4 5 6 7 8 9 10 11 12 ) #
 
 for prec in "${PRECS[@]}"; do
     for tol in "${TOLS[@]}"; do

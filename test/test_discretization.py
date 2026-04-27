@@ -195,7 +195,7 @@ class DiscretizationTestCase(unittest.TestCase):
             discretization.apply_N_transposed_operator_mugrid(
                 quad_field_ijqxyz=u_iqnxyz,
                 nodal_field_inxyz=nnu_inxyz,
-                apply_weights=True)
+                apply_weights=False)
 
             discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
 
@@ -215,6 +215,19 @@ class DiscretizationTestCase(unittest.TestCase):
             self.assertTrue(value,
                             'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
                                 element_type, problem_type, diff))
+
+            # test for partition of unity
+            # discretize constant field (ones)
+            u_inxyz.s[...] = 1.0
+            discretization.apply_N_operator_mugrid(nodal_field_inxyz=u_inxyz, quad_field_ijqnxyz=u_iqnxyz)
+            discretization.apply_N_transposed_operator_mugrid(
+                quad_field_ijqxyz=u_iqnxyz,
+                nodal_field_inxyz=nnu_inxyz,
+                apply_weights=True)
+
+            message = "Field nnu_inxyz does not contain only ones for 2D element {} in {} problem".format(element_type,
+                                                                                                        problem_type)
+            self.assertTrue(np.allclose(nnu_inxyz.s, 1.0, rtol=1e-12, atol=1e-12), message)
 
     def test_3D_gradients_linear_conductivity(self):
         domain_size = [3, 4, 5]

@@ -375,7 +375,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
 
 
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
-    ([1, 1], 0, [6, 6]), ([3, 1.6], 0, [12, 13])
+    ([1, 1], 0, [6, 5]), ([1, 1], 0, [4, 7])
 ])
 def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_fixture, plot=True):
     problem_type = 'elasticity'
@@ -533,7 +533,12 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
 
         adjoint_field_inxyz = discretization.get_unknown_size_field(name=f'adjoint_field_load_case')
         adjoint_field_inxyz.s.fill(0)
-        sensitivity_analytical, adjoint_field_inxyz, adjoint_energies = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
+
+        sensitivity_analytical = discretization.get_scalar_field(
+            name='sensitivity_analytical')
+        sensitivity_analytical.s.fill(0)
+
+        sensitivity_analytical.s[0, 0], adjoint_field_inxyz, adjoint_energies, _ = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
             discretization=discretization,
             base_material_data_ijkl=elastic_C_0,
             void_material_data_ijkl=elastic_C_void,
@@ -554,7 +559,7 @@ def test_fd_check_of_whole_objective_function_stress_equivalence(discretization_
         print(f'objective_function= {objective_function}')
         # print('adjoint_energy={}'.format(sensitivity_parts['adjoint_energy']) )
 
-        return objective_function, f_sigma, f_phase_field, sensitivity_analytical + s_phase_field
+        return objective_function, f_sigma, f_phase_field, sensitivity_analytical.s + s_phase_field.s
 
     np.random.seed(1)
     phase_field_0 = discretization.get_scalar_field(name='phase_field_0')
@@ -2247,6 +2252,7 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
     ([2, 5], 0, [12, 7])])
 def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixture, plot=True):
     epsilons = [1e6, 1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+    np.random.seed(1234)
     # epsilonminuss = [1e-4] #
     p = 2
     fd_derivative = discretization_fixture.get_scalar_field(name='fd_derivative')
@@ -2293,6 +2299,7 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
     adjoint_field = discretization_fixture.get_displacement_sized_field(
         name='test_adjoint_field_in_test')
     adjoint_field.s.fill(0)
+
     adjoint_field.s = np.random.rand(*adjoint_field.s.shape) ** 1
 
     # compute partial derivative of adjoint_potential
@@ -2408,8 +2415,8 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([1, 1], 0, [6, 6]),
     ([2, 5], 0, [12, 7]),
-    # ([3, 4], 1, [6, 8]),
-    # ([2, 5], 1, [12, 7])
+    ([3, 4], 1, [6, 8]),
+    ([2, 5], 1, [12, 7])
 ])
 def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixture, plot=True):
     p = 2
@@ -2502,6 +2509,7 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
     adjoint_field_inxyz = discretization_fixture.get_displacement_sized_field(
         name='adjoint_field_fnxyz_in_test')
     adjoint_field_inxyz.s.fill(0)
+    np.random.seed(1234)
     adjoint_field_inxyz.s = np.random.rand(*adjoint_field_inxyz.s.shape)
     discretization_fixture.fft.communicate_ghosts(adjoint_field_inxyz)
     # gradient_of_adjoint_field_ijqxyz = discretization_fixture.apply_gradient_operator_symmetrized(adjoint_field_fnxyz)
@@ -2604,8 +2612,8 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
 @pytest.mark.parametrize('domain_size , element_type, nb_pixels', [
     ([3, 4], 0, [6, 8]),
     ([2, 5], 0, [12, 7]),
-    # ([3, 4], 1, [6, 8]),
-    # ([2, 5], 1, [12, 7])
+     ([3, 4], 1, [6, 8]),
+    ([2, 5], 1, [12, 7])
 ])
 def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
     # create material data field

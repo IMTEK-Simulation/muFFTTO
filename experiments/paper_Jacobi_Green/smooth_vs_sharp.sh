@@ -6,7 +6,7 @@
 
 
 
-for rats in {2,}; do
+for rats in {2,4,8,12}; do
   echo "Run cg_tol 5  ratios $rats using -np 12..."
   mpirun -n 12 python ././exp_paper_smooth_vs_sharp_interphases_1024.py -r $rats -cg_tol 5
 

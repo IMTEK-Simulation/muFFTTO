@@ -343,7 +343,7 @@ if compute:
             maxiter=1,
             callback=callback_J,
             norm_metric=M_fun_green,
-            rtol=False
+            rtol=True
         )
 
         solution_gradient_field_J = discretization.get_gradient_size_field(name='solution_gradient_field_J')
@@ -394,7 +394,7 @@ if compute:
             maxiter=20000,
             callback=callback_GJ,
             norm_metric=M_fun_green,
-            rtol=False
+            rtol=True
         )
         solution_gradient_field_GJ = discretization.get_gradient_size_field(name='solution_gradient_field_GJ')
         discretization.apply_gradient_operator_symmetrized_mugrid(

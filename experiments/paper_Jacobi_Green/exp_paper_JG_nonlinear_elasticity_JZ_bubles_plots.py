@@ -46,7 +46,7 @@ if plot_iterations_vs_grids_size:
 
 
     it_max = 9
-    n_exponents = np.array([3])
+    n_exponents = np.array([5])
     iterations = np.arange(it_max)  # numbers of grids points
 
     grid_sizes= np.array( [ 32, 64, 128 , 256])#,200,128,200

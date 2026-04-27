@@ -28,7 +28,7 @@ element_type = 'linear_triangles'  # 'bilinear_rectangle'##'linear_triangles' # 
 formulation = 'small_strain'
 
 domain_size = [1, 1]  #
-number_of_pixels = (32, 32)
+number_of_pixels = (64, 64)
 dim = np.size(number_of_pixels)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -489,7 +489,7 @@ if __name__ == '__main__':
 
     run_adam = False
     run_lbfg = True
-    random_initial_geometry = True
+    random_initial_geometry = False
     bounds = False
 
     # fp = 'exp_data/muFFTTO_elasticity_random_init_N16_E_target_0.25_Poisson_-0.5_w0.01_eta0.01_p2_bounds=False_FE_NuMPI2.npy'
