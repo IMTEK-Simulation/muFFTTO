@@ -7,12 +7,12 @@ PRECONDS=("Green"   "Green_Jacobi")
 
 
 for i in $(seq 5 $NUM_RUNS); do
-  for exp in {3,5,7,8,10}; do
+  for exp in 3 4 5; do #
     for prec in "${PRECONDS[@]}"; do
           if [ $i -gt 5 ]; then
-              NP=1#8
+              NP=12
           else
-              NP=1#4
+              NP=4
           fi
           echo "Run $i with preconditioner $prec,  using -np $NP..."
           #mpirun -np $NP python ./exp_paper_JG_nonlinear_elasticity_JZ.py -n $((2**$i)) -exp $exp -p "$prec"

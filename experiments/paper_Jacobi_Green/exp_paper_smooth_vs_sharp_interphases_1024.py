@@ -65,12 +65,12 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-plot = False  # plot rediduals
+plot = True      # plot rediduals
 plot_cg_tol_vs_error = False
 plot_solution_differences = False
 
 store_fields = True
-compute = True
+compute = False
 # enforce_mean = False
 if compute:
     tol_cg = 10 ** (-cg_tol_exponent)
@@ -268,9 +268,9 @@ if compute:
             x=solution_field_G,
             P=M_fun_green,
             tol=tol_cg,
-            maxiter=20000,
+            maxiter=200000,
             callback=callback_G,
-            norm_metric=M_fun_green,
+            norm_metric=None,#M_fun_green,
             rtol=True
 
         )
@@ -342,7 +342,7 @@ if compute:
             tol=tol_cg,
             maxiter=1,
             callback=callback_J,
-            norm_metric=M_fun_green,
+            norm_metric=None,#M_fun_green,
             rtol=True
         )
 
@@ -391,9 +391,9 @@ if compute:
             x=solution_field_GJ,
             P=M_fun_Green_Jacobi,
             tol=tol_cg,
-            maxiter=20000,
+            maxiter=200000,
             callback=callback_GJ,
-            norm_metric=M_fun_green,
+            norm_metric=None,#M_fun_green,
             rtol=True
         )
         solution_gradient_field_GJ = discretization.get_gradient_size_field(name='solution_gradient_field_GJ')
@@ -818,7 +818,7 @@ if plot:
             ax_geom.set_title(r'$\rho_{\rm smooth}$', wrap=True)  # $Density
 
         for i in np.arange(ratios.size, step=1):
-            results_name = f'N1024_{ratios[i]}_sharp_{sharp}'
+            results_name = f'N1024_{ratios[i]}_sharp_{sharp}_tol_{cg_tol_exponent}'
             _info = np.load(data_folder_path + results_name + f'_log.npz', allow_pickle=True)
             norm_ = 'rr'
             if norm_ == 'rGr':
@@ -843,8 +843,8 @@ if plot:
             # ax_1.semilogy(convergence,  label=f'estim {kappa}', color='k', linestyle=lines[i])
             # ax_geom.set_xticks([])
             # ax_geom.set_xticks([])
-            relative_error_G = norm_G  # / norm_G[0]
-            relative_error_GJ = norm_GJ  # norm_GJ[0]
+            relative_error_G = norm_G   / norm_G[0]
+            relative_error_GJ = norm_GJ / norm_GJ[0]
             ax_error.loglog(np.arange(len(norm_G)), relative_error_G, label=fr'$\kappa=10^{{{-ratios[i]}}}$',
                             color='g', linestyle=lines[i], lw=2)
             #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
@@ -860,18 +860,18 @@ if plot:
                 ax_error.set_xlabel(r'PCG iteration - $k$')
             if norm_ == 'rGr':
                 ax_error.set_ylabel(
-                    'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||^{2}_{{\mathbf{{G}}}}$')
+                    fr'$||\mathbf{{r}}_{{k}}||^{2}_{{\mathbf{{G}}}}$') # 'Norm of residual - ' +
             elif norm_ == 'rr':
                 ax_error.set_ylabel(
-                    'Norm of residual - ' + fr'$||\mathbf{{r}}_{{k}}||^{2} $')
-                # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}
+                     fr'$||\mathbf{{r}}_{{k}}||^{2}/||\mathbf{{r}}_{{0}}||^{2} $')
+                # - '  fr'$||r_{{k}}||_{{\mathbdf{{G}} }}   $')#^{-1}  'Norm of residual - '
             # ax_error.set_title(r'Relative  norm of residua', wrap=True)
 
             # plt.legend([r'$\kappa$ upper bound','Green', 'Jacobi', 'Green + Jacobi','Richardson'])
-            ax_error.set_ylim([1e-10, 1e1])  # norm_rz[i][0]]/lb)
+            ax_error.set_ylim([1e-10, 1e2])  # norm_rz[i][0]]/lb)
             ax_error.set_xlim([1, 1e4])
             # ax_error.set_xscale('linear')
-            ax_error.set_yticks([1e-10, 1e-6, 1e-2, 1e1])
+            ax_error.set_yticks([1e-10, 1e-6, 1e-2, 1e2])
             ax_error.set_yticklabels([fr'$10^{{{-10}}}$', fr'$10^{{{-6}}}$', fr'$10^{{{-2}}}$', fr'$10^{{{1}}}$'])
 
             if sharp:
@@ -915,18 +915,17 @@ if plot:
                                         [1500.0, 1e-5]])
                 elif norm_ == 'rr':
 
-                    arrows_G = [20, 60, 5000, 8000]
-                    text_G = np.array([[2, 5e-7],
-                                       [150.6, 5e-2],
-                                       [500, 2e-10],
-                                       [2100, 1e-7]])
+                    arrows_G = [20, 200, 5000, 8000]
+                    text_G = np.array([[5, 5e-5],
+                                       [350.6, 5e-1],
+                                       [600, 2e-6],
+                                       [2000, 1e-2]])
 
                     arrows_GJ = [20, 100, 200, 300]
-                    text_GJ = np.array([[10.2, 3e-2],
-                                        [3, 1e-9]
-                                           ,
-                                        [350.0, 3e-4],
-                                        [1500.0, 1e-5]])
+                    text_GJ = np.array([[1.2, 6e-3],
+                                        [1.5, 5e-8],
+                                        [8.0, 5e-10],
+                                        [900.0, 5e-10]])
             # if sharp:
             #
             #     arrows_G = [5, 10, 15]  # anotation arrows

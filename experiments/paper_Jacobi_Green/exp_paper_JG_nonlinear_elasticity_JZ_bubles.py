@@ -26,7 +26,7 @@ parser.add_argument(
     "-p", "--preconditioner_type",
     type=str,
     choices=["Green", "Jacobi", "Green_Jacobi"],  # example options
-    default="Green",
+    default="Green_Jacobi",
     help="Type of preconditioner to use"
 )
 
@@ -494,12 +494,12 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             P=M_fun,
-            tol=1e-5,
+            tol= 1e-2,
             maxiter=20000,
             callback=callback,
-            rtol=False
+            rtol=True
             # norm_metric=M_fun_Green,
-                    )
+        )
 
         nb_it_comb = len(norms['residual_rr'])
         if len(norms['residual_rr']) > 1:
@@ -525,6 +525,10 @@ for inc in range(ninc):
         discretization.apply_gradient_operator_symmetrized_mugrid(
             u_inxyz=displacement_increment_field,
             grad_u_ijqxyz=strain_fluc_field)
+        
+        norm_strain_fluc = np.sqrt(discretization.fft.communicator.sum(
+            np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
+
 
         total_strain_field.s += strain_fluc_field.s
         # displacement_fluctuation_field.s += displacement_increment_field.s
@@ -585,8 +589,9 @@ for inc in range(ninc):
         #     np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
         norm_rhs = np.sqrt(discretization.fft.communicator.sum(
             np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
-        norm_strain_fluc = np.sqrt(discretization.fft.communicator.sum(
-            np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
+        if iiter == 1:
+            norm_rhs_0 = norm_rhs
+
         _info['norm_strain_fluc_field'] = norm_strain_fluc
         _info['norm_En'] = En
         _info['rhs_t_norm'] = rhs_t_norm
@@ -595,13 +600,18 @@ for inc in range(ninc):
 
         if discretization.fft.communicator.rank == 0:
             print('=====================')
-            print('np.linalg.norm(strain_fluc_field.s) / En {0:10.2e}'.format(
-                norm_strain_fluc / En))
-            print('np.linalg.norm(rhs_field.s) / rhs_t_norm  {0:10.2e}'.format(
-                norm_rhs / rhs_t_norm))
-            print('strain_fluc_field {0:10.2e}'.format(norm_strain_fluc))
+            # print('norm(strain_fluc_field)/ En {0:10.2e}'.format(
+            #     norm_strain_fluc / En))
+            # print('norm(rhs_field) / rhs_t_norm  {0:10.2e}'.format(
+            #     norm_rhs / rhs_t_norm))
+            print('  norm_rhs_0  {0:10.2e}'.format(norm_rhs_0))
+            print('(rhs_field) / norm_rhs_0  {0:10.2e}'.format(
+                norm_rhs / norm_rhs_0))
+            # print('strain_fluc_field {0:10.2e}'.format(norm_strain_fluc))
             print('norm_rhs {0:10.2e}'.format(norm_rhs))
-            print('En {0:10.2e}'.format(En))
+            print('norm_rhs^2 {0:10.2e}'.format(norm_rhs ** 2))
+
+            #  print('En {0:10.2e}'.format(En))
             print('newton_stop_crit {0:10.2e}'.format(_info['newton_stop_crit']))
 
         if MPI.COMM_WORLD.rank == 0:
@@ -611,9 +621,8 @@ for inc in range(ninc):
         # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
         # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
 
-        if norm_rhs < 1.e-5 and iiter > 0: break
-
-        if iiter == 10:
+        if norm_rhs / norm_rhs_0 < 1.e-8 and iiter > 0: break  #
+        if iiter == 20:
             break
 
     # # linear part of displacement(X-domain_size[0]/2)

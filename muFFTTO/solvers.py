@@ -115,11 +115,13 @@ def conjugate_gradients_mugrid(
     elif norm_metric is None:
         stop_crit = rr
 
+    if rtol:
+        tol_sq = tol_sq * stop_crit
+        print('tol_sq {0:10.2e}'.format(tol_sq))
+
     if stop_crit < tol_sq:
         return x
 
-    if rtol:
-        tol_sq = tol_sq * stop_crit
 
     if callback:
         #callback(0, x.s, r.s, p.s, z.s, stop_crit)

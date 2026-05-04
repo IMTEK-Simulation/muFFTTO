@@ -35,9 +35,67 @@ formulation = 'small_strain'
 
 domain_size = [1, 1, 1]
 # Variables to be set up
+import numpy as np
 
+def coarsen_binary_round(arr, factor):
+    """
+    Deterministic coarsening of a binary 3D microstructure.
+    For each block: compute mean, round to 0 or 1.
+    """
+    nx, ny, nz = arr.shape
+    assert nx % factor == ny % factor == nz % factor == 0
+
+    # reshape into blocks
+    arr_b = arr.reshape(nx//factor, factor,
+                        ny//factor, factor,
+                        nz//factor, factor)
+
+    # compute block means
+    phi_block = arr_b.mean(axis=(1, 3, 5))
+
+    # deterministic rounding
+    return np.rint(phi_block).astype(arr.dtype)
+
+# load fines geometry -- generated jsut finnest, and the coarsen others
+N=256
+results_name = (f'bubbles_' + f'dof={N}')
+#to_save = np.copy(geometry)
+finest_geometry=np.load(data_folder_path + results_name + f'.npy')
+
+geom_128 = coarsen_binary_round(finest_geometry, factor=2)
+results_name = (f'bubbles_' + f'dof={N//2}')
+np.save(data_folder_path + results_name + f'.npy', geom_128)
+
+geom_64  = coarsen_binary_round(finest_geometry, factor=4)
+results_name = (f'bubbles_' + f'dof={N//4}')
+np.save(data_folder_path + results_name + f'.npy', geom_64)
+
+geom_32  = coarsen_binary_round(finest_geometry, factor=8)
+results_name = (f'bubbles_' + f'dof={N//8}')
+np.save(data_folder_path + results_name + f'.npy', geom_32)
+
+geom_16  = coarsen_binary_round(finest_geometry, factor=16)
+results_name = (f'bubbles_' + f'dof={N//16}')
+np.save(data_folder_path + results_name + f'.npy', geom_16)
+
+plt.figure()
+plt.imshow(geom_128[...,64])
+plt.show()
+
+plt.imshow(geom_64[...,32])
+plt.show()
+
+plt.imshow(geom_32[...,16])
+plt.show()
+
+plt.imshow(geom_16[...,7])
+plt.show()
 max_size=6
-pixel_sizes =np.array([41,])
+
+generate_new=False
+if generate_new:
+
+    pixel_sizes =np.array([50,])
 for nb_pixels_power in pixel_sizes:
 
    # nb_laminates = 2 ** nb_pixels_power
