@@ -37,7 +37,7 @@ domain_size = [1, 1, 1]
 # Variables to be set up
 
 max_size=6
-pixel_sizes =np.array([41,])
+pixel_sizes =np.array([16,32,64,128,])
 for nb_pixels_power in pixel_sizes:
 
    # nb_laminates = 2 ** nb_pixels_power

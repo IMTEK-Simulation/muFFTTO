@@ -300,7 +300,7 @@ constitutive(total_strain_field, stress_field, K4_ijklqyz)
 if save_results:
     # save strain fluctuation
     i = 0
-    temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
+    # = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
     results_name = (f'init_K')
     # 4_0_to_save.s[...]=0
@@ -360,10 +360,10 @@ for inc in range(ninc):
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                              div_u_fnxyz=rhs_field,
                                                              apply_weights=True)
-    rhs_field.s *= -1
+    rhs_field.s[...] *= -1
 
     if save_results:
-        temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
+       # temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
         # results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
         # save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
@@ -526,7 +526,7 @@ for inc in range(ninc):
             u_inxyz=displacement_increment_field,
             grad_u_ijqxyz=strain_fluc_field)
 
-        total_strain_field.s += strain_fluc_field.s
+        total_strain_field.s[...] += strain_fluc_field.s[...]
         # displacement_fluctuation_field.s += displacement_increment_field.s
         # evaluate material law
         constitutive(total_strain_field, stress_field, K4_ijklqyz)
@@ -535,7 +535,7 @@ for inc in range(ninc):
         discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                                  div_u_fnxyz=rhs_field,
                                                                  apply_weights=True)
-        rhs_field.s *= -1
+        rhs_field.s[...] *= -1
 
         if save_results:
             # results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')

@@ -21,7 +21,7 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (32, 32)
+number_of_pixels = (128,128)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     data_folder_path = os.path.join(file_folder_path, 'data', script_name) + '/'
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
-    random_init = False
+    random_init = True
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)
@@ -380,24 +380,52 @@ if __name__ == '__main__':
                            discretization.fft.coords[1],
                            x_current.reshape(discretization.nb_of_pixels),
                            cmap=mpl.cm.Greys)
-            plt.clim(0, 1)
+            #plt.clim(0, 1)
             plt.title(f'Iteration {iterat}')
             plt.colorbar()
             plt.show()
 
 
     # Run optimization
-    xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
-                                      x=phase_field_0.s.ravel(),
-                                      jac=True,
-                                      maxcor=20,
-                                      gtol=1e-3,
-                                      ftol=1e-5,
-                                      maxiter=1000,
-                                      comm=MPI.COMM_WORLD,
-                                      disp=True,
-                                      callback=my_callback
-                                      )
+    # xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
+    #                                   x=phase_field_0.s.ravel(),
+    #                                   jac=True,
+    #                                   maxcor=20,
+    #                                   gtol=1e-3,
+    #                                   ftol=1e-10,
+    #                                   maxiter=100,
+    #                                   linesearch_options=dict(c1=1e-4, c2=0.9),
+    #                                   comm=MPI.COMM_WORLD,
+    #                                   disp=True,
+    #                                   callback=my_callback
+    #                                   )
+    #a = np.zeros(phase_field_0.s.ravel().shape)
+    a = discretization.get_scalar_field(name='a_constrain')
+    #if MPI.COMM_WORLD.rank == 0:
+    a.s[0,0,0,0]=1e-8
+    discretization.fft.communicate_ghosts(a)
+    target = 0.0
+    c = Optimization.LinearConstraint(a.s, target)
+    xopt_FE_MPI = Optimization.l_bfgs_bounded(
+        fun=objective_function_multiple_load_cases,
+        x0=phase_field_0.s.ravel(),
+      #  linear_constraint=c,
+        args=(),
+        jac=True,
+        bounds_lo=0.,
+        bounds_hi=1.,
+        zero_mask=None,
+        gtol=1e-3,
+        maxiter=500,
+        maxcor=20,
+        c1=1e-4,
+        max_halvings=40,
+        comm=MPI.COMM_WORLD,
+        callback=my_callback,
+        disp=True,
+    )
+
+
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
