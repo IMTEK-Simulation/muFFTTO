@@ -92,10 +92,10 @@ plt.imshow(geom_16[...,7])
 plt.show()
 max_size=6
 
-generate_new=False
+generate_new=True
 if generate_new:
 
-    pixel_sizes =np.array([50,])
+    pixel_sizes =np.array([17,])
 for nb_pixels_power in pixel_sizes:
 
    # nb_laminates = 2 ** nb_pixels_power

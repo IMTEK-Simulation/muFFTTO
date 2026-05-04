@@ -99,8 +99,8 @@ def conjugate_gradients_mugrid(
     p.s = np.copy(z.s)  # residual
 
 
-    rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
-    rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
+    rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product = norm squared
+    rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product = norm squared
 
     if norm_metric is not None:
         Pr = fc.real_field(
@@ -117,7 +117,7 @@ def conjugate_gradients_mugrid(
 
     if rtol:
         tol_sq = tol_sq * stop_crit
-        print('tol_sq {0:10.2e}'.format(tol_sq))
+        #print('tol_sq {0:10.2e}'.format(tol_sq))
 
     if stop_crit < tol_sq:
         return x

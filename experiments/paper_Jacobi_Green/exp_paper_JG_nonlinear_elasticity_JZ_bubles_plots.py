@@ -30,7 +30,7 @@ plot_3D_geometry = False
 
 plot_iterations_vs_grids_size_data_anal = True
 
-plot_iterations_vs_grids_size = True
+plot_iterations_vs_grids_size = False
 if plot_iterations_vs_grids_size:
 
     # print time vs DOFS
@@ -207,7 +207,6 @@ if plot_iterations_vs_grids_size:
                         color='black'
                         )
 
-
     gs_iter_grid = fig.add_subplot(gs[0, 1])
     gs_iter_grid.text(-0.00, 1.03, r'$\textbf{(b)}$', transform=gs_iter_grid.transAxes)
 
@@ -241,7 +240,7 @@ if plot_iterations_vs_grids_size:
 
         arrows_GJ = nb_nodes[nodes_GJ]
         text_GJ = np.array([[110 ** 3, 1.5],
-                          #  [20 ** 3, 3],
+                            #  [20 ** 3, 3],
                             [45 ** 3, 70]])
     else:
         nodes_G = [3, 3, 3]
@@ -249,14 +248,14 @@ if plot_iterations_vs_grids_size:
         arrows_G = nb_nodes[nodes_G]
 
         text_G = np.array([[150 ** 3, 20],
-                          # [155 ** 3, 400],
+                           # [155 ** 3, 400],
                            [100 ** 3, 550]])
         # possition of arrows for Green-Jacobi
         nodes_GJ = [2, 2, 2]
 
         arrows_GJ = nb_nodes[nodes_GJ]
         text_GJ = np.array([[17 ** 3, 20],
-                         #   [17 ** 3, 300],
+                            #   [17 ** 3, 300],
                             [25 ** 3, 350]])
     for e, exp in enumerate(n_exponents):
         gs_iter_grid.plot(nb_nodes, total_it_per_grid_cg['Green'][0][:, e], linestyle=lines[e],
@@ -372,10 +371,10 @@ if plot_iterations_vs_grids_size_data_anal:
     norm_newrton_stop_GJ = []
 
     it_max = 15
-    n_exponents = np.array([3, 4, 5])
+    n_exponents = np.array([3,  5])
     iterations = np.arange(it_max)  # numbers of grids points
 
-    grid_sizes = np.array([16, 32, 64, 128, 256])  # 16, 32, , 32, 64, 128, 256],200,128,200  32,64, 128 64, 128 , 256
+    grid_sizes = np.array([16, 32, ])  # 64, 128, 256
     # grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -383,6 +382,9 @@ if plot_iterations_vs_grids_size_data_anal:
 
     norm_newton_stop_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
     norm_newton_stop_GJ = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
+
+    norm_strain_fluc_field_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
+    norm_strain_fluc_field_GJ = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
 
     unique_components = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
     total_contrast = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -415,11 +417,15 @@ if plot_iterations_vs_grids_size_data_anal:
                         norm_rhs_G.append(_info_final_G.f.norm_rhs_field)
                         norm_newrton_stop_G.append(_info_final_G.f.newton_stop_crit)
                         norm_newton_stop_G[i, iteration_total, j] = _info_final_G.f.newton_stop_crit
+                        norm_strain_fluc_field_G[i, iteration_total, j] = _info_final_G.f.norm_strain_fluc_field/(_info_final_G.f.norm_En)**2
+
                     except:
                         its_G[i, iteration_total, j] = 0
                         norm_rhs_G.append(0)
                         norm_newrton_stop_G.append(0)
                         norm_newton_stop_G[i, iteration_total, j] = 0
+                        norm_strain_fluc_field_G[i, iteration_total, j] = 0
+
                         continue
 
                 results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
@@ -445,11 +451,14 @@ if plot_iterations_vs_grids_size_data_anal:
                         norm_rhs_GJ.append(_info_final_GJ.f.norm_rhs_field)
                         norm_newrton_stop_GJ.append(_info_final_GJ.f.newton_stop_crit)
                         norm_newton_stop_GJ[i, iteration_total, j] = _info_final_GJ.f.newton_stop_crit
+                        norm_strain_fluc_field_GJ[i, iteration_total, j] = _info_final_GJ.f.norm_strain_fluc_field/(_info_final_GJ.f.norm_En)**2
+
                     except:
                         its_GJ[i, iteration_total, j] = 0
                         norm_rhs_GJ.append(0)
                         norm_newrton_stop_GJ.append(0)
                         norm_newton_stop_GJ[i, iteration_total, j] = 0
+                        norm_strain_fluc_field_GJ[i, iteration_total, j] = 0
                         continue
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
 
@@ -461,19 +470,19 @@ if plot_iterations_vs_grids_size_data_anal:
         plt.title(f' exponent = {p_exp}')
         for i, n in enumerate(grid_sizes):
             gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_G[i, :, p_exp_index] ** 2
-                                           # / norm_newton_stop_G[i, 0, p_exp_index] ** 2
+                                            / norm_newton_stop_G[i, 0, p_exp_index] ** 2
                                            , '-', color=colors[i],
                                            marker='x', label=f'Green - {n}')  #
             gs_fnorm_vs_iteration.semilogy(iterations,
                                            norm_newton_stop_GJ[i, :, p_exp_index] ** 2
-                                           # / norm_newton_stop_GJ[i, 0, p_exp_index] ** 2
+                                            / norm_newton_stop_GJ[i, 0, p_exp_index] ** 2
                                            , '--', color=colors[i],
                                            marker='o', markerfacecolor='none', label=f'Green-Jacobi - {n}')  #
         gs_fnorm_vs_iteration.legend(loc='upper right')
         gs_fnorm_vs_iteration.set_xlabel('Newton iteration')
         gs_fnorm_vs_iteration.set_ylabel('Relative norm of residua')
 
-        gs_fnorm_vs_iteration.set_ylim([1e-10, 1e0])
+        gs_fnorm_vs_iteration.set_ylim([1e-16, 1e0])
 
         gs_iter_vs_mesh_size = fig.add_subplot(gs[1, 0])
         for i, n in enumerate(grid_sizes):
@@ -518,13 +527,13 @@ if plot_iterations_vs_grids_size_data_anal:
     # plt.title(f' exponent = {p_exp}')
     for p_exp_index, exp in enumerate(n_exponents):
         gs_fnorm_vs_iteration.semilogy(iterations, norm_newton_stop_G[-1, :, p_exp_index] ** 2 / norm_newton_stop_G[
-            -1, 0, p_exp_index] ** 2, '-', color=colors[i],
-                                       marker='x', label=f'Green - {n}')  #
+            -1, 0, p_exp_index] ** 2, '-', color=colors[p_exp_index],
+                                       marker='x', label=f'Green - {exp}')  #
         gs_fnorm_vs_iteration.semilogy(iterations,
                                        norm_newton_stop_GJ[-1, :, p_exp_index] ** 2
-                                       # / norm_newton_stop_GJ[-1, 0, p_exp_index] ** 2
-                                       , '--', color=colors[i],
-                                       marker='o', markerfacecolor='none', label=f'Green-Jacobi - {n}')  #
+                                        / norm_newton_stop_GJ[-1, 0, p_exp_index] ** 2
+                                       , '--', color=colors[p_exp_index],
+                                       marker='o', markerfacecolor='none', label=f'Green-Jacobi - {exp}')  #
     gs_fnorm_vs_iteration.legend(loc='upper right')
     gs_fnorm_vs_iteration.set_xlabel('Newton iteration')
     gs_fnorm_vs_iteration.set_ylabel('Relative norm of residua')
@@ -841,10 +850,10 @@ if plot_data_vs_CG_3D:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    Nx = 64  # 3200 # 2 ** 7# 8
+    Nx = 32  # 3200 # 2 ** 7# 8
     Ny = Nx
     Nz = Nx
-    it_max = 8
+    it_max = 14
     n_exponents = np.array([5])
     iterations = np.arange(it_max)  # numbers of grids points
 
@@ -923,7 +932,7 @@ if plot_data_vs_CG_3D:
     gs_global.set_ylabel(r'$\#$ of PCG iterations')
     # gs_global.legend(loc='best')
     gs_global.set_xlim(-0.05, iterations[-1] + .05)
-    gs_global.set_ylim(0., 750)
+    gs_global.set_ylim(0., 150)
     gs_global.set_xticks(iterations)
 
     gs_global.annotate(text=f'Green-Jacobi',  # \n contrast = 100
@@ -967,7 +976,9 @@ if plot_data_vs_CG_3D:
     # idx = np.unravel_index(np.argmax(values), values.shape)
     values = np.copy(K4_xyz_G) / K
     # Calculate normalization parameters
-    max_K = 10  # values.max() #10#
+    flat_idx = np.argmax(values)
+    i, j, z_cut = np.unravel_index(flat_idx, values.shape)
+    max_K = 100  # values.max() #10#
     min_K = 1  # values.min()
     mid_K = 1.66  # max_K/2#  values.mean() #1.66
 
@@ -1141,10 +1152,155 @@ if plot_data_vs_CG_3D:
         return ax, cbar, cmap
 
 
+    def plot_voxels_colormap_2D(fig, gs_position, K4_xyz_G, K, Nz, iteration_total,
+                             cmap='cividis', z_cut=0,
+                             label='(b.2)', cbar_gs_position=None, norm=norm,
+                             cbar_label=r'$\mathrm{C}_{11}/\mathrm{K}$',
+                             keep_ticks=False):
+        """
+        Plot 3D voxels with colormap based on continuous values.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            Figure object
+        gs_position : tuple or GridSpec index
+            Position in gridspec, e.g., gs[0, 2]
+        K4_xyz_G : ndarray, shape [Nx, Ny, Nz]
+            3D array of values to plot
+        K : float
+            Normalization constant
+        Nz : int
+            Size in z direction
+        iteration_total : int
+            Iteration number for title
+        cmap : str or Colormap
+            Colormap to use (default: 'cividis')
+        cutaway_type : str
+            Type of cutaway: 'half_z', 'quarter', 'none'
+        label : str
+            Subplot label, e.g., '(b.2)'
+        cbar_gs_position : GridSpec index or None
+            Position for colorbar, e.g., gs[0, 4]. If None, no colorbar is added.
+        cbar_label : str
+            Label for colorbar
+
+        Returns
+        -------
+        ax : Axes3D
+            The 3D axes object
+        cbar : Colorbar or None
+            The colorbar object (if cbar_gs_position is provided)
+        """
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        ax = fig.add_subplot(gs_position)#, projection='3d'
+
+        # Normalize values
+        values = np.copy(K4_xyz_G.transpose()) / K
+
+        # Get dimensions
+        nx, ny, nz = values.shape
+
+        ax.dist = 2  # Lower value = closer/larger plot (default is ~10)
+
+        # Remove padding around axes
+        ax.margins(0)
+
+        # Tighten the axis bounds
+        ax.autoscale_view(tight=True)
+
+        cmap_obj = mpl.cm.get_cmap(cmap) if isinstance(cmap, str) else cmap
+
+        # Create mask for cutaway (True = show, False = hide)
+        mask_cut = np.ones(values.shape, dtype=bool)
+
+
+
+        # Convert values to colors using colormap
+        colors = cmap_obj(norm(values))  # Returns RGBA array [Nx, Ny, Nz, 4]
+
+        # Plot voxels with colormap colors
+        #ax.imshow(values[:,:, z_cut])
+        ax.pcolormesh(values[:,:, z_cut], cmap=cmap_obj, norm=norm)
+        # ax.voxels(mask_cut,
+        #           facecolors=colors,
+        #           # edgecolor='none',
+        #           edgecolors=colors,  # Same as face colors
+        #           linewidth=0,
+        #           shade=False)
+        #
+        # # View and aspect
+        # ax.view_init(elev=35, azim=-135)
+        # ax.set_box_aspect([nx, ny, nz])
+
+        # Clean panes and grid - SAFE VERSION
+        # ax.xaxis.pane.fill = False
+        # ax.yaxis.pane.fill = False
+        # ax.zaxis.pane.fill = False
+        #
+        # ax.xaxis.pane.set_edgecolor('none')
+        # ax.yaxis.pane.set_edgecolor('none')
+        # ax.zaxis.pane.set_edgecolor('none')
+        #
+        # # Remove grid
+        # ax.grid(False)
+        #
+        # # Make grid lines transparent (safer than setting linewidth to 0)
+        # ax.xaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+        # ax.yaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+        # ax.zaxis._axinfo['grid']['color'] = (1, 1, 1, 0)
+
+        # Axis limits
+        ax.set_xlim(0, nx)
+        ax.set_ylim(0, ny)
+        # ax.set_zlim(0, nz)
+
+        # Ticks: First, Middle, Last
+        if keep_ticks:
+            ax.set_xticks([0, nx // 2, nx])
+            ax.set_yticks([0, ny // 2, ny])
+
+            ax.set_xticklabels(['1', str(nx // 2), str(nx)])
+            ax.set_yticklabels(['1', str(ny // 2), str(ny)])
+
+            # Axis labels
+            ax.set_xlabel(r'$x_1$', labelpad=3)
+            ax.set_ylabel(r'$x_2$', labelpad=3)
+
+        else:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+
+        # Title and label
+        ax.set_title(fr'$i={iteration_total}$')
+        if label:
+            ax.text(0.0, 1.05, rf'\textbf{{{label}}}', transform=ax.transAxes)
+
+        # Add colorbar if position is provided
+        cbar = None
+        if cbar_gs_position is not None:
+            ax_cbar = fig.add_subplot(cbar_gs_position)
+            sm = mpl.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+            sm.set_array([])
+
+            cbar = plt.colorbar(sm, location='left', cax=ax_cbar)
+            cbar.set_ticks([min_K, mid_K, max_K])
+            cbar.set_ticklabels([f'{min_K:.1f}', f'{mid_K:.1f}', f'{max_K:.1f}'])
+            ax_cbar.tick_params(right=True, top=False, labelright=False, labeltop=False, labelrotation=0)
+            cbar.ax.yaxis.set_ticks_position('right')
+            cbar.ax.yaxis.set_label_position('right')
+            ax_cbar.set_ylabel(cbar_label)
+
+        return ax, cbar, cmap
     # ===== USAGE EXAMPLE =====
 
     # Call the function
-    ax_geom_0, cbar, cmap_ = plot_voxels_colormap(
+    ax_geom_0, cbar, cmap_ = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[0, 2],
         K4_xyz_G=K4_xyz_G,
@@ -1152,7 +1308,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label='(b.2)',
         norm=norm,
         cbar_gs_position=gs[0, 4],
@@ -1191,9 +1347,9 @@ if plot_data_vs_CG_3D:
     # # ax_geom_0.set_xlim([0, Nz])
     # # ax_geom_0.set_ylim([0, Nz])
     #    ax_geom_0.set_box_aspect(1)
-
+    values=K4_xyz_G[..., cut_to_plot] / K
     # Call the function
-    ax_geom_0 = plot_voxels_colormap(
+    ax_geom_0 = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[0, 1],
         K4_xyz_G=K4_xyz_G,
@@ -1201,7 +1357,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label='(b.1)',
         norm=norm,
         # cbar_gs_position=gs[0, 4],
@@ -1219,7 +1375,7 @@ if plot_data_vs_CG_3D:
 
     # ax_geom_0 = fig.add_subplot(gs[0, 3])
     # Call the function
-    ax_geom_0 = plot_voxels_colormap(
+    ax_geom_0 = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[0, 3],
         K4_xyz_G=K4_xyz_G,
@@ -1227,7 +1383,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label='(b.3)',
         norm=norm,
         # cbar_gs_position=gs[0, 4],
@@ -1242,7 +1398,7 @@ if plot_data_vs_CG_3D:
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
     # K4_to_plot_G = K4_xyz_G[..., cut_to_plot]  # K4_xyz_G[i,0,0,0, ..., cut_to_plot]
     # ax_geom_0 = fig.add_axes([0.7, 0.75, 0.2, 0.2])
-    ax_geom_0 = plot_voxels_colormap(
+    ax_geom_0 = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[1, 1],
         K4_xyz_G=K4_xyz_G,
@@ -1250,7 +1406,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label=f'(b.{iteration_total})',
         norm=norm,
         # cbar_gs_position=gs[0, 4],
@@ -1263,7 +1419,7 @@ if plot_data_vs_CG_3D:
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
 
-    ax_geom_0 = plot_voxels_colormap(
+    ax_geom_0 = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[1, 2],
         K4_xyz_G=K4_xyz_G,
@@ -1271,7 +1427,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label=f'(b.{5})',
         norm=norm,
         # cbar_gs_position=gs[0, 4],
@@ -1283,7 +1439,7 @@ if plot_data_vs_CG_3D:
     results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
     del K4_xyz_G
     K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
-    ax_geom_0 = plot_voxels_colormap(
+    ax_geom_0 = plot_voxels_colormap_2D(
         fig=fig,
         gs_position=gs[1, 3],
         K4_xyz_G=K4_xyz_G,
@@ -1291,7 +1447,7 @@ if plot_data_vs_CG_3D:
         Nz=Nz,
         iteration_total=iteration_total,
         cmap='cividis',
-        cutaway_type='half_z',
+        z_cut=z_cut,
         label=f'(b.{6})',
         norm=norm,
         keep_ticks=True,

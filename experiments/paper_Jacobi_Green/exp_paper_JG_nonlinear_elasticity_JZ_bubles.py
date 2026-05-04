@@ -20,8 +20,8 @@ parser = argparse.ArgumentParser(
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
-parser.add_argument("-n", "--nb_pixel", default="16")
-parser.add_argument("-exp", "--exponent_elastic", default="5")
+parser.add_argument("-n", "--nb_pixel", default="17")
+parser.add_argument("-exp", "--exponent_elastic", default="3")
 parser.add_argument(
     "-p", "--preconditioner_type",
     type=str,
@@ -133,7 +133,8 @@ inclusions = load_npy(geom_folder_path + results_name + f'.npy',
 # 1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
 # 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
 # ] = 0
-
+# inc_mask = inclusions > 0
+# matrix_mask = inclusions  == 0
 matrix_mask = inclusions > 0
 inc_mask = inclusions == 0
 del inclusions
@@ -164,94 +165,158 @@ def linear_elastic_q_points(strain_ijqxyz,
 # print()
 
 ###
+# def nonlinear_elastic_q_points(strain_ijqxyz,
+#                                tangent_ijklqxyz,
+#                                stress_ijqxyz,
+#                                phase_xyz,
+#                                build_tangent,
+#                                **kwargs):
+#     """
+#     Nonlinear elastic (power-law) constitutive model.
+#
+#     stress = 3*K*strain_vol + (2/3)*sig0*(strain_eq/eps0)^(n-1) * strain_dev
+#     """
+#     K = kwargs['K']
+#     sig0 = kwargs['sig0']
+#     eps0 = kwargs['eps0']
+#     n = kwargs['n']
+#
+#     # Volumetric strain (trace / 3)
+#     strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3
+#
+#     # Volumetric strain tensor
+#     strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
+#     strain_vol_ijqxyz.s.fill(0)
+#     for d in np.arange(discretization.domain_dimension):
+#         strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
+#
+#     # Deviatoric strain
+#     strain_dev_ijqxyz = discretization.get_gradient_size_field(name='strain_dev_ijqxyz')
+#     strain_dev_ijqxyz.s[..., phase_xyz] = strain_ijqxyz.s[..., phase_xyz] - strain_vol_ijqxyz.s[..., phase_xyz]
+#
+#     # Equivalent strain
+#     strain_dev_ddot = np.einsum('ij...,ji...->...',
+#                                 strain_dev_ijqxyz.s[..., phase_xyz],
+#                                 strain_dev_ijqxyz.s[..., phase_xyz])
+#     strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
+#
+#     # Handle zero strain to avoid division by zero
+#     eps_small = 1e-15
+#     strain_eq_safe = np.maximum(strain_eq_qx, eps_small)
+#     zero_mask = strain_eq_qx < eps_small
+#
+#     # Stress calculation
+#     # sigma = 3*K*eps_vol + (2/3)*sig0*(eps_eq/eps0)^(n-1) * eps_dev
+#     prefactor = (2. / 3.) * sig0 * (strain_eq_safe / eps0) ** (n - 1.)
+#
+#     stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
+#                                        + prefactor * strain_dev_ijqxyz.s[..., phase_xyz])
+#
+#     # For zero strain, stress is just volumetric part
+#     # (prefactor -> 0 as strain_eq -> 0 for n > 1, so this is handled)
+#
+#     # Algorithmic tangent
+#     # d(sigma)/d(epsilon) = 3*K*I_vol + d(sigma_dev)/d(epsilon)
+#
+#     # Deviatoric part of tangent:
+#     # d(sigma_dev)/d(eps) = (2/3)*sig0/eps0^(n-1) * [
+#     #     (n-1)*eps_eq^(n-3) * (2/3) * eps_dev (x) eps_dev
+#     #     + eps_eq^(n-1) * I4_dev
+#     # ]
+#     if build_tangent:
+#         strain_dev_dyad = np.einsum('ij...,kl...->ijkl...',
+#                                     strain_dev_ijqxyz.s[..., phase_xyz],
+#                                     strain_dev_ijqxyz.s[..., phase_xyz])
+#
+#         coeff = (2. / 3.) * sig0 / (eps0 ** (n - 1.))
+#
+#         # Term 1: from derivative of eps_eq^(n-1)
+#         term1 = (n - 1.) * (strain_eq_safe ** (n - 3.)) * (2. / 3.) * strain_dev_dyad
+#
+#         # Term 2: from derivative of eps_dev
+#         term2 = (strain_eq_safe ** (n - 1.)) * I4d[..., np.newaxis, np.newaxis]
+#
+#         K4_d = coeff * (term1 + term2)
+#
+#         # At zero strain, use linear tangent (limit as eps_eq -> 0)
+#         # For n > 1, the deviatoric tangent vanishes; for n = 1, it's just sig0/eps0 * I4d
+#         if n == 1:
+#             K4_d_zero = (2. / 3.) * sig0 / eps0 * I4d[..., np.newaxis, np.newaxis]
+#         else:
+#             K4_d_zero = 0.
+#
+#         # Apply zero mask
+#         K4_d = np.where(zero_mask, K4_d_zero, K4_d)
+#
+#         tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
+
 def nonlinear_elastic_q_points(strain_ijqxyz,
                                tangent_ijklqxyz,
                                stress_ijqxyz,
                                phase_xyz,
                                **kwargs):
-    """
-    Nonlinear elastic (power-law) constitutive model.
-
-    stress = 3*K*strain_vol + (2/3)*sig0*(strain_eq/eps0)^(n-1) * strain_dev
-    """
+    # K = 2.  # bulk modulus
+    # sigma = K*trace(small_strain)*I_ij  + sigma_0* (strain_eq/epsilon_0)^n * N_ijkl
     K = kwargs['K']
-    sig0 = kwargs['sig0']
-    eps0 = kwargs['eps0']
-    n = kwargs['n']
+    sig0 = kwargs['sig0']  # 1e3  # 0.25 #* K  # reference stress # 1e5              # 0.5
+    eps0 = kwargs['eps0']  # = 0.03  # 0.2  # reference strain #    # 0.03                  # 0.1
+    n = kwargs['n']  # 5.0  # 3.0  # hardening exponent  # # 5.0               # 10.0
 
-    # Volumetric strain (trace / 3)
-    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3
+    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3  # todo{2 or 3 in 2D }
+    # strain_trace_xyz = np.einsum('ijxyz,ji ->xyz', strain, I) / 3  # todo{2 or 3 in 2D }
 
-    # Volumetric strain tensor
-    strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
-    strain_vol_ijqxyz.s.fill(0)
+    # volumetric strain
+    # strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
+    # strain_vol_ijqxyz.s.fill(0)
+    # for d in np.arange(discretization.domain_dimension):
+    #     strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
+
+    # deviatoric strain
+    strain_dev_ijqxyz_s = strain_ijqxyz.s[..., phase_xyz].copy()
     for d in np.arange(discretization.domain_dimension):
-        strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
+        strain_dev_ijqxyz_s[d, d] -= strain_trace_qx
 
-    # Deviatoric strain
-    strain_dev_ijqxyz = discretization.get_gradient_size_field(name='strain_dev_ijqxyz')
-    strain_dev_ijqxyz.s[..., phase_xyz] = strain_ijqxyz.s[..., phase_xyz] - strain_vol_ijqxyz.s[..., phase_xyz]
-
-    # Equivalent strain
-    strain_dev_ddot = np.einsum('ij...,ji...->...',
-                                strain_dev_ijqxyz.s[..., phase_xyz],
-                                strain_dev_ijqxyz.s[..., phase_xyz])
+    # equivalent strain
+    strain_dev_ddot = np.einsum('ijqx...,jiqx...-> qx...', strain_dev_ijqxyz_s,
+                                strain_dev_ijqxyz_s)
     strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
 
-    # Handle zero strain to avoid division by zero
-    eps_small = 1e-15
-    strain_eq_safe = np.maximum(strain_eq_qx, eps_small)
-    zero_mask = strain_eq_qx < eps_small
+    # numerical stability
+    threshold = 1e-15
+    mask = strain_eq_qx > threshold
+    strain_eq_safe = np.where(mask, strain_eq_qx, 1.0)
 
     # Stress calculation
-    # sigma = 3*K*eps_vol + (2/3)*sig0*(eps_eq/eps0)^(n-1) * eps_dev
-    prefactor = (2. / 3.) * sig0 * (strain_eq_safe / eps0) ** (n - 1.)
+    # volumetric part
+    stress_phase = np.zeros_like(strain_ijqxyz.s[..., phase_xyz])
+    for d in np.arange(discretization.domain_dimension):
+        stress_phase[d, d] = 3. * K * strain_trace_qx
 
-    stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
-                                       + prefactor * strain_dev_ijqxyz.s[..., phase_xyz])
+    # deviatoric part
+    stress_phase += np.where(mask,
+                             2. / 3. * sig0 / (eps0 ** n) *
+                             (strain_eq_safe ** (n - 1.)) * strain_dev_ijqxyz_s,
+                             0.0)
+    stress_ijqxyz.s[..., phase_xyz] = stress_phase
 
-    # For zero strain, stress is just volumetric part
-    # (prefactor -> 0 as strain_eq -> 0 for n > 1, so this is handled)
+    # Tangent calculation
+    strain_dev_dyad = np.einsum('ijqx...,klqx...->ijklqx...', strain_dev_ijqxyz_s,
+                                strain_dev_ijqxyz_s)
 
-    # Algorithmic tangent
-    # d(sigma)/d(epsilon) = 3*K*I_vol + d(sigma_dev)/d(epsilon)
-
-    # Deviatoric part of tangent:
-    # d(sigma_dev)/d(eps) = (2/3)*sig0/eps0^(n-1) * [
-    #     (n-1)*eps_eq^(n-3) * (2/3) * eps_dev (x) eps_dev
-    #     + eps_eq^(n-1) * I4_dev
-    # ]
-
-    strain_dev_dyad = np.einsum('ij...,kl...->ijkl...',
-                                strain_dev_ijqxyz.s[..., phase_xyz],
-                                strain_dev_ijqxyz.s[..., phase_xyz])
-
-    coeff = (2. / 3.) * sig0 / (eps0 ** (n - 1.))
-
-    # Term 1: from derivative of eps_eq^(n-1)
-    term1 = (n - 1.) * (strain_eq_safe ** (n - 3.)) * (2. / 3.) * strain_dev_dyad
-
-    # Term 2: from derivative of eps_dev
-    term2 = (strain_eq_safe ** (n - 1.)) * I4d[..., np.newaxis, np.newaxis]
-
-    K4_d = coeff * (term1 + term2)
-
-    # At zero strain, use linear tangent (limit as eps_eq -> 0)
-    # For n > 1, the deviatoric tangent vanishes; for n = 1, it's just sig0/eps0 * I4d
-    if n == 1:
-        K4_d_zero = (2. / 3.) * sig0 / eps0 * I4d[..., np.newaxis, np.newaxis]
-    else:
-        K4_d_zero = 0.
-
-    # Apply zero mask
-    K4_d = np.where(zero_mask, K4_d_zero, K4_d)
+    K4_d = np.where(mask,
+                    2. / 3. * sig0 / (eps0 ** n) * (strain_dev_dyad * 2. / 3. * (n - 1.) * strain_eq_safe ** (n - 3.)
+                                                    + strain_eq_safe ** (n - 1.) * I4d[..., np.newaxis, np.newaxis]),
+                    0.0)
 
     tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
 
 
+
+
 # print()
 
-def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
+def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz,
+                          build_tangent: bool):
     #            phase_field = np.zeros([*number_of_pixels])
     global matrix_mask, inc_mask
     linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
@@ -264,6 +329,7 @@ def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
                                tangent_ijklqxyz=tangent_ijklqxyz,
                                stress_ijqxyz=stress_ijqxyz,
                                phase_xyz=inc_mask,
+                               build_tangent=build_tangent,
                                **model_parameters_non_linear)
 
 
@@ -271,10 +337,12 @@ def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz):
 
 def constitutive(strain_ijqxyz,
                  sig_ijqxyz,
-                 K4_ijklqxyz):
+                 K4_ijklqxyz,
+                 build_tangent=True):
     constitutive_q_points(strain_ijqxyz=strain_ijqxyz,
                           tangent_ijklqxyz=K4_ijklqxyz,
-                          stress_ijqxyz=sig_ijqxyz)
+                          stress_ijqxyz=sig_ijqxyz,
+                          build_tangent=build_tangent)
 
 
 macro_gradient_inc_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
@@ -295,7 +363,7 @@ y = np.linspace(start=0, stop=domain_size[1], num=number_of_pixels[1])
 X, Y = np.meshgrid(x, y, indexing='ij')
 
 # evaluate material law
-constitutive(total_strain_field, stress_field, K4_ijklqyz)
+constitutive(total_strain_field, stress_field, K4_ijklqyz )
 
 if save_results:
     # save strain fluctuation
@@ -342,7 +410,7 @@ sum_CG_its = 0
 sum_Newton_its = 0
 start_time = time.time()
 iteration_total = 0
-
+# _info['norm_strain_fluc_field']=[]
 # incremental loading
 for inc in range(ninc):
     if discretization.fft.communicator.rank == 0:
@@ -353,14 +421,20 @@ for inc in range(ninc):
     total_strain_field.s[...] += macro_gradient_inc_field.s[...]
 
     # evaluate material law
-    constitutive(total_strain_field, stress_field, K4_ijklqyz)
+    #constitutive(total_strain_field, stress_field, K4_ijklqyz)
 
     # assembly rhs
     discretization.fft.communicate_ghosts(stress_field)
-    discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
-                                                             div_u_fnxyz=rhs_field,
-                                                             apply_weights=True)
-    rhs_field.s *= -1
+    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=K4_ijklqyz,
+                                  macro_gradient_field_ijqxyz=total_strain_field,
+                                  rhs_inxyz=rhs_field)
+    # discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
+    #                                                          div_u_fnxyz=rhs_field,
+    #                                                          apply_weights=True)
+    # rhs_field.s *= -1
+
+
+
 
     if save_results:
         temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
@@ -479,10 +553,10 @@ for inc in range(ninc):
             norms['residual_rr'].append(norm_of_rr)
             norms['residual_rz'].append(norm_of_rz)
 
-            if discretization.fft.communicator.rank == 0:
+            #if discretization.fft.communicator.rank == 0:
                 # print(f"{it:5} norm of rr = {norm_of_rr:.5}")
                 # print(f"{it:5} norm of rz = {norm_of_rz:.5}")
-                print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
+                #print(f"{it:5} stop_crit_norm = {stop_crit_norm:.5}")
 
 
         displacement_increment_field.s.fill(0)
@@ -494,7 +568,7 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             P=M_fun,
-            tol= 1e-2,
+            tol=1e-2,
             maxiter=20000,
             callback=callback,
             rtol=True
@@ -525,10 +599,9 @@ for inc in range(ninc):
         discretization.apply_gradient_operator_symmetrized_mugrid(
             u_inxyz=displacement_increment_field,
             grad_u_ijqxyz=strain_fluc_field)
-        
+
         norm_strain_fluc = np.sqrt(discretization.fft.communicator.sum(
             np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
-
 
         total_strain_field.s += strain_fluc_field.s
         # displacement_fluctuation_field.s += displacement_increment_field.s
@@ -592,7 +665,7 @@ for inc in range(ninc):
         if iiter == 1:
             norm_rhs_0 = norm_rhs
 
-        _info['norm_strain_fluc_field'] = norm_strain_fluc
+        _info['norm_strain_fluc_field']= norm_strain_fluc
         _info['norm_En'] = En
         _info['rhs_t_norm'] = rhs_t_norm
         _info['norm_rhs_field'] = norm_rhs
@@ -600,10 +673,10 @@ for inc in range(ninc):
 
         if discretization.fft.communicator.rank == 0:
             print('=====================')
-            # print('norm(strain_fluc_field)/ En {0:10.2e}'.format(
-            #     norm_strain_fluc / En))
-            # print('norm(rhs_field) / rhs_t_norm  {0:10.2e}'.format(
-            #     norm_rhs / rhs_t_norm))
+            print('norm(strain_fluc_field)/ En {0:10.2e}'.format(
+                norm_strain_fluc / En))
+            print('norm(En)    {0:10.2e}'.format(
+                En))
             print('  norm_rhs_0  {0:10.2e}'.format(norm_rhs_0))
             print('(rhs_field) / norm_rhs_0  {0:10.2e}'.format(
                 norm_rhs / norm_rhs_0))
@@ -621,8 +694,9 @@ for inc in range(ninc):
         # if np.linalg.norm(strain_fluc_field.s) / En < 1.e-6 and iiter > 0: break
         # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
 
-        if norm_rhs / norm_rhs_0 < 1.e-8 and iiter > 0: break  #
-        if iiter == 20:
+        # if norm_rhs / norm_rhs_0 < 1.e-8 and iiter > 0: break  #
+        if norm_strain_fluc / En < 1.e-4 and iiter > 0: break  #
+        if iiter == 100:
             break
 
     # # linear part of displacement(X-domain_size[0]/2)
@@ -664,10 +738,20 @@ for inc in range(ninc):
             np.savez(data_folder_path + f'info_log_final_exp_{n_exp}.npz', **_info)
             print(data_folder_path + f'info_log_final_exp_{n_exp}.npz')
 
+
+
+
     plot_sol_field = False
     if plot_sol_field:
         import matplotlib as mpl
         from matplotlib import pyplot as plt
+
+        plt.semilogy(_info['norm_strain_fluc_field'])
+        plt.xlabel("Newton's iteration")
+        plt.ylabel("Norm of residua")
+
+        plt.show()
+
 
         x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]
         y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :, 0]

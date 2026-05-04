@@ -6,10 +6,10 @@ NUM_RUNS=5
 PRECONDS=("Green"   "Green_Jacobi")
 
 
-for i in $(seq 5 $NUM_RUNS); do
-  for exp in 3 4 5; do #
+for i in $(seq 4 $NUM_RUNS); do
+  for exp in 3 5 6; do # #
     for prec in "${PRECONDS[@]}"; do
-          if [ $i -gt 5 ]; then
+          if [ $i -gt 4 ]; then
               NP=12
           else
               NP=4
