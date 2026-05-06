@@ -100,14 +100,14 @@ II = np.einsum('ij...  ,kl...  ->ijkl...', i, i)
 I4s = (I4 + I4rt) / 2.
 I4d = (I4s - II / 3.)
 
-model_parameters_non_linear = {'K': 2,
-                               'mu': 1.0,
+model_parameters_non_linear = {'K': 2, # MPa Soft rubber-like material
+                               'mu': 1, # MPa
                                'sig0': 0.5,
                                'eps0': 0.1,
                                'n': n_exp}
 
-model_parameters_linear = {'K': 2,
-                           'mu': 1}
+model_parameters_linear = {'K': 2, # MPa
+                           'mu': 1} # MPa
 
 _info['model_parameters_non_linear'] = model_parameters_non_linear
 _info['model_parameters_linear'] = model_parameters_linear
@@ -362,7 +362,8 @@ x = np.linspace(start=0, stop=domain_size[0], num=number_of_pixels[0])
 y = np.linspace(start=0, stop=domain_size[1], num=number_of_pixels[1])
 X, Y = np.meshgrid(x, y, indexing='ij')
 
-# evaluate material law
+
+# evaluate initial constitutive response / tangent
 constitutive(total_strain_field, stress_field, K4_ijklqyz )
 
 if save_results:
@@ -381,14 +382,16 @@ if save_results:
              components_are_leading=True,
              comm=MPI.COMM_WORLD)
     # del to_save
+
+
 # set macroscopic loading increment
 ninc = 1
 _info['ninc'] = ninc
 
 macro_gradient_inc = np.zeros(shape=(3, 3))
 # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
-macro_gradient_inc[0, 1] += 0.05 / float(ninc)
-macro_gradient_inc[1, 0] += 0.05 / float(ninc)
+macro_gradient_inc[0, 1] += 0.03/ float(ninc)
+macro_gradient_inc[1, 0] += 0.03/ float(ninc)
 dt = 1. / float(ninc)
 
 # set macroscopic gradient
@@ -417,59 +420,34 @@ for inc in range(ninc):
         print(f'Increment {inc}')
         print(f'==========================================================================')
 
-    # strain-hardening exponent
-    total_strain_field.s[...] += macro_gradient_inc_field.s[...]
-
-    # evaluate material law
-    #constitutive(total_strain_field, stress_field, K4_ijklqyz)
+    # add strain increment - old
+    # total_strain_field.s[...] += macro_gradient_inc_field.s[...]
+    # # evaluate material law- old
+    # constitutive(total_strain_field, stress_field, K4_ijklqyz)
 
     # assembly rhs
     discretization.fft.communicate_ghosts(stress_field)
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=K4_ijklqyz,
-                                  macro_gradient_field_ijqxyz=total_strain_field,
+                                  macro_gradient_field_ijqxyz=macro_gradient_inc_field,
                                   rhs_inxyz=rhs_field)
     # discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
     #                                                          div_u_fnxyz=rhs_field,
-    #                                                          apply_weights=True)
+    #                                                          apply_weights=True)#- old
     # rhs_field.s *= -1
 
-
+    # add strain increment
+    total_strain_field.s[...] += macro_gradient_inc_field.s[...]
 
 
     if save_results:
         temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
 
-        # results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
-        # save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
-        #          tuple(discretization.subdomain_locations_no_buffers),
-        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD,
-        #          )
-        #
-        # # save total  strain
-        # results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
-        # save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
-        #          tuple(discretization.subdomain_locations_no_buffers),
-        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-        #
-        # # save stress
-        # results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
-        # save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
-        #          tuple(discretization.subdomain_locations_no_buffers),
-        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
         # save K4_ijklqyz
         results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-        # results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
-        # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
-        #          tuple(discretization.subdomain_locations_no_buffers),
-        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD, )
-
-    # print('save_results')
-    # En = np.sqrt(np.linalg.norm(total_strain_field.s.mean(axis=2)))
     En = np.sqrt(
         discretization.fft.communicator.sum(np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
 
@@ -568,7 +546,7 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             P=M_fun,
-            tol=1e-2,
+            tol=1e-5,
             maxiter=20000,
             callback=callback,
             rtol=True
@@ -698,7 +676,7 @@ for inc in range(ninc):
         if norm_strain_fluc / En < 1.e-4 and iiter > 0: break  #
         if iiter == 100:
             break
-
+    # store material variable
     # # linear part of displacement(X-domain_size[0]/2)
     # disp_linear_x = ((X - domain_size[0] / 2) * macro_gradient_inc[0, 0] * inc +
     #                  Y * macro_gradient_inc[0, 1] * inc)  # (X - domain_size[0] / 2)
