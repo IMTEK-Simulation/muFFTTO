@@ -98,11 +98,13 @@ def conjugate_gradients_mugrid(
     P(r, z)
     p.s = np.copy(z.s)  # residual
 
-
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product = norm squared
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product = norm squared
 
-    if norm_metric is not None:
+    if norm_metric == 'rz':
+        stop_crit = rz
+
+    elif norm_metric is not None:
         Pr = fc.real_field(
             unique_name="cg-custom_metric_residual",  # name of the field
             components_shape=(*x.components_shape,),  # shape of components
@@ -111,20 +113,18 @@ def conjugate_gradients_mugrid(
         norm_metric(r, Pr)
         stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
 
-
     elif norm_metric is None:
         stop_crit = rr
 
     if rtol:
         tol_sq = tol_sq * stop_crit
-        #print('tol_sq {0:10.2e}'.format(tol_sq))
+        # print('tol_sq {0:10.2e}'.format(tol_sq))
 
     if stop_crit < tol_sq:
         return x
 
-
     if callback:
-        #callback(0, x.s, r.s, p.s, z.s, stop_crit)
+        # callback(0, x.s, r.s, p.s, z.s, stop_crit)
         callback(0, x.s, r.s, p.s, z.s, stop_crit)
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -144,7 +144,10 @@ def conjugate_gradients_mugrid(
         # Check convergence
         next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
         next_rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))
-        if norm_metric is not None:
+
+        if norm_metric ==  'rz':
+            stop_crit = rz
+        elif norm_metric is not None:
             norm_metric(r, Pr)
             stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
 
@@ -251,9 +254,6 @@ def conjugate_gradients_mugrid_experimental(
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
 
-
-
-
     if norm_metric is not None:
         Pr = fc.real_field(
             unique_name="cg-custom_metric_residual",  # name of the field
@@ -279,13 +279,12 @@ def conjugate_gradients_mugrid_experimental(
     Delta = []
     curve = []
     estim = []
-    norms['energy_lower_bound']= []
+    norms['energy_lower_bound'] = []
     delay = []
     if "tau" in kwargs:
         tau = kwargs['tau']
     else:
         tau = 0.25
-
 
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -314,9 +313,6 @@ def conjugate_gradients_mugrid_experimental(
 
         if callback:
             callback(iteration + 1, x.s, r.s, p.s, z.s, stop_crit)
-
-
-
 
         # Update search direction
         # beta = next_rr / rr
