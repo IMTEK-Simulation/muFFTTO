@@ -1,16 +1,15 @@
 #! /bin/bash
 
 NUM_RUNS=5
-
 # List of preconditioner types (strings)
-PRECONDS=("Green"   "Green_Jacobi")
+PRECONDS=("Green" "Green_Jacobi" ) #"Green" "Green_Jacobi"
 
 
 for i in $(seq 4 $NUM_RUNS); do
-  for exp in 3 5 6; do # #
+  for exp in 5 ; do # #
     for prec in "${PRECONDS[@]}"; do
           if [ $i -gt 4 ]; then
-              NP=12
+              NP=8
           else
               NP=4
           fi

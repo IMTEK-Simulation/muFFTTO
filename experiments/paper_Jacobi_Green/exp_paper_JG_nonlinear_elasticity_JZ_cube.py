@@ -16,7 +16,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 parser = argparse.ArgumentParser(
-    prog="exp_paper_JG_nonlinear_elasticity_JZ.py",
+    prog="exp_paper_JG_nonlinear_elasticity_JZ_cube.py",
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
@@ -102,12 +102,14 @@ I4d = (I4s - II / 3.)
 
 model_parameters_non_linear = {'K': 2,  # MPa Soft rubber-like material
                                'mu': 1,  # MPa
-                               'sig0': 1.0,
+                               'sig0': 0.5, # 1.0
                                'eps0': 0.01,
                                'n': n_exp}
 
-model_parameters_linear = {'K': 0.2,  # MPa
-                           'mu': 0.1,  # MPa
+model_parameters_linear = {'K': .2,  # MPa
+                           'mu': .1,  # MPa
+                           # 'sig0': 0.5,
+                           # 'eps0': 0.01,
                            'n': n_exp}  # MPa
 
 _info['model_parameters_non_linear'] = model_parameters_non_linear
@@ -116,7 +118,7 @@ _info['model_parameters_linear'] = model_parameters_linear
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 # save
-results_name = (f'bubbles_' + f'dof={nnn}') # prism_  bubbles_
+results_name = (f'cube_' + f'dof={nnn}') # prism_  bubbles_
 geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_bubles_generate_geom/'
 
 inclusions = load_npy(geom_folder_path + results_name + f'.npy',
@@ -353,7 +355,7 @@ def constitutive(strain_ijqxyz,
 
 macro_gradient_inc_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
 
-# displacement_fluctuation_field = discretization.get_unknown_size_field(name='displacement_fluctuation_field')
+displacement_fluctuation_field = discretization.get_unknown_size_field(name='displacement_fluctuation_field')
 displacement_increment_field = discretization.get_unknown_size_field(name='displacement_increment_field')
 
 strain_fluc_field = discretization.get_displacement_gradient_sized_field(name='strain_fluctuation_field')
@@ -446,6 +448,10 @@ for inc in range(ninc):
 
     if save_results:
         temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
+        results_name = (f'displacement_fluctuation_field' + f'_exp_{n_exp}_it{iteration_total}')
+        save_npy(data_folder_path + results_name + f'.npy', displacement_fluctuation_field.s.mean(axis=1),
+                 tuple(discretization.subdomain_locations_no_buffers),
+                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
         results_name = (f'strain_eq' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', strain_eq_qx.s[0, 0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
@@ -453,6 +459,10 @@ for inc in range(ninc):
         # save K4_ijklqyz
         results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
         save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
+                 tuple(discretization.subdomain_locations_no_buffers),
+                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
+        save_npy(data_folder_path + results_name + f'.npy', rhs_field.s[1].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
     En = np.sqrt(
@@ -475,7 +485,7 @@ for inc in range(ninc):
     while True:
         # Set up preconditioner
 
-        if preconditioner_type == 'Green' or iteration_total == 0 or iiter == 0:
+        if preconditioner_type == 'Green': #or iteration_total == 0 or iiter == 0:
             M_fun = M_fun_Green
         elif preconditioner_type == 'Green_Jacobi':
             # K_ref = discretization.get_system_matrix(I4s)
@@ -583,6 +593,7 @@ for inc in range(ninc):
         sum_Newton_its += 1
         iteration_total += 1
 
+        #displacement_fluctuation_field.s += displacement_increment_field.s
         # compute strain from the displacement increment
         discretization.apply_gradient_operator_symmetrized_mugrid(
             u_inxyz=displacement_increment_field,
@@ -592,7 +603,7 @@ for inc in range(ninc):
             np.dot(strain_fluc_field.s.ravel(), strain_fluc_field.s.ravel())))
 
         total_strain_field.s += strain_fluc_field.s
-        # displacement_fluctuation_field.s += displacement_increment_field.s
+        displacement_fluctuation_field.s += displacement_increment_field.s
         # evaluate material law
         strain_eq_qx = constitutive(total_strain_field, stress_field, K4_ijklqyz)
 
@@ -603,11 +614,11 @@ for inc in range(ninc):
         rhs_field.s *= -1
 
         if save_results:
-            # results_name = (f'displacement_increment_field' + f'_exp_{n_exp}_it{iteration_total}')
-            # save_npy(data_folder_path + results_name + f'.npy', displacement_increment_field.s.mean(axis=1),
-            #          tuple(discretization.subdomain_locations_no_buffers),
-            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-            #
+            results_name = (f'displacement_fluctuation_field' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', displacement_fluctuation_field.s.mean(axis=1),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
             # # save strain fluctuation
             # results_name = (f'strain_fluc_field' + f'_exp_{n_exp}_it{iteration_total}')
             # save_npy(data_folder_path + results_name + f'.npy', strain_fluc_field.s.mean(axis=2),
@@ -635,7 +646,10 @@ for inc in range(ninc):
             save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 1, 0, 1].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
+            results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
+            save_npy(data_folder_path + results_name + f'.npy', rhs_field.s[1].mean(axis=0),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             # results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
             # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
             #          tuple(discretization.subdomain_locations_no_buffers),
