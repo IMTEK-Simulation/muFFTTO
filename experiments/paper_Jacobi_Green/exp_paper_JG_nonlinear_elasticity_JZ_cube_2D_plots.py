@@ -17,7 +17,7 @@ plt.rcParams.update({
 plt.rcParams.update({'font.size': 13})
 plt.rcParams["font.family"] = "Arial"
 
-script_name = 'exp_paper_JG_nonlinear_elasticity_JZ_bubles'  # exp_paper_JG_nonlinear_elasticity_JZ
+script_name = 'exp_paper_JG_nonlinear_elasticity_JZ_cube_2D'  # exp_paper_JG_nonlinear_elasticity_JZ
 folder_name = '../exp_data/'
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 
@@ -28,10 +28,7 @@ plot_iterations_vs_grids_size = False
 plot_iterations_vs_grids_size_data_anal = True
 plot_convergence = False
 
-plot_C12_graph = True
-
-plot_data_vs_CG_3D = False  # this is the oone in the paper
-
+plot_C12_graph=True
 plot_data_convergence=False
 if plot_data_convergence:
 
@@ -49,12 +46,12 @@ if plot_data_convergence:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    it_max = 15
-    n_exponents = np.array([ 3, 4,5 ])  # , 3, 4, 5
+    it_max = 9
+    n_exponents = np.array([2, 3, 4])  # , 3, 4, 5
     iterations = np.arange(it_max)  # numbers of grids points
 
     grid_sizes = np.array(
-        [16, 32, 50,64,100,128,150,200,256])  # , 128, 256
+        [16, 32, 64,128,256])  # , 128, 256
     # grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -83,35 +80,35 @@ if plot_data_convergence:
                 preconditioner_type = 'Green'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
                     #     _info_final_G = np.load(data_folder_path + f'info_log_it{iteration_total}.npz', allow_pickle=True)
                     #
-                    try:
-                        _info_final_G_final = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz',
-                                                      allow_pickle=True)
+                    #try:
+                        # _info_final_G_final = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz',
+                        #                               allow_pickle=True)
+                        #
+                        # its_newton_G[i, j] = _info_final_G_final.f.sum_Newton_its
+                        #
+                        # _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                        #                         allow_pickle=True)
 
-                        its_newton_G[i, j] = _info_final_G_final.f.sum_Newton_its
+                    results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
 
-                        _info_final_G = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
-                                                allow_pickle=True)
+                    K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True,
+                                       mmap_mode='r')
+                    K4_xyz_G_mean[i, iteration_total, j] = np.mean(K4_xyz_G)
 
-                        results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
+                   # except:
 
-                        K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True,
-                                           mmap_mode='r')
-                        K4_xyz_G_mean[i, iteration_total, j] = np.mean(K4_xyz_G)
-
-                    except:
-
-                        K4_xyz_G_mean[i, iteration_total, j] = 0
+                     #   K4_xyz_G_mean[i, iteration_total, j] = 0
 
                 preconditioner_type = 'Green_Jacobi'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
@@ -120,12 +117,12 @@ if plot_data_convergence:
                     #
                     # else:
                     try:
-                        _info_final_GJ_final = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz',
-                                                       allow_pickle=True)
-                        its_newton_GJ[i, j] = _info_final_GJ_final.f.sum_Newton_its
-
-                        _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
-                                                 allow_pickle=True)
+                        # _info_final_GJ_final = np.load(data_folder_path + f'info_log_final_exp_{n_exp}.npz',
+                        #                                allow_pickle=True)
+                        # its_newton_GJ[i, j] = _info_final_GJ_final.f.sum_Newton_its
+                        #
+                        # _info_final_GJ = np.load(data_folder_path + f'info_log_exp_{n_exp}_it{iteration_total}.npz',
+                        #                          allow_pickle=True)
                         results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
 
                         K4_xyz_G = np.load(data_folder_path + results_name + f'.npy', allow_pickle=True,
@@ -152,7 +149,8 @@ if plot_data_convergence:
         print(last_values)
 
         print(relative_error)
-    #print('K4_xyz_G_mean', K4_xyz_G_mean.shape)
+    print('K4_xyz_G_mean', K4_xyz_G_mean.shape)
+
 if plot_iterations_vs_grids_size:
 
     # print time vs DOFS
@@ -170,11 +168,11 @@ if plot_iterations_vs_grids_size:
     norm_newrton_stop_GJ = []
 
     it_max = 10
-    n_exponents = np.array([ 3, 4,5])  # , 3, 4, 5
+    n_exponents = np.array([ 3,4,5 ])  # , 3, 4, 5
     iterations = np.arange(it_max)  # numbers of grids points
 
     grid_sizes = np.array(
-        [16, 32, 50,64,100,128,150,200])  #  , 256,200,256
+        [16, 32, 64, 128, 256])  # , 32, 64, 128, 256
     # grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -203,7 +201,7 @@ if plot_iterations_vs_grids_size:
                 preconditioner_type = 'Green'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
@@ -233,7 +231,7 @@ if plot_iterations_vs_grids_size:
                 preconditioner_type = 'Green_Jacobi'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
@@ -271,21 +269,22 @@ if plot_iterations_vs_grids_size:
 
     # p_exp_index=2
     grid_size = -1
-    nodes_G = [7, 7, 8]  #
+    nodes_G = [3, 3, 3]  #
 
     arrows_G = iterations[nodes_G]
 
-    text_G = np.array([[5., 2000],
-                       [6.0, 2500],
-                       [7.5, 3500]])
+    text_G = np.array([[0.3, 300],
+                       [1.0, 390],
+                       [2.0, 600]])
     # possition of arrows for Green-Jacobi
     # nodes_GJ = [13, 13, 13]
     nodes_GJ = [4, 6, 8]
 
     arrows_GJ = iterations[nodes_GJ]
-    text_GJ = np.array([[2, 210],
-                        [3.5,250],
-                        [6.5, 350]])
+    text_GJ = np.array([[1.5, 50],
+                        [3.5, 60],
+                        [6.5, 60]
+                        ])
     # for i, n in enumerate(grid_sizes[2:]):
     for p_exp_index, exp in enumerate(n_exponents):
         # if p_exp_index == 1:
@@ -335,11 +334,11 @@ if plot_iterations_vs_grids_size:
         gs_iter_newton.set_ylabel(r'Number of PCG iterations')
         # gs_global.legend(loc='best')
         gs_iter_newton.set_xlim(-0.0, iterations[-1])
-        gs_iter_newton.set_ylim(2e2, 5e3)
+        gs_iter_newton.set_ylim(30, 1000)
         gs_iter_newton.set_yscale('log')
     # gs_iter_newton.text(0.20, 0.95, r'$ \approx  50 \times 10^{6}$ DOFs ',
     #                transform=gs_iter_newton.transAxes)
-    gs_iter_newton.text(0.05, 0.92, fr'$ N_{{\mathrm{{N}} }}  ={{{grid_sizes[-1]}}}^3$',
+    gs_iter_newton.text(0.05, 0.92, r'$ N_{\mathrm{N}}  =256^3$',
                         transform=gs_iter_newton.transAxes,
                         fontsize=13,
                         color='black'
@@ -370,9 +369,9 @@ if plot_iterations_vs_grids_size:
         nodes_G = [3, 2, 3]
         arrows_G = nb_nodes[nodes_G]
 
-        text_G = np.array([[70 ** 3, 450],
-                           [20 ** 3, 600],
-                           [100 ** 3, 1000]])
+        text_G = np.array([[70 ** 3, 3],
+                           [20 ** 3, 30],
+                           [100 ** 3, 150]])
         # possition of arrows for Green-Jacobi
         nodes_GJ = [3, 2, 3]
 
@@ -381,20 +380,20 @@ if plot_iterations_vs_grids_size:
                             [20 ** 3, 3],
                             [45 ** 3, 70]])
     else:
-        nodes_G = [1, 2, 2]
+        nodes_G = [2, 2, 2]
 
         arrows_G = nb_nodes[nodes_G]
 
-        text_G = np.array([[18 ** 3, 2500],
-                           [30 ** 3, 3000],
-                           [30 ** 3, 7000]])
+        text_G = np.array([[18 ** 3, 1400],
+                           [30 ** 3, 2000],
+                           [50 ** 3, 3400]])
         # possition of arrows for Green-Jacobi
         nodes_GJ = [2, 2, 2]
 
         arrows_GJ = nb_nodes[nodes_GJ]
-        text_GJ = np.array([[32 ** 3,450],
-                            [64 ** 3,600],
-                            [128 ** 3, 1000]])
+        text_GJ = np.array([[32 ** 3, 110],
+                            [64 ** 3, 130],
+                            [128 ** 3, 270]])
     for e, exp in enumerate(n_exponents):
         text_ = fr'$\omega$ = $ {{{exp}}}$'
         line_weight = 2
@@ -455,13 +454,13 @@ if plot_iterations_vs_grids_size:
         # gs_iter_grid.set_title('Total number of PCG iterations')
         # gs_iter_vs_grid.set_ylim([1e1, 1e3])
         # gs_iter_vs_grid.set_yscale('log')
-        #  gs_iter_grid.set_ylim([1, 650])
+        gs_iter_grid.set_ylim([1e2, 5e3])
         gs_iter_grid.set_yscale('log')
     gs_iter_grid.set_xlim([nb_nodes[0], nb_nodes[-1]])
 
     gs_iter_grid.set_xscale('log')
-    gs_iter_grid.set_xticks([x**3 for x in [16, 32, 64, 128, 256]])
-    gs_iter_grid.set_xticklabels([fr'${n}^{{3}}$' for n in [16,32,64,128,256]])
+    gs_iter_grid.set_xticks(nb_nodes)
+    gs_iter_grid.set_xticklabels([fr'${n}^{{3}}$' for n in grid_sizes])
 
     gs_iter_grid.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
     gs_iter_grid.yaxis.set_label_position('right')
@@ -470,10 +469,6 @@ if plot_iterations_vs_grids_size:
     fname = f'nbsteps' + f'ex{n_exp}' + f'_av_{avarage}' + '{}'.format('.pdf')
     plt.savefig(figure_folder_path + fname, bbox_inches='tight')
     print(('create figure: {}'.format(figure_folder_path + fname)))
-    fname = f'nbsteps' + f'ex{n_exp}' + f'_av_{avarage}' + '{}'.format('.png')
-    plt.savefig(figure_folder_path + fname, bbox_inches='tight')
-    print(('create figure: {}'.format(figure_folder_path + fname)))
-
     plt.show()
 
     print()
@@ -494,10 +489,10 @@ if plot_iterations_vs_grids_size_data_anal:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    it_max = 10
-    n_exponents = np.array([2, 3, 4])  # 3,4,5
+    it_max = 80
+    n_exponents = np.array([    3 ])  # 3,4,5
     iterations = np.arange(it_max)  # numbers of grids points
-    grid_sizes = np.array([16, 32, 64, 128,])  # 64, 128, 256 256     ,128
+    grid_sizes = np.array([16, 32,64, 128, 256 ])  # 64, 128, 256     ,128, 64, 128, 256]
     # grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -520,7 +515,7 @@ if plot_iterations_vs_grids_size_data_anal:
 
         Nx = n
         Ny = Nx
-        Nz = 3
+        Nz = Nx
 
         for j in np.arange(len(n_exponents)):
             n_exp = n_exponents[j]
@@ -529,7 +524,7 @@ if plot_iterations_vs_grids_size_data_anal:
                 preconditioner_type = 'Green'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
@@ -579,7 +574,7 @@ if plot_iterations_vs_grids_size_data_anal:
                 preconditioner_type = 'Green_Jacobi'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
 
@@ -661,7 +656,7 @@ if plot_iterations_vs_grids_size_data_anal:
         gs_iter_vs_mesh_size.legend()
         gs_iter_vs_mesh_size.set_ylabel('CG iterations  count')
         #  gs_iter_vs_mesh_size.set_yscale('log')
-        gs_iter_vs_mesh_size.set_ylim([1, 500])
+        gs_iter_vs_mesh_size.set_ylim([1, 100])
 
         # gs_iter_vs_mesh_size.set_title('Iterations vs Mesh Size')
 
@@ -713,6 +708,181 @@ if plot_iterations_vs_grids_size_data_anal:
     plt.savefig(figure_folder_path + script_name + fname, bbox_inches='tight')
     print(('create figure: {}'.format(figure_folder_path + script_name + fname)))
     plt.show()
+    print()
+
+
+
+    ###### supporting
+    colors = ['red', 'blue', 'green', 'orange', 'purple', 'orange', 'purple']
+
+    lines = ['-', '--', '-.', ':', 'dotted', '--', ':', ]
+
+    fig = plt.figure(figsize=(8.3, 4.0))
+    gs = fig.add_gridspec(1, 2, hspace=0.5, wspace=0.1, width_ratios=[1, 1],
+                          height_ratios=[1])
+
+    gs_iter_newton = fig.add_subplot(gs[0, 0])
+    gs_iter_newton.text(-0.00, 1.03, r'$\textbf{(a)}$', transform=gs_iter_newton.transAxes)
+
+    # p_exp_index=2
+    grid_size = -1
+    nodes_G = [3, 3, 3]  #
+
+    arrows_G = iterations[nodes_G]
+
+    text_G = np.array([[0.3, 300],
+                       [1.0, 390],
+                       [2.0, 600]])
+    # possition of arrows for Green-Jacobi
+    # nodes_GJ = [13, 13, 13]
+    nodes_GJ = [4, 6, 8]
+
+    arrows_GJ = iterations[nodes_GJ]
+    text_GJ = np.array([[2, 60],
+                        [3.5, 60],
+                        [6.5, 60]
+                        ])
+    # for i, n in enumerate(grid_sizes[2:]):
+    for p_exp_index, exp in enumerate(n_exponents):
+        # if p_exp_index == 1:
+        #     continue
+        text_ = fr'$\omega$ = $ {{{exp}}}$'
+        line_weight = 2
+        if p_exp_index == 1:
+            text_ = f'Green\n' + fr'$\omega$ = $ {{{exp}}}$'
+            line_weight = 3
+
+        mask = ~(its_G[grid_size, :, p_exp_index] == 0)
+        gs_iter_newton.plot(iterations[mask], total_contrast[grid_size, :, p_exp_index][mask], ls=lines[p_exp_index], marker='x',
+                            color='red',
+                            label=f'Green\n' + fr'$\omega$ = $ {{{exp}}}$', lw=line_weight)
+
+        gs_iter_newton.annotate(text=text_,
+                                xy=(arrows_G[p_exp_index], total_contrast[grid_size, :, p_exp_index][nodes_G[p_exp_index]]),
+                                xytext=(text_G[p_exp_index, 0], text_G[p_exp_index, 1]),
+                                arrowprops=dict(arrowstyle='->',
+                                                color='green',
+                                                lw=1,
+                                                ls=lines[p_exp_index]),
+                                fontsize=13,
+                                color='green'
+                                )
+        gs_iter_newton.plot(iterations[mask], unique_components[grid_size, :, p_exp_index][mask], ls=lines[p_exp_index],
+                            marker='o',
+                            color='blue',
+                            label=f'Green\n' + fr'$\omega$ = $ {{{exp}}}$', lw=line_weight)
+
+        gs_iter_newton.set_xlabel(r'Newton iteration -  $i$')
+        gs_iter_newton.set_ylabel(r'Total phase contrast')
+        # gs_global.legend(loc='best')
+        gs_iter_newton.set_xlim(-0.0, iterations[-1])
+       # gs_iter_newton.set_ylim(-0.5, 1000)
+        gs_iter_newton.set_yscale('log')
+    # gs_iter_newton.text(0.20, 0.95, r'$ \approx  50 \times 10^{6}$ DOFs ',
+    #                transform=gs_iter_newton.transAxes)
+    gs_iter_newton.text(0.05, 0.92, r'$ N_{\mathrm{N}}  =256^3$',
+                        transform=gs_iter_newton.transAxes,
+                        fontsize=13,
+                        color='black'
+                        )
+
+    gs_iter_grid = fig.add_subplot(gs[0, 1])
+    gs_iter_grid.text(-0.00, 1.03, r'$\textbf{(b)}$', transform=gs_iter_grid.transAxes)
+
+    total_it_per_grid_cg = {
+        'Green': [],
+        'Green_Jacobi': [],
+    }
+    avarage = False
+    # for i, n in enumerate(n_exponents):
+    if avarage:
+
+        total_it_per_grid_cg['Green'].append(np.sum(its_G, axis=1) / its_newton_G)
+        total_it_per_grid_cg['Green_Jacobi'].append(np.sum(its_GJ, axis=1) / its_newton_GJ)
+    else:
+        total_it_per_grid_cg['Green'].append(np.sum(its_G, axis=1))
+        total_it_per_grid_cg['Green_Jacobi'].append(np.sum(its_GJ, axis=1))
+
+    nb_nodes = grid_sizes ** 3
+    # plot set up
+
+    if avarage:
+        # possition of arrows for Green
+        nodes_G = [3, 2, 3]
+        arrows_G = nb_nodes[nodes_G]
+
+        text_G = np.array([[70 ** 3, 3],
+                           [20 ** 3, 30],
+                           [100 ** 3, 150]])
+        # possition of arrows for Green-Jacobi
+        nodes_GJ = [3, 2, 3]
+
+        arrows_GJ = nb_nodes[nodes_GJ]
+        text_GJ = np.array([[110 ** 3, 1.5],
+                            [20 ** 3, 3],
+                            [45 ** 3, 70]])
+    else:
+        nodes_G = [2, 2, 2]
+
+        arrows_G = nb_nodes[nodes_G]
+
+        text_G = np.array([[18 ** 3, 1400],
+                           [30 ** 3, 2000],
+                           [50 ** 3, 3400]])
+        # possition of arrows for Green-Jacobi
+        nodes_GJ = [2, 2, 2]
+
+        arrows_GJ = nb_nodes[nodes_GJ]
+        text_GJ = np.array([[32 ** 3, 100],
+                            [64 ** 3, 130],
+                            [128 ** 3, 270]])
+    for e, exp in enumerate(n_exponents):
+        text_ = fr'$\omega$ = $ {{{exp}}}$'
+        line_weight = 2
+        if e == 1:
+            text_ = f'Green\n' + fr'$\omega$ = $ {{{exp}}}$'
+            line_weight = 3
+        gs_iter_grid.plot(nb_nodes, total_contrast[..., e].mean(axis=1), linestyle=lines[e],
+                          color='red', marker='x', label=f'Green\n' + fr'$\omega$ = $ {{{exp}}}$', lw=line_weight
+                          )
+
+        # gs_iter_grid.plot(nb_nodes, unique_components[..., e].mean(axis=1), linestyle=lines[e],
+        #                   color='blue', marker='x', label=f'Green\n' + fr'$\omega$ = $ {{{exp}}}$', lw=line_weight
+        #                   )
+
+    gs_iter_grid.set_xlabel(r'Number of nodes - $N_{\mathrm{N}}$')
+    if avarage:
+        gs_iter_grid.set_ylabel('Average number of PCG iterations')
+    else:
+        gs_iter_grid.set_ylabel('Total number of PCG iterations')
+
+    # #
+    if avarage:
+        # gs_iter_grid.set_title('Avarage number of PCG iterations')
+
+        gs_iter_grid.set_ylim([1e0, 1e2])  # norm_rz[i][0]]/lb)
+        gs_iter_grid.set_yscale('log')
+    else:
+        # gs_iter_grid.set_title('Total number of PCG iterations')
+        # gs_iter_vs_grid.set_ylim([1e1, 1e3])
+        # gs_iter_vs_grid.set_yscale('log')
+        #  gs_iter_grid.set_ylim([1, 650])
+        gs_iter_grid.set_yscale('log')
+    gs_iter_grid.set_xlim([nb_nodes[0], nb_nodes[-1]])
+
+    gs_iter_grid.set_xscale('log')
+    gs_iter_grid.set_xticks(nb_nodes)
+    gs_iter_grid.set_xticklabels([fr'${n}^{{3}}$' for n in grid_sizes])
+
+    gs_iter_grid.yaxis.set_ticks_position('right')  # Set y-axis ticks to the right
+    gs_iter_grid.yaxis.set_label_position('right')
+
+    fig.tight_layout()
+    fname = f'supporting' + f'ex{n_exp}' + f'_av_{avarage}' + '{}'.format('.pdf')
+    plt.savefig(figure_folder_path + fname, bbox_inches='tight')
+    print(('create figure: {}'.format(figure_folder_path + fname)))
+    plt.show()
+
     print()
 
 
@@ -803,7 +973,6 @@ def plot_voxels_colormap_2D(fig, gs_position, values, iteration,
 
     return ax, cbar, cmap
 
-
 if plot_C12_graph:
     # print time vs DOFS
     its_G = []
@@ -819,11 +988,11 @@ if plot_C12_graph:
     norm_newrton_stop_G = []
     norm_newrton_stop_GJ = []
 
-    n_exponents = [4]
+    n_exponents = [3]
 
     it_max = 10
     iterations = np.arange(it_max)  # numbers of grids points
-    grid_sizes = np.array([128])  # 64, 128, 256     ,128
+    grid_sizes = np.array([64])  # 64, 128, 256     ,128
     # grid_sizes= np.array( [ 50, 100, 150 ,200])#,200,128,200
 
     its_G = np.zeros([len(grid_sizes), it_max, len(n_exponents)])
@@ -839,7 +1008,7 @@ if plot_C12_graph:
 
         Nx = n
         Ny = Nx
-        Nz = 1
+        Nz = Nx
 
         for j in np.arange(len(n_exponents)):
             n_exp = n_exponents[j]
@@ -848,7 +1017,7 @@ if plot_C12_graph:
                 preconditioner_type = 'Green'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
                     # if Nx == 256:
@@ -882,7 +1051,7 @@ if plot_C12_graph:
                 preconditioner_type = 'Green_Jacobi'
 
                 data_folder_path = (
-                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+                        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
                 if iteration_total < it_max:
 
@@ -924,10 +1093,10 @@ if plot_C12_graph:
         gs_strain_vs_iteration.set_ylabel(r'$\|\mathsf{B} \delta\tilde{\mathsf{u}}^{(i+1)}\| / \|\mathsf{E}\|$')
 
         gs_strain_vs_iteration.set_ylim([1e-5, 1e0])
-        gs_strain_vs_iteration.set_xlim([0, 8])
-        gs_strain_vs_iteration.set_xticks([0, 2, 4, 6,8])
+        gs_strain_vs_iteration.set_xlim([0, 7])
+        gs_strain_vs_iteration.set_xticks([0, 2, 4, 6])
 
-        gs_strain_vs_iteration.text(0.3, 0.93, fr'$ N_{{\mathrm{{N}} }}  ={{{grid_sizes[-1]}}}^3$', transform=gs_strain_vs_iteration.transAxes)
+        gs_strain_vs_iteration.text(0.3, 0.93, r'$N_{\mathrm{N}}=256^3$', transform=gs_strain_vs_iteration.transAxes)
         gs_strain_vs_iteration.text(0.4, 0.85, fr'$\omega$ ={{{n_exponents[0]}}}', transform=gs_strain_vs_iteration.transAxes)
 
         gs_strain_vs_iteration.text(0.0, 1.03, rf'$\textbf{{(a)}}$', transform=gs_strain_vs_iteration.transAxes)
@@ -936,15 +1105,15 @@ if plot_C12_graph:
     # numbers of grids points
     from muFFTTO import domain
 
-    # Nx = 128  # 3200 # 2 ** 7# 8
-    # Ny = Nx
-    # Nz = Nx
+    Nx = 64  # 3200 # 2 ** 7# 8
+    Ny = Nx
+    Nz = Nx
     it_max = 6
-    domain_size = [1, 1, 1]
-    number_of_pixels = [Nx, Ny, Nz]
+    domain_size = [1, 1 ]
+    number_of_pixels = [Nx, Ny ]
     problem_type = 'elasticity'
     discretization_type = 'finite_element'
-    element_type = 'trilinear_hexahedron'
+    element_type = 'linear_triangles'
     formulation = 'small_strain'
     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                       problem_type=problem_type)
@@ -957,7 +1126,7 @@ if plot_C12_graph:
     grad_eq_strain_field = discretization.get_gradient_of_scalar_field(name='grad_eq_strain_field')
 
     preconditioner_type = 'Green'
-    data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+    data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
                         + f'_{preconditioner_type}' + '/')
 
     # first iteration
@@ -1003,39 +1172,39 @@ if plot_C12_graph:
                                                  mmap_mode='r')
         results_name = (f'cube_' + f'dof={Nx}')  # prism_  bubbles_
         geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_bubles_generate_geom/'
-        #geometry = np.load(geom_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
+        geometry = np.load(geom_folder_path + results_name + f'.npy', allow_pickle=True, mmap_mode='r')
 
-        z_cut = Nz // 2
-        max_val = np.max(values[..., z_cut])
+      #  z_cut = Nz // 2
+        max_val = np.max(values)
         # max_val=1800
 
         if field_name_to_plot == 'strain_eq':
-            arr_masked = np.where(np.isclose(values[..., z_cut], 0.), np.inf, values[..., z_cut])
+            arr_masked = np.where(np.isclose(values[... ], 0.), np.inf, values[... ])
             min_val = np.min(arr_masked)
             cbar_label_ = r'$\mathrm{\varepsilon}_{eq}$'
             title_ = r'$\mathrm{\varepsilon}_{eq}$'
 
         elif field_name_to_plot == 'K4_ijklqyz':
-            arr_masked = np.where(np.isclose(values[..., z_cut], 500.), -np.inf, values[..., z_cut])
+            arr_masked = np.where(np.isclose(values[...], 500.), -np.inf, values[...])
             m = np.max(arr_masked)
-            min_val = np.min(values[..., z_cut])
+            min_val = np.min(values[... ])
             cbar_label_ = r'$\mathrm{C}_{66}/\mathrm{\mu^0}$'
             title_ = r'$\mathrm{C}_{66}/\mathrm{\mu^0}$'
 
         if field_name_to_plot == 'strain_eq':
-            slice_ = values[..., z_cut]
+            slice_ = values[... ]
         elif field_name_to_plot == 'K4_ijklqyz':
-            slice_ = values[..., z_cut] / 0.1
+            slice_ = values[... ] / 0.1
         # norm = mpl.colors.LogNorm(vmin=min_val, vmax=max_val)
 
         print(f'max vals tot {np.max(values[...])}  max cut   {max_val}')
         print(f'min vals tot {np.min(values[...])}   min cut {min_val}')
         if field_name_to_plot == 'strain_eq':
-            min_val = 0.01
-            max_val = 0.03
+            min_val = 0.00
+            max_val = 0.01
         elif field_name_to_plot == 'K4_ijklqyz':
             min_val = 1.
-            max_val = 10000.
+            max_val = 300.
 
         norm = mpl.colors.Normalize(vmin=min_val, vmax=max_val)
 
@@ -1044,15 +1213,15 @@ if plot_C12_graph:
 
         # Choose colormap and set masked color to white
         cmap = mpl.cm.viridis.copy()
-        cmap.set_bad(color='black')
+        cmap.set_bad(color='white')
 
         ax = fig.add_subplot(gs[plot_positions_[index][0], plot_positions_[index][1]])
         if index == 0:
-            ax.text(0.2, 0.7, rf'$x_3=l_3/2$', transform=ax.transAxes)
+            ax.text(0.2, 0.8, rf'$x_3=l_3/2$', transform=ax.transAxes)
 
         # Ny, Nx = displacement_fluctuation_field[0,..., z_cut].shape
 
-        x, y, z = discretization.fft.coords[..., z_cut]
+        x, y = discretization.fft.coords[... ]
         # x_li = np.linspace(0, 1, Nx+1)
         # y_li = np.linspace(0, 1, Ny+1)
         #
@@ -1072,8 +1241,8 @@ if plot_C12_graph:
 
         # x_def = x +  (gamma * y + extended_displacement[0]) * 10 #
         # y_def = y +  (gamma * x + extended_displacement[1]) * 10#
-        x_def = x + (gamma * y + displacement_fluctuation_field[0, ..., z_cut]) * 5  #
-        y_def = y + (gamma * x + displacement_fluctuation_field[1, ..., z_cut]) * 5  #
+        x_def = x + (gamma * y + displacement_fluctuation_field[0, ...  ]) * 5  #
+        y_def = y + (gamma * x + displacement_fluctuation_field[1, ... ]) * 5  #
         pcm = ax.pcolormesh(x_def, y_def, masked, norm=norm, cmap=cmap,  # shading='flat',
                             rasterized=True)
 

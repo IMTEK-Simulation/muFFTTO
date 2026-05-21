@@ -8,7 +8,7 @@ PRECONDS=("Green" "Green_Jacobi" ) #"Green" "Green_Jacobi"
 for i in $(seq 4 $NUM_RUNS); do
   for exp in 5 ; do # #
     for prec in "${PRECONDS[@]}"; do
-          if [ $i -gt 4 ]; then
+          if [ $i -gt 5 ]; then
               NP=8
           else
               NP=4

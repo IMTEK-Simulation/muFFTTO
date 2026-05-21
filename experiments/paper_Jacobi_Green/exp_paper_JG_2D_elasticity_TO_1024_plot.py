@@ -358,7 +358,7 @@ ax_grad.set_yticklabels([f'$10^{{{0}}}$',f'$10^{{{1}}}$',f'$10^{{{2}}}$' ])
 ax_grad.set_ylim([2,512])
 ax_grad.text(380, 3, f'Density gradient', fontsize=14,                 color='purple',
 )
-ax_grad.set_ylabel(r'$\|\nabla \rho_i \|_{\infty}$')
+ax_grad.set_ylabel(r'$L \|\nabla \rho_i \|_{\infty}$')
 
 
 ax_grad.annotate(text=r'$\mathcal{T}$' + f'$_{{{1024}}}$',

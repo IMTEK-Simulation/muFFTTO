@@ -16,11 +16,11 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 parser = argparse.ArgumentParser(
-    prog="exp_paper_JG_nonlinear_elasticity_JZ.py",
+    prog="exp_paper_JG_nonlinear_elasticity_JZ_cube_2D.py",
     description="Solve non-linear elasticity example "
                 "from J.Zeman et al., Int. J. Numer. Meth. Engng 111, 903–926 (2017)."
 )
-parser.add_argument("-n", "--nb_pixel", default="16")
+parser.add_argument("-n", "--nb_pixel", default="32")
 parser.add_argument("-exp", "--exponent_elastic", default="2")
 parser.add_argument(
     "-p", "--preconditioner_type",
@@ -44,15 +44,15 @@ save_results = True
 _info = {}
 start_time = time.time()
 
-number_of_pixels = (nnn, nnn, 3)
-domain_size = [1, 1, 1]
+number_of_pixels = (nnn, nnn)
+domain_size = [1, 1]
 Nx = number_of_pixels[0]
 Ny = number_of_pixels[1]
-Nz = number_of_pixels[2]
+# Nz = number_of_pixels[2]
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'trilinear_hexahedron'
+element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 _info['problem_type'] = problem_type
@@ -72,9 +72,9 @@ if discretization.fft.communicator.rank == 0:
     print(f'preconditioer {preconditioner_type}')
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = (
-        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
         + f'_{preconditioner_type}' + '/')
-figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}'
                       + f'_{preconditioner_type}' + '/')
 if discretization.fft.communicator.rank == 0:
     if not os.path.exists(file_folder_path):
@@ -91,58 +91,46 @@ start_time = time.time()
 
 # identity tensor                                               [single tensor]
 i = np.eye(discretization.domain_dimension)
-I = np.einsum('ij,xyz', i, np.ones(number_of_pixels))
+I = np.einsum('ij,xy', i, np.ones(number_of_pixels))
 
 # identity tensors                                            [grid of tensors]
 I4 = np.einsum('il,jk', i, i)
 I4rt = np.einsum('ik,jl', i, i)
 II = np.einsum('ij...  ,kl...  ->ijkl...', i, i)
 I4s = (I4 + I4rt) / 2.
-I4d = (I4s - II / 3.)
+I4d = (I4s - II / 2)
 
 model_parameters_non_linear = {'K': 2,  # MPa Soft rubber-like material
                                'mu': 1,  # MPa
-                               'sig0': 0.5,
+                               'sig0': 0.5,  # 1.0
                                'eps0': 0.01,
                                'n': n_exp}
 
-model_parameters_linear = {'K': 0.2,  # MPa
-                           'mu': 0.1,  # MPa
+model_parameters_linear = {'K': .2,  # MPa
+                           'mu': .1,  # MPa
+                           # 'sig0': 0.5,
+                           # 'eps0': 0.01,
                            'n': n_exp}  # MPa
-ref_mat = model_parameters_linear['K'] * II + 2. * model_parameters_linear['mu'] * I4d
 
+ref_mat = model_parameters_linear['K'] * II + 2. * model_parameters_linear['mu'] * I4d
 _info['model_parameters_non_linear'] = model_parameters_non_linear
 _info['model_parameters_linear'] = model_parameters_linear
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 # save
-results_name = (f'bubbles_' + f'dof={nnn}') # prism_  bubbles_
-geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_bubles_generate_geom/'
+results_name = (f'cube_' + f'dof={nnn}')  # prism_  bubbles_
+geom_folder_path = file_folder_path + '/exp_data/' + 'exp_paper_JG_nonlinear_elasticity_JZ_generate_geom_2D/'
 
 inclusions = load_npy(geom_folder_path + results_name + f'.npy',
                       tuple(discretization.subdomain_locations_no_buffers),
                       tuple(discretization.nb_of_pixels), MPI.COMM_WORLD)
 
-#
-# geometry_ID = 'square_inclusion'
-# phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-#                                                           microstructure_name=geometry_ID,
-#                                                           coordinates=discretization.fft.coords)
-#
-# phase_field.s[0, 0,
-# 1 * number_of_pixels[0] // 4:3 * number_of_pixels[0] // 4,
-# 1 * number_of_pixels[1] // 4:3 * number_of_pixels[1] // 4,
-# 1 * number_of_pixels[2] // 4:3 * number_of_pixels[2] // 4
-# ] = 0
-# inc_mask = inclusions > 0
-# matrix_mask = inclusions  == 0
-matrix_mask = inclusions > 0
-inc_mask = inclusions == 0
+
+matrix_mask = inclusions[...] > 0
+inc_mask = inclusions[...] == 0
 del inclusions
 
-
-# phase_field[:26, :, :] = 1.
 # linear elasticity
 # -----------------
 def linear_elastic_q_points(strain_ijqxyz,
@@ -161,96 +149,6 @@ def linear_elastic_q_points(strain_ijqxyz,
     stress_ijqxyz.s[..., phase_xyz] = np.einsum('ijklqx...,lkqx...  ->ijqx...  ',
                                                 tangent_ijklqxyz.s[..., phase_xyz],
                                                 strain_ijqxyz.s[..., phase_xyz])
-    # sig = ddot42(C4, strain)
-
-
-# print()
-
-###
-# def nonlinear_elastic_q_points(strain_ijqxyz,
-#                                tangent_ijklqxyz,
-#                                stress_ijqxyz,
-#                                phase_xyz,
-#                                build_tangent,
-#                                **kwargs):
-#     """
-#     Nonlinear elastic (power-law) constitutive model.
-#
-#     stress = 3*K*strain_vol + (2/3)*sig0*(strain_eq/eps0)^(n-1) * strain_dev
-#     """
-#     K = kwargs['K']
-#     sig0 = kwargs['sig0']
-#     eps0 = kwargs['eps0']
-#     n = kwargs['n']
-#
-#     # Volumetric strain (trace / 3)
-#     strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3
-#
-#     # Volumetric strain tensor
-#     strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
-#     strain_vol_ijqxyz.s.fill(0)
-#     for d in np.arange(discretization.domain_dimension):
-#         strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
-#
-#     # Deviatoric strain
-#     strain_dev_ijqxyz = discretization.get_gradient_size_field(name='strain_dev_ijqxyz')
-#     strain_dev_ijqxyz.s[..., phase_xyz] = strain_ijqxyz.s[..., phase_xyz] - strain_vol_ijqxyz.s[..., phase_xyz]
-#
-#     # Equivalent strain
-#     strain_dev_ddot = np.einsum('ij...,ji...->...',
-#                                 strain_dev_ijqxyz.s[..., phase_xyz],
-#                                 strain_dev_ijqxyz.s[..., phase_xyz])
-#     strain_eq_qx = np.sqrt((2. / 3.) * strain_dev_ddot)
-#
-#     # Handle zero strain to avoid division by zero
-#     eps_small = 1e-15
-#     strain_eq_safe = np.maximum(strain_eq_qx, eps_small)
-#     zero_mask = strain_eq_qx < eps_small
-#
-#     # Stress calculation
-#     # sigma = 3*K*eps_vol + (2/3)*sig0*(eps_eq/eps0)^(n-1) * eps_dev
-#     prefactor = (2. / 3.) * sig0 * (strain_eq_safe / eps0) ** (n - 1.)
-#
-#     stress_ijqxyz.s[..., phase_xyz] = (3. * K * strain_vol_ijqxyz.s[..., phase_xyz]
-#                                        + prefactor * strain_dev_ijqxyz.s[..., phase_xyz])
-#
-#     # For zero strain, stress is just volumetric part
-#     # (prefactor -> 0 as strain_eq -> 0 for n > 1, so this is handled)
-#
-#     # Algorithmic tangent
-#     # d(sigma)/d(epsilon) = 3*K*I_vol + d(sigma_dev)/d(epsilon)
-#
-#     # Deviatoric part of tangent:
-#     # d(sigma_dev)/d(eps) = (2/3)*sig0/eps0^(n-1) * [
-#     #     (n-1)*eps_eq^(n-3) * (2/3) * eps_dev (x) eps_dev
-#     #     + eps_eq^(n-1) * I4_dev
-#     # ]
-#     if build_tangent:
-#         strain_dev_dyad = np.einsum('ij...,kl...->ijkl...',
-#                                     strain_dev_ijqxyz.s[..., phase_xyz],
-#                                     strain_dev_ijqxyz.s[..., phase_xyz])
-#
-#         coeff = (2. / 3.) * sig0 / (eps0 ** (n - 1.))
-#
-#         # Term 1: from derivative of eps_eq^(n-1)
-#         term1 = (n - 1.) * (strain_eq_safe ** (n - 3.)) * (2. / 3.) * strain_dev_dyad
-#
-#         # Term 2: from derivative of eps_dev
-#         term2 = (strain_eq_safe ** (n - 1.)) * I4d[..., np.newaxis, np.newaxis]
-#
-#         K4_d = coeff * (term1 + term2)
-#
-#         # At zero strain, use linear tangent (limit as eps_eq -> 0)
-#         # For n > 1, the deviatoric tangent vanishes; for n = 1, it's just sig0/eps0 * I4d
-#         if n == 1:
-#             K4_d_zero = (2. / 3.) * sig0 / eps0 * I4d[..., np.newaxis, np.newaxis]
-#         else:
-#             K4_d_zero = 0.
-#
-#         # Apply zero mask
-#         K4_d = np.where(zero_mask, K4_d_zero, K4_d)
-#
-#         tangent_ijklqxyz.s[..., phase_xyz] = K * II[..., np.newaxis, np.newaxis] + K4_d
 
 def nonlinear_elastic_q_points(strain_ijqxyz,
                                tangent_ijklqxyz,
@@ -262,17 +160,10 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
     K = kwargs['K']
     sig0 = kwargs['sig0']  # 1e3  # 0.25 #* K  # reference stress # 1e5              # 0.5
     eps0 = kwargs['eps0']  # = 0.03  # 0.2  # reference strain #    # 0.03                  # 0.1
-    n = kwargs['n']  # 5.0  # 3.0  # hardening exponent  # # 5.0               # 10.0
-
-    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 3  # todo{2 or 3 in 2D }
-    # strain_trace_xyz = np.einsum('ijxyz,ji ->xyz', strain, I) / 3  # todo{2 or 3 in 2D }
-
+    n = kwargs['n']  # 5.0  # 3.0  # hardening exponent  # # 5.0
+    # 10.0
     # volumetric strain
-    # strain_vol_ijqxyz = discretization.get_gradient_size_field(name='strain_vol_ijqxyz')
-    # strain_vol_ijqxyz.s.fill(0)
-    # for d in np.arange(discretization.domain_dimension):
-    #     strain_vol_ijqxyz.s[..., phase_xyz][d, d] = strain_trace_qx
-
+    strain_trace_qx = np.einsum('ii...', strain_ijqxyz.s[..., phase_xyz]) / 2
     # deviatoric strain
     strain_dev_ijqxyz_s = strain_ijqxyz.s[..., phase_xyz].copy()
     for d in np.arange(discretization.domain_dimension):
@@ -293,7 +184,7 @@ def nonlinear_elastic_q_points(strain_ijqxyz,
     # volumetric part
     stress_phase = np.zeros_like(strain_ijqxyz.s[..., phase_xyz])
     for d in np.arange(discretization.domain_dimension):
-        stress_phase[d, d] = 3. * K * strain_trace_qx
+        stress_phase[d, d] =  2* K * strain_trace_qx
 
     # deviatoric part
     stress_phase += np.where(mask,
@@ -324,11 +215,11 @@ def constitutive_q_points(strain_ijqxyz, tangent_ijklqxyz, stress_ijqxyz,
     #            phase_field = np.zeros([*number_of_pixels])
     global matrix_mask, inc_mask
     linear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
-                                   tangent_ijklqxyz=tangent_ijklqxyz,
-                                   stress_ijqxyz=stress_ijqxyz,
-                                   phase_xyz=matrix_mask, #
-                                   build_tangent=build_tangent,
-                                   **model_parameters_linear)
+                            tangent_ijklqxyz=tangent_ijklqxyz,
+                            stress_ijqxyz=stress_ijqxyz,
+                            phase_xyz=matrix_mask,  #
+                            build_tangent=build_tangent,
+                            **model_parameters_linear)
 
     strain_eq_qx = nonlinear_elastic_q_points(strain_ijqxyz=strain_ijqxyz,
                                               tangent_ijklqxyz=tangent_ijklqxyz,
@@ -390,10 +281,10 @@ if save_results:
     # del to_save
 
 # set macroscopic loading increment
-ninc = 1
+ninc =1
 _info['ninc'] = ninc
 
-macro_gradient_inc = np.zeros(shape=(3, 3))
+macro_gradient_inc = np.zeros(shape=(discretization.domain_dimension, discretization.domain_dimension))
 # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
 macro_gradient_inc[0, 1] += 0.025/ float(ninc)
 macro_gradient_inc[1, 0] += 0.025/ float(ninc)
@@ -410,6 +301,7 @@ if preconditioner_type == 'Green':
 elif preconditioner_type == 'Green_Jacobi':
     preconditioner = discretization.get_preconditioner_Green_mugrid(
         reference_material_data_ijkl=I4s)
+
 
 def M_fun_Green(x, Px):
     discretization.fft.communicate_ghosts(x)
@@ -443,11 +335,11 @@ for inc in range(ninc):
     #                               rhs_inxyz=rhs_field)
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                              div_u_fnxyz=rhs_field,
-                                                             apply_weights=True)#- old
+                                                             apply_weights=True)  # - old
     rhs_field.s *= -1
 
     # add strain increment
-#    total_strain_field.s[...] += macro_gradient_inc_field.s[...]
+    #    total_strain_field.s[...] += macro_gradient_inc_field.s[...]
 
     if save_results:
         temp_max_size_ = {'nb_max_subdomain_grid_pts': discretization.nb_max_subdomain_grid_pts}
@@ -464,21 +356,11 @@ for inc in range(ninc):
         save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-        results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', rhs_field.s[1].mean(axis=0),
-                 tuple(discretization.subdomain_locations_no_buffers),
-                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        # results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
+        # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s[1].mean(axis=0),
+        #          tuple(discretization.subdomain_locations_no_buffers),
+        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
-        results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
-                 tuple(discretization.subdomain_locations_no_buffers),
-                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-        # save stress
-        results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
-                 tuple(discretization.subdomain_locations_no_buffers),
-                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
     En = np.sqrt(
         discretization.fft.communicator.sum(np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
 
@@ -499,7 +381,7 @@ for inc in range(ninc):
     while True:
         # Set up preconditioner
 
-        if preconditioner_type == 'Green' or iteration_total == 0 or iiter == 0:
+        if preconditioner_type == 'Green':  # or iteration_total == 0 or iiter == 0:
             M_fun = M_fun_Green
         elif preconditioner_type == 'Green_Jacobi':
             # K_ref = discretization.get_system_matrix(I4s)
@@ -607,6 +489,7 @@ for inc in range(ninc):
         sum_Newton_its += 1
         iteration_total += 1
 
+        # displacement_fluctuation_field.s += displacement_increment_field.s
         # compute strain from the displacement increment
         discretization.apply_gradient_operator_symmetrized_mugrid(
             u_inxyz=displacement_increment_field,
@@ -638,18 +521,17 @@ for inc in range(ninc):
             #          tuple(discretization.subdomain_locations_no_buffers),
             #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             #
-            # save total  strain
-            results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-            # save stress
-            results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
-            save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
-                     tuple(discretization.subdomain_locations_no_buffers),
-                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
+            # # save total  strain
+            # results_name = (f'total_strain_field' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', total_strain_field.s.mean(axis=2),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            #
+            # # save stress
+            # results_name = (f'stress' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', stress_field.s.mean(axis=2),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             results_name = (f'strain_eq' + f'_exp_{n_exp}_it{iteration_total}')
             save_npy(data_folder_path + results_name + f'.npy', strain_eq_qx.s[0, 0].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
@@ -660,7 +542,10 @@ for inc in range(ninc):
             save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 1, 0, 1].mean(axis=0),
                      tuple(discretization.subdomain_locations_no_buffers),
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
+            # results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
+            # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s[1].mean(axis=0),
+            #          tuple(discretization.subdomain_locations_no_buffers),
+            #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
             # results_name = (f'rhs_field' + f'_exp_{n_exp}_it{iteration_total}')
             # save_npy(data_folder_path + results_name + f'.npy', rhs_field.s.mean(axis=1),
             #          tuple(discretization.subdomain_locations_no_buffers),

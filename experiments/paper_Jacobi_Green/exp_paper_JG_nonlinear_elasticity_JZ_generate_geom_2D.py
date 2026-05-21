@@ -30,10 +30,10 @@ src = '../figures/'
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'trilinear_hexahedron'
+element_type = 'linear_triangles'
 formulation = 'small_strain'
 
-domain_size = [1, 1, 1]
+domain_size = [1, 1 ]
 # Variables to be set up
 import numpy as np
 
@@ -42,16 +42,15 @@ def coarsen_binary_round(arr, factor):
     Deterministic coarsening of a binary 3D microstructure.
     For each block: compute mean, round to 0 or 1.
     """
-    nx, ny, nz = arr.shape
-    assert nx % factor == ny % factor == nz % factor == 0
+    nx, ny = arr.shape
+    assert nx % factor == ny % factor  == 0
 
     # reshape into blocks
     arr_b = arr.reshape(nx//factor, factor,
-                        ny//factor, factor,
-                        nz//factor, factor)
+                        ny//factor, factor)
 
     # compute block means
-    phi_block = arr_b.mean(axis=(1, 3, 5))
+    phi_block = arr_b.mean(axis=(1, 3))
 
     # deterministic rounding
     return np.rint(phi_block).astype(arr.dtype)
@@ -100,14 +99,14 @@ generate_prism=False
 generate_cube=True
 if generate_cube:
 
-    pixel_sizes =np.array([17,33,62,81])
+    pixel_sizes =np.array([256,])
     for nb_pixels_power in pixel_sizes:
 
        # nb_laminates = 2 ** nb_pixels_power
         #nb_laminates=200
         #
         #number_of_pixels = (2 ** nb_pixels_power, 2 ** nb_pixels_power, 2 ** nb_pixels_power)
-        number_of_pixels =  (nb_pixels_power, nb_pixels_power, nb_pixels_power)
+        number_of_pixels =  (nb_pixels_power, nb_pixels_power )
 
         geometry_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                                 problem_type=problem_type)
@@ -148,17 +147,16 @@ if generate_cube:
             # Get domain bounds and size
             x_min, x_max = coords[0].min(), coords[0].max()
             y_min, y_max = coords[1].min(), coords[1].max()
-            z_min, z_max = coords[2].min(), coords[2].max()
 
             # Domain lengths
             Lx = x_max - x_min
             Ly = y_max - y_min
-            Lz = z_max - z_min
 
-            Nx, Ny, Nz =coords.shape[1:]
+
+            Nx, Ny  =coords.shape[1:]
             # Initialize output array
             inclusions = np.zeros(coords.shape[1:], dtype=np.int32)
-            inclusions[Nx // 4:3*Nx // 4, Ny // 4:3*Ny // 4, Nz // 4:3*Nz // 4] = 1
+            inclusions[Nx // 4:3*Nx // 4, Ny // 4:3*Ny // 4 ] = 1
 
             return inclusions
 
@@ -174,7 +172,7 @@ if generate_cube:
         to_save = np.copy(geometry)
         np.save(data_folder_path + results_name + f'.npy', to_save)
 
-       # generate_smaller_grids(geometry_name='cube_', N=256)
+        generate_smaller_grids(geometry_name='cube_', N=256)
 
         def visualize_inclusions_voxels(inclusions, color='blue', edgecolor='k', alpha=0.9, figsize=(8, 8)):
             """

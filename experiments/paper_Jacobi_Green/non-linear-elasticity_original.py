@@ -9,9 +9,9 @@ np.seterr(divide='ignore', invalid='ignore')
 
 # ----------------------------------- GRID ------------------------------------
 
-Nx = 17  # number of voxels in x-direction
-Ny = 17  # number of voxels in y-direction
-Nz = 17  # number of voxels in z-direction
+Nx = 33  # number of voxels in x-direction
+Ny = Nx  # number of voxels in y-direction
+Nz = Nx  # number of voxels in z-direction
 shape = [Nx, Ny, Nz]  # number of voxels as list: [Nx,Ny,Nz]
 ndof = 3 ** 2 * Nx * Ny * Nz  # number of degrees-of-freedom
 
@@ -90,8 +90,8 @@ G_K_deps = lambda depsm: G(K_deps(depsm))
 
 def elastic(eps):
     # parameters
-    K = 2.  # bulk  modulus
-    mu = 1.  # shear modulus
+    K = 0.2  # bulk  modulus
+    mu = 0.1  # shear modulus
 
     # elastic stiffness tensor, and stress response
     C4 = K * II + 2. * mu * I4d
@@ -106,7 +106,7 @@ def elastic(eps):
 def nonlin_elastic(eps):
     K = 2.  # bulk modulus
     sig0 = 0.5  # reference stress
-    eps0 = 0.1  # reference strain
+    eps0 = 0.01  # reference strain
     n = 3.  # hardening exponent
 
     epsm = ddot22(eps, I) / 3. # trace
@@ -124,7 +124,7 @@ def nonlin_elastic(eps):
 
 # laminate of two materials
 # -------------------------
-geom_phase = np.load('bubbles_dof=17' + f'.npy' ).astype(float)
+geom_phase = np.load('cube_dof=33' + f'.npy' ).astype(float)
 try:
     phase = geom_phase.reshape(shape)
 except:
@@ -152,10 +152,11 @@ sig, K4 = constitutive(eps)
 
 # set macroscopic loading
 DE = np.zeros([3, 3, Nx, Ny, Nz])
-DE[0, 1] += 0.01
-DE[1, 0] += 0.01
+DE[0, 1] += 0.025
+DE[1, 0] += 0.025
 
 # initial residual: distribute "DE" over grid using "K4"
+sig, K4 = constitutive(DE)
 b = -G_K_deps(DE)
 eps += DE
 
@@ -175,7 +176,7 @@ while True:
 
 
     # solve linear system using the Conjugate Gradient iterative solver
-    depsm, _ = sp.cg(rtol=1.e-3,
+    depsm, _ = sp.cg(rtol=1.e-5,
                      A=sp.LinearOperator(shape=(ndof, ndof), matvec=G_K_deps),
                      b=b,
                      callback=callback

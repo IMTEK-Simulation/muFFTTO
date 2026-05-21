@@ -154,7 +154,7 @@ if plot_N32:
     ax_grad.set_xlim([-20, nb_of_filters])
     ax_grad.set_xticks([])
     ax_grad.set_xticklabels([])
-    ax_grad.set_ylabel(r'$\|\nabla \rho_i \|_{\infty}$')
+    ax_grad.set_ylabel(r'$L \|\nabla \rho_i \|_{\infty}$')
     ax_grad.text(0.018 , 0.65, rf'\textbf{{(c)}}', transform=ax_grad.transAxes)
 
     ax_grad.annotate(text=f'Density gradient',  # \n contrast = 100
