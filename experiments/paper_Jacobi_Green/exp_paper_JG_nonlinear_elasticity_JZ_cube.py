@@ -464,7 +464,7 @@ for inc in range(ninc):
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
         # save K4_ijklqyz
         results_name = (f'K4_ijklqyz' + f'_exp_{n_exp}_it{iteration_total}')
-        save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 0, 0, 0].mean(axis=0),
+        save_npy(data_folder_path + results_name + f'.npy', K4_ijklqyz.s[0, 1, 0, 1].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
         # results_name = (f'rhs_' + f'_exp_{n_exp}_it{iteration_total}')
