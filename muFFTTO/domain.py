@@ -996,7 +996,7 @@ class Discretization:
 
         return K_system_matrix
 
-    def get_system_matrix_mugrid(self, material_data_field, formulation):
+    def get_system_matrix_mugrid(self, material_data_field, formulation=None):
         """
         Function that assembly global system matrix K
         - memory hungry process that returns

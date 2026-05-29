@@ -29,6 +29,7 @@ formulation = 'small_strain'
 
 domain_size = [1, 1]
 nb_pix_multips = [2]  # ,2,3,3,2,
+tol_cg = 1e-14
 
 ratios = np.arange(2,33)  # 65 17  33
 
@@ -70,6 +71,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
     # set macroscopic gradient
     macro_gradient = np.array([[1.0,0.5], [0.5, 1.0]])
+    #macro_gradient = np.array([[1.0,0. ], [0. , 0.0]])
 
     # create material data field
     K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
@@ -92,13 +94,14 @@ for kk in np.arange(np.size(nb_pix_multips)):
                                                      kind='linear')
     C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
 
-    material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                          *discretization.nb_of_pixels])))
+    # material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
+    #                                                       *discretization.nb_of_pixels])))
 
-    refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                           np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                             *discretization.nb_of_pixels])))
+
+    # refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+    #                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
+    #                                                          *discretization.nb_of_pixels])))
 
     print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
@@ -142,48 +145,51 @@ for kk in np.arange(np.size(nb_pix_multips)):
         # nb_it=[]
         # nb_it_combi=[]
         # nb_it_Jacobi=[]
-        phase_field = np.abs(phase_field_smooth)
+        phase_field_smooth = np.abs(phase_field_smooth)
         #phase_field = scale_field(phase_field, min_val=1, max_val=1e2)
 #        phase_field = scale_field(phase_field, min_val=np.power(10, 1), max_val=10 ** 2)
         if kontrast == 100:
-            phase_field = scale_field(phase_field, min_val=1, max_val=10 ** 2)
+            phase_field_smooth = scale_field(phase_field_smooth, min_val=1, max_val=10 ** 2)
         elif kontrast == 10:
-            phase_field = scale_field(phase_field, min_val=10, max_val=10 ** 2)
+            phase_field_smooth = scale_field(phase_field_smooth, min_val=10, max_val=10 ** 2)
         elif kontrast == 2 :
-            phase_field = scale_field(phase_field, min_val=50 , max_val=10 ** 2)
+            phase_field_smooth = scale_field(phase_field_smooth, min_val=50 , max_val=10 ** 2)
 
         # phase_field[phase_field<=0.001]= phase_field + 1e-4
 
-        phase_fem = np.zeros([2, *number_of_pixels])
-        phase_fnxyz = discretization.get_scalar_sized_field()
-        phase_fnxyz[0, 0, ...] = phase_field
+        #phase_fem = np.zeros([2, *number_of_pixels])
+        #phase_fnxyz = discretization.get_scalar_sized_field()
+        phase_field = discretization.get_scalar_field(name='phase_field')
+        phase_field.s[0, 0, ...] = phase_field_smooth
 
-        # np.save('geometry_jacobi.npy', np.power(phase_field_l, 2),)
-        # sc.io.savemat('geometry_jacobi.mat', {'data':  np.power(phase_field_l, 2)})
 
-        phase_field_at_quad_poits_1qnxyz = \
-            discretization.evaluate_field_at_quad_points(nodal_field_fnxyz=phase_fnxyz,
-                                                         quad_field_fqnxyz=None,
-                                                         quad_points_coords_iq=None)[0]
-
-        phase_field_at_quad_poits_1qnxyz[0, :, 0, ...] = phase_fnxyz
-        # apply material distribution
-        # material_data_field_C_0_rho = material_data_field_C_0[..., :, :] * np.power(phase_field[0, 0], 1)
-        # material_data_field_C_0_rho=material_data_field_C_0[..., :, :] * phase_fem
-        # material_data_field_C_0_rho +=100*material_data_field_C_0[..., :, :] * (1-phase_fem)
-        material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-            phase_field_at_quad_poits_1qnxyz, 1)[0, :, 0, ...]
+        material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='algortihmic_tangent')
+        material_data_field_C_0.s[...] = elastic_C_1[..., np.newaxis, np.newaxis, np.newaxis] * phase_field.s[
+            np.newaxis, ...]
         # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
+        # Set up macro gradient field
+        macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+        macro_gradient_field.sg.fill(0)
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
+        discretization.fft.communicate_ghosts(field=macro_gradient_field)
+
         # Set up right hand side
-        macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-        # perturb=np.random.random(macro_gradient_field.shape)
-        # macro_gradient_field += perturb#-np.mean(perturb)
+        rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+        rhs_field.sg.fill(0)
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                      macro_gradient_field_ijqxyz=macro_gradient_field,
+                                      rhs_inxyz=rhs_field)
+        def K_fun(x, Ax):
+            """
+            Function to compute the product of the Hessian matrix with a vector.
+            The Hessian is represented by the convolution operator.
+            """
 
-        # Solve mechanical equilibrium constrain
-        rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
-
-        K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
-                                                             formulation='small_strain')
+            discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
+                                                      input_field_inxyz=x,
+                                                      output_field_inxyz=Ax)
+            discretization.fft.communicate_ghosts(Ax)
 
         # plotting eigenvalues
         ##  K = discretization.get_system_matrix(material_data_field_C_0_rho)
@@ -214,66 +220,132 @@ for kk in np.arange(np.size(nb_pix_multips)):
         # ax2.loglog(sorted(eig)[1:-2], label=f'{i}',marker='.', linewidth=0, markersize=1)
         # ax2.set_ylim([1e-5, 1e1])
 
-        K = discretization.get_system_matrix(material_data_field=material_data_field_C_0_rho)
+        K = discretization.get_system_matrix_mugrid(material_data_field=material_data_field_C_0)
         # material_data_field_C_0=np.mean(material_data_field_C_0_rho,axis=(4,5,6))
         # mean_material=np.mean(material_data_field_C_0_rho,axis=(4,5,6))
         # material_data_field_C_0_ratio = np.einsum('ijkl,qxy->ijklqxy', mean_material,
         #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
         #                                                       *discretization.nb_of_pixels])))
 
-        preconditioner = discretization.get_preconditioner_NEW(
-            reference_material_data_field_ijklqxyz=refmaterial_data_field_I4s)
+        preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
+        def M_fun_Green(x, Px):
+            """
+            Function to compute the product of the Preconditioner matrix with a vector.
+            The Preconditioner is represented by the convolution operator.
+            """
+            discretization.fft.communicate_ghosts(x)
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                       input_nodal_field_fnxyz=x,
+                                                       output_nodal_field_fnxyz=Px)
 
-        M_fun = lambda x: discretization.apply_preconditioner_NEW(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                                  nodal_field_fnxyz=x)
 
-        K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-            material_data_field_ijklqxyz=material_data_field_C_0_rho)
+        K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            formulation=formulation)
+        def M_fun_Jacobi(x, Px):
+            Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
 
-        M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-            preconditioner_Fourier_fnfnqks=preconditioner,
-            nodal_field_fnxyz=K_diag_alg * x)
-        # #
-        M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
+        def M_fun_Green_Jacobi(x, Px):
+            # discretization.fft.communicate_ghosts(x)
+            x_jacobi_temp = discretization.get_unknown_size_field(name='x_jacobi_temp')
+
+            x_jacobi_temp.s[...] = K_diag_alg.s * x.s
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                       input_nodal_field_fnxyz=x_jacobi_temp,
+                                                       output_nodal_field_fnxyz=Px)
+
+            Px.s[...] = K_diag_alg.s * Px.s
+        # # #
+        # M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
        # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
-        x0 = np.zeros(discretization.get_displacement_sized_field().shape)
+        #x0 = np.zeros(discretization.get_displacement_sized_field().shape)
+        x0_Green=discretization.get_unknown_size_field(name=f'x0_Green')
+        norms_G = dict()
+        norms_G['residual_rr'] = []
+        norms_G['residual_rz'] = []
 
-        displacement_field, norms = solvers.PCG(K_fun, rhs,
-                                                x0=x0,
-                                                P=M_fun, steps=int(1000), toler=1e-6,
-                                                norm_type='data_scaled_rr',
-                                                norm_metric=M_fun)
-        nb_it[kk - 1, i] = (len(norms['residual_rz']))
-        norm_rz.append(norms['residual_rz'])
-        norm_rr.append(norms['residual_rr'])
-        norm_rMr.append(norms['data_scaled_rr'])
+        def callback_G(it, x, r, p, z, stop_crit_norm):
+            # global norms_cg_mech
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norms_G['residual_rr'].append(norm_of_rr)
+            norms_G['residual_rz'].append(norm_of_rz)
+
+
+        x0_Green.s.fill(0)
+        x0_Green, norms = solvers.conjugate_gradients_mugrid_experimental(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,
+            x=x0_Green,
+            P=M_fun_Green ,
+            tol=tol_cg,
+            maxiter=10000,
+            callback=callback_G,
+            # rtol=True,
+           # norm_metric=M_fun_Green
+        )
+        nb_it[kk - 1, i] = (len(norms_G['residual_rz']))
+        norm_rz.append(norms_G['residual_rz'])
+        norm_rr.append(norms_G['residual_rr'])
 
         print(nb_it)
         #########
-        displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_combi, steps=int(1000),
-                                                            toler=1e-6,
-                                                            norm_type='data_scaled_rr',
-                                                            norm_metric=M_fun)
-        nb_it_combi[kk - 1, i] = (len(norms_combi['residual_rz']))
-        norm_rz_combi.append(norms_combi['residual_rz'])
-        norm_rr_combi.append(norms_combi['residual_rr'])
-        norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+        # displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_combi, steps=int(1000),
+        #                                                     toler=1e-6,
+        #                                                     norm_type='data_scaled_rr',
+        #                                                     norm_metric=M_fun)
+
+        norms_GJ = dict()
+        norms_GJ['residual_rr'] = []
+        norms_GJ['residual_rz'] = []
+        def callback_GJ(it, x, r, p, z, stop_crit_norm):
+            # global norms_cg_mech
+            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
+            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norms_GJ['residual_rr'].append(norm_of_rr)
+            norms_GJ['residual_rz'].append(norm_of_rz)
+        x0_GreenJacobi=discretization.get_unknown_size_field(name=f'x0_GreenJacobi')
+        x0_GreenJacobi.s.fill(0)
+
+        x0_GreenJacobi, norms = solvers.conjugate_gradients_mugrid_experimental(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,
+            x=x0_GreenJacobi,
+            P=M_fun_Green_Jacobi,
+            tol=tol_cg,
+            maxiter=10000,
+            callback=callback_GJ,
+            # rtol=True,
+            # norm_metric=M_fun_Green
+        )
+
+
+
+        nb_it_combi[kk - 1, i] = (len(norms_GJ['residual_rz']))
+        norm_rz_combi.append(norms_GJ['residual_rz'])
+        norm_rr_combi.append(norms_GJ['residual_rr'])
+        #norm_rMr_combi.append(norms_GJ['data_scaled_rr'])
+        print(nb_it_combi)
 
         #
-        displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_Jacobi, steps=int(1000),
-                                                              toler=1e-6,
-                                                            norm_type='data_scaled_rr',
-                                                            norm_metric=M_fun)
-        nb_it_Jacobi[kk - 1, i] = (len(norms_Jacobi['residual_rz']))
-        norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
-        norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
-        norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
-
-        displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=x0, P=M_fun,
-                                                                             omega=omega,
-                                                                             steps=int(1000),
-                                                                             toler=1e-6)
+        # displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_Jacobi, steps=int(1000),
+        #                                                       toler=1e-6,
+        #                                                     norm_type='data_scaled_rr',
+        #                                                     norm_metric=M_fun)
+        # nb_it_Jacobi[kk - 1, i] = (len(norms_Jacobi['residual_rz']))
+        # norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
+        # norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
+        # norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
+        #
+        # displacement_field_Richardson, norms_Richardson = solvers.Richardson(K_fun, rhs, x0=x0, P=M_fun,
+        #                                                                      omega=omega,
+        #                                                                      steps=int(1000),
+        #                                                                      toler=1e-6)
         # nb_it_Richardson[kk - 1, i] = (len(norms_Richardson['residual_rr']))
         # norm_rr_Richardson= norms_Richardson['residual_rr'][-1]
         #
@@ -320,19 +392,26 @@ for kk in np.arange(np.size(nb_pix_multips)):
         _info['nb_of_pixels'] = discretization.nb_of_pixels_global
         _info['nb_of_sampling_points'] = ratio
         # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
-        _info['norm_rMr_G'] = norms['data_scaled_rr']
-        _info['norm_rMr_J'] = norms_Jacobi['data_scaled_rr']
-        _info['norm_rMr_JG'] = norms_combi['data_scaled_rr']
+#        _info['norm_rMr_G'] = norms_G['data_scaled_rr']
+       #_info['norm_rMr_J'] = norms_Jacobi['data_scaled_rr']
+     #   _info['norm_rMr_JG'] = norms_GJ['data_scaled_rr']
         _info['nb_it_G'] = nb_it
         _info['nb_it_J'] = nb_it_Jacobi
         _info['nb_it_JG'] = nb_it_combi
         script_name = 'exp_paper_JG_intro_2'
         file_data_name = (
             f'{script_name}_gID{geometry_ID}_T{number_of_pixels[0]}_G{ratio}_kappa{kontrast}.npy')
-        folder_name = '../exp_data/'
-        save_npy(folder_name + file_data_name + f'.npy', phase_field,
-                 tuple(discretization.fft.subdomain_locations),
+        folder_name = './exp_data/'
+        # save_npy(folder_name + file_data_name + f'.npy', phase_field,
+        #          tuple(discretization.fft.subdomain_locations),
+        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        #
+        save_npy(folder_name + file_data_name + f'.npy', phase_field.s[0].mean(axis=0),
+                 tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+
+
+
         print(folder_name + file_data_name + f'.npy')
 
         if MPI.COMM_WORLD.rank == 0:

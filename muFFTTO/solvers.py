@@ -180,6 +180,8 @@ def conjugate_gradients_mugrid_experimental(
         tol: float = 1e-6,
         maxiter: int = 1000,
         callback: callable = None,
+        rtol: bool = False,
+
         norm_metric: callable = None,
         **kwargs
 ):
@@ -240,9 +242,9 @@ def conjugate_gradients_mugrid_experimental(
     )
 
     hessp(x, Ap)
-    r.s[...] = b.s - Ap.s
+    r.s[...] = b.s[...] - Ap.s[...]
     P(r, z)
-    p.s[...] = np.copy(z.s)  # residual
+    p.s[...] = np.copy(z.s[...])  # residual
 
     norms = dict()
 
@@ -266,6 +268,9 @@ def conjugate_gradients_mugrid_experimental(
 
     if stop_crit < tol_sq:
         return x
+
+    if rtol:
+        tol_sq = tol_sq * stop_crit
 
     if callback:
         # callback(0, x.s, r.s, p.s, z.s, stop_crit)
@@ -295,8 +300,8 @@ def conjugate_gradients_mugrid_experimental(
             raise RuntimeError("Hessian is not positive definite")
 
         alpha = rz / pAp
-        x.s += alpha * p.s
-        r.s -= alpha * Ap.s
+        x.s[...] += alpha * p.s[...]
+        r.s[...] -= alpha * Ap.s[...]
 
         P(r, z)
 
@@ -353,7 +358,8 @@ def conjugate_gradients_mugrid_experimental(
     return x, norms
 
 
-def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False, lambda_min=None, norm_type='rz',
+def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False,
+        lambda_min=None, norm_type='rz',
         callback=None, **kwargs):
     # print('I am in PCG')
     """

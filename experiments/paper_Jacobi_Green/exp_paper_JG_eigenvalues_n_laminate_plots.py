@@ -47,7 +47,7 @@ plot_this = True
 if plot_this:
     geometry_ID = 'linear'  # 'linear'# 'sine_wave_'
     geometry_n = [2, ]
-    discretization_n = [3, 4, 5]
+    discretization_n = [2, 3, 4]#, 5
     ratio = 2
 
     # create a figure
@@ -72,18 +72,18 @@ if plot_this:
             script_name = 'exp_paper_JG_eigenvalues_n_laminate'
             file_data_name = (
                 f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
-            folder_name = '../exp_data/'
+            folder_name = './exp_data/'
 
-            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
-            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+            xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('./exp_data/' + file_data_name + f'.npy', allow_pickle=True)
 
             #
             # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_G)), xopt.f.norm_rr_G,
                           label=r'Green - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$', color='green',
                           linestyle='--', marker=markers[counter])
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_JG)), xopt.f.norm_rr_JG,
                           label=r'Green-Jacobi - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$',
                           color='Black', linestyle='-.', marker=markers[counter])
             ax_1.set_xlabel(r'PCG iteration - $k$')
@@ -169,7 +169,7 @@ if plot_this:
 
             # -------------------------------------# plot eigenvals #-------------------------------------#
             ax_weights = fig.add_subplot(gs[counter, 2])
-            results_name = f'T{2 ** T}_G{2 ** G}'
+            results_name = f'T{2 ** T}_G{2 ** G}_kappa{ratio}'
 
             script_name = 'exp_paper_JG_eivals_with_eigenvectors'
             file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
@@ -275,18 +275,18 @@ if plot_size_dep:
 
             file_data_name = (
                 f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
-            folder_name = '../exp_data/'
+            folder_name = './exp_data/'
 
-            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
-            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+            xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('./exp_data/' + file_data_name + f'.npy', allow_pickle=True)
 
             #
             # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_G)), xopt.f.norm_rr_G, # TODO[CHANGE IN NORM] norm_rMr_G
                           label=r'  Green - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$', color='green',
                           linestyle='--', marker=markers[counter], markevery=3)
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_JG)), xopt.f.norm_rr_JG,
                           label=r'  Green-Jacobi - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$',
                           color='Black', linestyle='-.', marker=markers[counter])
             ax_1.set_xlabel(r'PCG iteration - $k$')
@@ -357,7 +357,7 @@ if plot_size_dep:
 
              # -------------------------------------# plot weights #-------------------------------------#
             ax_weights = fig.add_subplot(gs[counter, 2])
-            results_name = f'T{2 ** T}_G{2 ** G}'
+            results_name = f'T{2 ** T}_G{2 ** G}_kappa{ratio}'
 
             script_name = 'exp_paper_JG_eivals_with_eigenvectors'
             file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
@@ -464,18 +464,18 @@ if plot_this:
 
             file_data_name = (
                 f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
-            folder_name = '../exp_data/'
+            folder_name = './exp_data/'
 
-            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
-            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+            xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('./exp_data/' + file_data_name + f'.npy', allow_pickle=True)
             print(f'../exp_data/' + file_data_name + f'xopt_log.npz')
             #
             # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_G)), xopt.f.norm_rr_G,
                           label=r'  Green - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$', color='green',
                           linestyle='--', marker=markers[counter])
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_JG)), xopt.f.norm_rr_JG,
                           label=r' Green-Jacobi - ' + r' $\mathcal{T}$' + f'$_{{{2 ** T}}}$',
                           color='Black', linestyle='-.', marker=markers[counter])
             ax_1.set_xlabel(r'PCG iteration - $k$')
@@ -639,18 +639,18 @@ if plot_size_dep:
             print(f'T={T}')
             file_data_name = (
                 f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{ratio}.npy')
-            folder_name = '../exp_data/'
+            folder_name = './exp_data/'
 
-            xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
-            phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+            xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+            phase_field = np.load('./exp_data/' + file_data_name + f'.npy', allow_pickle=True)
 
             #
             # ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
 
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_G)), xopt.f.norm_rMr_G,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_G)), xopt.f.norm_rr_G,
                           label=r'  Green - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$', color='green',
                           linestyle='--', marker=markers[counter], markevery=3)
-            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rMr_JG)), xopt.f.norm_rMr_JG,
+            ax_1.semilogy(np.arange(0, len(xopt.f.norm_rr_JG)), xopt.f.norm_rr_JG,
                           label=r'  Green-Jacobi - ' + r'$\mathcal{G}$' + f'$_{{{2 ** G}}}$',
                           color='Black', linestyle='-.', marker=markers[counter])
             ax_1.set_xlabel(r'PCG iteration - $k$')

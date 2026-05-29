@@ -125,10 +125,10 @@ def run_simple_CG_Green(initial, RHS, kappa):
     plt.rcParams["font.family"] = "Arial"
 
     domain_size = [1, 1]
-    geom_n = [2,3,4,5 ]  #[2,3,4,5 ]  #2,3,4,5,6  3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
-    discretization_n =  [5   ] #2,3,4, #[2,3,4,5  ]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+    geom_n = [2,3,4,5]  #[2,3,4,5 ]  #2,3,4,5,6  3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
+    discretization_n =  [2,3,4,5 ] #2,3,4, #[2,3,4,5  ]  # 3,,4,5,6 ,6,7,8,9,10,]  # ,2,3,3,2,  #,5,6,7,8,9 ,5,6,7,8,9,10,11
 
-    ratios = np.array([8])  # np.arange(1,5)  # 17  33
+    ratios = np.array([1,2,4])  # np.arange(1,5)  # 17  33
 
     for geometry_ID in [
         'n_laminate']: # n_laminate ,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3' square_inclusion
@@ -171,18 +171,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                                  mu=G_0,
                                                                  kind='linear')
 
-                material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-                                                    np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                      *discretization.nb_of_pixels])))
-
-                ref_elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                                     K=K_0,
-                                                                     mu=G_0,
-                                                                     kind='linear')
-
-                refmaterial_data_field_C1 = np.einsum('ijkl,qxy->ijklqxy', ref_elastic_C_1,
-                                                      np.ones(np.array([discretization.nb_quad_points_per_pixel,
-                                                                        *discretization.nb_of_pixels])))
+                refmaterial_data_field_ = np.copy(elastic_C_1)  #
 
                 print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
@@ -212,43 +201,62 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                     phase_field = np.abs(phase_field_smooth)
                     phase_field = scale_field(phase_field, min_val=1, max_val=10 ** ratio)
+                    phase_field = discretization.get_scalar_field(name='phase_field')
+                    phase_field.s[0, 0, ...] = phase_field_smooth
 
-                    material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
-                        phase_field, 1)
+                    material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(
+                        name='algortihmic_tangent')
+                    material_data_field_C_0.s[...] = elastic_C_1[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                     phase_field.s[
+                                                         np.newaxis, ...]
+
+                    # Set up macro gradient field
+                    macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+                    macro_gradient_field.sg.fill(0)
+                    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
+                    discretization.fft.communicate_ghosts(field=macro_gradient_field)
 
                     # Set up right hand side
-                    macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
-                    # np.random.seed(seed=1)
+                    rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+                    rhs_field.sg.fill(0)
+                    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                                  macro_gradient_field_ijqxyz=macro_gradient_field,
+                                                  rhs_inxyz=rhs_field)
 
-                    # Solve mechanical equilibrium constrain
-                    rhs = discretization.get_rhs(material_data_field_C_0_rho, macro_gradient_field)
+                    def K_fun(x, Ax):
+                        """
+                        Function to compute the product of the Hessian matrix with a vector.
+                        The Hessian is represented by the convolution operator.
+                        """
 
-                    K_fun = lambda x: discretization.apply_system_matrix(material_data_field_C_0_rho, x,
-                                                                         formulation='small_strain')
+                        discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
+                                                                  input_field_inxyz=x,
+                                                                  output_field_inxyz=Ax,
+                                                                  formulation=formulation)
+                        discretization.fft.communicate_ghosts(Ax)
 
-                    min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
-                    max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
+                 #   min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
+                  #  max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
 
-                    preconditioner = discretization.get_preconditioner_NEW(
-                        reference_material_data_field_ijklqxyz=refmaterial_data_field_C1)
+                    preconditioner = discretization.get_preconditioner_Green_mugrid(
+                        reference_material_data_ijkl=elastic_C_1)
 
-                    M_fun = lambda x: discretization.apply_preconditioner_NEW(
-                        preconditioner_Fourier_fnfnqks=preconditioner,
-                        nodal_field_fnxyz=x)
+                    def M_fun_Green(x, Px):
+                        """
+                        Function to compute the product of the Preconditioner matrix with a vector.
+                        The Preconditioner is represented by the convolution operator.
+                        """
+                        discretization.fft.communicate_ghosts(x)
+                        discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                                   input_nodal_field_fnxyz=x,
+                                                                   output_nodal_field_fnxyz=Px)
 
-                    K_diag_alg = discretization.get_preconditioner_Jacoby_fast(
-                        material_data_field_ijklqxyz=material_data_field_C_0_rho)
-
-                    M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
-                        preconditioner_Fourier_fnfnqks=preconditioner,
-                        nodal_field_fnxyz=K_diag_alg * x)
-                    # #
-                    M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
                     get_igens = True
                     if get_igens:
                         adjust_system = True
 
-                        K = discretization.get_system_matrix(material_data_field_C_0_rho)
+                        K = discretization.get_system_matrix_mugrid(     material_data_field_C_0)
                         # fixing zero eigenvalues
                         reduced_K = np.copy(K)
                         K[:, 0] = 0
@@ -268,7 +276,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         sorted_eig_vect_K = eig_vect_K[:, idx_K]
 
                         # Greeen precond
-                        M = discretization.get_system_matrix(refmaterial_data_field_C1)
+                        M = discretization.get_system_matrix_mugrid(refmaterial_data_field_)
                         # M2 = discretization.get_preconditioner_NEW(refmaterial_data_field_C1)
                         # RM2=discretization.fft.ifft(M2[:,0,:,0])
                         # M_inv_fromfft=np.zeros_like(M)
@@ -323,18 +331,18 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         # plot_eigendisplacement(eigenvectors_1=eig_vect_JG[:, idx_JG],
                         #                        grid_shape=rhs.shape, dim=2, eigenvals=eig_JG[idx_JG],
                         #                        weight=eig_JG[idx_JG], participation_ratios=participation_ratios)
-                    rhs.flatten()[0] = 0
-                    rhs.flatten()[np.prod(number_of_pixels)] = 0
+                    rhs_field.s.flatten()[0] = 0
+                    rhs_field.s.flatten()[np.prod(number_of_pixels)] = 0
 
                     ######### INITIAL SOLUTION
                     # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
-                    x0 = np.zeros(discretization.get_displacement_sized_field().shape)
+                    x0 = np.zeros(rhs_field.s.shape)
 
                     ########################### Greeen  PRE CONDITIONED VERSION ########################################################
                     M_null = lambda x: 1 * x
                     K_fun_G = lambda x: GKGsym @ x
 
-                    rhs_G = Green_sqrt @ rhs.flatten()
+                    rhs_G = Green_sqrt @ rhs_field.s.flatten()
 
                     r0 = rhs_G.flatten() - K_fun_G(M_sym @ x0.flatten())
                     r0_norm = np.linalg.norm(r0.flatten())  # order='F
@@ -346,7 +354,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                             Green_sqrt_eig_vect_J[:, k])
                     w_i = (np.dot(np.transpose(normed_eigenvectors), r0.flatten() / r0_norm)) ** 2  # order='F'
                     w_i_for_un_K = (np.dot(np.transpose(eig_vect_K),
-                                           rhs.flatten() / np.linalg.norm(rhs.flatten()))) ** 2  ### ONLY FOR ZERO RHS
+                                           rhs_field.s.flatten() / np.linalg.norm(rhs_field.s.flatten()))) ** 2  ### ONLY FOR ZERO RHS
 
                     # plot_eigenvectors(eigenvectors_1=normed_eigenvectors, eigenvectors_2=eig_vect_K,
                     #                   grid_shape=rhs.shape, dim=2)
@@ -360,10 +368,12 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                            M_inv=None)
                     # plot_ritz_values(ritz_values=ritz_values, true_eigenvalues=eig_G)
 
+                    setting_CG = {'energy_lower_bound': True}
                     displacement_field, norms = solvers.PCG(K_fun_G, rhs_G.flatten(), x0=M_sym @ x0.flatten(), P=M_null,
                                                             steps=int(1000), toler=1e-14,
                                                             norm_energy_upper_bound=True,
-                                                            lambda_min=np.real(sorted(eig_G)[-2])
+                                                            lambda_min=np.real(sorted(eig_G)[-2]),
+                                                            **setting_CG
                                                             )
                     # plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G_no_zero[idx_G],
                     #                    weight=w_i[idx_G],
@@ -375,14 +385,14 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     _info['nb_of_pixels'] = discretization.nb_of_pixels_global
                     _info['nb_of_sampling_points'] = np.shape(phase_fied_small_grid)
                     # phase_field_sol_FE_MPI = xopt.x.reshape([1, 1, *discretization.nb_of_pixels])
-                    _info['norm_rMr_G'] = norms['data_scaled_rr']
+                 #   _info['norm_rMr_G'] = norms['data_scaled_rr']
                     _info['norm_rr_G'] = norms['residual_rr']
 
                     _info['norm_UB_G'] = norms['energy_upper_bound']
                     _info['eigens_G'] = eig_G[idx_G]
 
                     _info['eig_vect_G'] = eig_vect_G[:, idx_G]
-                    _info['rhs'] = rhs
+                    _info['rhs'] = rhs_field.s
                     _info['weights'] = w_i[idx_G]
 
                     _info['x_values'] = x_values

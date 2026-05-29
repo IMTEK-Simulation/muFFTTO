@@ -112,7 +112,7 @@ def get_cg_polynomial(lambda_val, ritz_values):
 
 ##### PLOT FOR MESH REFINEMENT
 ratios = [1, 2, 4]
-geometry_n = [3, 4, 5]
+geometry_n = [2, 3, 4]
 discretization_n = [5]  # ,5
 iteration_to_plot = 7  # 2 ** G - 1
 
@@ -142,7 +142,7 @@ for ii in np.arange(np.size(geometry_n)):
             nb_of_pixels_global = _info['nb_of_pixels']
             phase_fied = _info['nb_of_sampling_points']
             norms = {}
-            norms['data_scaled_rr'] = _info['norm_rMr_G']
+#            norms['data_scaled_rr'] = _info['norm_rMr_G']
             norms['energy_upper_bound'] = _info['norm_UB_G']
             norms['residual_rr'] = _info['norm_rr_G']
             eig_G = _info['eigens_G']
@@ -312,7 +312,7 @@ print(('create figure: {}'.format(fname)))
 plt.savefig(figure_folder_path + fname, bbox_inches='tight')
 plt.show()
 
-quit()
+# quit()
 ##### PLOT FOR DATA REFINEMENT
 ratio = 2
 
@@ -342,7 +342,7 @@ for ii in np.arange(np.size(discretization_n)):
         nb_of_pixels_global = _info['nb_of_pixels']
         phase_fied = _info['nb_of_sampling_points']
         norms = {}
-        norms['data_scaled_rr'] = _info['norm_rMr_G']
+#        norms['data_scaled_rr'] = _info['norm_rMr_G']
         norms['energy_upper_bound'] = _info['norm_UB_G']
         norms['residual_rr'] = _info['norm_rr_G']
         eig_G = _info['eigens_G']
@@ -453,7 +453,7 @@ for ii in np.arange(np.size(geometry_n)):
         nb_of_pixels_global = _info['nb_of_pixels']
         phase_fied = _info['nb_of_sampling_points']
         norms = {}
-        norms['data_scaled_rr'] = _info['norm_rMr_G']
+        # norms['data_scaled_rr'] = _info['norm_rMr_G']
         norms['energy_upper_bound'] = _info['norm_UB_G']
         norms['residual_rr'] = _info['norm_rr_G']
         eig_G = _info['eigens_G']
@@ -538,7 +538,7 @@ for ii in np.arange(np.size(geometry_n)):
 ratio = 2
 
 geometry_n = [2, 3, 4]
-discretization_n = [5]  #
+discretization_n = [4]  #
 # create a figure
 fig = plt.figure(figsize=(8.3, 5.0))
 
@@ -563,7 +563,7 @@ for ii in np.arange(np.size(discretization_n)):
         nb_of_pixels_global = _info['nb_of_pixels']
         phase_fied = _info['nb_of_sampling_points']
         norms = {}
-        norms['data_scaled_rr'] = _info['norm_rMr_G']
+        # norms['data_scaled_rr'] = _info['norm_rMr_G']
         norms['energy_upper_bound'] = _info['norm_UB_G']
         norms['residual_rr'] = _info['norm_rr_G']
         eig_G = _info['eigens_G']

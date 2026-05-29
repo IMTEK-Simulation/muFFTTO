@@ -193,7 +193,7 @@ def plot_cg_polynomial(x_values, ritz_values, true_eigenvalues, ylim=[-2.5, 2.5]
     convergence = ((np.sqrt(kappa) - 1) / (np.sqrt(kappa) + 1)) ** k
     errors = np.zeros(len(ritz_values) + 1)
     errors[0] = 1
-    nb_iterations = min(len(ritz_values), 2)
+    nb_iterations = min(len(ritz_values), 5)
     for i in np.arange(0, nb_iterations):  # len(ritz_values)
         polynomial_at_eigens = get_cg_polynomial(np.real(true_eigenvalues), ritz_values[i])
 
