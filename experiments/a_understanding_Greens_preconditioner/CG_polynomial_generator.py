@@ -13,7 +13,7 @@ from muFFTTO import solvers
 from muFFTTO.solvers import PCG
 from muFFTTO import microstructure_library
 
-from helper_cg_ import get_ritz_values, plot_ritz_values, get_cg_polynomial, plot_cg_polynomial, plot_eigenvectors, \
+from trivial_CG_experiments_plot import get_ritz_values, plot_ritz_values, get_cg_polynomial, plot_cg_polynomial, plot_eigenvectors, \
     plot_eigendisplacement
 
 
@@ -92,10 +92,9 @@ def run_simple_CG_Green(initial, RHS, kappa):
     problem_type = 'conductivity'
     discretization_type = 'finite_element'
     element_type = 'linear_triangles'
-    # formulation = 'small_strain'
 
     domain_size = [1, 1]
-    geom_n = [4]  # , 4, 5
+    geom_n = [3]#, 4, 5
 
     ratios = np.array([2])  # np.arange(1,5)  # 17  33
 
@@ -124,7 +123,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
     eigen_LB = []
 
     for geometry_ID in [
-        'n_laminate']:  # n_laminate ,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3' square_inclusion
+        'square_inclusion']:  # n_laminate ,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3' square_inclusion
         for nb_starting_phases in np.arange(np.size(geom_n)):
             print(f'geometry_ID = {geometry_ID}')
             print(f'nb_starting_phases = {nb_starting_phases}')
@@ -144,10 +143,40 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                        element_type=element_type)
 
                 # set macroscopic gradient
-                macro_gradient = np.array([1.0, 0])
+                macro_gradient = np.array([[1.0, 0.], [0., 1.0]])
+
                 # create material data field
-                conductivity_C_0 = np.array([[1., 0], [0, 1.0]])
-                refmaterial_data_field_ = np.copy(conductivity_C_0)  # [:, :, np.newaxis, np.newaxis, np.newaxis]
+                K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+
+                # identity tensor                                               [single tensor]
+                ii = np.eye(2)
+
+                shape = tuple((number_of_pixels[0] for _ in range(2)))
+                # identity tensors                                            [grid of tensors]
+                I = ii
+                I4 = np.einsum('il,jk', ii, ii)
+                I4rt = np.einsum('ik,jl', ii, ii)
+                I4s = (I4 + I4rt) / 2.
+
+                elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                                 K=K_0,
+                                                                 mu=G_0,
+                                                                 kind='linear')
+
+                # material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
+                #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                #                                                       *discretization.nb_of_pixels])))
+
+                ref_elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                                     K=K_0,
+                                                                     mu=G_0,
+                                                                     kind='linear')
+                #
+                # refmaterial_data_field_C1 = np.einsum('ijkl,qxy->ijklqxy', ref_elastic_C_1,
+                #                                       np.ones(np.array([discretization.nb_quad_points_per_pixel,
+                #                                                         *discretization.nb_of_pixels])))
+
+                print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
                 def scale_field(field, min_val, max_val):
                     """Scales a 2D random field to be within [min_val, max_val]."""
@@ -164,7 +193,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                             microstructure_name=geometry_ID,
                             coordinates=discretization.fft.coords,
                             seed=1,
-                            parameter=6)  # ,
+                            parameter=3)  # ,
                         #                                                                           contrast=-ratio) # $1 / 10 ** ratio
                         if ratio != 0:
                             phase_fied_small_grid += 1 / 10 ** ratio
@@ -179,10 +208,13 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     phase_field = np.abs(phase_field_smooth)
                     phase_field = scale_field(phase_field, min_val=1, max_val=10 ** ratio)
 
+                    # material_data_field_C_0_rho = material_data_field_C_0[..., :, :, :] * np.power(
+                    #     phase_field, 1)
                     material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(
-                        name='conductivity_tensor')
-                    material_data_field_C_0.s[...] = conductivity_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                                     phase_field[np.newaxis, ...]
+                        name='algortihmic_tangent')
+                    material_data_field_C_0.s[...] = elastic_C_1[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                     phase_field[
+                                                         np.newaxis, ...]
 
                     # Set up right hand side
                     # macro_gradient_field = discretization.get_macro_gradient_field(macro_gradient)
@@ -205,22 +237,22 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                                   rhs_inxyz=rhs_field)
 
-                    # def K_fun(x, Ax):
-                    #     """
-                    #     Function to compute the product of the Hessian matrix with a vector.
-                    #     The Hessian is represented by the convolution operator.
-                    #     """
-                    #
-                    #     discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
-                    #                                               input_field_inxyz=x,
-                    #                                               output_field_inxyz=Ax)
-                    #     discretization.fft.communicate_ghosts(Ax)
+                    def K_fun(x, Ax):
+                        """
+                        Function to compute the product of the Hessian matrix with a vector.
+                        The Hessian is represented by the convolution operator.
+                        """
 
-                    # min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
-                    # max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
+                        discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
+                                                                  input_field_inxyz=x,
+                                                                  output_field_inxyz=Ax)
+                        discretization.fft.communicate_ghosts(Ax)
+
+                    min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
+                    max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
 
                     preconditioner = discretization.get_preconditioner_Green_mugrid(
-                        reference_material_data_ijkl=conductivity_C_0)
+                        reference_material_data_ijkl=elastic_C_1)
 
                     def M_fun(x, Px):
                         """
@@ -233,8 +265,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                                    output_nodal_field_fnxyz=Px)
 
                     K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-                        material_data_field_ijklqxyz=material_data_field_C_0)
-
+                        material_data_field_ijklqxyz=material_data_field_C_0,
+                        formulation=formulation)
                     #
                     # M_fun_combi = lambda x: K_diag_alg * discretization.apply_preconditioner_NEW(
                     #     preconditioner_Fourier_fnfnqks=preconditioner,
@@ -250,24 +282,23 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                                    output_nodal_field_fnxyz=Px)
 
                         Px.s[...] = K_diag_alg.s * Px.s
-
                     # #
-                    # M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
+                   # M_fun_Jacobi = lambda x: K_diag_alg * K_diag_alg * x
 
                     def M_fun_Jacobi(x, Px):
                         Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
 
                     get_igens = True
                     if get_igens:
-                        K = discretization.get_system_matrix_mugrid(material_data_field_C_0)
+                        K = discretization.get_system_matrix_mugrid(material_data_field_C_0 )
                         # fixing zero eigenvalues
                         reduced_K = np.copy(K)
                         K[:, 0] = 0
                         K[0, :] = 0
-                        #  K[:, np.prod(number_of_pixels)] = 0
-                        #  K[np.prod(number_of_pixels), :] = 0
+                        K[:, np.prod(number_of_pixels)] = 0
+                        K[np.prod(number_of_pixels), :] = 0
                         K[0, 0] = 1
-                        # K[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 1
+                        K[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 1
 
                         eig_K, eig_vect_K = sc.linalg.eig(a=K, b=None)  # , eigvals_only=True
                         eig_K = np.real(eig_K)
@@ -280,14 +311,14 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         sorted_eig_vect_K = eig_vect_K[:, idx_K]
 
                         # Greeen precond
-                        M = discretization.get_system_matrix_mugrid(conductivity_C_0)
+                        M = discretization.get_system_matrix_mugrid(elastic_C_1)
                         # fixing zero eigenvalues
                         M[:, 0] = 0
                         M[0, :] = 0
-                        # M[:, np.prod(number_of_pixels)] = 0
-                        # M[np.prod(number_of_pixels), :] = 0
+                        M[:, np.prod(number_of_pixels)] = 0
+                        M[np.prod(number_of_pixels), :] = 0
                         M[0, 0] = 1
-                        #  M[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 1
+                        M[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 1
                         eig_G, eig_vect_G = sc.linalg.eig(a=K, b=M)  # , eigvals_only=True
                         eig_G = np.real(eig_G)
                         eig_G[eig_G == 1.0] = 1
@@ -332,11 +363,14 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         #                        grid_shape=rhs.shape, dim=2, eigenvals=sorte_eig_G,
                         #                        participation_ratios=participation_ratios)
 
-                        norms = np.linalg.norm(MiK, axis=0)
-                        normalized_matrix = MiK / norms
-                        plot_eigendisplacement(eigenvectors_1=normalized_matrix,
-                                               grid_shape=rhs_field.s.shape, dim=2, eigenvals=eig_G[idx_G],
-                                               weight=eig_G[idx_G], participation_ratios=participation_ratios)
+
+
+                        # norms = np.linalg.norm(MiK, axis=0)
+                        # normalized_matrix = MiK / norms
+                        # plot_eigendisplacement(eigenvectors_1=normalized_matrix,
+                        #                        grid_shape=rhs.shape, dim=2, eigenvals=eig_G[idx_G],
+                        #                        weight=eig_G[idx_G], participation_ratios=participation_ratios)
+                        #
 
 
                         #### jacobi preconditioner
@@ -353,33 +387,46 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         JKJsym = np.matmul(np.diag(Jacobi_sym), np.matmul(K, np.diag(Jacobi_sym)))
                         eig_J, eig_vect_J = sc.linalg.eig(a=JKJsym)  # , eigvals_only=True
 
+
                         eig_JG, eig_vect_JG = sc.linalg.eig(a=JKJsym, b=M)  # , eigvals_only=True
                         idx_JG = np.argsort(eig_JG)[::-1]
                         # plot_eigendisplacement(eigenvectors_1=eig_vect_JG[:, idx_JG],
                         #                        grid_shape=rhs.shape, dim=2, eigenvals=eig_JG[idx_JG],
                         #                        weight=eig_JG[idx_JG], participation_ratios=participation_ratios)
                     rhs_field.s.flatten()[0] = 0
-                    # rhs_field.s.flatten()[np.prod(number_of_pixels)] = 0
+                    rhs_field.s.flatten()[np.prod(number_of_pixels)] = 0
 
                     ######### INITIAL SOLUTION
-                    # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
+                    #x0 = np.random.random(discretization.get_displacement_sized_field().shape)
                     x0 = discretization.get_unknown_size_field(name='x0')
-                    x0.s.fill(0)  # = discretization.get_unknown_size_field(name='x0')
+                    x0.s.fill(0)# = discretization.get_unknown_size_field(name='x0')
 
-                    # x0.s[...]= np.random.random( x0.s.shape)
-                    # x0 = np.zeros(rhs_field.s.shape)
-                    K_fun = lambda x: K @ x
+                    #x0.s[...]= np.random.random( x0.s.shape)
+                    #x0 = np.zeros(rhs_field.s.shape)
+                    K_fun  = lambda x: K @ x
 
                     M_null = lambda x: 1 * x
 
                     # def M_null(x, Px):
                     #     Px.s[...] = 1 * x.s[...]
-                    displacement_field, norms_origin = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=x0.s.flatten(),
-                                                                   P=M_null,
+                    displacement_field, norms_origin = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=x0.s.flatten(), P=M_null,
                                                                    steps=int(1000), toler=1e-14,
                                                                    norm_energy_upper_bound=True,
                                                                    lambda_min=np.real(sorted(eig_J)[0])
                                                                    )
+
+                    # x0, norms =solvers.conjugate_gradients_mugrid_experimental(
+                    #     comm=discretization.communicator,
+                    #     fc=discretization.field_collection,
+                    #     hessp=K_fun,  # linear operator
+                    #     b=rhs_field,
+                    #     x=x0,
+                    #     P=M_null,
+                    #     tol=1e-14,
+                    #     maxiter=100,
+                    #     #callback=callback,
+                    #     # norm_metric=res_norm
+                    # )
 
 
                     ########################### Greeen  PRE CONDITIONED VERSION ########################################################
@@ -398,8 +445,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                             Green_sqrt_eig_vect_J[:, k])
                     w_i = (np.dot(np.transpose(normed_eigenvectors), r0.flatten() / r0_norm)) ** 2  # order='F'
                     w_i_for_un_K = (np.dot(np.transpose(eig_vect_K),
-                                           rhs_field.s.flatten() / np.linalg.norm(
-                                               rhs_field.s.flatten()))) ** 2  ### ONLY FOR ZERO RHS
+                                           rhs_field.s.flatten() / np.linalg.norm( rhs_field.s.flatten()))) ** 2  ### ONLY FOR ZERO RHS
 
                     # plot_eigenvectors(eigenvectors_1=normed_eigenvectors, eigenvectors_2=eig_vect_K,
                     #                   grid_shape=rhs.shape, dim=2)
@@ -411,20 +457,14 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     plot_ritz_values(ritz_values=ritz_values, true_eigenvalues=eig_G)
 
                     x0.s.fill(0)
-
-                    setting_CG = {'energy_lower_bound': True}
-                    displacement_field, norms = solvers.PCG(K_fun_G, rhs_G.flatten(), x0=M_sym @ x0.s.flatten(),
-                                                            P=M_null,
+                    displacement_field, norms = solvers.PCG(K_fun_G, rhs_G.flatten(), x0=M_sym @ x0.s.flatten(), P=M_null,
                                                             steps=int(1000), toler=1e-14,
                                                             norm_energy_upper_bound=True,
-                                                            lambda_min=np.real(sorted(eig_G)[0]),
-                                                            **setting_CG)
-                    plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G, weight=w_i,
-                                       error_evol=norms['energy_lower_bound'] / norms['residual_rr'][0],
-                                       title='Unpreconditioned')
+                                                            lambda_min=np.real(sorted(eig_G)[0])
+                                                            )
+
                     print(norms)
-                    # quit()
-                    # # plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G[idx_G], weight=w_i[idx_G],
+                    # plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_G[idx_G], weight=w_i[idx_G],
                     #                    error_evol=norms['energy_lb'] / norms['residual_rr'][
                     #                        0], title='Green')  # energy_lb
                     # plot_eigendisplacement(eigenvectors_1=np.real(MiK),
@@ -435,12 +475,12 @@ def run_simple_CG_Green(initial, RHS, kappa):
                     #                        grid_shape=rhs_field.s.shape, dim=2, eigenvals=eig_G[idx_G], weight=w_i[idx_G],
                     #                        participation_ratios=participation_ratios)
 
-                    # quit()
+                   # quit()
                     ############################ UNPRECONDITIONED VERSION ########################################################
                     M_null = lambda x: 1 * x
                     K_fun_ = lambda x: K @ x
 
-                    r0 = rhs_field.s.flatten() - K_fun_(x0.s.flatten())
+                    r0 =  rhs_field.s.flatten() - K_fun_(x0.s.flatten())
                     r0_norm = np.linalg.norm(r0.flatten())  # order='F'
                     w_i = (np.dot(np.transpose(eig_vect_K), r0.flatten() / r0_norm)) ** 2  # order='F'
 
@@ -451,15 +491,15 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                     # plot_ritz_values(ritz_values=ritz_values, true_eigenvalues=eig_K)
                     x0.s.fill(0)
+                    setting_CG={'energy_lower_bound': True }
                     displacement_field, norms = solvers.PCG(K_fun_, rhs_field.s.flatten(), x0=x0.s.flatten(), P=M_null,
                                                             steps=int(1000), toler=1e-14,
                                                             norm_energy_upper_bound=True,
                                                             lambda_min=np.real(sorted(eig_K)[0]),
-                                                            **setting_CG)
+                                                             **setting_CG  )
                     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_K, weight=w_i,
                                        error_evol=norms['energy_lower_bound'] / norms['residual_rr'][0],
                                        title='Unpreconditioned')
-
                     ########################### JACOBI  PRE CONDITIONED VERSION ########################################################
                     M_null = lambda x: 1 * x
                     K_fun_J = lambda x: JKJsym @ x
@@ -490,7 +530,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                             steps=int(1000), toler=1e-14,
                                                             norm_energy_upper_bound=True,
                                                             lambda_min=np.real(sorted(eig_J)[0]),
-                                                            **setting_CG
+                                                             **setting_CG
                                                             )
                     print(norms)
                     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_J, weight=w_i,
@@ -498,7 +538,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                        title='Jacobi')  # energy_lb
 
                     ############################ UNPRECONDITIONED VERSION ########################################################
-                    r0 = rhs_field.s.flatten() - K_fun(x0.s.flatten())
+                    r0 = rhs_field.s - K_fun(x0.s)
                     r0_norm = np.linalg.norm(r0.flatten())  # order='F'
                     w_i = (np.dot(np.transpose(eig_vect_K), r0.flatten() / r0_norm)) ** 2  # order='F'
 
@@ -511,57 +551,57 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                     M_null = lambda x: 1 * x
                     K_fun_ = lambda x: K @ x
-                    displacement_field, norms = solvers.PCG(K_fun_, rhs_field.s.flatten(), x0=x0.s.flatten(), P=M_null,
+                    displacement_field, norms = solvers.PCG(K_fun_, rhs_field.s.flatten(), x0=x0.flatten(), P=M_null,
                                                             steps=int(1000), toler=1e-14,
                                                             norm_energy_upper_bound=True,
                                                             lambda_min=np.real(sorted(eig_K)[0]),
-                                                            **setting_CG
+                                                             **setting_CG
                                                             )
                     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_K, weight=w_i,
-                                       error_evol=norms['energy_lower_bound'] / norms['residual_rr'][0], title='non')
+                                       error_evol=norms['energy_lower_bound'] / norms['residual_rr'][0])
 
-                    # quit()
+                    #quit()
                     # SOLVER GREEN
-                    # displacement_field, norms = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_null, steps=int(1000), toler=1e-14,
-                    #                                         norm_type='data_scaled_rr',
-                    #                                          norm_metric=M_fun,
-                    #                                          **setting_CG
-                    #                                         )
-                    # nb_it[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
-                    #     len(norms['residual_rr']))
-                    # print('nb it  = {} '.format(len(norms['residual_rr'])))
+                    displacement_field, norms = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_fun, steps=int(1000), toler=1e-14,
+                                                            norm_type='data_scaled_rr',
+                                                            norm_metric=M_fun,
+                                                             **setting_CG
+                                                            )
+                    nb_it[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
+                        len(norms['residual_rr']))
+                    print('nb it  = {} '.format(len(norms['residual_rr'])))
+
+                    norm_rz.append(norms['residual_rz'])
+                    norm_rr.append(norms['residual_rr'])
+                    # norm_energy_lb.append(norms['energy_lb'])
+                    norm_rMr.append(norms['data_scaled_rr'])
+
+                    #########
+                    displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_fun_combi,
+                                                                        steps=int(1000),
+                                                                        toler=1e-14, norm_type='data_scaled_rr',
+                                                                        norm_metric=M_fun,
+                                                             **setting_CG
+                                                                        )
+                    nb_it_combi[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
+                        len(norms_combi['residual_rr']))
+                    norm_rz_combi.append(norms_combi['residual_rz'])
+                    norm_rr_combi.append(norms_combi['residual_rr'])
+                    # norm_energy_lb_combi.append(norms_combi['energy_lb'])
+                    norm_rMr_combi.append(norms_combi['data_scaled_rr'])
+
                     #
-                    # norm_rz.append(norms['residual_rz'])
-                    # norm_rr.append(norms['residual_rr'])
-                    # # norm_energy_lb.append(norms['energy_lb'])
-                    # norm_rMr.append(norms['data_scaled_rr'])
-                    #
-                    # #########
-                    # displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_fun_combi,
-                    #                                                     steps=int(1000),
-                    #                                                     toler=1e-14, norm_type='data_scaled_rr',
-                    #                                                     # norm_metric=M_fun,
-                    #                                          **setting_CG
-                    #                                                     )
-                    # nb_it_combi[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
-                    #     len(norms_combi['residual_rr']))
-                    # norm_rz_combi.append(norms_combi['residual_rz'])
-                    # norm_rr_combi.append(norms_combi['residual_rr'])
-                    # # norm_energy_lb_combi.append(norms_combi['energy_lb'])
-                    # norm_rMr_combi.append(norms_combi['data_scaled_rr'])
-                    #
-                    # #
-                    # displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_fun_Jacobi,
-                    #                                                       steps=int(1),
-                    #                                                       toler=1e-6, norm_type='data_scaled_rr',
-                    #                                                       norm_metric=M_fun,
-                    #                                          **setting_CG
-                    #                                                       )
-                    # nb_it_Jacobi[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
-                    #     len(norms_Jacobi['residual_rr']))
-                    # norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
-                    # # norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
-                    # norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
+                    displacement_field_Jacobi, norms_Jacobi = solvers.PCG(K_fun, rhs_field.s.flatten(), x0=None, P=M_fun_Jacobi,
+                                                                          steps=int(1),
+                                                                          toler=1e-6, norm_type='data_scaled_rr',
+                                                                          norm_metric=M_fun,
+                                                             **setting_CG
+                                                                          )
+                    nb_it_Jacobi[nb_discretization_index + nb_starting_phases, nb_starting_phases, i] = (
+                        len(norms_Jacobi['residual_rr']))
+                    norm_rz_Jacobi.append(norms_Jacobi['residual_rz'])
+                    # norm_rr_Jacobi.append(norms_Jacobi['residual_rr'])
+                    norm_rMr_Jacobi.append(norms_Jacobi['data_scaled_rr'])
     ########################################   Uniform distribution   ###############################################
     print('Uniform distributio  ')
 
@@ -604,11 +644,10 @@ def run_simple_CG_Green(initial, RHS, kappa):
     plot_ritz_values(ritz_values=ritz_values, true_eigenvalues=eig_A)
 
     x, norms_N = PCG(Afun=A_fun, B=rhs, x0=x0, P=M_fun, steps=int(5000), toler=1e-14, norm_energy_upper_bound=True,
-                     lambda_min=np.real(eig_A[0]),
-                     **setting_CG)
+                     lambda_min=np.real(eig_A[0]))
 
     plot_cg_polynomial(x_values, ritz_values, true_eigenvalues=eig_A, weight=w_i,
-                       error_evol=norms_N['energy_lower_bound'] / norms_N['residual_rr'][0], title='TestT_small')
+                       error_evol=norms_N['energy_lb'] / norms_N['residual_rr'][0])
     # print(x)
     # print(norms_N)
 

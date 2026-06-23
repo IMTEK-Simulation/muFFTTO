@@ -21,13 +21,13 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (128,128)
+number_of_pixels = (64,64)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
 # Optimization Parameters
 soft_phase_exponent = 5
-preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
+preconditioner_type = "Green"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
 weight = 1.  # Weight for the stress match term
 cg_setup = {'cg_tol': 1e-6}
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     data_folder_path = os.path.join(file_folder_path, 'data', script_name) + '/'
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
-    random_init = True
+    random_init = False
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)

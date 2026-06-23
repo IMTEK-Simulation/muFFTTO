@@ -501,88 +501,88 @@ for geometry_ID in ['linear']:  # ,'sine_wave_','linear', 'right_cluster_x3', 'l
                 if MPI.COMM_WORLD.rank == 0:
                     np.savez(folder_name + file_data_name + f'xopt_log.npz', **_info)
                     print(folder_name + file_data_name + f'.xopt_log.npz')
-# quit()
+quit()
 
-#                 # print(ratio)
+                # print(ratio)
+
+                x = np.arange(0, 1 * number_of_pixels[0])
+                y = np.arange(0, 1 * number_of_pixels[1])
+                X_, Y_ = np.meshgrid(x, y)
+
+                print(f'nb_discretization_index = {nb_discretization_index}')
+                # pcm = ax_0.pcolormesh(X_, Y_, np.transpose(phase_field),
+                #                cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
+                #                rasterized=True)
+                extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
+                # extended_y = np.append(np.diag(phase_field), np.diag(phase_field)[-1])
+                extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
+                                       phase_field[:, phase_field.shape[0] // 2][-1])
+                ax_0.step(extended_x, extended_y
+                          , where='post',
+                          linewidth=1, color='black', linestyle='-',  # marker='|',
+                          label=r'phase contrast -' + f'1e{geom_n[nb_discretization_index]} ')
+                ax_0.set_xlabel('x coordinate')
+                ax_0.set_ylabel(f'Phase' + r' $\rho$')
+                ax_0.set_title(f'Cross section')
+                # cbar = plt.colorbar(pcm, location='left', cax=ax_0, ticklocation='right')
+                if ratio == 0:
+                    ax_0.set_yticks([0, 0.5, 1])
+                    ax_0.set_yticklabels([0, 0.5, 1])
+                else:
+                    ax_0.set_yticks([1/np.power(10,ratio), 0.5, 1])
+                    ax_0.set_yticklabels([f'$10^{{{-ratio}}}$', 0.5, 1])
+
+                k = np.arange(150)
+                print(f'k \n {k}')
+                kappa_G = 10 ** (ratio)
+
+                convergence = ((np.sqrt(kappa_G) - 1) / (np.sqrt(kappa_G) + 1)) ** k
+                convergence_G = convergence * norm_rMr[-1][0]
+
+
+                ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
+
+                if nb_discretization_index == np.size(geom_n) - 1:
+                    ax_1.semilogy(convergence_G, ':', label=r'$\kappa$ est. - Green', color='green')
+
+                ax_0.text(-0.25, 1.1, '(a)', transform=ax_0.transAxes)
+
 #
-#                 x = np.arange(0, 1 * number_of_pixels[0])
-#                 y = np.arange(0, 1 * number_of_pixels[1])
-#                 X_, Y_ = np.meshgrid(x, y)
-#
-#                 print(f'nb_discretization_index = {nb_discretization_index}')
-#                 # pcm = ax_0.pcolormesh(X_, Y_, np.transpose(phase_field),
-#                 #                cmap=mpl.cm.Greys, vmin=1e-4, vmax=1, linewidth=0,
-#                 #                rasterized=True)
-#                 extended_x = np.linspace(0, 1, phase_field[:, phase_field.shape[0] // 2].size + 1)
-#                 # extended_y = np.append(np.diag(phase_field), np.diag(phase_field)[-1])
-#                 extended_y = np.append(phase_field[:, phase_field.shape[0] // 2],
-#                                        phase_field[:, phase_field.shape[0] // 2][-1])
-#                 ax_0.step(extended_x, extended_y
-#                           , where='post',
-#                           linewidth=1, color='black', linestyle='-',  # marker='|',
-#                           label=r'phase contrast -' + f'1e{geom_n[nb_discretization_index]} ')
-#                 ax_0.set_xlabel('x coordinate')
-#                 ax_0.set_ylabel(f'Phase' + r' $\rho$')
-#                 ax_0.set_title(f'Cross section')
-#                 # cbar = plt.colorbar(pcm, location='left', cax=ax_0, ticklocation='right')
-#                 if ratio == 0:
-#                     ax_0.set_yticks([0, 0.5, 1])
-#                     ax_0.set_yticklabels([0, 0.5, 1])
-#                 else:
-#                     ax_0.set_yticks([1/np.power(10,ratio), 0.5, 1])
-#                     ax_0.set_yticklabels([f'$10^{{{-ratio}}}$', 0.5, 1])
-#
-#                 k = np.arange(150)
-#                 print(f'k \n {k}')
-#                 kappa_G = 10 ** (ratio)
-#
-#                 convergence = ((np.sqrt(kappa_G) - 1) / (np.sqrt(kappa_G) + 1)) ** k
-#                 convergence_G = convergence * norm_rMr[-1][0]
-#
-#
-#                 ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
-#
-#                 if nb_discretization_index == np.size(geom_n) - 1:
-#                     ax_1.semilogy(convergence_G, ':', label=r'$\kappa$ est. - Green', color='green')
-#
-#                 ax_0.text(-0.25, 1.1, '(a)', transform=ax_0.transAxes)
-#
-# #
-#                 ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
-#
-#                 ax_1.semilogy(np.arange(1, len(norm_rMr[-1]) + 1), norm_rMr[-1],
-#                               label=r'$||r_{k}||_{G^{-1}} $  - Green '+r'$N_{I}$'+f'{number_of_pixels[0]}' , color='green', linestyle='--',marker=markers[nb_discretization_index])
-#                 ax_1.semilogy(np.arange(1, len(norm_rMr_combi[-1]) + 1), norm_rMr_combi[-1],
-#                               label=r'$||r_{k}||_{G^{-1}} $ - Jacobi-Green  '+r'$N_{I}$' +f'{number_of_pixels[0]}', color='b', linestyle='-.',marker=markers[nb_discretization_index])
-#                 #
-#                 # ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
-#                 #               label='Upper bound --- Green', color='green', linestyle='--', marker='v')
-#                 # ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
-#                 #               label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
-#                 ax_1.text(-0.2, 1.05, '(c)', transform=ax_1.transAxes)
-#                 # x_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
-#                 # ax_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
-#                 ax_1.set_xlabel('PCG iteration - k')
-#                 ax_1.set_ylabel('Norm of residua')
-#                 ax_1.set_title(f'Convergence')
-#
-#                 # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
-#
-#                 ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
-#                 print(max(map(len, norm_rr)))
-#                 ax_1.set_xlim([1, 100])
-#                 # ax_1.set_xticks([1,5, 8, 10,15])
-#                 # ax_1.set_xticklabels([1,5, 8, 10,15])
-#                 ax_1.set_xticks([1,10, 20, 30,40,50])
-#                 ax_1.set_xticklabels([1,10, 20, 30,40,50])
-#                 print(f'ratios = {ratios}')
-#                 print(f'geom_n = {geom_n}')
-#         ax_1.legend(loc='upper right')
-#
-#         fname = src + 'exp_paper_JG_linear_conv_2_{}_rho{}{}'.format(geometry_ID, ratio,
-#                                                                  '.pdf')
-#         print(('create figure: {}'.format(fname)))
-#         plt.savefig(fname, bbox_inches='tight')
-#         plt.show()
+                ax_1.set_title(f'nb phases {2 ** (nb_starting_phases)}, nb pixels {number_of_pixels[0]}', wrap=True)
+
+                ax_1.semilogy(np.arange(1, len(norm_rMr[-1]) + 1), norm_rMr[-1],
+                              label=r'$||r_{k}||_{G^{-1}} $  - Green '+r'$N_{I}$'+f'{number_of_pixels[0]}' , color='green', linestyle='--',marker=markers[nb_discretization_index])
+                ax_1.semilogy(np.arange(1, len(norm_rMr_combi[-1]) + 1), norm_rMr_combi[-1],
+                              label=r'$||r_{k}||_{G^{-1}} $ - Jacobi-Green  '+r'$N_{I}$' +f'{number_of_pixels[0]}', color='b', linestyle='-.',marker=markers[nb_discretization_index])
+                #
+                # ax_1.semilogy(np.arange(1, len(norm_energy_lb[-1]) + 1), norm_energy_lb[-1],
+                #               label='Upper bound --- Green', color='green', linestyle='--', marker='v')
+                # ax_1.semilogy(np.arange(1, len(norm_energy_lb_combi[-1]) + 1), norm_energy_lb_combi[-1],
+                #               label='Upper bound --- Jacobi-Green', color='b', linestyle='-.', marker='v')
+                ax_1.text(-0.2, 1.05, '(c)', transform=ax_1.transAxes)
+                # x_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson[i], label='Richardson Green', color='green')
+                # ax_1.plot(ratios, geom_n[i] * 32, zs=nb_it_Richardson_combi[i], label='Richardson Green+Jacobi')
+                ax_1.set_xlabel('PCG iteration - k')
+                ax_1.set_ylabel('Norm of residua')
+                ax_1.set_title(f'Convergence')
+
+                # plt.legend([r'$\kappa$ upper bound', 'Green', 'Jacobi', 'Green + Jacobi', 'Richardson'])
+
+                ax_1.set_ylim([1e-14, 1e2])  # norm_rz[i][0]]/lb)
+                print(max(map(len, norm_rr)))
+                ax_1.set_xlim([1, 100])
+                # ax_1.set_xticks([1,5, 8, 10,15])
+                # ax_1.set_xticklabels([1,5, 8, 10,15])
+                ax_1.set_xticks([1,10, 20, 30,40,50])
+                ax_1.set_xticklabels([1,10, 20, 30,40,50])
+                print(f'ratios = {ratios}')
+                print(f'geom_n = {geom_n}')
+        ax_1.legend(loc='upper right')
+
+        fname = src + 'exp_paper_JG_linear_conv_2_{}_rho{}{}'.format(geometry_ID, ratio,
+                                                                 '.pdf')
+        print(('create figure: {}'.format(fname)))
+        plt.savefig(fname, bbox_inches='tight')
+        plt.show()
 
 quit()

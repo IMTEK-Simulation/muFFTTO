@@ -1,35 +1,36 @@
-from cProfile import label
 
+
+import os
 import numpy as np
-import scipy as sc
 import time
-import matplotlib.pyplot as plt
 import matplotlib as mpl
 from mpi4py import MPI
 from NuMPI.Tools import Reduction
 import matplotlib.pyplot as plt
 
 from NuMPI.IO import save_npy, load_npy
-# from IPython.terminal.shortcuts.filters import KEYBINDING_FILTERS
-# from PySide2.examples.opengl.contextinfo import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
-# from sympy.physics.quantum.sho1d import omega
 
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from mpl_toolkits import mplot3d
 
-src = '../figures/'
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+file_folder_path = os.path.dirname(os.path.realpath(__file__))
+os.makedirs(file_folder_path, exist_ok=True)
+data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
+os.makedirs(data_folder_path, exist_ok=True)
+figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
+os.makedirs(figure_folder_path, exist_ok=True)
 
-problem_type = 'elasticity'
+problem_type = 'conductivity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
-formulation = 'small_strain'
 
 domain_size = [1, 1]
 nb_pix_multips = [2]  # ,2,3,3,2,
-tol_cg = 1e-14
+tol_cg = 1e-7
 
 ratios = np.arange(2,33)  # 65 17  33
 
@@ -70,53 +71,16 @@ for kk in np.arange(np.size(nb_pix_multips)):
     start_time = time.time()
 
     # set macroscopic gradient
-    macro_gradient = np.array([[1.0,0.5], [0.5, 1.0]])
-    #macro_gradient = np.array([[1.0,0. ], [0. , 0.0]])
-
+    macro_gradient = np.array([1.0, 1.0])
     # create material data field
-    K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    conductivity_C_0 = np.array([[1., 0], [0, 1.0]])
+    refmaterial_data_ = np.copy(conductivity_C_0)
 
-    # identity tensor                                               [single tensor]
-    ii = np.eye(2)
-
-    shape = tuple((number_of_pixels[0] for _ in range(2)))
-
-
-    # identity tensors                                            [grid of tensors]
-    I = ii
-    I4 = np.einsum('il,jk', ii, ii)
-    I4rt = np.einsum('ik,jl', ii, ii)
-    I4s = (I4 + I4rt) / 2.
-
-    elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                     K=K_0,
-                                                     mu=G_0,
-                                                     kind='linear')
-    C_1 = domain.compute_Voigt_notation_4order(elastic_C_1)
-
-    # material_data_field_C_0 = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-    #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
-    #                                                       *discretization.nb_of_pixels])))
-
-
-    # refmaterial_data_field_I4s = np.einsum('ijkl,qxy->ijklqxy', elastic_C_1,
-    #                                        np.ones(np.array([discretization.nb_quad_points_per_pixel,
-    #                                                          *discretization.nb_of_pixels])))
-
-    print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
 
     # material distribution
     geometry_ID = 'n_laminate'  # 'square_inclusion'#'circle_inclusion'#
 
 
-    # flipped_arr = 1 - phase_field
-
-    # Method 2: Using subtraction
-    # flipped_arr_alt = np.logical_not(flipped_arr).astype(int)
-    # plt.figure()
-    # fig = plt.figure()
-    # gs = fig.add_gridspec(1, 2)
-    # ax1 = fig.add_subplot(gs[0, 0])
     # ax2 = fig.add_subplot(gs[0, 1])
     def scale_field(field, min_val, max_val):
         """Scales a 2D random field to be within [min_val, max_val]."""
@@ -125,8 +89,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
         return scaled_field * (max_val - min_val) + min_val  # Scale to [min_val, max_val]
 
 
-    for i in np.arange(ratios.size):
-        ratio = ratios[i]
+    for i,ratio in enumerate(ratios):
 
         phase_field_smooth = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                                  microstructure_name=geometry_ID,
@@ -164,8 +127,8 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
 
         material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='algortihmic_tangent')
-        material_data_field_C_0.s[...] = elastic_C_1[..., np.newaxis, np.newaxis, np.newaxis] * phase_field.s[
-            np.newaxis, ...]
+        material_data_field_C_0.s[...] = conductivity_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                         phase_field.s[np.newaxis, ...]
         # material_data_field_C_0_rho=phase_field_at_quad_poits_1qnxyz
         # Set up macro gradient field
         macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
@@ -227,7 +190,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
         #                                     np.ones(np.array([discretization.nb_quad_points_per_pixel,
         #                                                       *discretization.nb_of_pixels])))
 
-        preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
+        preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=refmaterial_data_)
         def M_fun_Green(x, Px):
             """
             Function to compute the product of the Preconditioner matrix with a vector.
@@ -240,8 +203,7 @@ for kk in np.arange(np.size(nb_pix_multips)):
 
 
         K_diag_alg = discretization.get_preconditioner_Jacobi_mugrid(
-            material_data_field_ijklqxyz=material_data_field_C_0,
-            formulation=formulation)
+            material_data_field_ijklqxyz=material_data_field_C_0 )
         def M_fun_Jacobi(x, Px):
             Px.s[...] = K_diag_alg.s * K_diag_alg.s * x.s
 
@@ -290,7 +252,8 @@ for kk in np.arange(np.size(nb_pix_multips)):
         nb_it[kk - 1, i] = (len(norms_G['residual_rz']))
         norm_rz.append(norms_G['residual_rz'])
         norm_rr.append(norms_G['residual_rr'])
-
+        plt.semilogy(norms_G['residual_rr'])
+        plt.show()
         print(nb_it)
         #########
         # displacement_field_combi, norms_combi = solvers.PCG(K_fun, rhs, x0=x0, P=M_fun_combi, steps=int(1000),
@@ -398,31 +361,21 @@ for kk in np.arange(np.size(nb_pix_multips)):
         _info['nb_it_G'] = nb_it
         _info['nb_it_J'] = nb_it_Jacobi
         _info['nb_it_JG'] = nb_it_combi
-        script_name = 'exp_paper_JG_intro_2'
         file_data_name = (
             f'{script_name}_gID{geometry_ID}_T{number_of_pixels[0]}_G{ratio}_kappa{kontrast}.npy')
-        folder_name = './exp_data/'
-        # save_npy(folder_name + file_data_name + f'.npy', phase_field,
-        #          tuple(discretization.fft.subdomain_locations),
-        #          tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-        #
-        save_npy(folder_name + file_data_name + f'.npy', phase_field.s[0].mean(axis=0),
+        save_npy(data_folder_path + file_data_name + f'.npy', phase_field.s[0].mean(axis=0),
                  tuple(discretization.subdomain_locations_no_buffers),
                  tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
 
 
 
-        print(folder_name + file_data_name + f'.npy')
+        print(data_folder_path + file_data_name + f'.npy')
 
         if MPI.COMM_WORLD.rank == 0:
-            np.savez(folder_name + file_data_name + f'xopt_log.npz', **_info)
-            print(folder_name + file_data_name + f'.xopt_log.npz')
+            np.savez(data_folder_path + file_data_name + f'xopt_log.npz', **_info)
+            print(data_folder_path + file_data_name + f'.xopt_log.npz')
 ##################
 
-
-
-
-quit()
 
 
 

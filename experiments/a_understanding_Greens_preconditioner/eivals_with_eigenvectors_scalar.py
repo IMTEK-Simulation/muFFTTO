@@ -25,18 +25,19 @@ import matplotlib.tri as tri
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
-
-script_name = 'exp_paper_JG_eivals_with_eigenvectors'
-file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
-if not os.path.exists(file_folder_path):
-    os.makedirs(file_folder_path)
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+file_folder_path = os.path.dirname(os.path.realpath(__file__))
+if rank == 0:
+    os.makedirs(file_folder_path, exist_ok=True)
 data_folder_path = file_folder_path + '/exp_data/' + script_name + '/'
-if not os.path.exists(data_folder_path):
-    os.makedirs(data_folder_path)
+if rank == 0:
+    os.makedirs(data_folder_path, exist_ok=True)
 figure_folder_path = file_folder_path + '/figures/' + script_name + '/'
-if not os.path.exists(figure_folder_path):
-    os.makedirs(figure_folder_path)
-
+if rank == 0:
+    os.makedirs(figure_folder_path, exist_ok=True)
+comm.Barrier()
 
 def get_participation_ration(displacemets_flat, grid_shape):
     # reshape to the grid size
@@ -111,10 +112,10 @@ def matrix_sqrt_eig(A, nb_zero_eigens=2):
 
 
 def run_simple_CG_Green(initial, RHS, kappa):
-    problem_type = 'elasticity'
+    problem_type = 'conductivity'
     discretization_type = 'finite_element'
     element_type = 'linear_triangles'
-    formulation = 'small_strain'
+    # formulation = 'small_strain'
     src = './figures/'  # source folder\
     # Enable LaTeX rendering
     plt.rcParams.update({
@@ -125,9 +126,9 @@ def run_simple_CG_Green(initial, RHS, kappa):
     plt.rcParams["font.family"] = "Arial"
 
     domain_size = [1, 1]
-    geom_n = [2,3,4,5]  # ,5
-    discretization_n = [5]  # ,4,5
-    ratios = np.array([1,2,4])  # np.arange(1,5)  # 17  33
+    geom_n = [2]  # ,5
+    discretization_n = [3]  # ,4,5
+    ratios = np.array([2])  # np.arange(1,5)  # 17  33
 
     for geometry_ID in [
         'n_laminate']:  # n_laminate ,'sine_wave_','linear', 'right_cluster_x3', 'left_cluster_x3' square_inclusion
@@ -155,24 +156,11 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                        element_type=element_type)
 
                 # set macroscopic gradient
-                macro_gradient = np.array([[1.0, 0.5], [0.5, 1.0]])
-
+                macro_gradient = np.array([1.0, 1.0])
                 # create material data field
-                K_0, G_0 = 1, 0.5  # domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
 
-                # identity tensor                                               [single tensor]
-                ii = np.eye(2)
-
-                shape = tuple((number_of_pixels[0] for _ in range(2)))
-                # identity tensors                                            [grid of tensors]
-                elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                                 K=K_0,
-                                                                 mu=G_0,
-                                                                 kind='linear')
-
-                refmaterial_data_field_ = np.copy(elastic_C_1)  #
-
-                print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+                conductivity_C_0 = np.array([[1., 0], [0, 1.0]])
+                refmaterial_data_field_ = np.copy(conductivity_C_0)
 
                 def scale_field(field, min_val, max_val):
                     """Scales a 2D random field to be within [min_val, max_val]."""
@@ -205,7 +193,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                     material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(
                         name='algortihmic_tangent')
-                    material_data_field_C_0.s[...] = elastic_C_1[..., np.newaxis, np.newaxis, np.newaxis] * \
+                    material_data_field_C_0.s[...] = conductivity_C_0[..., np.newaxis, np.newaxis, np.newaxis] * \
                                                      phase_field.s[
                                                          np.newaxis, ...]
 
@@ -231,15 +219,11 @@ def run_simple_CG_Green(initial, RHS, kappa):
 
                         discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
                                                                   input_field_inxyz=x,
-                                                                  output_field_inxyz=Ax,
-                                                                  formulation=formulation)
+                                                                  output_field_inxyz=Ax )
                         discretization.fft.communicate_ghosts(Ax)
 
-                    #   min_val = Reduction(MPI.COMM_WORLD).min(phase_field)
-                    #  max_val = Reduction(MPI.COMM_WORLD).max(phase_field)
-
                     preconditioner = discretization.get_preconditioner_Green_mugrid(
-                        reference_material_data_ijkl=elastic_C_1)
+                        reference_material_data_ijkl=refmaterial_data_field_)
 
                     def M_fun_Green(x, Px):
                         """
@@ -260,10 +244,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         reduced_K = np.copy(K)
                         K[:, 0] = 0
                         K[0, :] = 0
-                        K[:, np.prod(number_of_pixels)] = 0
-                        K[np.prod(number_of_pixels), :] = 0
                         K[0, 0] = 10 ** ratio // 2  # 50.5 #
-                        K[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 10 ** ratio // 2  # 50.5
+                       # K[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 10 ** ratio // 2  # 50.5
 
                         eig_K, eig_vect_K = sc.linalg.eig(a=K, b=None)  # , eigvals_only=True
                         eig_K = np.real(eig_K)
@@ -284,10 +266,8 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         # fixing zero eigenvalues
                         M[:, 0] = 0
                         M[0, :] = 0
-                        M[:, np.prod(number_of_pixels)] = 0
-                        M[np.prod(number_of_pixels), :] = 0
+
                         M[0, 0] = 1
-                        M[np.prod(number_of_pixels), np.prod(number_of_pixels)] = 1
                         ##### Left preconditioned
                         MiK = np.linalg.pinv(M) @ K
 
@@ -331,7 +311,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                         #                        grid_shape=rhs.shape, dim=2, eigenvals=eig_JG[idx_JG],
                         #                        weight=eig_JG[idx_JG], participation_ratios=participation_ratios)
                     rhs_field.s.flatten()[0] = 0
-                    rhs_field.s.flatten()[np.prod(number_of_pixels)] = 0
+                    #rhs_field.s.flatten()[np.prod(number_of_pixels)] = 0
 
                     ######### INITIAL SOLUTION
                     # x0 = np.random.random(discretization.get_displacement_sized_field().shape)
@@ -357,7 +337,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                                rhs_field.s.flatten()))) ** 2  ### ONLY FOR ZERO RHS
 
                     # plot_eigenvectors(eigenvectors_1=normed_eigenvectors, eigenvectors_2=eig_vect_K,
-                    #                   grid_shape=rhs.shape, dim=2)
+                    #                   grid_shape=rhs_field.s.shape, dim=2)
 
                     x_values = np.linspace(0, np.real(sorted(eig_G)[-1] + 1), 100)
                     # test Ritz values
@@ -483,7 +463,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
     if plot_eigenvectors:
         x_offset = -0.5
         y_offset = 1.1
-        for upper_ax in np.arange(6):
+        for upper_ax in np.arange(1):
             # weight = np.array([0.2, 1, 10, 30, 100])[upper_ax]
             if upper_ax == 0:
                 # ax1 = fig.add_subplot(gs[0, upper_ax])
@@ -500,7 +480,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                 #                              ls='-')
                 #              )
                 ax_global.text(x_offset + 0.4, y_offset + 0.3, '(a.1)', transform=ax1.transAxes)  #
-                i = 20
+                i = 3
             if upper_ax == 1:
                 ax1 = fig.add_axes([0.34, 0.38, 0.1, 0.20])
                 ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=34) $ ')
@@ -513,7 +493,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                 ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=67) $ ')
                 ax_global.text(x_offset, y_offset, '(a.3)', transform=ax1.transAxes)
 
-                i = 350
+                i = 150
             if upper_ax == 3:
                 ax1 = fig.add_axes([0.776, 0.64, 0.1, 0.20])
                 # ax1.set_title(r'$\phi_{i}\, (\lambda_{i}=100) $ ')
@@ -521,7 +501,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                 ax_global.text(x_offset + 0.01, y_offset - 1.4,
                                r'(a.4) $\phi_{i}\, (\lambda_{i}=100) $',
                                transform=ax1.transAxes, fontsize=13)
-                i = 500
+                i = 250
             if upper_ax == 4:
                 i = 115
                 # ax1 = fig.add_axes([0.17, 0.6, 0.1, 0.20])
@@ -543,7 +523,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                   facecolor='none', linewidth=0.5)
                 ax_global.add_patch(ellipse)
 
-                i = 256
+                i = 200
                 ax_global.annotate('',
                                    xy=(i + 25, sorted(eig_G)[i] - 7),
                                    xytext=(350, 25),
@@ -557,8 +537,7 @@ def run_simple_CG_Green(initial, RHS, kappa):
                                   edgecolor='black',
                                   facecolor='none', linewidth=0.5)
                 ax_global.add_patch(ellipse)
-                i = 400
-
+                i = 210
                 ax_global.annotate('',
                                    xy=(i, sorted(eig_G)[i] - 7),
                                    xytext=(370, 31),
@@ -585,25 +564,27 @@ def run_simple_CG_Green(initial, RHS, kappa):
                 ax_global.text(x_offset, y_offset + 0.2, '(d.1)', transform=ax1.transAxes)
 
             if i > 0:
+                print(i)
                 eigenvector_x = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
                     0, 0].transpose()
-                eigenvector_y = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
-                    1, 0].transpose()
+
+                # eigenvector_y = np.real(vector_to_plot[:, ::-1])[:, i].reshape(grid_shape)[
+                #     1, 0].transpose()
             elif i == -1:
                 eigenvector_x = np.real(rhs_to_plot).reshape(grid_shape)[
                     0, 0].transpose()
-                eigenvector_y = np.real(rhs_to_plot).reshape(grid_shape)[
-                    1, 0].transpose()
+                # eigenvector_y = np.real(rhs_to_plot).reshape(grid_shape)[
+                #     1, 0].transpose()
             elif i == -2:
                 eigenvector_x = np.real(w_i).reshape(grid_shape)[
                     0, 0].transpose()
-                eigenvector_y = np.real(w_i).reshape(grid_shape)[
-                    1, 0].transpose()
-            amplitude = np.sqrt(eigenvector_x ** 2 + eigenvector_y ** 2)
+                # eigenvector_y = np.real(w_i).reshape(grid_shape)[
+                #     1, 0].transpose()
+            amplitude = eigenvector_x#np.sqrt(eigenvector_x ** 2 + eigenvector_y ** 2)
 
             divnorm = mpl.colors.Normalize(vmin=0, vmax=2)
             # Define facecolors: Use 'none' for empty elements (zeros) and color for others
-            facecolors = ['none' if value == 0 else 'red' for value in amplitude.flatten()]
+            facecolors = ['none' if value > 1e-14 else 'red' for value in amplitude.flatten()]
             # Plot circles with empty ones for zero values
             # plt.scatter(x_coords_flat, y_coords_flat, s=A_flat * 100, facecolors=facecolors, edgecolors='blue', alpha=0.7)
             sizes = np.copy(amplitude)  # .flatten()
