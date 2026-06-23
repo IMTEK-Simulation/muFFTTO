@@ -756,6 +756,7 @@ if plot:
     import matplotlib.pyplot as plt
     import matplotlib as mpl
 
+    plot_jacobi=True
     plt.rcParams["text.usetex"] = True
     plt.rcParams.update({
         "text.usetex": True,  # Use LaTeX
@@ -845,11 +846,13 @@ if plot:
             # ax_geom.set_xticks([])
             relative_error_G = norm_G   / norm_G[0]
             relative_error_GJ = norm_GJ / norm_GJ[0]
+
             ax_error.loglog(np.arange(len(norm_G)), relative_error_G, label=fr'$\kappa=10^{{{-ratios[i]}}}$',
                             color='g', linestyle=lines[i], lw=2)
             #  ax_1.semilogy(norm_rMr[2*i+1]/norm_rMr[2*i+1][0], label=f'Green ' +r'$\kappa=10^'+f'{{{ratios[i]}}}$', color='r', linestyle=lines[i])
-            ax_error.loglog(np.arange(len(norm_GJ)), relative_error_GJ, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
-                            color='black', linestyle=lines[i], lw=2)
+            if plot_jacobi:
+                ax_error.loglog(np.arange(len(norm_GJ)), relative_error_GJ, label=r'$JG \kappa=10^' + f'{{{-ratios[i]}}}$',
+                                color='black', linestyle=lines[i], lw=2)
 
             # ax_1.semilogy(norm_rMr_Jacobi[i]/norm_rMr_Jacobi[i][0], label=f' Jacobi {kappa}', color='b', linestyle=lines[i])
             # ax_1.semilogy(norm_rMr_combi[i]/norm_rMr_combi[i][0], label=f' Jacobi-Green {kappa}', color='r', linestyle=lines[i])
@@ -947,17 +950,17 @@ if plot:
             #     text_GJ = np.array([[1.05, 1e-6],
             #                         [1.25, 3e-8],
             #                         [1.5, 1e-9]])
-
-            ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
-                              xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
-                              xytext=(text_GJ[i, 0], text_GJ[i, 1]),
-                              arrowprops=dict(arrowstyle='->',
-                                              color='black',
-                                              lw=1,
-                                              ls=lines[i]),
-                              fontsize=10,
-                              color='black'
-                              )
+            if plot_jacobi:
+                ax_error.annotate(text=f'Green-Jacobi\n' + fr'  $\chi^{{\mathrm{{tot}}}} =10^{{{ratios[i]}}}$',
+                                  xy=(arrows_GJ[i], relative_error_GJ[arrows_GJ[i]]),
+                                  xytext=(text_GJ[i, 0], text_GJ[i, 1]),
+                                  arrowprops=dict(arrowstyle='->',
+                                                  color='black',
+                                                  lw=1,
+                                                  ls=lines[i]),
+                                  fontsize=10,
+                                  color='black'
+                                  )
             ax_error.annotate(text=f'Green\n' + fr'$\chi^{{\mathrm{{tot}}}} = 10^{{{ratios[i]}}}$',
                               xy=(arrows_G[i], relative_error_G[arrows_G[i]]),
                               xytext=(text_G[i, 0], text_G[i, 1]),

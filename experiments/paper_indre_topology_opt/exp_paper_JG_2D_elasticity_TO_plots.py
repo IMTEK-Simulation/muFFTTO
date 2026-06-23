@@ -34,36 +34,24 @@ script_name = 'exp_paper_JG_2D_elasticity_TO_load_init' + f'_N_{N}/'
 preconditioner_type = 'Green_Jacobi'
 file_name = f'_log.npz'
 
-
-
-
-
-
-
-
-
-
-
-
 # _info_log_GJ = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name,
 #                        allow_pickle=True)
+#
+# plt.figure()
+# for i in np.arange(max_it):
+#
+#     preconditioner_type = 'Green_Jacobi'
+#     file_name = f'iteration{i}'
+#     phase_field_it = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name + '.npy',
+#                            allow_pickle=True)
+#
+#     plt.contourf(phase_field_it, cmap=mpl.cm.Greys)
+#     # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+#     plt.clim(0, 1)
+#     plt.title(f'Phase field {i}')
+#     plt.colorbar()
+#     plt.show()
 
-plt.figure()
-for i in np.arange(max_it):
-
-    preconditioner_type = 'Green_Jacobi'
-    file_name = f'iteration{i}'
-    phase_field_it = np.load('./exp_data/' + script_name + f'{preconditioner_type}' + file_name + '.npy',
-                           allow_pickle=True)
-
-    plt.contourf(phase_field_it, cmap=mpl.cm.Greys)
-    # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-    plt.clim(0, 1)
-    plt.title(f'Phase field {i}')
-    plt.colorbar()
-    plt.show()
-
-quit
 Ns = [16, 32, 64, 128]  # , 64, 128
 plt.figure(figsize=[8, 6])
 max_it = 300

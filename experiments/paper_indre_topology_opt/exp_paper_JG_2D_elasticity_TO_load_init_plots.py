@@ -20,31 +20,31 @@ plt.rcParams.update({'font.size': 13})
 plt.rcParams["font.family"] = "Arial"
 
 cg_tol = 8
-#Ns = [16, 32, 64, 128, 256, 512, 1024]
-Ns = [ 256, 512, 1024]
+Ns = [16, 32, 64, 128, 256, 512, 1024]
+#Ns = [ 256, 512, 1024]
 
-steps = np.arange(0, 10000, 50)
-for j in np.arange(len(Ns)):
-    N = Ns[j]
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    for i in np.arange(len(steps) - 1):
-        iter = steps[i]
-        preconditioner_type = 'Green_Jacobi'
-        random = False
-        try:
-            script_name = f'exp_paper_JG_2D_elasticity_TO_load_init_random_{random}' + f'_N_{N}'+ f'_cgtol_{cg_tol}'+'/'
-            phase_field_it_F = np.load(
-                './exp_data/' + script_name + f'{preconditioner_type}' + f'_iteration_{iter}' + '.npy',
-                allow_pickle=True)
-
-            plt.contourf(phase_field_it_F, cmap=mpl.cm.Greys)
-            # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
-            plt.clim(0, 1)
-            plt.title(f'Phase field {iter}, res {N}, tol {cg_tol}')
-            plt.colorbar()
-            plt.show()
-        except:
-            pass
+# steps = np.arange(0, 10000, 50)
+# for j in np.arange(len(Ns)):
+#     N = Ns[j]
+#     fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+#     for i in np.arange(len(steps) - 1):
+#         iter = steps[i]
+#         preconditioner_type = 'Green_Jacobi'
+#         random = False
+#         try:
+#             script_name = f'exp_paper_JG_2D_elasticity_TO_load_init_random_{random}' + f'_N_{N}'+ f'_cgtol_{cg_tol}'+'/'
+#             phase_field_it_F = np.load(
+#                 './exp_data/' + script_name + f'{preconditioner_type}' + f'_iteration_{iter}' + '.npy',
+#                 allow_pickle=True)
+#
+#             plt.contourf(phase_field_it_F, cmap=mpl.cm.Greys)
+#             # nodal_coordinates[0, 0] * number_of_pixels[0], nodal_coordinates[1, 0] * number_of_pixels[0],
+#             plt.clim(0, 1)
+#             plt.title(f'Phase field {iter}, res {N}, tol {cg_tol}')
+#             plt.colorbar()
+#             plt.show()
+#         except:
+#             pass
 
 
 nbit_per_lbfgs_mech_G = []
@@ -174,7 +174,7 @@ print(('create figure: {}'.format(fname)))
 plt.savefig(fname, bbox_inches='tight')
 plt.show()
 
-quit()
+# quit()
 
 Ns = [16, 32, 64, 128]  # , 64, 128
 max_it = 300

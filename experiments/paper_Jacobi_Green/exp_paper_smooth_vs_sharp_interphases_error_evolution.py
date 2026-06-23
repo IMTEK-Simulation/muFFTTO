@@ -57,7 +57,7 @@ plot = True
 enforce_mean = False
 save_results = False
 save_in_iteration = False
-plot_strain_evols = True
+plot_strain_evols = False
 
 if compute:
 

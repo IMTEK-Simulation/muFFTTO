@@ -2653,6 +2653,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         tol=cg_tol,
         maxiter=int(10000),
         callback=callback_adjoint,
+        rtol=False
         # norm_metric=res_norm
     )
 

@@ -22,7 +22,7 @@ from matplotlib.patches import Ellipse
 
 plt.rcParams.update({
     "text.usetex": True,  # Use LaTeX
-    # "font.family": "helvetica",  # Use a serif font
+     "font.family": "helvetica",  # Use a serif font
 })
 plt.rcParams.update({'font.size': 11})
 plt.rcParams["font.family"] = "Arial"

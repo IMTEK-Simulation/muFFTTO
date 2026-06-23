@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("-n", "--nb_pixels", default="16")
 parser.add_argument("-start", "--first_iteration", default="0")
 parser.add_argument("-stop", "--last_iteration", default="100000")
-parser.add_argument("-cg_tol", "--cg_tol_exponent", default="8")
+parser.add_argument("-cg_tol", "--cg_tol_exponent", default="7")
 parser.add_argument("-soft", "--soft_phase_exponent", default="5")
 # Preconditioner type (string, choose from a set)
 parser.add_argument(
@@ -366,6 +366,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             tol=cg_setup['cg_tol'],
             maxiter=10000,
             callback=callback,
+            rtol=False
             # norm_metric=res_norm
         )
 
@@ -557,13 +558,13 @@ if __name__ == '__main__':
         file_data_name_it = f'_iteration_{iterat}'  # print('rank' f'{MPI.COMM_WORLD.rank:6} ')
 
         if save_data:
-            if iterat % 10 == 0:
-                save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
-                         result_norms.reshape([*discretization.nb_of_pixels]),
-                         tuple(discretization.subdomain_locations_no_buffers),
-                         tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-                if MPI.COMM_WORLD.rank == 0:
-                    print(data_folder_path + file_data_name_it + f'.npy')
+ #           if iterat % 10 == 0:
+            save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name_it + f'.npy',
+                     result_norms.reshape([*discretization.nb_of_pixels]),
+                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+            if MPI.COMM_WORLD.rank == 0:
+                print(data_folder_path + file_data_name_it + f'.npy')
 
             if MPI.COMM_WORLD.rank == 0:
                 _info_iter["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
@@ -587,7 +588,7 @@ if __name__ == '__main__':
                                       x=phase_field_0.s.ravel(),
                                       jac=True,
                                       maxcor=20,
-                                      gtol=1e-9,
+                                      gtol=1e-5,
                                       ftol=1e-16,
                                       maxiter=stop - start,
                                       comm=MPI.COMM_WORLD,
