@@ -169,7 +169,6 @@ def conjugate_gradients_mugrid(
         warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
     return x
 
-
 def conjugate_gradients_mugrid_experimental(
         comm: Communicator,
         fc: GlobalFieldCollection,
@@ -189,7 +188,7 @@ def conjugate_gradients_mugrid_experimental(
     Conjugate gradient method for matrix-free solution of the linear problem
     Ax = b, where A is represented by the function hessp (which computes the
     product of A with a vector). The method iteratively refines the solution x
-    until the residual ||Ax - b|| is less than tol or until maxiter iterations
+    until the residual ||Ax- b|| is less than tol or until maxiter iterations
     are reached.
 
     Parameters
@@ -217,7 +216,7 @@ def conjugate_gradients_mugrid_experimental(
     Returns
     -------
     x : array_like
-        Approximate solution to the system Ax = b. (Same as input field x.)
+        Approximate solution to the systems Ax = b. (Same as input field x.)
     """
     tol_sq = tol * tol
     p = fc.real_field(
@@ -562,6 +561,254 @@ def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
             break
 
     return x_k, norms
+
+
+def dr_pbcg_mugrid(
+        comm: Communicator,
+        fc: GlobalFieldCollection,
+        hessp: callable,
+        b_list: list,
+        x_list: list,
+        P: callable,
+        tol: float = 1e-6,
+        rtol: bool = False,
+        maxiter: int = 1000,
+        callback: callable = None,
+        **kwargs
+):
+    """
+    DR-PBCG: Preconditioned Block Conjugate Gradient with deflation-based restart.
+
+    Solves A X = B where B is a block of m right-hand sides simultaneously,
+    following Algorithm 5 of Meurant & Tichy (2026).
+
+    Parameters
+    ----------
+    comm : muGrid.Communicator
+    fc : muGrid.GlobalFieldCollection
+        Collection that holds all working fields (must have 'nodal_points' sub-pt).
+    hessp : callable
+        hessp(p, Ap): computes Ap = A p, writing the result into Ap.
+    b_list : list of muGrid.Field, length m
+        Block of m right-hand-side fields.
+    x_list : list of muGrid.Field, length m
+        Initial guesses, overwritten in-place with the approximate solutions.
+    P : callable
+        P(r, z): applies preconditioner M^{-1} to r, writing the result into z.
+    tol : float
+        Convergence tolerance on ||R_k||_F (absolute, or relative when rtol=True).
+    rtol : bool
+        If True, tolerance is relative to the initial ||R_0||_F.
+    maxiter : int
+        Maximum number of iterations.
+    callback : callable, optional
+        callback(iteration, x_list, stop_crit) called after each iteration.
+
+    Returns
+    -------
+    x_list : list of Field
+        Approximate solutions (same objects as input).
+    norms : dict
+        'residual_frobenius': list of ||R_k||_F values (one per iteration).
+    """
+    m    = len(b_list)
+    comp = (*b_list[0].components_shape,)
+
+    Q     = [fc.real_field(name=f'dr-pbcg-Q-{j}',    components=comp, sub_pt='nodal_points') for j in range(m)]
+    S     = [fc.real_field(name=f'dr-pbcg-S-{j}',    components=comp, sub_pt='nodal_points') for j in range(m)]
+    Q_new = [fc.real_field(name=f'dr-pbcg-Qnew-{j}', components=comp, sub_pt='nodal_points') for j in range(m)]
+    S_new = [fc.real_field(name=f'dr-pbcg-Snew-{j}', components=comp, sub_pt='nodal_points') for j in range(m)]
+    MiQ   = [fc.real_field(name=f'dr-pbcg-MiQ-{j}',  components=comp, sub_pt='nodal_points') for j in range(m)]
+    R     = [fc.real_field(name=f'dr-pbcg-R-{j}',    components=comp, sub_pt='nodal_points') for j in range(m)]
+    AS    = [fc.real_field(name=f'dr-pbcg-AS-{j}',   components=comp, sub_pt='nodal_points') for j in range(m)]
+
+    def dot(u, v):
+        return comm.sum(np.dot(u.s.ravel(), v.s.ravel()))
+
+    def gram(u_list, v_list):
+        """m × m matrix G[i,j] = <u_list[i], v_list[j]>."""
+        return np.array([[dot(u_list[i], v_list[j]) for j in range(m)]
+                         for i in range(m)])
+
+    def householder_qr(r_list, q_list):
+        """Thin QR via Householder reflections (MPI-aware).
+        Overwrites q_list with orthonormal columns. Returns upper-triangular Psi."""
+        Psi = np.zeros((m, m))
+
+        for j in range(m):
+            q_list[j].s[...] = r_list[j].s
+
+        # Build the m x m Gram matrix G[i,j] = dot(r_list[i], r_list[j])
+        # Then QR-factor G's Cholesky-like structure via Householder on the normal eqs.
+        # Instead: work with the "tall" matrix implicitly via its m x m inner product matrix.
+
+        # Step 1: collect all pairwise inner products (the m x m matrix A where A[:,j] is
+        # the j-th vector expressed in terms of inner products with all others).
+        # Householder QR on this m x m matrix gives us the mixing coefficients.
+        A = np.zeros((m, m))
+        for i in range(m):
+            for j in range(i, m):
+                A[i, j] = dot(q_list[i], q_list[j])
+                A[j, i] = A[i, j]
+
+        # Step 2: Householder QR of A (plain numpy, O(m^3), cheap)
+        Q_coeff, Psi = np.linalg.qr(A)  # A = Q_coeff @ Psi
+
+        # Step 3: form new q_list as linear combinations
+        old_fields = [q_list[j].s.copy() for j in range(m)]
+        for j in range(m):
+            q_list[j].s[...] = sum(Q_coeff[k, j] * old_fields[k] for k in range(m))
+
+        return Psi
+
+    def modified_gram_schmidt(r_list, q_list):
+        """Thin QR via Modified Gram-Schmidt (MPI-aware).
+        Overwrites q_list with orthonormal columns. Returns upper-triangular Psi."""
+        Psi = np.zeros((m, m))
+        for j in range(m):
+            q_list[j].s[...] = r_list[j].s
+        for j in range(m):
+            for i in range(j):
+                Psi[i, j] = dot(q_list[i], q_list[j])
+                q_list[j].s[...] -= Psi[i, j] * q_list[i].s
+            nrm = np.sqrt(dot(q_list[j], q_list[j]))
+            if nrm < 1e-14:
+                raise RuntimeError(
+                    f"DR-PBCG: column {j} collapsed during QR (linearly dependent RHS?)"
+                )
+            Psi[j, j] = nrm
+            q_list[j].s[...] /= nrm
+        return Psi
+
+    def cholesky_qr(r_list, q_list):
+        """Tall-and-thin QR via CholeskyQR (MPI-aware).
+        Overwrites q_list with orthonormal columns. Returns upper-triangular Psi."""
+        for j in range(m):
+            q_list[j].s[...] = r_list[j].s
+
+        # Step 1: Gram matrix G = R^T R  (one global reduction)
+        G = np.zeros((m, m))
+        for i in range(m):
+            for j in range(i, m):
+                G[i, j] = dot(q_list[i], q_list[j])
+                G[j, i] = G[i, j]
+
+        # Step 2: Cholesky G = L L^T  →  Psi = L^T (upper triangular R-factor)
+        try:
+            Psi = np.linalg.cholesky(G).T
+        except np.linalg.LinAlgError:
+            raise RuntimeError(
+                "DR-PBCG: Gram matrix not positive definite (linearly dependent RHS?)"
+            )
+
+        # Step 3: Q = R Psi^{-1}
+        Psi_inv = np.linalg.inv(Psi)
+        old_fields = [q_list[j].s.copy() for j in range(m)]
+        for j in range(m):
+            q_list[j].s[...] = sum(Psi_inv[k, j] * old_fields[k] for k in range(m))
+
+        return Psi
+    # ------------------------------------------------------------------
+    # Initialisation  (Algorithm 5, lines 2-5)
+    # ------------------------------------------------------------------
+    for j in range(m):
+        hessp(x_list[j], R[j])                        # R[j] = A X0[j]
+        R[j].s[...] = b_list[j].s - R[j].s            # R0 = B - A X0  (line 2)
+
+    # Check convergence before QR: zero residual means X0 is already the solution.
+    tol_sq     = tol * tol
+    R0_norm_sq = comm.sum(sum(np.dot(R[j].s.ravel(), R[j].s.ravel()) for j in range(m)))
+
+    if rtol:
+        tol_sq = tol_sq * R0_norm_sq
+
+    norms = {'residual_frobenius': [R0_norm_sq]}
+
+    if R0_norm_sq < tol_sq:
+        return x_list, norms
+    #np.qr(R, mode='reduced')
+    Sigma = modified_gram_schmidt(R, Q)                # [Q0, Sigma0] = qr(R0)  (line 3)
+    #Sigma = householder_qr(R, Q)                # [Q0, Sigma0] = qr(R0)  (line 3)
+    #Sigma = cholesky_qr(R, Q)                # [Q0, Sigma0] = qr(R0)  (line 3)
+
+
+    for j in range(m):
+        P(Q[j], S[j])                                  # S0 = M^{-1} Q0  (line 4)
+
+    Theta = gram(Q, S)                                 # Theta0 = Q0^T M^{-1} Q0  (line 5)
+
+    if callback:
+        callback(0, x_list, R0_norm_sq)
+
+    # ------------------------------------------------------------------
+    # Main loop  (Algorithm 5, lines 6-13)
+    # ------------------------------------------------------------------
+    for iteration in range(maxiter):
+
+        # Line 7: Pi = (S^T A S)^{-1} Theta
+        for j in range(m):
+            hessp(S[j], AS[j])
+        StAS = gram(S, AS)                             # S^T A S  (m × m, SPD)
+        Pi   = np.linalg.solve(StAS, Theta)            # (S^T A S)^{-1} Theta
+
+        # Line 8: X_k = X_{k-1} + S Pi Sigma
+        C = Pi @ Sigma                                 # m × m
+        for j in range(m):
+            for i in range(m):
+                x_list[j].s[...] += C[i, j] * S[i].s
+
+        # Line 9: R = Q - A S Pi,  then [Q_new, Psi] = qr(R)
+        for j in range(m):
+            R[j].s[...] = Q[j].s
+            for i in range(m):
+                R[j].s[...] -= Pi[i, j] * AS[i].s
+
+        # Pre-QR convergence check: ||R_k||_F ≤ ||R||_F * ||Sigma||_F (submultiplicativity).
+        # If R ≈ 0 the system is solved; avoid QR of near-zero columns.
+        R_norm_sq     = comm.sum(sum(np.dot(R[j].s.ravel(), R[j].s.ravel()) for j in range(m)))
+        Sigma_norm_sq = np.trace(Sigma.T @ Sigma)
+        stop_crit     = R_norm_sq * Sigma_norm_sq
+        if stop_crit < tol_sq:
+            norms['residual_frobenius'].append( stop_crit)
+            if callback:
+                callback(iteration + 1, x_list, stop_crit)
+            return x_list, norms
+
+        Psi = modified_gram_schmidt(R, Q_new)
+
+        # Line 10: Theta_new = Q_new^T M^{-1} Q_new
+        for j in range(m):
+            P(Q_new[j], MiQ[j])
+        Theta_new = gram(Q_new, MiQ)
+
+        # Line 11: S_new = M^{-1} Q_new + S Theta^{-1} Psi^T Theta_new
+        C2 = np.linalg.solve(Theta, Psi.T @ Theta_new)  # m × m
+        for j in range(m):
+            S_new[j].s[...] = MiQ[j].s
+            for i in range(m):
+                S_new[j].s[...] += C2[i, j] * S[i].s
+
+        # Line 12: Sigma_k = Psi Sigma_{k-1}
+        Sigma = Psi @ Sigma
+
+        # Convergence: ||R_k||_F^2 = tr(Sigma^T Sigma)
+        stop_crit = np.trace(Sigma.T @ Sigma)
+        norms['residual_frobenius'].append(stop_crit)
+
+        if callback:
+            callback(iteration + 1, x_list, stop_crit)
+
+        if stop_crit < tol_sq:
+            return x_list, norms
+
+        # Advance: swap buffers instead of copying field data
+        Q, Q_new = Q_new, Q
+        S, S_new = S_new, S
+        Theta = Theta_new
+
+    if comm.rank == 0:
+        warnings.warn("DR-PBCG did not converge", RuntimeWarning)
+    return x_list, norms
 
 
 def scalar_product_mpi(a, b):

@@ -283,9 +283,9 @@ def get_geometry(nb_voxels,
 
             elif nb_voxels.size == 3:
                 phase_field = (0.5 + 0.25 * np.cos(
-                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 2 * np.pi * coordinates[2]) +
+                    2 * np.pi * coordinates[0] - 2 * np.pi * coordinates[1] - 4 * np.pi * coordinates[2]) +
                                0.25 * np.cos(
-                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 2 * np.pi * coordinates[2]))
+                            2 * np.pi * coordinates[1] + 2 * np.pi * coordinates[0] + 3 * np.pi * coordinates[2]))
         case 'sine_wave_inv':
             phase_field = np.zeros(nb_voxels)
             if nb_voxels.size == 2:

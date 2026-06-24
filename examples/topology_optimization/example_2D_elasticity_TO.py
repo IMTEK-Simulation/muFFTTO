@@ -27,10 +27,10 @@ pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
 # Optimization Parameters
 soft_phase_exponent = 5
-preconditioner_type = "Green"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
+preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
 weight = 1.  # Weight for the stress match term
-cg_setup = {'cg_tol': 1e-6}
+cg_setup = {'cg_tol': 1e-3}
 
 # Initialize periodic unit cell and discretization
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -416,6 +416,7 @@ if __name__ == '__main__':
         bounds_hi=1.,
         zero_mask=None,
         gtol=1e-3,
+        xtol=1e-3,
         maxiter=500,
         maxcor=20,
         c1=1e-4,
