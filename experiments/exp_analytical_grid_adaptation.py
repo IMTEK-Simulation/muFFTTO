@@ -13,6 +13,9 @@ OMEGA = 0.8
 K0 = 0.25
 KMIN = 0.005
 
+#coor = make_grid_nodes(N=8, L=2.0)
+#print(coor)
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments for the grid-adaptation experiment.

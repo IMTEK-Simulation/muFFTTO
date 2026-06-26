@@ -1,4 +1,6 @@
 '''
+Storage of adapted grid data into muGrid real_field containers
+through the primary accessor `field.p`.
 
 Reference:
 Zecevic, M., Lebensohn, R. A., & Capolungo, L. (2026).
@@ -8,10 +10,9 @@ https://doi.org/10.1016/j.mechmat.2025.105512
 
 '''
 
-
 import numpy as np
 from collections import deque
-
+import muGrid
 
 def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -29,21 +30,32 @@ def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarra
 
     Returns
     -------
+    [i,x,y] (x,y),nx,ny
     P : numpy ndarray
-        Array of nodal coordinates with shape [nx, ny, xy].
-        - nx = N + 1 is the number of nodes in x-direction.
-        - ny = N + 1 is the number of nodes in y-direction.
+        Array of nodal coordinates with shape [xy, nx, ny].
+        - nx = N is the number of nodes in x-direction.
+        - ny = N is the number of nodes in y-direction.
         - the last index 'xy' holds (x, y) coordinates at each node.
     x : numpy ndarray
         One-dimensional array of x-coordinates with shape [nx].
     y : numpy ndarray
         One-dimensional array of y-coordinates with shape [ny].
     """
-    x = np.linspace(-L, L, N + 1)
-    y = np.linspace(-L, L, N + 1)
+
+    x = np.linspace(-L, L, N+1)
+    y = np.linspace(-L, L, N+1)
     X, Y = np.meshgrid(x, y, indexing="ij")
     P = np.stack([X, Y], axis=-1)
+   
+    '''
+    # (0,L)
+    x = np.linspace(0, L, N, endpoint=False )
+    y = np.linspace(0, L, N, endpoint=False )
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    P = np.stack([X, Y])
+    '''
     return P, x, y
+
 
 # specifically for circle inclusion, but can be adapted for other shapes by changing the labeling logic
 def cell_labels(
@@ -425,3 +437,43 @@ def adapt_grid_to_circle(
             "kmin": kmin,
         },
     }
+
+
+
+'''
+from muGrid import Communicator, CartesianDecomposition 
+import numpy as np
+
+if __name__ == "__main__":
+    coor,x,z = make_grid_nodes(N=4, L=1.0)
+    print(coor[0,0])
+    print(coor[1,0])
+
+    #print(muGrid.__file__)
+    #print([x for x in dir(muGrid) if not x.startswith("_")])
+    
+    nx = 8
+    ny = 8
+    g = 1
+    print("before communicator")
+    comm = Communicator()
+    print("after communicator")
+    print("before decomp")
+
+    #help(muGrid.CartesianDecomposition)vu0 
+    decomp = muGrid.CartesianDecomposition(
+        communicator=comm,
+        nb_domain_grid_pts=(nx, ny),
+        nb_subdivisions=(1, 1),
+        nb_ghosts_left=(g, g),
+        nb_ghosts_right=(g, g),
+    )
+    print("after decomp")
+    
+    field = decomp.real_field("displacement", components=(3,))
+    print(comm)
+    print(field)
+    print(type(field))
+    print([x for x in dir(field) if not x.startswith("_")])
+    
+'''
