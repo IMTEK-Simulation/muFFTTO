@@ -1,10 +1,12 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from mpi4py import MPI
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 from muGrid import Solvers
 
 from muFFTTO import domain
@@ -19,7 +21,7 @@ element_type = 'linear_triangles'
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (128, 128)
+number_of_pixels = (28, 28)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -51,9 +53,62 @@ matrix_mask = phase_field_geom > 0
 inc_mask = phase_field_geom == 0
 
 # apply material distribution
-
 material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
 material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
+
+# Reference coordinates
+ref_coords_ixyz = discretization.fft.coords
+
+# Deformed coordinates
+def_coords_inxyz = discretization.get_displacement_sized_field(name='deformed_nodal_points_coordinates_inxyz')
+
+# grid_nodes_displacement
+grid_nodes_displacement_inxyz = discretization.get_displacement_sized_field(name='grid_nodes_displacement_inxyz')
+
+grid_nodes_displacement_inxyz.s.fill(0)
+grid_nodes_displacement_inxyz.s[0, 0, ...] = (0.1 * np.sin(2 * np.pi * ref_coords_ixyz[0, ...]) *
+                                              np.sin(2 * np.pi * ref_coords_ixyz[1, ...]))
+
+# fill in the  deformation with analytical
+def_coords_inxyz.s[:, 0, ...] = ref_coords_ixyz[...] + grid_nodes_displacement_inxyz.s[:, 0, ...]
+# def_coords_inxyz.s[1, 0, ...] = ref_coords_ixyz[1, ...] + 0.1 * np.cos(2 * np.pi * ref_coords_ixyz[1, ...])
+
+
+# Visualize grid and material
+
+# Deformed coords with periodic extension for plotting
+x_plot = discretization.get_nodal_points_coordinates_with_periodic_nodes()
+# add deformation
+x_plot[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
+# x_plot[..., -1, -1] += grid_nodes_displacement_inxyz.s[...]
+x_plot = np.squeeze(x_plot, axis=1)  # removes axis for more nodal points
+#
+fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+# edges, nodes and material phase ID
+phase_colors = ['white', 'black']
+for i in range(number_of_pixels[0]):
+    for j in range(number_of_pixels[1]):
+        xs = [x_plot[0, i, j], x_plot[0, i + 1, j], x_plot[0, i + 1, j + 1], x_plot[0, i, j + 1]]
+        ys = [x_plot[1, i, j], x_plot[1, i + 1, j], x_plot[1, i + 1, j + 1], x_plot[1, i, j + 1]]
+        ax.fill(xs, ys, color=phase_colors[int(phase_field.s[0, 0, i, j])], alpha=0.8)
+for col in range(number_of_pixels[0] + 1):
+    ax.plot(x_plot[0, col, :], x_plot[1, col, :], 'b-', lw=0.5)
+    ax.plot(x_plot[0, :, col], x_plot[1, :, col], 'b-', lw=0.5)
+ax.scatter(x_plot[0], x_plot[1], c='blue', s=15)
+ax.set_aspect('equal')
+ax.set_title('Deformed Grid + Material')
+plt.tight_layout()
+plt.show()
+
+# Deformation gradient F = I + grad(u)
+F_ijqxy = discretization.get_displacement_gradient_sized_field(name='Grid_Deformation_gradient_F_ijqxy')
+
+discretization.apply_gradient_operator_mugrid(def_coords_inxyz, F_ijqxy)
+# + np.eye(2)[:,:,None,None,None]
+# F_ijqxy =   B_grid(grid_def) + np.eye(2)[:,:,None,None,None]
+det_F = np.linalg.det(F_ijqxy.s.transpose(2, 3, 4, 0, 1))
+inv_F = np.linalg.pinv(F_ijqxy.s.transpose(2, 3, 4, 0, 1)).transpose(3, 4, 0, 1, 2)
+
 
 def K_fun(x, Ax):
     """
@@ -68,6 +123,7 @@ def K_fun(x, Ax):
 
 
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
+
 
 def M_fun(x, Px):
     """
@@ -103,6 +159,7 @@ for i in range(dim):
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
 
+
     def callback(iteration, fields):
         """
         Callback function to print the current solution, residual, and search direction.
@@ -126,15 +183,16 @@ for i in range(dim):
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field
         import matplotlib.pyplot as plt
+
         plt.figure()
         plt.pcolormesh(discretization.fft.coords[0],
                        discretization.fft.coords[1],
-                       solution_field.s[0,0])
+                       solution_field.s[0, 0])
 
         plt.title(f'Solution field - macro gradient {macro_gradient} ')
         plt.xlabel('x  / L')
         plt.ylabel('y  / L')
-        plt.colorbar(label='Temperature gradient ')
+        plt.colorbar(label='Temperature / Potential')
         plt.show()
     discretization.fft.communicate_ghosts(field=solution_field)
 
@@ -153,7 +211,6 @@ for i in range(dim):
         np.array2string(homogenized_A_ij, formatter={'float_kind': lambda x: f"{x:0.8f}"})
     )
 
-
 end_time = time.time()
 elapsed_time = end_time - start_time
 if discretization.communicator.rank == 0:
@@ -161,5 +218,4 @@ if discretization.communicator.rank == 0:
     print("Elapsed time: ", elapsed_time / 60, 'minutes')
     J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
     print(f'Analytical solution conductivity - A^eff_11  : {J_eff:0.8f}')
-    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0,0]:0.8f}')
-
+    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0, 0]:0.8f}')
