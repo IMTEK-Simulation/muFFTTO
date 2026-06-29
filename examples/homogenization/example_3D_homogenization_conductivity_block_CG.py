@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import numpy as np
@@ -15,9 +16,9 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (32,)
+number_of_pixels = 3 * (64,)
 
-geometry_ID = 'cos_wave' #'square_inclusion'
+geometry_ID = 'random_distribution'  # 'cos_wave' # square_inclusion
 # set up the system
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -26,7 +27,6 @@ discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
-
 
 # create material data field
 mat_contrast = 1
@@ -42,8 +42,8 @@ material_data_field_C_0.s[...] = conductivity_C_1[:, :, np.newaxis, np.newaxis, 
 phase_field = discretization.get_scalar_field(name='phase_field')
 
 phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
-                                                  microstructure_name=geometry_ID,
-                                                  coordinates=discretization.fft.coords)
+                                                          microstructure_name=geometry_ID,
+                                                          coordinates=discretization.fft.coords)
 
 matrix_mask = phase_field.s[0, 0] > 0
 inc_mask = phase_field.s[0, 0] == 0
@@ -54,7 +54,8 @@ if geometry_ID == 'square_inclusion':
     material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
     material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
 else:
-    material_data_field_C_0.s[... ] = phase_field.s[0, 0] * material_data_field_C_0.s[...]
+    material_data_field_C_0.s[...] = mat_contrast_2 * phase_field.s[0, 0] * material_data_field_C_0.s[...]
+
 
 # linear system
 def K_fun(x, Ax):
@@ -69,8 +70,8 @@ def K_fun(x, Ax):
     discretization.fft.communicate_ghosts(Ax)
 
 
-
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
+
 
 # preconditioner
 def M_fun(x, Px):
@@ -83,6 +84,7 @@ def M_fun(x, Px):
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
 
+
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 # compute whole homogenized elastic tangent
@@ -90,8 +92,14 @@ homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
 init_x_0 = discretization.get_unknown_size_field(name='init_solution')
 solution_field = discretization.get_unknown_size_field(name='solution')
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
-rhs_field  = discretization.get_unknown_size_field(name='rhs_field')
+rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 start_time = time.time()
+
+norms_single = {
+    "E1": [],  # Manhattan norm
+    "E2": [],  # Euclidean norm
+    "E3": []  # Infinity norm
+}
 for i in range(dim):
     # set macroscopic gradient
     macro_gradient = np.zeros([dim])
@@ -107,11 +115,13 @@ for i in range(dim):
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
+
+
     # solver
     def callback(it, x, r, p, z, stop_crit_norm):
         norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
         norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
-
+        norms_single[f'E{i + 1}'].append(norm_of_rr)
         if discretization.communicator.rank == 0:
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
@@ -126,7 +136,7 @@ for i in range(dim):
         P=M_fun,
         tol=1e-5,
         maxiter=2000,
-        callback=callback, rtol=True
+        callback=callback#, rtol=True
     )
 
     discretization.fft.communicate_ghosts(field=solution_field)
@@ -141,10 +151,11 @@ for i in range(dim):
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field
         import matplotlib.pyplot as plt
+
         plt.figure()
-        plt.pcolormesh(discretization.fft.coords[0,...,number_of_pixels[2]//2],
-                       discretization.fft.coords[1,...,number_of_pixels[2]//2],
-                       solution_field.s[0,0, ...,number_of_pixels[2]//2,:])
+        plt.pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                       discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+                       solution_field.s[0, 0, ..., number_of_pixels[2] // 2, :])
 
         plt.title(f'Solution field - macro gradient {macro_gradient} ')
         plt.xlabel('x  / L')
@@ -162,8 +173,6 @@ elapsed_time = end_time - start_time
 
 print("Elapsed time: ", elapsed_time)
 print("Elapsed time: ", elapsed_time / 60)
-
-
 
 # solving using block CG
 
@@ -196,8 +205,8 @@ _, norms = solvers.dr_pbcg_mugrid(comm=discretization.communicator,
                                   b_list=list_of_rhs_field,
                                   x_list=list_of_solution_field,
                                   P=M_fun,
-                                  tol=1e-5,
-                                  rtol=True)
+                                  tol=1e-5#,                                  rtol=True
+                                    )
 if discretization.communicator.rank == 0:
     norms = np.asarray(norms['residual_frobenius'])
     print(f"{len(norms):1} norm of residual = {', '.join(f'{v}' for v in norms)}")
@@ -210,16 +219,24 @@ for i in range(dim):
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field
         import matplotlib.pyplot as plt
+
         plt.figure()
-        plt.pcolormesh(discretization.fft.coords[0,...,number_of_pixels[2]//2],
-                       discretization.fft.coords[1,...,number_of_pixels[2]//2],
-                       list_of_solution_field[i].s[0, 0,  :, number_of_pixels[2] // 2, :])
-        macro_gradient=list_of_macro_gradient_field[i].s[0,:,0,0,0,0]
-        plt.title(f'Solution field - macro gradient { macro_gradient} ')
+        plt.pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                       discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+                       list_of_solution_field[i].s[0, 0, :, number_of_pixels[2] // 2, :])
+        macro_gradient = list_of_macro_gradient_field[i].s[0, :, 0, 0, 0, 0]
+        plt.title(f'Solution field - macro gradient {macro_gradient} ')
         plt.xlabel('x  / L')
         plt.ylabel('y  / L')
         plt.colorbar(label='Temperature / Potential')
         plt.show()
+plt.figure()
+plt.semilogy(norms, label=f'Block CG')
+for d in range(dim):
+    plt.semilogy(norms_single[f'E{d + 1}'], label=f'E{d + 1}')
+plt.legend()
+plt.show()
+
 if discretization.communicator.rank == 0:
     print(
         "homogenized conductivity tangent =\n" +

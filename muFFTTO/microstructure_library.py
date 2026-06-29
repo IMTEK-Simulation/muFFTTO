@@ -42,8 +42,9 @@ def get_geometry(nb_voxels,
 
     match microstructure_name:
         case 'random_distribution':
-            seed = kwargs['seed']
-            np.random.seed(seed)
+            if 'seed' in kwargs:
+                np.random.seed(kwargs['seed'])
+
             phase_field = np.random.rand(*nb_voxels)
 
         case 'square_inclusion':

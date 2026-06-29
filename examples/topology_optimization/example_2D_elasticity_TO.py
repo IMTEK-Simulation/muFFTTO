@@ -21,7 +21,7 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (64,64)
+number_of_pixels = (32,32)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -29,7 +29,7 @@ pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 soft_phase_exponent = 5
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
-weight = 1.  # Weight for the stress match term
+weight = 5.  # Weight for the stress match term
 cg_setup = {'cg_tol': 1e-3}
 
 # Initialize periodic unit cell and discretization
@@ -91,7 +91,7 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties (Auxetic behavior)
-poison_target = -0.3
+poison_target = -0.0
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poison_target)
