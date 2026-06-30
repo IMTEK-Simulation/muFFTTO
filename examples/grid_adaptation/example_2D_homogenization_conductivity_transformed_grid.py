@@ -168,7 +168,7 @@ for i in range(dim):
         b=rhs_field,  # right-hand side
         x=solution_field,
         prec=M_fun,
-        tol=1e-6,
+        rtol=1e-6,
         maxiter=2000,
         callback=callback)
 
