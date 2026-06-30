@@ -134,7 +134,7 @@ for i in range(dim):
         plt.title(f'Solution field - macro gradient {macro_gradient} ')
         plt.xlabel('x  / L')
         plt.ylabel('y  / L')
-        plt.colorbar(label='Temperature gradient ')
+        plt.colorbar(label='Temperature / Potential')
         plt.show()
     discretization.fft.communicate_ghosts(field=solution_field)
 

@@ -599,6 +599,53 @@ class Discretization:
 
         self.fft.communicate_ghosts(field=rhs_inxyz)
 
+    def get_rhs_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
+                                     macro_gradient_field_ijqxyz,
+                                     rhs_inxyz,
+                                     det_of_deformation_gradient,
+                                     inv_of_deformation_gradient):
+        """
+        Function that computes right hand side vector of linear  homogenization problem
+        on deformed grid
+        rhs= - B^t: det(F_q) *( C: E )@ inv(F_q).T  )
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+            - q is a quadrature point index
+
+        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
+            - shape [i,j,q,x,y,z]
+            - q is quadrature point index
+
+        Returns
+        -------
+        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+
+        """
+
+        # aliasing
+        det_F = det_of_deformation_gradient
+        inv_F = inv_of_deformation_gradient
+
+        gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
+        gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
+        # apply constitutive law
+        self.apply_material_data_mugrid(material_data_field_ijklqxyz, gradient_ijqxyz)
+
+        # w_q * div( det(F^q) * σ^q · (F^q)^-T ) // transformed divergence
+        gradient_ijqxyz.s[...] = np.einsum('ij...,kj...->ik...', gradient_ijqxyz.s[...], inv_F) * det_F[None, None, ...]
+
+        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                       div_u_fnxyz=rhs_inxyz,
+                                                       apply_weights=True)
+
+        rhs_inxyz.s[...] *= -1
+
+        self.fft.communicate_ghosts(field=rhs_inxyz)
+
     def get_rhs_explicit_stress(self, stress_function,
                                 gradient_field_ijqxyz,
                                 rhs_inxyz, **kwargs):
@@ -746,6 +793,56 @@ class Discretization:
                                         gradient_field=gradient_field_ijqxyz)
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+
+        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
+                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        return homogenized_stress_ij / self.cell.domain_volume
+
+    def get_homogenized_stress_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
+                                                  temperature_field_inxyz,
+                                                  macro_gradient_field_ijqxyz,
+                                                  det_of_deformation_gradient,
+                                                  inv_of_deformation_gradient,
+                                                  formulation=None):
+        '''
+        Function computes homogenized material heat conductivity matrix (or flux)
+        from the solution on deformed grid
+
+        :param material_data_field_ijklqxyz:
+        :param temperature_field_inxyz:
+        :param macro_gradient_field_ijqxyz:
+        :param det_of_deformation_gradient:
+        :param inv_of_deformation_gradient:
+        :param formulation:
+        :return:
+        '''
+
+        # aliasing
+        det_F = det_of_deformation_gradient
+        inv_F = inv_of_deformation_gradient
+
+        gradient_field_ijqxyz = self.get_gradient_size_field(name='grad_temp')
+        self.fft.communicate_ghosts(field=temperature_field_inxyz)
+        self.apply_gradient_operator_mugrid(u_inxyz=temperature_field_inxyz,
+                                            grad_u_ijqxyz=gradient_field_ijqxyz)
+
+        # compute total heat gradient field
+        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+
+        # apply deformation gradient    (∇ũ)^q · (F^q)^-1    // q-th transformed gradient
+        gradient_field_ijqxyz.s[...] = np.einsum('ij...,jk...->ik...', gradient_field_ijqxyz.s[...], inv_F)
+        # symmetrization for small-strain elasticity
+        if np.all(formulation == 'small_strain'):
+            #  symmetrize it
+            gradient_field_ijqxyz.s[...] = (gradient_field_ijqxyz.s + np.swapaxes(gradient_field_ijqxyz.s, 0, 1)) / 2
+
+        # compute stress/flux field : σ^q ← C^q : ε^q              // constitutive model
+        self.apply_material_data_mugrid(material_data=material_data_field_ijklqxyz,
+                                        gradient_field=gradient_field_ijqxyz)
+
+        # w_q *   det(F^q) * σ^q
+        self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s[...] * det_F[None, None, ...]
 
         homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
@@ -1553,6 +1650,58 @@ class Discretization:
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)
 
+    def apply_system_matrix_mugrid_deformed_grid(self,
+                                                 material_data_field,
+                                                 input_field_inxyz,
+                                                 output_field_inxyz,
+                                                 det_of_deformation_gradient,
+                                                 inv_of_deformation_gradient,
+                                                 formulation=None,
+                                                 **kwargs):
+        '''
+
+
+        :param material_data_field:
+        :param input_field_inxyz:
+        :param output_field_inxyz:
+        :param det_of_deformation_gradient:
+        :param inv_of_deformation_gradient:
+        :param formulation:
+        :param kwargs:
+        :return:
+        '''
+        # aliasing
+        det_F = det_of_deformation_gradient
+        inv_F = inv_of_deformation_gradient
+
+        if isinstance(input_field_inxyz, np.ndarray):
+            raise ("apply_system_matrix_mugrid does not supprot ndarray")
+
+        self.fft.communicate_ghosts(input_field_inxyz)
+        # allocate temporary fields
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
+        self.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz,
+                                            grad_u_ijqxyz=gradient_ijqxyz)
+
+        # apply deformation gradient ε^q ← sym( (∇ũ)^q · (F^q)^-1 )   // q-th transformed gradient
+        gradient_ijqxyz.s[...] = np.einsum('ij...,jk...->ik...', gradient_ijqxyz.s[...], inv_F)
+        # symmetrization for small-strain elasticity
+        if np.all(formulation == 'small_strain'):
+            #  symmetrize it
+            gradient_ijqxyz.s[...] = (gradient_ijqxyz.s + np.swapaxes(gradient_ijqxyz.s, 0, 1)) / 2
+
+        # compute stress/flux field : σ^q ← C^q : ε^q              // constitutive model
+        self.apply_material_data_mugrid(material_data=material_data_field,
+                                        gradient_field=gradient_ijqxyz)
+
+        # w_q * div( det(F^q) * σ^q · (F^q)^-T ) // transformed divergence
+        gradient_ijqxyz.s[...] = np.einsum('ij...,kj...->ik...', gradient_ijqxyz.s[...], inv_F) * det_F[None, None, ...]
+
+        self.fft.communicate_ghosts(gradient_ijqxyz)
+        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                       div_u_fnxyz=output_field_inxyz,
+                                                       apply_weights=True)
+
     def apply_system_matrix_mugrid_explicit_stress(self,
                                                    constitutive: callable,
                                                    input_field_inxyz: Field,
@@ -1772,7 +1921,7 @@ class Discretization:
         # Get a tensor-field (for example to represent the strain)
         grad_u_ijqxyz = self.field_collection.real_field(
             name=name,  # name of the field
-            components=(self.cell.domain_dimension,self.cell.domain_dimension,),  # shape of components
+            components=(self.cell.domain_dimension, self.cell.domain_dimension,),  # shape of components
             sub_pt='quad_points'  # sub-point type
         )
 
