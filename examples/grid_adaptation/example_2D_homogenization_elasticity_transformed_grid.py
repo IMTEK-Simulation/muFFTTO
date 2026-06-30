@@ -13,7 +13,7 @@ from muFFTTO import domain
 from muFFTTO import microstructure_library
 from muFFTTO.visualization_utils import plot_field_on_grid , get_deformed_grid_coords_two_dim
 
-# Example of how to usu muFFTTO to solve the homogenization problem for 2D heat conductivity problem
+# Example of how to usu muFFTTO to solve the homogenization problem for 2D elasticity problem
 # using deformed grid
 
 problem_type = 'elasticity'
