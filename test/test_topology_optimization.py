@@ -7,6 +7,7 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
+from muFFTTO import material_models
 
 @pytest.fixture()
 def discretization_fixture(domain_size, element_type, nb_pixels):
@@ -88,9 +89,9 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     E_0 = 1
     poison_0 = 0.2
 
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=E_0, poisson=poison_0)
 
-    elastic_C_0_ijkl = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+    elastic_C_0_ijkl = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                           K=K_0,
                                                           mu=G_0,
                                                           kind='linear')
@@ -102,8 +103,8 @@ def test_fd_check_of_whole_objective_function(discretization_fixture, plot=True)
     poison_target = 1 / 3
     G_target_auxet = (1 / 4) * E_0
     E_target = 2 * G_target_auxet * (1 + poison_target)
-    K_targer, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
-    elastic_C_target_ijkl = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+    K_targer, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poison_target)
+    elastic_C_target_ijkl = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                                K=K_targer,
                                                                mu=G_target,
                                                                kind='linear')
