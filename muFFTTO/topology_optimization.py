@@ -204,7 +204,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
         Jacobian_matrix)  # this is product of diagonal term of Jacoby transformation matrix
     discretization.fft.communicate_ghosts(phase_field_1nxyz)
 
-    # # TODO [ask Lars] is the array copied or is it just "view" on array?
+    #
     rho_00 = discretization.get_scalar_field(name='rho_00')
     rho_10 = discretization.get_scalar_field(name='rho_10')
     rho_01 = discretization.get_scalar_field(name='rho_01')

@@ -9,6 +9,7 @@ import time
 from NuMPI import Optimization
 from NuMPI.IO import save_npy
 from mpi4py import MPI
+
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
@@ -17,17 +18,17 @@ from muFFTTO import material_models
 # Problem Configuration
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'trilinear_hexahedron'
+element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 # Domain and Discretization
-domain_size = 3*(1,)
-number_of_pixels = 3*(16,)
+domain_size = [1, 1]
+number_of_pixels = (32, 32)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
 # Optimization Parameters
-soft_phase_exponent = 3
+soft_phase_exponent = 5
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
 weight = 5.  # Weight for the stress match term
@@ -53,10 +54,11 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 
 # Base Material Properties
 K_0, G_0 = 1.0, 0.5
-elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
+lam_0, mu_0 = material_models.get_lame_parameters_from_bulk_and_shear(K=K_0, G=G_0,
+                                                                      dim=discretization.domain_dimension)
+elastic_C_0 = material_models.get_elastic_tensor_from_lame(dim=discretization.domain_dimension,
+                                                           lam=lam_0, mu=mu_0)
+
 soft_phase = 10 ** (-soft_phase_exponent) if soft_phase_exponent > 0 else 0
 elastic_C_void = elastic_C_0 * soft_phase
 
@@ -75,15 +77,15 @@ def M_fun_Green(x, Px):
 # Define load cases (macroscopic gradients)
 nb_load_cases = 3
 macro_gradients = np.zeros([nb_load_cases, dim, dim])
-macro_gradients[0] = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
-macro_gradients[1] = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]])
-macro_gradients[2] = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+macro_gradients[0] = np.array([[1.0, 0.0], [0.0, 0.0]])
+macro_gradients[1] = np.array([[0.0, 0.0], [0.0, 1.0]])
+macro_gradients[2] = np.array([[0.0, 0.5], [0.5, 0.0]])
 
 # Left macroscopic gradients for energy calculation
 left_macro_gradients = np.zeros([nb_load_cases, dim, dim])
-left_macro_gradients[0] = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
-left_macro_gradients[1] = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]])
-left_macro_gradients[2] = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+left_macro_gradients[0] = np.array([[0.0, 0.0], [0.0, 1.0]])
+left_macro_gradients[1] = np.array([[1.0, 0.0], [0.0, 0.0]])
+left_macro_gradients[2] = np.array([[0.0, 0.5], [0.5, 0.0]])
 
 if MPI.COMM_WORLD.rank == 0:
     print(f'Load cases (macro gradients):\n{macro_gradients}')
@@ -92,11 +94,11 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties (Auxetic behavior)
-poisson_target = -0.0
+poison_target = -0.3
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
-E_target = 2 * G_target_auxet * (1 + poisson_target)
-K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poisson_target)
+E_target = 2 * G_target_auxet * (1 + poison_target)
+K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poison_target)
 
 elastic_C_target = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                       K=K_target,
@@ -155,9 +157,9 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
     # 2. Update material properties based on phase field (SIMP interpolation)
     material_data_field_C_0_rho_ijklqxyz.s[...] = (elastic_C_0 - elastic_C_void)[
-                                                      ..., np.newaxis, np.newaxis, np.newaxis, np.newaxis] * \
+                                                      ..., np.newaxis, np.newaxis, np.newaxis] * \
                                                   np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                                  elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+                                                  elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
 
     # 3. Calculate phase field contribution to objective and its sensitivity
     f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
@@ -381,7 +383,7 @@ if __name__ == '__main__':
                            discretization.fft.coords[1],
                            x_current.reshape(discretization.nb_of_pixels),
                            cmap=mpl.cm.Greys)
-            #plt.clim(0, 1)
+            # plt.clim(0, 1)
             plt.title(f'Iteration {iterat}')
             plt.colorbar()
             plt.show()
@@ -400,17 +402,17 @@ if __name__ == '__main__':
     #                                   disp=True,
     #                                   callback=my_callback
     #                                   )
-    #a = np.zeros(phase_field_0.s.ravel().shape)
+    # a = np.zeros(phase_field_0.s.ravel().shape)
     a = discretization.get_scalar_field(name='a_constrain')
-    #if MPI.COMM_WORLD.rank == 0:
-    a.s[0,0,0,0]=1e-8
+    # if MPI.COMM_WORLD.rank == 0:
+    a.s[0, 0, 0, 0] = 1e-8
     discretization.fft.communicate_ghosts(a)
     target = 0.0
     c = Optimization.LinearConstraint(a.s, target)
     xopt_FE_MPI = Optimization.l_bfgs_bounded(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
-      #  linear_constraint=c,
+        #  linear_constraint=c,
         args=(),
         jac=True,
         bounds_lo=0.,
@@ -426,8 +428,6 @@ if __name__ == '__main__':
         callback=my_callback,
         disp=True,
     )
-
-
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
