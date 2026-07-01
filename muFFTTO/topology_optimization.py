@@ -63,6 +63,42 @@ def objective_function_phase_field(discretization,
     # f =  eta* f_rho_grad  + f_dw/eta
 
     # double - well potential
+    # f_dw = compute_double_well_potential_analytical(discretization=discretization,
+    #                                                 phase_field_1nxyz=phase_field_1nxyz)
+    f_dw = compute_double_well_potential_nodal(discretization=discretization,
+                                               phase_field_1nxyz=phase_field_1nxyz)
+    if disp and MPI.COMM_WORLD.rank == 0:
+        print('f_dw= '          ' {} '.format(f_dw))  # good in MPI
+        print('f_dw / eta= '          ' {} '.format(f_dw / eta))  # good in MPI
+    # phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
+    # f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
+
+    f_rho_grad = compute_gradient_of_phase_field_potential(discretization=discretization,
+                                                           phase_field_1nxyz=phase_field_1nxyz)
+    if disp and MPI.COMM_WORLD.rank == 0:
+        print('f_rho_grad= '          ' {} '.format(f_rho_grad))  # good in MPI
+        print('eta*f_rho_grad= '          ' {} '.format(eta * f_rho_grad))
+    f_rho = eta * f_rho_grad + double_well_depth * f_dw / eta
+    if disp and MPI.COMM_WORLD.rank == 0:
+        print('f_rho= '          ' {} '.format(f_rho))  # good in MPI
+
+    if split_results:
+        return f_rho, f_rho_grad, f_dw
+
+    return f_rho
+
+
+def objective_function_phase_field_3D(discretization,
+                                      phase_field_1nxyz,
+                                      eta,
+                                      double_well_depth=1,
+                                      disp=False,
+                                      split_results=False):
+    # evaluate objective functions
+    # f =  w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
+    # f =  eta* f_rho_grad  + f_dw/eta
+
+    # double - well potential
     f_dw = compute_double_well_potential_analytical(discretization=discretization,
                                                     phase_field_1nxyz=phase_field_1nxyz)
 
@@ -122,6 +158,7 @@ def compute_elastic_energy_equivalence_potential(discretization,
     if disp and MPI.COMM_WORLD.rank == 0:
         print('f_sigma = '          ' {} '.format(f_sigma))  # good in MPI
     return f_sigma
+
 
 def objective_function_small_strain_pixel(discretization,
                                           actual_stress_ij,
@@ -210,14 +247,14 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     rho_01 = discretization.get_scalar_field(name='rho_01')
     rho_11 = discretization.get_scalar_field(name='rho_11')
 
-    rho_00.sg[0, 0] = phase_field_1nxyz.sg[0, 0]#[..., 1:-1]
-    rho_10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))#[..., 1:-1]
+    rho_00.sg[0, 0] = phase_field_1nxyz.sg[0, 0]  # [..., 1:-1]
+    rho_10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))  # [..., 1:-1]
     # rho_m10 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))
-    rho_01.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))#[..., 1:-1]
+    rho_01.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))  # [..., 1:-1]
     # rho_0m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))
     # rho_m11 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))
     # rho_1m1 = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))
-    rho_11.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, -1]), axis=(0, 1))#[..., 1:-1]
+    rho_11.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, -1]), axis=(0, 1))  # [..., 1:-1]
 
     rho_squared_pixel = lambda rho0, rho1, rho2, rho3: (1 / 12) * (rho0 ** 2 + rho1 ** 2 + rho2 ** 2) \
                                                        + (2 / 24) * (rho0 * rho1 + rho0 * rho2 + rho2 * rho1) \
@@ -346,7 +383,9 @@ def partial_der_of_double_well_potential_wrt_density_NEW(discretization, phase_f
 
 
 def partial_der_of_double_well_potential_wrt_density_nodal(discretization,
-                                                           phase_field_1nxyz, eta=1):
+                                                           phase_field_1nxyz,
+                                                           output_1nxyz,
+                                                           eta=1):
     # Derivative of the double-well potential with respect to phase-field
     # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
     # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
@@ -358,7 +397,8 @@ def partial_der_of_double_well_potential_wrt_density_nodal(discretization,
 
     integral_fnxyz = (integrant_1nxyz / np.prod(integrant_1nxyz.shape)) * discretization.cell.domain_volume
     # there is no sum here
-    return integral_fnxyz / eta
+    output_1nxyz.s[0, 0] = integral_fnxyz / eta
+    return output_1nxyz
 
 
 def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
@@ -389,13 +429,13 @@ def partial_der_of_double_well_potential_wrt_density_analytical(discretization,
     rho_1m1 = discretization.get_scalar_field(name='rho_1m1')
 
     # NODAL VALUES OF CONNECTED POINTS
-    rho_00.sg[0, 0] = phase_field_1nxyz.sg[0, 0]#[..., 1:-1]
-    rho_10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))#[..., 1:-1]
-    rho_m10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))#[..., 1:-1]
-    rho_01.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))#[..., 1:-1]
-    rho_0m1.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))#[..., 1:-1]
-    rho_m11.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))#[..., 1:-1]
-    rho_1m1.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))#[..., 1:-1]
+    rho_00.sg[0, 0] = phase_field_1nxyz.sg[0, 0]  # [..., 1:-1]
+    rho_10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 0]), axis=(0, 1))  # [..., 1:-1]
+    rho_m10.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, 0]), axis=(0, 1))  # [..., 1:-1]
+    rho_01.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, -1]), axis=(0, 1))  # [..., 1:-1]
+    rho_0m1.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([0, 1]), axis=(0, 1))  # [..., 1:-1]
+    rho_m11.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([1, -1]), axis=(0, 1))  # [..., 1:-1]
+    rho_1m1.sg[0, 0] = np.roll(phase_field_1nxyz.sg[0, 0], np.array([-1, 1]), axis=(0, 1))  # [..., 1:-1]
 
     drho_squared = (rho_00.s[0, 0] + 1 / 6 * (rho_10.s[0, 0] + rho_m10.s[0, 0] + rho_01.s[0, 0]
                                               + rho_0m1.s[0, 0] + rho_m11.s[0, 0] + rho_1m1.s[0, 0])) * Jacobian_det
@@ -549,8 +589,9 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
         quad_points_coords_iq=None)  # TODO[Martin] missing exact integration
     dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field(
         name='data_field_in_partial_derivative_of_energy_equivalence_wrt_phase_field_FE')
-    dmaterial_data_field_drho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * np.power(
-        p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
+    dmaterial_data_field_drho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                np.power(
+                                                    p * phase_field_at_quad_poits_1qnxyz, p - 1)[0, :, 0, ...]
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
 
@@ -563,8 +604,9 @@ def partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization,
     strain_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
 
     # Get the stress field (in the strain field name)
-    strain_ijqxyz.s[...] = discretization.apply_material_data_elasticity(material_data=dmaterial_data_field_drho_ijklqxyz,
-                                                                    gradient_field=strain_ijqxyz)
+    strain_ijqxyz.s[...] = discretization.apply_material_data_elasticity(
+        material_data=dmaterial_data_field_drho_ijklqxyz,
+        gradient_field=strain_ijqxyz)
     # apply quadrature weights
     # TODO not sure if this should be here
     strain_ijqxyz.s[...] = discretization.apply_quadrature_weights_on_gradient_field(grad_field=strain_ijqxyz.s)
@@ -632,8 +674,9 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     #                                               p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
     # TODO{WARNING} here is missing Cvoidd becouse of derivateive
     dmaterial_data_field_drho_ijklqxyz_FE.s[...] = (material_data_field_ijkl - void_material_data_ijkl)[
-                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
-                                              (p * np.power(phase_field_at_quad_poits_1qxyz.s, p - 1))[0, 0, :, ...]
+                                                       ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                   (p * np.power(phase_field_at_quad_poits_1qxyz.s, p - 1))[
+                                                       0, 0, :, ...]
 
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
@@ -648,8 +691,8 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # compute stress field
     strain_ijqxyz.s[...] = np.einsum('ijkl...,lk...->ij...',
-                                dmaterial_data_field_drho_ijklqxyz_FE.s,
-                                strain_ijqxyz.s)
+                                     dmaterial_data_field_drho_ijklqxyz_FE.s,
+                                     strain_ijqxyz.s)
     # this is actually stress
 
     # stress difference
@@ -787,8 +830,10 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_reusable')
 
-    dmaterial_data_field_drho_ijklqxyz.s[...] = (base_material_data_ijkl-void_material_data_ijkl)[..., np.newaxis, np.newaxis, np.newaxis] * (
-            p * np.power(phase_field_at_quad_poits_1qxyz.s[0, 0, :, ...], (p - 1)))
+    dmaterial_data_field_drho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
+                                                    ..., np.newaxis, np.newaxis, np.newaxis] * (
+                                                        p * np.power(phase_field_at_quad_poits_1qxyz.s[0, 0, :, ...],
+                                                                     (p - 1)))
 
     # compute strain field from to displacement and macro gradient
     stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='stress_ijqxyz_local_at_pdapwpf')
@@ -1183,7 +1228,7 @@ def sensitivity_with_adjoint_problem_FE_NEW(discretization,
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_with_adjoint_problem_FE_NEW')
     material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
+                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
     # d_stress_d_rho phase field gradient potential for a phase field without perturbation
     dstress_drho = partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE(
@@ -1355,10 +1400,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
     material_data_field_rho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
-                                             ..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                         void_material_data_ijkl[
-                                             ..., np.newaxis, np.newaxis, np.newaxis]
+                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                              void_material_data_ijkl[
+                                                  ..., np.newaxis, np.newaxis, np.newaxis]
 
     # d_stress_d_rho phase field gradient potential for a phase field without perturbation
     dstress_drho = partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE(
@@ -1394,7 +1439,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     df_du_field.s[...] = weight * df_du_field.s / np.sum(target_stress_ij ** 2)
 
     info_adjoint_ = {}
-    #if MPI.COMM_WORLD.rank == 0:
+    # if MPI.COMM_WORLD.rank == 0:
     norms_cg_adjoint = dict()
     norms_cg_adjoint['residual_rr'] = []
     norms_cg_adjoint['residual_rz'] = []
@@ -1415,7 +1460,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         x=adjoint_field_inxyz,
         P=preconditioner_fun,
         tol=cg_tol,
-        maxiter=int(10000) ,
+        maxiter=int(10000),
         callback=callback_adjoint,
         # norm_metric=res_norm
     )
@@ -1501,7 +1546,7 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field(
         name='data_field_in_sensitivity_elastic_energy_and_adjoint_FE_NEW')
     material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
+                                              np.power(phase_field_at_quad_poits_1qnxyz, p)[0, :, 0, ...]
 
     # d_stress_d_rho phase field gradient potential for a phase field without perturbation
     dstress_drho = partial_derivative_of_energy_equivalence_wrt_phase_field_FE(discretization=discretization,
@@ -1612,10 +1657,10 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
 
     material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
         name='data_field_in_sensitivity_reusable')
-    material_data_field_rho_ijklqxyz.s[...]  = (base_material_data_ijkl - void_material_data_ijkl)[
-                                             ..., np.newaxis, np.newaxis, np.newaxis] * \
-                                         np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                         void_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis]
+    material_data_field_rho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
+                                                  ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                              np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                              void_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis]
 
     # -----    Double well potential ----- #
 
@@ -1625,10 +1670,14 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
     # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
     ddw_drho = discretization.get_scalar_field(name='ddw_drho_sensitivity_phase_field_term_FE_NEW')
     ddw_drho.s.fill(0)
-    ddw_drho = partial_der_of_double_well_potential_wrt_density_analytical(discretization=discretization,
-                                                                           phase_field_1nxyz=phase_field_1nxyz,
-                                                                           output_1nxyz=ddw_drho
-                                                                           )
+    # ddw_drho = partial_der_of_double_well_potential_wrt_density_analytical(discretization=discretization,
+    #                                                                        phase_field_1nxyz=phase_field_1nxyz,
+    #                                                                        output_1nxyz=ddw_drho
+    #                                                                        )
+    ddw_drho = partial_der_of_double_well_potential_wrt_density_nodal(discretization=discretization,
+                                                                      phase_field_1nxyz=phase_field_1nxyz,
+                                                                      output_1nxyz=ddw_drho
+                                                                      )
 
     # -----    phase field gradient potential ----- #
     # partial derivative of  phase field gradient potential = 2/eta int (  (grad(rho))^2 )    dx

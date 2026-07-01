@@ -12,6 +12,7 @@ from mpi4py import MPI
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
+from muFFTTO import material_models
 
 # Problem Configuration
 problem_type = 'elasticity'
@@ -52,7 +53,7 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 
 # Base Material Properties
 K_0, G_0 = 1.0, 0.5
-elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
@@ -95,15 +96,15 @@ poison_target = -0.0
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poison_target)
-K_target, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
+K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poison_target)
 
-elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_target = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                       K=K_target,
                                                       mu=G_target,
                                                       kind='linear')
 
 if MPI.COMM_WORLD.rank == 0:
-    print(f'Target elastic tangent (Voigt):\n{domain.compute_Voigt_notation_4order(elastic_C_target)}')
+    print(f'Target elastic tangent (Voigt):\n{material_models.compute_Voigt_notation_4order(elastic_C_target)}')
 
 # Target stresses and energies
 target_stresses = np.zeros([nb_load_cases, dim, dim])

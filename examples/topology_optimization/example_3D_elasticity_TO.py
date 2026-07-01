@@ -160,7 +160,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                                                   elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
     # 3. Calculate phase field contribution to objective and its sensitivity
-    f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
+    f_phase_field = topology_optimization.objective_function_phase_field_3D(discretization=discretization,
                                                                          phase_field_1nxyz=phase_field_1nxyz,
                                                                          eta=eta,
                                                                          double_well_depth=double_well_depth_test)
