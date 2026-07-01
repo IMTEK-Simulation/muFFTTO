@@ -5,12 +5,10 @@ sys.path.append('..')  # Add parent directory to path
 
 import numpy as np
 
-# from muGrid import ConvolutionOperator
 
 from muFFTTO import domain
 from muFFTTO import solvers
-from muFFTTO import topology_optimization
-
+from muFFTTO import material_models
 
 class DiscretizationTestCase(unittest.TestCase):
     def test_discretization_initialization(self):
@@ -434,10 +432,10 @@ class DiscretizationTestCase(unittest.TestCase):
             du_fun_3 = lambda y: 4 + 0 * y
 
             u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field(
+            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(
                 name='gradient_of_temp')
 
-            temperature_gradient_anal = discretization.get_displacement_gradient_sized_field(
+            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
                 name='anal_gradient_of_temp')
 
             u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
@@ -578,9 +576,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
                     material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
@@ -620,9 +618,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                                K=K_1, mu=G_1,
                                                                kind='linear')
 
@@ -665,9 +663,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=1, poison=0.0)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=1, poison=0.0)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
                     material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
@@ -819,9 +817,9 @@ class DiscretizationTestCase(unittest.TestCase):
                                                        element_type=element_type)
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
                     material_data_field = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
@@ -934,9 +932,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
                     material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
@@ -989,9 +987,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
                     # # identity tensor                                               [single tensor]
                     # ii = np.eye(2)
@@ -1071,9 +1069,9 @@ class DiscretizationTestCase(unittest.TestCase):
                 material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
                 if problem_type == 'elasticity':
-                    K_1, G_1 = domain.get_bulk_and_shear_modulus(E=3, poison=0.2)
+                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poison=0.2)
 
-                    mat_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                                kind='linear')
 
                     material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]

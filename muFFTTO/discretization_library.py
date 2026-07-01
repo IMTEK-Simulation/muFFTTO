@@ -579,8 +579,7 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             coord_helper[0] = -1. / (np.sqrt(3))
             coord_helper[1] = +1. / (np.sqrt(3))
 
-            # quadrature points    # TODO This hold for prototypical element      !!!
-            # TODO MAKE clear how to generate B matrices
+            # quadrature points
             my_domain.quad_points_coord[:, 0] = [coord_helper[0], coord_helper[0], coord_helper[0]]
             my_domain.quad_points_coord[:, 1] = [coord_helper[1], coord_helper[0], coord_helper[0]]
             my_domain.quad_points_coord[:, 2] = [coord_helper[0], coord_helper[1], coord_helper[0]]
@@ -591,7 +590,6 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             my_domain.quad_points_coord[:, 7] = [coord_helper[1], coord_helper[1], coord_helper[1]]
 
             # quadrature points : weights
-
             my_domain.quadrature_weights = np.zeros([my_domain.nb_quad_points_per_pixel])
             my_domain.quadrature_weights[:] = del_x * del_y * del_z / 8
 

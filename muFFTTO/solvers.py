@@ -185,6 +185,8 @@ def conjugate_gradients_mugrid_experimental(
         **kwargs
 ):
     """
+    - this version has error estimates implemented
+    #
     Conjugate gradient method for matrix-free solution of the linear problem
     Ax = b, where A is represented by the function hessp (which computes the
     product of A with a vector). The method iteratively refines the solution x
@@ -362,7 +364,7 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         callback=None, **kwargs):
     # print('I am in PCG')
     """
-    Conjugate gradients solver.
+    Conjugate gradients solver. Using NumPy arrays
 
     Parameters
     ----------
@@ -523,7 +525,6 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
 
 
 def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
-    # print('I am in PCG')
     """
     Richardson iteration
     𝑥𝑘+1=𝑥𝑘−𝜏(𝐴𝑥𝑘−𝑓)

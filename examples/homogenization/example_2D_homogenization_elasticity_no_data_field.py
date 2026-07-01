@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import numpy as np
@@ -18,7 +19,7 @@ element_type = 'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (32,32)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -32,20 +33,15 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
       f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
 
 # initialize material data
-K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
-
+lam_0, mu_0 = material_models.get_lame_parameters(E=1, poisson=0.2)
 # create material data field
-elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
-if discretization.communicator.rank == 0:
-    print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
+elastic_C_1 = material_models.get_elastic_tensor_from_lame(dim=discretization.domain_dimension,
+                                                           lam=lam_0, mu=mu_0)
+# create material data field
+lam_1qxyz = discretization.get_quad_field_scalar(name='first_Lamé_parameter')
+mu_1qxyz = discretization.get_quad_field_scalar(name='second_Lamé_parameter')
 
-material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
-
-# populate the field with C_1 material
-material_data_field_C_0.s[...] = elastic_C_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+# material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
 
 # material distribution
@@ -61,21 +57,32 @@ mat_contrast_2 = 1e2
 matrix_mask = phase_field.s[0, 0] > 0
 inc_mask = phase_field.s[0, 0] == 0
 
-# apply material distribution
+# populate the field with  material data
+lam_1qxyz.s[...] = lam_0
+mu_1qxyz.s[...] = mu_0
 
-material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
-material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
+lam_1qxyz.s[..., matrix_mask] = mat_contrast_2 * lam_0
+mu_1qxyz.s[..., matrix_mask] = mat_contrast_2 * mu_0
+
+
+def constitutive_model(strain, stress):
+    material_models.linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz=strain,
+                                                                        lam_1qxyz=lam_1qxyz,
+                                                                        mu_1qxyz=mu_1qxyz,
+                                                                        output_stress_ijqxyz=stress)
 
 
 def K_fun(x, Ax):
+    discretization.apply_system_matrix_mugrid_explicit_stress(constitutive=constitutive_model,
+                                                              input_field_inxyz=x,
+                                                              output_field_inxyz=Ax,
+                                                              formulation='small_strain')
 
-    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
-                                              input_field_inxyz=x,
-                                              output_field_inxyz=Ax,
-                                              formulation='small_strain')
     discretization.fft.communicate_ghosts(Ax)
 
+
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
+
 
 def M_fun(x, Px):
     """
@@ -86,6 +93,7 @@ def M_fun(x, Px):
     discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
+
 
 # Allocate fields
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
@@ -101,6 +109,7 @@ def callback(iteration, fields):
     if discretization.communicator.rank == 0:
         print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
 
+
 dim = discretization.domain_dimension
 homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
 # compute whole homogenized elastic tangent
@@ -109,13 +118,14 @@ for i in range(dim):
         # set macroscopic gradient
         macro_gradient_ij = np.zeros([dim, dim])
         macro_gradient_ij[i, j] = 1
+
         # Set up right hand side
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
         # Solve mechanical equilibrium constrain
-        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                      macro_gradient_field_ijqxyz=macro_gradient_field,
-                                      rhs_inxyz=rhs_field)
+        discretization.get_rhs_explicit_stress_mugrid(stress_function=constitutive_model,
+                                                      gradient_field_ijqxyz=macro_gradient_field,
+                                                      rhs_inxyz=rhs_field)
 
         Solvers.conjugate_gradients(
             comm=discretization.communicator,
@@ -128,7 +138,6 @@ for i in range(dim):
             maxiter=2000,
             callback=callback)
 
-
         if discretization.communicator.size == 1:
             # Plot the first two components of the solution field
             import matplotlib.pyplot as plt
@@ -137,7 +146,8 @@ for i in range(dim):
 
             im0 = ax[0].pcolormesh(discretization.fft.coords[0],
                                    discretization.fft.coords[1],
-                                   solution_field.s[0, 0],vmin=-0.2, vmax=0.2)
+                                   solution_field.s[0, 0],
+                        vmin=-0.2, vmax=0.2)
             ax[0].set_title(f'Solution field $u_0$ - macro gradient {macro_gradient_ij} ')
             ax[0].set_xlabel('x  / L')
             ax[0].set_ylabel('y  / L')
@@ -145,7 +155,8 @@ for i in range(dim):
 
             im1 = ax[1].pcolormesh(discretization.fft.coords[0],
                                    discretization.fft.coords[1],
-                                   solution_field.s[1, 0],vmin=-0.2, vmax=0.2)
+                                   solution_field.s[1, 0],
+                        vmin=-0.2, vmax=0.2)
             ax[1].set_title(f'Solution field $u_1$ - macro gradient {macro_gradient_ij} ')
             ax[1].set_xlabel('x  / L')
             ax[1].set_ylabel('y  / L')
@@ -156,8 +167,8 @@ for i in range(dim):
 
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
-            material_data_field_ijklqxyz=material_data_field_C_0,
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid_explicit_stress(
+            constitutive=constitutive_model,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
@@ -165,7 +176,8 @@ for i in range(dim):
 if MPI.COMM_WORLD.rank == 0:
     print(
         "Homogenized elastic tangent =\n" +
-        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
+        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
+                        formatter={'float_kind': lambda x: f"{x:0.8f}"})
     )
 end_time = time.time()
 elapsed_time = end_time - start_time
