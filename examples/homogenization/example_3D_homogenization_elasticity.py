@@ -9,6 +9,8 @@ from muGrid import Solvers
 
 from muFFTTO import domain
 from muFFTTO import microstructure_library
+from muFFTTO import material_models
+
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -34,19 +36,19 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 macro_gradient = np.array([[0.0, 0, 0], [0., 0.0, 0], [0, 0, 1.0]])
 
 # create material data field
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poison=0.2)
 mat_contrast = 1
 mat_contrast_2 = 1e2
 
-elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
-print(domain.compute_Voigt_notation_4order(elastic_C_1))
+print(material_models.compute_Voigt_notation_4order(elastic_C_1))
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
 material_data_field_C_0.s[...] = elastic_C_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
 
 # material distribution
 phase_field = discretization.get_scalar_field(name='phase_field')
@@ -79,7 +81,6 @@ def K_fun(x, Ax):
                                               output_field_inxyz=Ax,
                                               formulation='small_strain')
     discretization.fft.communicate_ghosts(Ax)
-# M_fun = lambda x: 1 * x
 
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
 
@@ -171,7 +172,7 @@ for i in range(dim):
 if MPI.COMM_WORLD.rank == 0:
     print(
         "Homogenized elastic tangent =\n" +
-        np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
+        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
     )
 end_time = time.time()
 elapsed_time = end_time - start_time

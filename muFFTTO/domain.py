@@ -2,16 +2,15 @@ import warnings
 
 import numpy as np
 import scipy as sc
-import itertools
-
-from muFFTTO import discretization_library
 
 from NuMPI.Tools import Reduction
-
 from mpi4py import MPI
+
 import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
+
+from muFFTTO import discretization_library
 
 
 class PeriodicUnitCell:
@@ -67,24 +66,21 @@ class Discretization:
         self.domain_size = cell.domain_size
         # total number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
+        # number of ghost buffers -> # TODO[Martin]: have to be changed base on the stencil
         left_ghosts = [1, ] * self.domain_dimension
         right_ghosts = [1, ] * self.domain_dimension
-
-        ## #todo[Lars] what engine?  FFT(nb_grid_pts, engine='mpi', communicator=MPI.COMM_WORLD)
         self.fft = muGrid.FFTEngine(nb_domain_grid_pts=nb_of_pixels_global,
                                     communicator=communicator,
                                     nb_ghosts_left=left_ghosts,
                                     nb_ghosts_right=right_ghosts,
                                     )
         self.communicator = communicator
-        ### TODO[MARTIN] I have to add multiple subpoints to nb_grid_pts
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
 
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
-                                       dtype=np.intp)  # self.fft.nb_subdomain_grid_pts  #todo
+                                       dtype=np.intp)
         if MPI.COMM_WORLD.size > 1:
-            # warnings.warn(message='Be carefull about change in number of poitns ')
             # adjust the number of points
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
             # adjust subdomain location to not take into account buffers
@@ -277,7 +273,6 @@ class Discretization:
          shift:  numpy ndarray with shape(d,)
              Indices of roll. How manny and which direction is u_inxyz shifted
                 [1,2,3] means that array u_inxyz[i,n,x,y,z] we be shifted into u_inxyz[i,n,x+1,y+2,z+3]
-         #TODO{Lars} ask why is the indexing of axis from the end
          axis: tuple to indicates which axis should be rolled
             axis=(0, 1) means last two axis (use for 2d arrays-- 0 is y, 1 i x)
             axis=(0, 1, 2 ) means last three axis (use for 3d arrays -- 0 is z, 1 i y, 2 i x)
@@ -646,44 +641,6 @@ class Discretization:
 
         self.fft.communicate_ghosts(field=rhs_inxyz)
 
-    def get_rhs_explicit_stress(self, stress_function,
-                                gradient_field_ijqxyz,
-                                rhs_inxyz, **kwargs):
-        """
-        Function that computes right hand side vector of linear elastic homogenization problem
-        rhs= - B^t: C: E+grad_U
-
-        Parameters
-        ----------
-        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
-            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
-            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
-            - q is a quadrature point index
-
-        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
-            - shape [i,j,q,x,y,z]
-            - q is quadrature point index
-
-        Returns
-        -------
-        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
-
-        """
-
-        # macro_gradient_field    [f,d,q,x,y,z]
-        # material_data_field [d,d,d,d,q,x,y,z] - elasticity
-        # material_data_field     [d,d,q,x,y,z] - conductivity
-        # rhs                       [f,n,x,y,z]
-        #  rhs=-Dt*wA*E
-
-        stress = self.get_gradient_size_field(name='stress_temporary')
-        stress.s, _ = stress_function(gradient_field_ijqxyz)
-        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
-                                                div_u_fnxyz=rhs_inxyz,
-                                                apply_weights=True)
-        rhs_inxyz.s *= -1
-        return rhs_inxyz
-
     def get_rhs_explicit_stress_mugrid(self, stress_function,
                                        gradient_field_ijqxyz,
                                        rhs_inxyz, **kwargs):
@@ -693,12 +650,8 @@ class Discretization:
 
         Parameters
         ----------
-        material_data_field_ijklqxyz: numpy ndarray of discretized  material data tangent field [i,j,k,l,q,x,y,z]
-            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
-            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
-            - q is a quadrature point index
 
-        macro_gradient_field_ijqxyz: numpy ndarray of discretized  macroscopic gradient E - constant part of gradient
+        macro_gradient_field_ijqxyz:  array of discretized  macroscopic gradient E - constant part of gradient
             - shape [i,j,q,x,y,z]
             - q is quadrature point index
 
@@ -715,11 +668,15 @@ class Discretization:
         #  rhs=-Dt*wA*E
 
         stress = self.get_gradient_size_field(name='stress_temporary')
-        stress.s, _ = stress_function(gradient_field_ijqxyz)
-        self.apply_gradient_transposed_operator(gradient_field_ijqxyz=stress,
-                                                div_u_fnxyz=rhs_inxyz,
-                                                apply_weights=True)
-        rhs_inxyz.s *= -1
+        # stress.s, _ = stress_function(gradient_field_ijqxyz)
+        stress_function(gradient_field_ijqxyz, stress)
+
+        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress,
+                                                       div_u_fnxyz=rhs_inxyz,
+                                                       apply_weights=True)
+        rhs_inxyz.s[...] *= -1
+
+        self.fft.communicate_ghosts(field=rhs_inxyz)
 
     def get_macro_gradient_field_mugrid(self,
                                         macro_gradient_ij,
@@ -740,7 +697,8 @@ class Discretization:
             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
         return macro_gradient_field_ijqxyz
 
-    def get_homogenized_stress_mugrid(self, material_data_field_ijklqxyz,
+    def get_homogenized_stress_mugrid(self,
+                                      material_data_field_ijklqxyz,
                                       displacement_field_inxyz,
                                       macro_gradient_field_ijqxyz,
                                       formulation=None):
@@ -798,12 +756,61 @@ class Discretization:
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         return homogenized_stress_ij / self.cell.domain_volume
 
+    def get_homogenized_stress_mugrid_explicit_stress(self,
+                                                      constitutive: callable,
+                                                      displacement_field_inxyz,
+                                                      macro_gradient_field_ijqxyz,
+                                                      formulation=None):
+        """
+         Function that computes homogenized  (averaged) stress field (or flux)
+
+         Parameters
+         ----------
+         constitutive: callable fucntion strain ---> stress
+
+         displacement_field_inxyz:
+            - nodal point field - displacement or temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         homogenized_stress_ij: nd array of homogenized stress of flux field
+                    - int (C * (macro_grad + micro_grad))  dx / | domain |
+         """
+        self.fft.communicate_ghosts(field=displacement_field_inxyz)
+
+        gradient_field_ijqxyz = self.get_gradient_size_field(name='strain_temp')
+
+        if formulation == 'small_strain':
+            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_inxyz,
+                                                            grad_u_ijqxyz=gradient_field_ijqxyz)
+
+        else:
+            self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
+                                                grad_u_ijqxyz=gradient_field_ijqxyz)
+
+        # compute total strain
+        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+
+        # compute stress/flux field
+        constitutive(gradient_field_ijqxyz, gradient_field_ijqxyz)
+
+        self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+
+        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
+                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        return homogenized_stress_ij / self.cell.domain_volume
+
     def get_homogenized_stress_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
-                                                  temperature_field_inxyz,
-                                                  macro_gradient_field_ijqxyz,
-                                                  det_of_deformation_gradient,
-                                                  inv_of_deformation_gradient,
-                                                  formulation=None):
+                                                    temperature_field_inxyz,
+                                                    macro_gradient_field_ijqxyz,
+                                                    det_of_deformation_gradient,
+                                                    inv_of_deformation_gradient,
+                                                    formulation=None):
         '''
         Function computes homogenized material heat conductivity matrix (or flux)
         from the solution on deformed grid
@@ -1624,7 +1631,6 @@ class Discretization:
                                    output_field_inxyz,
                                    formulation=None,
                                    **kwargs):
-        # the ouput array is numpy array for compatibility with solvers
 
         if isinstance(input_field_inxyz, np.ndarray):
             raise ("apply_system_matrix_mugrid does not supprot ndarray")
@@ -1642,6 +1648,39 @@ class Discretization:
                                                 grad_u_ijqxyz=gradient_ijqxyz)
 
         # compute stress/flux field
+        self.apply_material_data_mugrid(material_data=material_data_field,
+                                        gradient_field=gradient_ijqxyz)
+
+        self.fft.communicate_ghosts(gradient_ijqxyz)
+        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
+                                                       div_u_fnxyz=output_field_inxyz,
+                                                       apply_weights=True)
+
+    def apply_system_matrix_without_data_field(self,
+                                               constitutive_law,
+                                               input_field_inxyz,
+                                               output_field_inxyz,
+                                               formulation=None,
+                                               **kwargs):
+
+        if isinstance(input_field_inxyz, np.ndarray):
+            raise ("apply_system_matrix_mugrid does not supprot ndarray")
+
+        self.fft.communicate_ghosts(input_field_inxyz)
+        # allocate temporary fields
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
+
+        if np.all(formulation == 'small_strain'):
+            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
+                                                            grad_u_ijqxyz=gradient_ijqxyz)
+
+        else:
+            self.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz,
+                                                grad_u_ijqxyz=gradient_ijqxyz)
+
+        # compute stress/flux field
+        constitutive_law
+        constitutive_law
         self.apply_material_data_mugrid(material_data=material_data_field,
                                         gradient_field=gradient_ijqxyz)
 
@@ -1708,8 +1747,6 @@ class Discretization:
                                                    output_field_inxyz: Field,
                                                    formulation=None,
                                                    **kwargs):
-        # the ouput array is numpy array for compatibility with solvers
-
         if isinstance(input_field_inxyz, np.ndarray):
             raise ("apply_system_matrix_mugrid does not supprot ndarray")
 
@@ -1781,7 +1818,6 @@ class Discretization:
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
         stress_field.s[...] = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
-        # TODO change this to muGRID
         integral = self.mpi_reduction.sum(stress_field.s, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
 
         return integral
@@ -1811,15 +1847,6 @@ class Discretization:
             sub_pt='quad_points')  # sub-point type
 
         return u_inxyz
-
-    def get_gradient_size_field(self, name):
-        # return zero field for  the  (discretized)  gradient of temperature/displacement
-        grad_u_ijqxyz = self.field_collection.real_field(
-            name=name,  # name of the field
-            components=(*self.cell.gradient_shape,),  # shape of components
-            sub_pt='quad_points'  # sub-point type
-        )
-        return grad_u_ijqxyz
 
     def get_gradient_size_field(self, name):
         # return zero field for  the  (discretized)  gradient of temperature/displacement
@@ -1927,9 +1954,25 @@ class Discretization:
 
         return grad_u_ijqxyz
 
-    def get_material_data_size_field_numpy(self):
-        # return zero field for the (discretized) material data
-        return np.zeros(self.material_data_size)
+    def get_strain_sized_field(self, name):
+        # return zero field for gradient of displacement field / strain
+        grad_u_ijqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(self.cell.domain_dimension, self.cell.domain_dimension,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+
+        return grad_u_ijqxyz
+
+    def get_stress_sized_field(self, name):
+        # return zero field for stress = ijqxyz
+        stress_ijqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(self.cell.domain_dimension, self.cell.domain_dimension,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+
+        return stress_ijqxyz
 
     def get_material_data_size_field_mugrid(self, name):
         # return zero muGrid field for the (discretized) material data
@@ -1962,214 +2005,12 @@ class Discretization:
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):
-        """Scales a 2D random field to be within [min_val, max_val]."""
+        """Scales a 2D  field to be within [min_val, max_val]."""
         field_min = self.mpi_reduction.min(field.s)
         field_max = self.mpi_reduction.max(field.s)
         field.s[...] = (field.s - field_min) / (field_max - field_min)  # Normalize to [0,1]
         field.s *= (max_val - min_val)
         field.s += min_val
-
-
-def compute_Voigt_notation_4order(C_ijkl):
-    # function return Voigt notation of elastic tensor in quad. point
-    if len(C_ijkl) == 2:
-        C_voigt_kl = np.zeros([3, 3])
-        ij_ind = [(0, 0), (1, 1), (0, 1)]
-        for k in np.arange(len(C_voigt_kl[0])):
-            for l in np.arange(len(C_voigt_kl[1])):
-                C_voigt_kl[k, l] = C_ijkl[ij_ind[k] + ij_ind[l]]
-
-    elif len(C_ijkl) == 3:
-        C_voigt_kl = np.zeros([6, 6])
-        ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
-        for i in np.arange(len(C_voigt_kl[0])):
-            for j in np.arange(len(C_voigt_kl[1])):
-                C_voigt_kl[i, j] = C_ijkl[ij_ind[i] + ij_ind[j]]
-    return C_voigt_kl
-
-
-def compute_Voigt_notation_2order(sigma_ij):
-    # function return Voigt notation of second order tensor in quad. point
-    if len(sigma_ij) == 2:
-        sigma_voigt_k = np.zeros([3])
-        ij_ind = [(0, 0), (1, 1), (0, 1)]
-
-        for k in np.arange(len(sigma_voigt_k)):
-            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
-
-    elif len(sigma_ij) == 3:
-        sigma_voigt_k = np.zeros([6])
-        ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
-        for k in np.arange(len(sigma_voigt_k)):
-            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
-
-    return sigma_voigt_k
-
-
-def get_bulk_and_shear_modulus(E, poison):
-    K = E / (3 * (1 - 2 * poison))
-    G = E / (2 * (1 + poison))
-    return K, G
-
-
-def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
-    shape = np.array(4 * [dim, ])
-    mat = np.zeros(shape)
-    kron = lambda a, b: 1 if a == b else 0
-
-    if kind in 'linear':
-        for alpha, beta, gamma, delta in np.ndindex(*shape):
-            mat[alpha, beta, gamma, delta] = (K * (kron(alpha, beta) * kron(gamma, delta))
-                                              + mu * (kron(alpha, gamma) * kron(beta, delta) +
-                                                      kron(alpha, delta) * kron(beta, gamma) -
-                                                      2 / 3 * kron(alpha, beta) * kron(gamma, delta)))
-            # https://en.wikipedia.org/wiki/Linear_elasticity
-    return mat
-
-
-# ------------------------------------------------------------
-# Elastic stiffness tensors from Lamé parameters
-# ------------------------------------------------------------
-def get_elastic_tensor_from_lame(dim, lam, mu):
-    """
-    Construct linear elastic stiffness tensor from Lamé parameters.
-
-    Parameters
-    ----------
-    dim : int
-        Spatial dimension (2 or 3).
-    lam : float
-        First Lamé parameter (λ).
-    mu : float
-        Second Lamé parameter (μ), shear modulus.
-
-    Returns
-    -------
-    C : ndarray (dim, dim, dim, dim)
-        Elastic stiffness tensor.
-
-    Notes
-    -----
-    The stiffness tensor is computed as:
-    C_ijkl = λ δ_ij δ_kl + μ (δ_ik δ_jl + δ_il δ_jk)
-
-    For 2D, this assumes plane strain conditions.
-    """
-    C = np.zeros((dim, dim, dim, dim))
-    for i in range(dim):
-        for j in range(dim):
-            for k in range(dim):
-                for l in range(dim):
-                    delta_ij = 1 if i == j else 0
-                    delta_kl = 1 if k == l else 0
-                    delta_ik = 1 if i == k else 0
-                    delta_jl = 1 if j == l else 0
-                    delta_il = 1 if i == l else 0
-                    delta_jk = 1 if j == k else 0
-
-                    C[i, j, k, l] = (lam * delta_ij * delta_kl +
-                                     mu * (delta_ik * delta_jl + delta_il * delta_jk))
-    return C
-
-
-def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
-    """
-    Assemble the stiffness matrix for an orthotropic material in 2D plane strain.
-
-    Parameters:
-        E1 (float): Young's modulus in the x-direction.
-        E2 (float): Young's modulus in the y-direction.
-        G12 (float): Shear modulus in the xy-plane.
-        nu12 (float): Poisson's ratio (strain in y due to stress in x).
-
-    Returns:
-        np.ndarray: 3x3 stiffness matrix.
-    """
-    # Compute nu21 from symmetry condition: nu21 / E2 = nu12 / E1
-    nu21 = (nu12 * E1) / E2
-
-    # Stiffness matrix components
-    factor = 1 / (1 - nu12 * nu21)
-    C11 = E1 * factor
-    C22 = E2 * factor
-    C12 = nu12 * E2 * factor
-    C66 = G12
-
-    # Assemble stiffness matrix
-    # Initialize the 4th-order stiffness tensor
-    C = np.zeros((2, 2, 2, 2))
-
-    # Fill tensor components in plane strain
-    C[0, 0, 0, 0] = C11  # xx-xx
-    C[1, 1, 1, 1] = C22  # yy-yy
-    C[0, 0, 1, 1] = C[1, 1, 0, 0] = C12  # xx-yy and yy-xx
-    C[0, 1, 0, 1] = C[1, 0, 1, 0] = C[0, 1, 1, 0] = C[1, 0, 0, 1] = C66  # xy-xy
-
-    return C
-
-
-def get_elastic_tangent(E, nu, mode="3D"):
-    """
-    Returns the elastic constitutive (tangent) matrix C for:
-        mode = "plane_stress"
-        mode = "plane_strain"
-        mode = "3D"
-
-    Parameters
-    ----------
-    E : float
-        Young's modulus
-    nu : float
-        Poisson's ratio
-    mode : str
-        "plane_stress", "plane_strain", or "3D"
-
-    Returns
-    -------
-    C : ndarray
-        Elastic tangent matrix
-    """
-
-    # Lame parameters
-    lam = (E * nu) / ((1 + nu) * (1 - 2 * nu))
-    mu = E / (2 * (1 + nu))
-
-    if mode.lower() == "3d":
-        # 6x6 matrix in Voigt notation
-        C = np.array([
-            [lam + 2 * mu, lam, lam, 0, 0, 0],
-            [lam, lam + 2 * mu, lam, 0, 0, 0],
-            [lam, lam + 2 * mu, lam + 2 * mu, 0, 0, 0],
-            [0, 0, 0, mu, 0, 0],
-            [0, 0, 0, 0, mu, 0],
-            [0, 0, 0, 0, 0, mu]
-        ])
-        return C
-
-    elif mode.lower() == "plane_strain":
-        # 3x3 matrix (σxx, σyy, σxy)
-        C = np.array([
-            [lam + 2 * mu, lam, 0],
-            [lam, lam + 2 * mu, 0],
-            [0, 0, mu]
-        ])
-        return C
-
-    elif mode.lower() == "plane_stress":
-        # Plane stress uses reduced constitutive matrix
-        C11 = E / (1 - nu ** 2)
-        C12 = nu * C11
-        C66 = E / (2 * (1 + nu))
-
-        C = np.array([
-            [C11, C12, 0],
-            [C12, C11, 0],
-            [0, 0, C66]
-        ])
-        return C
-
-    else:
-        raise ValueError("mode must be 'plane_stress', 'plane_strain', or '3D'")
 
 
 def compute_stress_difference(actual_stress, target_stress):

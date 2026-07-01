@@ -123,39 +123,6 @@ def compute_elastic_energy_equivalence_potential(discretization,
         print('f_sigma = '          ' {} '.format(f_sigma))  # good in MPI
     return f_sigma
 
-
-def objective_function_small_strain_weight(discretization,
-                                           actual_stress_ij,
-                                           target_stress_ij,
-                                           phase_field_1nxyz,
-                                           eta,
-                                           w):
-    # evaluate objective functions
-    # f = (flux_h -flux_target)^2 + w*eta* int (  (grad(rho))^2 )dx  +    int ( rho^2(1-rho)^2 ) / eta   dx
-    # f =  f_sigma + w*eta* f_rho_grad  + f_dw/eta
-    # stress difference potential: actual_stress_ij is homogenized stress
-    # stress_difference_ij = actual_stress_ij - target_stress_ij
-    stress_difference_ij = (actual_stress_ij - target_stress_ij)
-    f_sigma = np.sum(stress_difference_ij ** 2) / np.sum(target_stress_ij ** 2)
-
-    # double - well potential
-    f_dw = compute_double_well_potential_analytical(discretization=discretization,
-                                                    phase_field_1nxyz=phase_field_1nxyz)
-
-    phase_field_gradient = discretization.apply_gradient_operator(phase_field_1nxyz)
-    f_rho_grad = np.sum(discretization.integrate_over_cell(phase_field_gradient ** 2))
-
-    f_rho = eta * f_rho_grad + f_dw / eta
-
-    print('f_rho_grad linear=  {} '.format(f_rho_grad))
-    print('f_dw =  linear {} '.format(f_dw))
-    print('f_rho   linear = {} '.format(f_rho))
-    print('w * f_rho linear =  {} '.format(w * f_rho))
-    print('weight =  linear {} '.format(w))
-
-    return w * f_sigma + f_rho  # / discretization.cell.domain_volume
-
-
 def objective_function_small_strain_pixel(discretization,
                                           actual_stress_ij,
                                           target_stress_ij,
