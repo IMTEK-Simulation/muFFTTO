@@ -36,7 +36,7 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 macro_gradient = np.array([[0.0, 0, 0], [0., 0.0, 0], [0, 0, 1.0]])
 
 # create material data field
-K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poison=0.2)
+K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 mat_contrast = 1
 mat_contrast_2 = 1e2
 

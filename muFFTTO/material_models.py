@@ -78,6 +78,38 @@ def get_lame_parameters(E, poisson):
     mu = E / (2 * (1 + poisson))
     return lam, mu
 
+def get_lame_parameters_from_bulk_and_shear(K, G, dim):
+    """
+    Convert bulk modulus K and shear modulus G to the Lame parameters
+    (lambda, mu) for an isotropic linear elastic material, valid in
+    2D (plane strain) or 3D.
+
+    mu     = G
+    lambda = K - (2/dim) * G
+
+    Parameters
+    ----------
+    K : float
+        Bulk modulus.
+    G : float
+        Shear modulus.
+    dim : int
+        Spatial dimension: 2 (plane strain) or 3.
+
+    Returns
+    -------
+    lam : float
+        First Lame parameter (lambda).
+    mu : float
+        Second Lame parameter (mu), equivalent to the shear modulus G.
+    """
+    if dim not in (2, 3):
+        raise ValueError(f"dim must be 2 or 3, got {dim}")
+
+    mu = G
+    lam = K - (2.0 / dim) * G
+    return lam, mu
+
 
 
 def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
