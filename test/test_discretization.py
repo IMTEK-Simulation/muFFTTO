@@ -1307,3 +1307,120 @@ class DiscretizationTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# --- pytest-style tests for trilinear_hexahedron_1Q ---
+
+import pytest
+import warnings
+
+
+@pytest.fixture
+def disc_1Q():
+    """3D discretization with trilinear_hexahedron_1Q, odd pixel count to avoid hourglass modes."""
+    my_cell = domain.PeriodicUnitCell(domain_size=[3, 4, 5], problem_type='conductivity')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        disc = domain.Discretization(cell=my_cell,
+                                     nb_of_pixels_global=(3, 5, 7),
+                                     discretization_type='finite_element',
+                                     element_type='trilinear_hexahedron_1Q')
+    return disc
+
+
+def test_1Q_nb_quad_points(disc_1Q):
+    assert disc_1Q.nb_quad_points_per_pixel == 1
+
+
+def test_1Q_quadrature_weight(disc_1Q):
+    """Single Gauss point weight must equal the full voxel volume."""
+    del_x, del_y, del_z = disc_1Q.pixel_size
+    assert np.isclose(disc_1Q.quadrature_weights[0], del_x * del_y * del_z)
+
+
+def test_1Q_N_shape(disc_1Q):
+    """N_at_quad_points_qnijk must have shape (1, 1, 1, 2, 2, 2)."""
+    assert disc_1Q.N_at_quad_points_qnijk.shape == (1, 1, 1, 2, 2, 2)
+
+
+def test_1Q_N_partition_of_unity(disc_1Q):
+    """All 8 shape functions evaluated at the centroid must sum to 1."""
+    N = disc_1Q.N_at_quad_points_qnijk
+    assert np.isclose(N[0, 0, 0].sum(), 1.0)
+
+
+def test_1Q_N_equal_weights(disc_1Q):
+    """At the centroid all 8 shape functions must equal 1/8."""
+    N = disc_1Q.N_at_quad_points_qnijk
+    assert np.allclose(N[0, 0, 0], 1.0 / 8.0)
+
+
+def test_1Q_gradient_linear_field():
+    """Gradient of a linear field must be exact with 1-point quadrature."""
+    my_cell = domain.PeriodicUnitCell(domain_size=[3, 4, 5], problem_type='conductivity')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        disc = domain.Discretization(cell=my_cell,
+                                     nb_of_pixels_global=(3, 5, 7),
+                                     discretization_type='finite_element',
+                                     element_type='trilinear_hexahedron_1Q')
+
+    nodal_coords = disc.get_nodal_points_coordinates()
+    quad_coords = disc.get_quad_points_coordinates()
+
+    a, b, c = 4.0, 3.0, 5.0
+    u = disc.get_temperature_sized_field(name='u')
+    u.s[0, 0] = (a * nodal_coords.s[0, 0]
+                 + b * nodal_coords.s[1, 0]
+                 + c * nodal_coords.s[2, 0])
+
+    grad_u = disc.get_temperature_gradient_size_field(name='grad_u')
+    disc.apply_gradient_operator_mugrid(u, grad_u)
+
+    # exclude periodic boundary pixels (last in each direction)
+    interior = grad_u.s[..., :-1, :-1, :-1]
+    assert np.allclose(interior[0, 0], a, rtol=1e-12, atol=1e-12), \
+        f"∂u/∂x error: max={np.abs(interior[0, 0] - a).max()}"
+    assert np.allclose(interior[0, 1], b, rtol=1e-12, atol=1e-12), \
+        f"∂u/∂y error: max={np.abs(interior[0, 1] - b).max()}"
+    assert np.allclose(interior[0, 2], c, rtol=1e-12, atol=1e-12), \
+        f"∂u/∂z error: max={np.abs(interior[0, 2] - c).max()}"
+
+
+def test_1Q_system_matrix_symmetry():
+    """Stiffness matrix must be symmetric (conductivity, homogeneous material)."""
+    my_cell = domain.PeriodicUnitCell(domain_size=[3, 4, 5], problem_type='conductivity')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        disc = domain.Discretization(cell=my_cell,
+                                     nb_of_pixels_global=(3, 5, 7),
+                                     discretization_type='finite_element',
+                                     element_type='trilinear_hexahedron_1Q')
+
+    mat = disc.get_material_data_size_field_mugrid(name='mat')
+    C = np.eye(3)
+    mat.s[...] = C[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+
+    K = disc.get_system_matrix_mugrid(mat, formulation=None)
+    assert np.allclose(K, K.T, rtol=1e-14, atol=1e-13), \
+        f"K not symmetric, max asymmetry: {np.abs(K - K.T).max()}"
+
+
+def test_1Q_system_matrix_column_sum_zero():
+    """Each column of the stiffness matrix must sum to zero (rigid body mode)."""
+    my_cell = domain.PeriodicUnitCell(domain_size=[3, 4, 5], problem_type='conductivity')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        disc = domain.Discretization(cell=my_cell,
+                                     nb_of_pixels_global=(3, 5, 7),
+                                     discretization_type='finite_element',
+                                     element_type='trilinear_hexahedron_1Q')
+
+    mat = disc.get_material_data_size_field_mugrid(name='mat')
+    C = np.eye(3)
+    mat.s[...] = C[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+
+    K = disc.get_system_matrix_mugrid(mat, formulation=None)
+    col_sums = np.abs(K.sum(axis=0))
+    assert np.allclose(col_sums, 0, atol=1e-12), \
+        f"Column sums not zero, max: {col_sums.max()}"

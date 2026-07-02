@@ -22,7 +22,7 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (32,32)
+number_of_pixels = (64,64)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -388,19 +388,6 @@ if __name__ == '__main__':
 
 
     # Run optimization
-    # xopt_FE_MPI = Optimization.l_bfgs(fun=objective_function_multiple_load_cases,
-    #                                   x=phase_field_0.s.ravel(),
-    #                                   jac=True,
-    #                                   maxcor=20,
-    #                                   gtol=1e-3,
-    #                                   ftol=1e-10,
-    #                                   maxiter=100,
-    #                                   linesearch_options=dict(c1=1e-4, c2=0.9),
-    #                                   comm=MPI.COMM_WORLD,
-    #                                   disp=True,
-    #                                   callback=my_callback
-    #                                   )
-    #a = np.zeros(phase_field_0.s.ravel().shape)
     a = discretization.get_scalar_field(name='a_constrain')
     #if MPI.COMM_WORLD.rank == 0:
     a.s[0,0,0,0]=1e-8

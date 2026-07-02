@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import numpy as np
+
 import time
 
 from NuMPI import Optimization
@@ -17,12 +18,12 @@ from muFFTTO import material_models
 # Problem Configuration
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'trilinear_hexahedron'
+element_type = 'trilinear_hexahedron_1Q'#
 formulation = 'small_strain'
 
 # Domain and Discretization
-domain_size = 3*(1,)
-number_of_pixels = 3*(16,)
+domain_size = 3 * (1,)
+number_of_pixels = (63,63,63)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -31,7 +32,7 @@ soft_phase_exponent = 3
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
 weight = 5.  # Weight for the stress match term
-cg_setup = {'cg_tol': 1e-3}
+cg_setup = {'cg_tol': 1e-6, 'r_tol': False}
 
 # Initialize periodic unit cell and discretization
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -54,9 +55,9 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 # Base Material Properties
 K_0, G_0 = 1.0, 0.5
 elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
+                                                          K=K_0,
+                                                          mu=G_0,
+                                                          kind='linear')
 soft_phase = 10 ** (-soft_phase_exponent) if soft_phase_exponent > 0 else 0
 elastic_C_void = elastic_C_0 * soft_phase
 
@@ -92,16 +93,16 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties (Auxetic behavior)
-poisson_target = -0.0
+poisson_target = -0.3
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poisson_target)
 K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poisson_target)
 
 elastic_C_target = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                      K=K_target,
-                                                      mu=G_target,
-                                                      kind='linear')
+                                                               K=K_target,
+                                                               mu=G_target,
+                                                               kind='linear')
 
 if MPI.COMM_WORLD.rank == 0:
     print(f'Target elastic tangent (Voigt):\n{material_models.compute_Voigt_notation_4order(elastic_C_target)}')
@@ -161,9 +162,9 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
     # 3. Calculate phase field contribution to objective and its sensitivity
     f_phase_field = topology_optimization.objective_function_phase_field_3D(discretization=discretization,
-                                                                         phase_field_1nxyz=phase_field_1nxyz,
-                                                                         eta=eta,
-                                                                         double_well_depth=double_well_depth_test)
+                                                                            phase_field_1nxyz=phase_field_1nxyz,
+                                                                            eta=eta,
+                                                                            double_well_depth=double_well_depth_test)
     s_sensitivity_field.s.fill(0)
 
     topology_optimization.sensitivity_phase_field_term_FE_NEW(
@@ -257,6 +258,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             x=displacement_field_load_case[load_case],
             P=M_fun,
             tol=cg_setup['cg_tol'],
+            rtol=cg_setup['r_tol'],
             maxiter=10000,
             callback=callback,
         )
@@ -376,15 +378,41 @@ if __name__ == '__main__':
         if MPI.COMM_WORLD.size == 1:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
-            plt.figure()
-            plt.pcolormesh(discretization.fft.coords[0],
-                           discretization.fft.coords[1],
-                           x_current.reshape(discretization.nb_of_pixels),
-                           cmap=mpl.cm.Greys)
-            #plt.clim(0, 1)
-            plt.title(f'Iteration {iterat}')
-            plt.colorbar()
-            plt.show()
+            import pyvista as pv
+
+            def plot_cuts_3d(field_xyz, cmap='gray_r', positions=None,
+                             interpolate=False, screenshot=None, title=f'rho - {iterat}'):
+                field_xyz = np.asarray(field_xyz)
+                nx, ny, nz = field_xyz.shape
+
+                if interpolate:
+                    grid = pv.ImageData(dimensions=(nx, ny, nz))
+                    grid.point_data[title] = field_xyz.flatten(order='F')
+                else:
+                    # +1 because dimensions counts points; values live on cells -> flat voxels
+                    grid = pv.ImageData(dimensions=(nx + 1, ny + 1, nz + 1))
+                    grid.cell_data[title] = field_xyz.flatten(order='F')
+
+                if positions is None:
+                    positions = (nx // 2, ny // 2, nz // 2)
+
+                slices = grid.slice_orthogonal(x=positions[0],
+                                               y=positions[1],
+                                               z=positions[2])
+
+                p = pv.Plotter(off_screen=True)
+                p.add_mesh(slices, cmap=cmap, clim=[0, 1],
+                           interpolate_before_map=False,  # keep cells flat, no shading tricks
+                           scalar_bar_args={'title': title})
+                p.show_grid(xtitle='x', ytitle='y', ztitle='z')
+                img = p.screenshot(screenshot)
+
+                plt.figure(figsize=(7, 6))
+                plt.imshow(img)
+                plt.axis('off')
+                plt.show()
+            if iterat % 10 == 0:
+                plot_cuts_3d(x_current.reshape(discretization.nb_of_pixels))
 
 
     # Run optimization
@@ -400,23 +428,23 @@ if __name__ == '__main__':
     #                                   disp=True,
     #                                   callback=my_callback
     #                                   )
-    #a = np.zeros(phase_field_0.s.ravel().shape)
-    a = discretization.get_scalar_field(name='a_constrain')
-    #if MPI.COMM_WORLD.rank == 0:
-    a.s[0,0,0,0]=1e-8
-    discretization.fft.communicate_ghosts(a)
-    target = 0.0
-    c = Optimization.LinearConstraint(a.s, target)
+    # a = np.zeros(phase_field_0.s.ravel().shape)
+    # a = discretization.get_scalar_field(name='a_constrain')
+    # if MPI.COMM_WORLD.rank == 0:
+    # a.s[0,0,0,0]=1e-8
+    # discretization.fft.communicate_ghosts(a)
+    # target = 0.0
+    # c = Optimization.LinearConstraint(a.s, target)
     xopt_FE_MPI = Optimization.l_bfgs_bounded(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
-      #  linear_constraint=c,
+        #  linear_constraint=c,
         args=(),
         jac=True,
         bounds_lo=0.,
         bounds_hi=1.,
         zero_mask=None,
-        gtol=1e-3,
+        gtol=1e-5,
         xtol=1e-3,
         maxiter=500,
         maxcor=20,
@@ -426,8 +454,6 @@ if __name__ == '__main__':
         callback=my_callback,
         disp=True,
     )
-
-
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
@@ -460,9 +486,15 @@ if __name__ == '__main__':
 
     material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
         name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s[...] = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                              np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                              elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
+    # material_data_field_C_0_rho_quad.s[...] = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
+    #                                           np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+    #                                           elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
+    expand = (...,) + (np.newaxis,) * (dim + 1)
+
+    material_data_field_C_0_rho_quad.s[...] = \
+        (elastic_C_0 - elastic_C_void)[expand] \
+        * np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] \
+        + elastic_C_void[expand]
 
     homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
 
@@ -521,8 +553,8 @@ if __name__ == '__main__':
     rhs_field_final = discretization.get_unknown_size_field(name='rhs_field_final')
 
     # compute whole homogenized elastic tangent
-    for i in range(2):
-        for j in range(2):
+    for i in range(dim):
+        for j in range(dim):
             macro_gradient_ij = np.zeros([dim, dim])
             macro_gradient_ij[i, j] = 1
 
@@ -551,14 +583,14 @@ if __name__ == '__main__':
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
         print('Optimized elastic tangent =  :\n' +
-              np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
+              np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
         print(f'Target elastic tangent (Voigt):\n' +
-              np.array2string(domain.compute_Voigt_notation_4order(elastic_C_target),
+              np.array2string(material_models.compute_Voigt_notation_4order(elastic_C_target),
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
-    _info['homogenized_C_ijkl'] = domain.compute_Voigt_notation_4order(homogenized_C_ijkl)
-    _info['target_C_ijkl'] = domain.compute_Voigt_notation_4order(elastic_C_target)
+    _info['homogenized_C_ijkl'] = material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)
+    _info['target_C_ijkl'] = material_models.compute_Voigt_notation_4order(elastic_C_target)
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:

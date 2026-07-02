@@ -881,6 +881,25 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                                                  del_y/2 ,
                                                  del_z/2 ]
 
+            N_at_quad_points_qijk = np.zeros(
+                [my_domain.nb_quad_points_per_pixel, *my_domain.domain_dimension * (2,)])
+
+            xi   = 0.0
+            eta  = 0.0
+            zeta = 0.0
+            # @formatter:off
+            N_at_quad_points_qijk[0, 0, 0, 0] = (1 - xi) * (1 - eta) * (1 - zeta) / 8
+            N_at_quad_points_qijk[0, 1, 0, 0] = (1 + xi) * (1 - eta) * (1 - zeta) / 8
+            N_at_quad_points_qijk[0, 0, 1, 0] = (1 - xi) * (1 + eta) * (1 - zeta) / 8
+            N_at_quad_points_qijk[0, 1, 1, 0] = (1 + xi) * (1 + eta) * (1 - zeta) / 8
+            N_at_quad_points_qijk[0, 0, 0, 1] = (1 - xi) * (1 - eta) * (1 + zeta) / 8
+            N_at_quad_points_qijk[0, 1, 0, 1] = (1 + xi) * (1 - eta) * (1 + zeta) / 8
+            N_at_quad_points_qijk[0, 0, 1, 1] = (1 - xi) * (1 + eta) * (1 + zeta) / 8
+            N_at_quad_points_qijk[0, 1, 1, 1] = (1 + xi) * (1 + eta) * (1 + zeta) / 8
+            # @formatter:on
+
+            my_domain.N_at_quad_points_qnijk = np.expand_dims(
+                np.expand_dims(N_at_quad_points_qijk, axis=1), axis=0)
 
         case _:
 
