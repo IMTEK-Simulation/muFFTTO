@@ -3,7 +3,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
-from muFFTTO.circle_muGrid_real_field import (
+from muFFTTO.grid_adaptation_methods import (
     adapt_grid_to_circle,
     pack_adapted_grid_to_fields,
     print_field_summary,

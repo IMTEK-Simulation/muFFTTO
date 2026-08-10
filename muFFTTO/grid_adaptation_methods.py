@@ -14,6 +14,7 @@ from collections import deque
 import numpy as np
 import muGrid
 
+
 def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Function that constructs a regular periodic-style Cartesian node grid.
@@ -51,9 +52,9 @@ def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarra
 
 
 def cell_labels(
-    P: np.ndarray,
-    center: tuple[float, float] = (0.0, 0.0),
-    R: float = 20.0,
+        P: np.ndarray,
+        center: tuple[float, float] = (0.0, 0.0),
+        R: float = 20.0,
 ) -> np.ndarray:
     """
     Function that labels cells as inside or outside a circular inclusion.
@@ -140,9 +141,9 @@ def interface_node_mask(cell_inside: np.ndarray) -> np.ndarray:
 
 
 def project_points_to_circle(
-    Ppts: np.ndarray,
-    center: tuple[float, float] = (0.0, 0.0),
-    R: float = 20.0,
+        Ppts: np.ndarray,
+        center: tuple[float, float] = (0.0, 0.0),
+        R: float = 20.0,
 ) -> np.ndarray:
     """
     Function that projects points onto a target circle.
@@ -236,11 +237,11 @@ def manhattan_distance_to_interface(interface_mask: np.ndarray) -> np.ndarray:
 
 
 def stiffness_from_distance(
-    dist: np.ndarray,
-    k0: float = 1.0,
-    b: float = 1.0,
-    a: float = 1.0,
-    kmin: float = 1e-3,
+        dist: np.ndarray,
+        k0: float = 1.0,
+        b: float = 1.0,
+        a: float = 1.0,
+        kmin: float = 1e-3,
 ) -> np.ndarray:
     """
     Function that computes a nodal stiffness field from the distance to the interface.
@@ -272,11 +273,11 @@ def stiffness_from_distance(
 
 
 def spring_relax_weighted(
-    P: np.ndarray,
-    fixed_mask: np.ndarray,
-    k_node: np.ndarray,
-    iters: int = 600,
-    omega: float = 1.0,
+        P: np.ndarray,
+        fixed_mask: np.ndarray,
+        k_node: np.ndarray,
+        iters: int = 600,
+        omega: float = 1.0,
 ) -> np.ndarray:
     """
     Function that performs weighted spring relaxation on a periodic stored grid.
@@ -354,15 +355,15 @@ def spring_relax_weighted(
 
 
 def adapt_grid_to_circle(
-    N: int = 64,
-    L: float = 40.0,
-    center: tuple[float, float] = (20.0, 20.0),
-    R: float = 10.0,
-    iters: int = 600,
-    omega: float = 0.8,
-    b: float = 1.0,
-    k0: float = 0.25,
-    kmin: float = 0.005,
+        N: int = 64,
+        L: float = 40.0,
+        center: tuple[float, float] = (20.0, 20.0),
+        R: float = 10.0,
+        iters: int = 600,
+        omega: float = 0.8,
+        b: float = 1.0,
+        k0: float = 0.25,
+        kmin: float = 0.005,
 ) -> dict:
     """
     Function that adapts a periodic Cartesian grid to a circular inclusion.
@@ -448,10 +449,107 @@ def adapt_grid_to_circle(
     }
 
 
+def adapt_grid_to_circle_EXAMPLE_(
+        nb_grid_points: tuple[int, int] = (64, 64),
+        domain_size: tuple[float, float] = (1, 1),
+        center: tuple[float, float] = (0.5, 0.5),
+        radius: float = 0.2,
+        reference_grid_points_coords: np.ndarray = None,
+        iters: int = 600,
+        omega: float = 0.8,
+        b: float = 1.0,
+        k0: float = 0.25,
+        kmin: float = 0.005,
+) -> dict:
+    """
+    Function that adapts a periodic Cartesian grid to a circular inclusion.
+
+    The procedure consists of four main steps:
+    1. Construct the initial periodic grid.
+    2. Label cells and detect interface nodes.
+    3. Project interface nodes onto the target circle.
+    4. Relax the remaining nodes with a weighted spring model.
+
+    Parameters
+    ----------
+    nb_grid_points : tuple[int, int]
+        Number of stored grid points per spatial direction.
+    domain_size : tuple[float, float]
+        Side lengths of the rectangular computational domain.
+    center : tuple[float, float]
+        Coordinates of the circle center given as (x_center, y_center).
+    radius : float
+        Radius of the circular inclusion.
+    iters : int
+        Number of spring-relaxation iterations.
+    omega : float
+        Relaxation parameter for the spring-relaxation update.
+    b : float
+        Exponent of the stiffness-distance law.
+    k0 : float
+        Reference stiffness factor.
+    kmin : float
+        Minimum admissible stiffness value.
+
+    Returns
+    -------
+    result : dict
+        Dictionary containing the adapted grid and related fields:
+        - "P0": initial nodal coordinates, shape [xy, nx, ny]
+        - "P": adapted nodal coordinates, shape [xy, nx, ny]
+        - "inside": cell labels, shape [nx, ny]
+        - "interface": interface-node mask, shape [nx, ny]
+        - "fixed": fixed-node mask, shape [nx, ny]
+        - "dist": distance-to-interface field, shape [nx, ny]
+        - "k_node": nodal stiffness field, shape [nx, ny]
+        - "params": dictionary of input parameters
+    """
+    P0 = reference_grid_points_coords # this is just aliasing, not copy
+    #P0, _, _ = make_grid_nodes(N=nb_grid_points[0], L=domain_size[0])
+    inside = cell_labels(P0, center=center, R=radius)
+    interface = interface_node_mask(inside)
+    fixed = interface.copy()
+
+    P1 = P0.copy()
+    idx = np.argwhere(interface)
+    if idx.size:
+        pts = P1[:, idx[:, 0], idx[:, 1]]
+        P1[:, idx[:, 0], idx[:, 1]] = project_points_to_circle(
+            pts,
+            center=center,
+            R=radius,
+        )
+    # TODO[Jia]: what is this
+    dist = manhattan_distance_to_interface(interface)
+    # TODO[Jia]: Comment what is this
+    k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)
+    P1 = spring_relax_weighted(P1, fixed_mask=fixed, k_node=k_node, iters=iters, omega=omega)
+
+    return {
+        "coords_of_displaced_nodes": P1,
+        "inside": inside,
+        "interface": interface,
+        "fixed": fixed,
+        "dist": dist,
+        "k_node": k_node,
+        "params": {
+            "nb_grid_points": nb_grid_points,
+            "domain_size": domain_size,
+            "center": center,
+            "radius": radius,
+            "iters": iters,
+            "omega": omega,
+            "b": b,
+            "k0": k0,
+            "kmin": kmin,
+        },
+    }
+
+
 def make_mugrid_decomposition(
-    nx: int,
-    ny: int,
-    ghosts: int = 1,
+        nx: int,
+        ny: int,
+        ghosts: int = 1,
 ):
     """
     Function that creates a simple single-process muGrid Cartesian decomposition.
@@ -577,10 +675,10 @@ def make_numpy_field_bundle(result: dict, store_positions: bool = True) -> dict:
 
 
 def pack_adapted_grid_to_fields(
-    result: dict,
-    ghosts: int = 1,
-    store_positions: bool = True,
-    verbose: bool = True,
+        result: dict,
+        ghosts: int = 1,
+        store_positions: bool = True,
+        verbose: bool = True,
 ) -> dict:
     """
     Function that stores adapted-grid data into muGrid real_field containers.

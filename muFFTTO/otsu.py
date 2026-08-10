@@ -1,584 +1,421 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any
 
 import cv2
 import numpy as np
-import pandas as pd
-import muGrid
 
 
-# ============================================================
-# Basic I/O
-# ============================================================
-
-
-def load_npy_image(path: str | os.PathLike[str], dtype=np.float32) -> np.ndarray:
-    """
-    Function that loads a 2D image stored in .npy format.
-
-    Parameters
-    ----------
-    path : str or PathLike
-        Path to a .npy file containing a 2D array.
-    dtype : numpy dtype
-        Target dtype after loading.
-
-    Returns
-    -------
-    data : numpy.ndarray
-        Loaded 2D array with shape [nx, ny].
-
-    Raises
-    ------
-    ValueError
-        If the loaded array is not 2D.
-    """
-    data = np.load(path).astype(dtype)
-    if data.ndim != 2:
-        raise ValueError(f"Expected a 2D array, got shape {data.shape}.")
-    return data
-
-
-# ============================================================
-# Image processing
-# ============================================================
-
-
-def normalize_to_u8(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Function that normalizes a float image to [0, 1] and uint8 [0, 255].
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        Input 2D image.
-
-    Returns
-    -------
-    img_norm : numpy.ndarray
-        Float image normalized to [0, 1].
-    img_u8 : numpy.ndarray
-        Unsigned 8-bit image normalized to [0, 255].
-    """
+def _normalize_to_u8(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize a 2D image to [0, 1] and uint8 [0, 255]."""
     data = np.asarray(data, dtype=np.float32)
-    img_norm = (data - data.min()) / (data.max() - data.min() + 1e-12)
-    img_u8 = (img_norm * 255).astype(np.uint8)
-    return img_norm, img_u8
+
+    if data.ndim != 2:
+        raise ValueError(f"Expected a 2D image, got shape {data.shape}.")
+
+    data_min = float(data.min())
+    data_max = float(data.max())
+    value_range = data_max - data_min
+
+    if value_range <= np.finfo(np.float32).eps:
+        image_norm = np.zeros_like(data, dtype=np.float32)
+    else:
+        image_norm = (data - data_min) / value_range
+
+    image_u8 = np.clip(image_norm * 255.0, 0, 255).astype(np.uint8)
+    return image_norm, image_u8
 
 
-def gaussian_blur_u8(img_u8: np.ndarray, ksize: int = 7, sigma: float = 1.5) -> np.ndarray:
+def _validate_odd_positive(name: str, value: int) -> None:
+    """Validate a positive odd OpenCV kernel size."""
+    if value <= 0 or value % 2 == 0:
+        raise ValueError(f"{name} must be a positive odd integer, got {value}.")
+
+
+def otsu_edgeDetection_and_phaseIndicator(
+        data: np.ndarray,
+        blur_ksize: int = 7,
+        blur_sigma: float = 1.5,
+        morph_kernel_size: int = 3,
+        open_iterations: int = 1,
+        close_iterations: int = 1,
+        regions_label: bool = True,
+        connectivity: int = 8,
+        return_intermediate: bool = False,
+
+) -> dict[str, Any]:
     """
-    Function that applies Gaussian blur to an 8-bit image.
+    Segment dark regions in a two-dimensional grayscale image, extract their
+    external boundaries, and optionally assign a unique integer label to each
+    disconnected foreground region.
+
+    The input image is normalized to uint8 intensity values, smoothed with a
+    Gaussian filter, and segmented using inverted Otsu thresholding. Morphological
+    opening and closing are then applied to reduce isolated noise, remove small
+    foreground artifacts, fill small holes, and close short gaps.
+
+    Inverted Otsu thresholding treats dark pixels as foreground:
+
+    - ``phase_mask_binary == 1`` identifies dark segmented regions.
+    - ``phase_mask_binary == 0`` identifies bright/background regions.
+
+    When ``regions_label=True``, connected-component analysis assigns one unique
+    integer ID to each disconnected foreground region. Background pixels always
+    have label ``0``; foreground region labels are consecutive integers
+    ``1, 2, ..., N``.
+
+    This function currently distinguishes regions by geometric connectivity only.
+    Therefore, two disconnected regions receive different labels even when their
+    average grayscale values are similar. A later processing step may group such
+    regions into shared material classes based on their mean grayscale values.
 
     Parameters
     ----------
-    img_u8 : numpy.ndarray
-        Input uint8 image.
-    ksize : int
-        Odd kernel size.
-    sigma : float
-        Gaussian sigma.
+    data : numpy.ndarray
+        Two-dimensional grayscale input image with shape ``(nx, ny)``. Integer and
+        floating-point input dtypes are supported.
+
+    blur_ksize : int, default=7
+        Positive odd Gaussian-kernel width and height. Larger values produce
+        stronger smoothing before Otsu thresholding.
+
+    blur_sigma : float, default=1.5
+        Standard deviation of the Gaussian filter. Must be non-negative.
+
+    morph_kernel_size : int, default=3
+        Positive odd side length of the square structuring element used for
+        morphological opening and closing.
+
+    open_iterations : int, default=1
+        Number of morphological-opening iterations. Opening suppresses small
+        isolated foreground pixels and thin noise.
+
+    close_iterations : int, default=1
+        Number of morphological-closing iterations. Closing fills small holes and
+        connects short gaps inside foreground regions.
+
+    regions_label : bool, default=True
+        If ``True``, perform connected-component labeling on the cleaned binary
+        foreground mask.
+
+        - ``True``: ``phase_mask_label`` has dtype ``int32`` and contains labels
+          ``0, 1, ..., N``.
+        - ``False``: ``phase_mask_label`` is a uint8 copy of
+          ``phase_mask_binary`` and contains only ``0`` and ``1``.
+
+    connectivity : int, default=8
+        Connectivity used for connected-component labeling when
+        ``regions_label=True``.
+
+        - ``4`` connects pixels sharing a horizontal or vertical edge.
+        - ``8`` additionally connects pixels touching diagonally at a corner.
+
+    return_intermediate : bool, default=False
+        If ``True``, include normalized, blurred, thresholded, and morphology
+        intermediate arrays in the returned dictionary.
 
     Returns
     -------
-    blur : numpy.ndarray
-        Blurred uint8 image.
+    dict[str, Any]
+        Dictionary containing the following arrays with shape ``(nx, ny)``:
+
+        ``edge_mask`` : numpy.ndarray, uint8
+            One-pixel-wide mask of external contours. A value of ``1`` marks an
+            outer boundary of a segmented foreground region.
+
+        ``phase_mask_binary`` : numpy.ndarray, uint8
+            Cleaned binary segmentation mask with values ``0`` for background and
+            ``1`` for dark foreground regions.
+
+        ``phase_mask_label`` : numpy.ndarray
+            Region-label field.
+
+            - If ``regions_label=True``, dtype is ``int32`` and values are
+              ``0, 1, ..., N``.
+            - If ``regions_label=False``, dtype is ``uint8`` and values are
+              ``0`` and ``1``.
+
+        When ``regions_label=True``, the dictionary additionally contains:
+
+        ``number_of_phase_regions`` : int
+            Number of disconnected foreground regions. Background label ``0`` is
+            excluded.
+
+        ``phase_region_stats`` : numpy.ndarray
+            OpenCV connected-component statistics. Each row corresponds to one
+            region label, including background label ``0``. The columns contain
+            bounding-box x/y coordinates, width, height, and pixel area.
+
+        ``phase_region_centroids`` : numpy.ndarray
+            Centroid coordinates ``(x, y)`` for every label, including background.
+
+        When ``return_intermediate=True``, the dictionary additionally contains:
+
+        ``image_norm`` : numpy.ndarray
+            Input image normalized to the interval ``[0, 1]``.
+
+        ``image_u8`` : numpy.ndarray
+            Normalized uint8 image with intensity values in ``[0, 255]``.
+
+        ``image_blur`` : numpy.ndarray
+            Gaussian-smoothed uint8 image.
+
+        ``mask_raw`` : numpy.ndarray, uint8
+            Binary result directly after inverted Otsu thresholding.
+
+        ``mask_open`` : numpy.ndarray, uint8
+            Binary result after morphological opening.
+
+        ``mask_clean`` : numpy.ndarray, uint8
+            Binary result after opening and closing; equal to
+            ``phase_mask_binary``.
+
+        ``otsu_threshold`` : float
+            Automatically selected Otsu threshold in uint8 intensity units.
+
+        ``contour_count`` : int
+            Number of external contours detected from ``phase_mask_binary``.
+
+    Notes
+    -----
+    The function applies standard non-periodic image connectivity. Hence, a
+    physical region crossing a periodic simulation boundary may be assigned
+    separate labels at opposite image edges. Periodic label merging should be
+    implemented before using region labels for periodic material identification or
+    periodic adaptive-grid decisions.
+
+    The returned ``phase_mask_label`` describes disconnected geometric regions,
+    not material classes. In a future extension, regions with similar mean
+    grayscale values can be grouped into a separate ``material_label`` field,
+    while retaining ``phase_mask_label`` for region geometry.
     """
-    if ksize % 2 == 0:
-        raise ValueError("ksize must be odd for Gaussian blur.")
-    return cv2.GaussianBlur(img_u8, (ksize, ksize), sigma)
 
+    _validate_odd_positive("blur_ksize", blur_ksize)
+    _validate_odd_positive("morph_kernel_size", morph_kernel_size)
 
-def otsu_threshold_dark_foreground(img_u8: np.ndarray) -> tuple[float, np.ndarray]:
-    """
-    Function that applies Otsu thresholding with inversion.
+    if blur_sigma < 0:
+        raise ValueError(f"blur_sigma must be non-negative, got {blur_sigma}.")
+    if open_iterations < 0:
+        raise ValueError(
+            f"open_iterations must be non-negative, got {open_iterations}."
+        )
+    if close_iterations < 0:
+        raise ValueError(
+            f"close_iterations must be non-negative, got {close_iterations}."
+        )
+    if connectivity not in (4, 8):
+        raise ValueError(
+            f"connectivity must be 4 or 8, got {connectivity}."
+        )
 
-    This is useful when dark grain boundaries should become foreground.
+    image_norm, image_u8 = _normalize_to_u8(data)
 
-    Parameters
-    ----------
-    img_u8 : numpy.ndarray
-        Input uint8 image.
+    image_blur = cv2.GaussianBlur(
+        image_u8,
+        (blur_ksize, blur_ksize),
+        blur_sigma,
+    )
 
-    Returns
-    -------
-    otsu_thresh : float
-        Otsu threshold value.
-    mask_raw : numpy.ndarray
-        Raw binary mask with values {0, 255}.
-    """
-    otsu_thresh, mask_raw = cv2.threshold(
-        img_u8,
+    otsu_threshold, mask_raw_u8 = cv2.threshold(
+        image_blur,
         0,
         255,
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
-    return float(otsu_thresh), mask_raw
 
+    kernel = np.ones(
+        (morph_kernel_size, morph_kernel_size),
+        dtype=np.uint8,
+    )
 
-def clean_binary_mask(
-    mask_raw: np.ndarray,
-    kernel_size: int = 3,
-    open_iterations: int = 1,
-    close_iterations: int = 1,
-) -> dict[str, np.ndarray]:
-    """
-    Function that applies opening and closing to a binary mask.
+    mask_open_u8 = cv2.morphologyEx(
+        mask_raw_u8,
+        cv2.MORPH_OPEN,
+        kernel,
+        iterations=open_iterations,
+    )
 
-    Parameters
-    ----------
-    mask_raw : numpy.ndarray
-        Raw binary mask with values {0, 255}.
-    kernel_size : int
-        Size of the square morphology kernel.
-    open_iterations : int
-        Number of opening iterations.
-    close_iterations : int
-        Number of closing iterations.
+    mask_clean_u8 = cv2.morphologyEx(
+        mask_open_u8,
+        cv2.MORPH_CLOSE,
+        kernel,
+        iterations=close_iterations,
+    )
 
-    Returns
-    -------
-    cleaned : dict
-        Dictionary with keys:
-        - "mask_open"
-        - "mask_clean"
-        - "mask_binary"
-    """
-    kernel = np.ones((kernel_size, kernel_size), np.uint8)
-    mask_open = cv2.morphologyEx(mask_raw, cv2.MORPH_OPEN, kernel, iterations=open_iterations)
-    mask_clean = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, kernel, iterations=close_iterations)
-    mask_binary = (mask_clean > 0).astype(np.uint8)
+    # Binary phase indicator: values are always 0 or 1.
+    phase_mask_binary = (mask_clean_u8 > 0).astype(np.uint8)
 
-    return {
-        "mask_open": mask_open,
-        "mask_clean": mask_clean,
-        "mask_binary": mask_binary,
-    }
-
-
-def find_external_contour_mask(mask_binary: np.ndarray) -> dict[str, Any]:
-    """
-    Function that finds external contours and rasterizes them into a 0/1 contour mask.
-
-    Parameters
-    ----------
-    mask_binary : numpy.ndarray
-        Binary mask with values {0, 1}.
-
-    Returns
-    -------
-    contour_info : dict
-        Dictionary with keys:
-        - "contours"
-        - "hierarchy"
-        - "contour_mask"
-        - "contour_pixel_count"
-        - "contour_count"
-    """
-    contours, hierarchy = cv2.findContours(
-        (mask_binary * 255).astype(np.uint8),
+    # Detect edges from the binary phase mask.
+    contours, _ = cv2.findContours(
+        (phase_mask_binary * 255).astype(np.uint8),
         cv2.RETR_EXTERNAL,
         cv2.CHAIN_APPROX_SIMPLE,
     )
 
-    contour_mask = np.zeros_like(mask_binary, dtype=np.uint8)
-    cv2.drawContours(contour_mask, contours, -1, 1, thickness=1)
+    edge_mask = np.zeros_like(phase_mask_binary, dtype=np.uint8)
 
-    return {
-        "contours": contours,
-        "hierarchy": hierarchy,
-        "contour_mask": contour_mask,
-        "contour_pixel_count": int(contour_mask.sum()),
-        "contour_count": int(len(contours)),
-    }
-
-
-def run_otsu_contour_pipeline(
-    data: np.ndarray,
-    blur_ksize: int = 7,
-    blur_sigma: float = 1.5,
-    morph_kernel_size: int = 3,
-    open_iterations: int = 1,
-    close_iterations: int = 1,
-) -> dict[str, Any]:
-    """
-    Function that runs the full image-to-mask-to-contour pipeline on a 2D image.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        Input 2D image.
-    blur_ksize : int
-        Gaussian blur kernel size.
-    blur_sigma : float
-        Gaussian blur sigma.
-    morph_kernel_size : int
-        Morphology kernel size.
-    open_iterations : int
-        Opening iterations.
-    close_iterations : int
-        Closing iterations.
-
-    Returns
-    -------
-    result : dict
-        Dictionary containing processed arrays and scalar metadata.
-    """
-    data = np.asarray(data, dtype=np.float32)
-    if data.ndim != 2:
-        raise ValueError(f"Expected 2D input data, got shape {data.shape}.")
-
-    img_norm, img_u8 = normalize_to_u8(data)
-    blur = gaussian_blur_u8(img_u8, ksize=blur_ksize, sigma=blur_sigma)
-    otsu_thresh, mask_raw = otsu_threshold_dark_foreground(blur)
-
-    cleaned = clean_binary_mask(
-        mask_raw,
-        kernel_size=morph_kernel_size,
-        open_iterations=open_iterations,
-        close_iterations=close_iterations,
+    cv2.drawContours(
+        edge_mask,
+        contours,
+        contourIdx=-1,
+        color=1,
+        thickness=1,
     )
-    contour_info = find_external_contour_mask(cleaned["mask_binary"])
 
-    return {
-        "image_raw": data,
-        "image_norm": img_norm,
-        "image_u8": img_u8,
-        "image_blur": blur,
-        "mask_raw": (mask_raw > 0).astype(np.uint8),
-        "mask_open": (cleaned["mask_open"] > 0).astype(np.uint8),
-        "mask_clean": (cleaned["mask_clean"] > 0).astype(np.uint8),
-        "mask_binary": cleaned["mask_binary"],
-        "contour": contour_info["contour_mask"],
-        "params": {
-            "shape": tuple(data.shape),
-            "value_min": float(data.min()),
-            "value_max": float(data.max()),
-            "blur_ksize": int(blur_ksize),
-            "blur_sigma": float(blur_sigma),
-            "morph_kernel_size": int(morph_kernel_size),
-            "open_iterations": int(open_iterations),
-            "close_iterations": int(close_iterations),
-            "otsu_thresh": float(otsu_thresh),
-            "mask_pixel_count": int(cleaned["mask_binary"].sum()),
-            "contour_pixel_count": int(contour_info["contour_pixel_count"]),
-            "contour_count": int(contour_info["contour_count"]),
-        },
-    }
+    # Default behavior: label field is the same as the binary mask.
+    phase_mask_label = phase_mask_binary.copy()
 
+    '''
+    (1) connectedComponentsWithStats 對 binary foreground 做連通區域標記，得到每個 region 的唯一 ID。
+    (2) 對每個 region，從原始 normalized grayscale image計算平均灰階。
+    (3) 比較各 region 的平均灰階；平均值足夠相近的 region，給予相同 material_label。
+     --> 會同時得到「每一塊幾何區域」與「每一種材料」兩種不同資料。connectedComponentsWithStats 可輸出 label map、每個區域統計與中心位置，而 label 0 是背景
 
-# ============================================================
-# muGrid helpers
-# ============================================================
+    [output]:
+    phase_mask_binary : 0/1，Otsu 分割結果
+    phase_mask_label  : 0/1/2/3/...，每個連通區域有唯一 ID
+    material_label    : 0/1/2/...，平均灰階相近的區域共享材料 ID
+    region_mean_gray  : 每個 region 的平均灰階
+    region_to_material: region ID -> material ID 的對照表
 
-
-def make_mugrid_decomposition(
-    nx: int,
-    ny: int,
-    ghosts: int = 1,
-):
-    """
-    Function that creates a simple single-process muGrid Cartesian decomposition.
-
-    Parameters
-    ----------
-    nx : int
-        Number of domain grid points in x-direction.
-    ny : int
-        Number of domain grid points in y-direction.
-    ghosts : int
-        Number of ghost points per side.
-
-    Returns
-    -------
-    comm : muGrid.Communicator
-        muGrid communicator.
-    decomp : muGrid.CartesianDecomposition
-        Cartesian decomposition.
-    """
-    comm = muGrid.Communicator()
-    decomp = muGrid.CartesianDecomposition(
-        communicator=comm,
-        nb_domain_grid_pts=(nx, ny),
-        nb_subdivisions=(1, 1),
-        nb_ghosts_left=(ghosts, ghosts),
-        nb_ghosts_right=(ghosts, ghosts),
-    )
-    return comm, decomp
-
-
-def _as_scalar_field_array(arr: np.ndarray) -> np.ndarray:
-    """
-    Function that converts a 2D scalar array to shape [1, nx, ny].
-
-    Parameters
-    ----------
-    arr : numpy.ndarray
-        Input scalar array with shape [nx, ny].
-
-    Returns
-    -------
-    arr3 : numpy.ndarray
-        Output array with shape [1, nx, ny].
-    """
-    arr = np.asarray(arr)
-    if arr.ndim != 2:
-        raise ValueError(f"Expected a 2D scalar field array, got shape {arr.shape}.")
-    return arr[None, ...]
-
-
-def _copy_array_into_field_p(field, arr: np.ndarray) -> None:
-    """
-    Function that copies a NumPy array into a muGrid field through field.p.
-
-    Parameters
-    ----------
-    field : muGrid field
-        Target field.
-    arr : numpy.ndarray
-        Array to be copied.
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    ValueError
-        If arr.shape does not match field.p shape.
-    """
-    arr = np.asarray(arr)
-    target = np.asarray(field.p)
-    if target.shape != arr.shape:
+    def _validate_gray_tolerance(gray_tolerance: float) -> None:
+    """Validate the tolerance used to group region mean grayscale values."""
+    if gray_tolerance < 0.0:
         raise ValueError(
-            f"Shape mismatch: field.p shape {target.shape}, arr shape {arr.shape}."
+            "gray_tolerance must be non-negative, "
+            f"got {gray_tolerance}."
         )
-    target[...] = arr
 
 
-def make_numpy_field_bundle(
-    result: dict[str, Any],
-    store_intermediate: bool = True,
-) -> dict[str, np.ndarray]:
-    """
-    Function that converts pipeline outputs into muGrid-ready NumPy arrays.
+    def _group_regions_by_mean_gray(
+        image_norm: np.ndarray,
+        phase_mask_label: np.ndarray,
+        gray_tolerance: float,
+    ) -> tuple[np.ndarray, dict[int, float], dict[int, int]]:
+        """
+        Assign material IDs by grouping connected regions with similar mean gray.
 
-    Scalar fields are stored with shape [1, nx, ny], matching the style used
-    in the successful circle_muGrid_real_field implementation.
+        Parameters
+        ----------
+        image_norm
+            Original image normalized to [0, 1].
+        phase_mask_label
+            Connected-region label map. Label 0 is background.
+        gray_tolerance
+            Two regions are assigned to the same material when the absolute
+            difference between their representative mean gray values is not
+            greater than this tolerance.
 
-    Parameters
-    ----------
-    result : dict
-        Result from run_otsu_contour_pipeline.
-    store_intermediate : bool
-        If True, also include intermediate images and masks.
+        Returns
+        -------
+        material_label
+            Integer material-ID field. Background remains 0. Foreground material
+            IDs start at 1.
 
-    Returns
-    -------
-    bundle : dict[str, numpy.ndarray]
-        Dictionary of arrays with shape [1, nx, ny].
-    """
-    useful = {
-        "mask_binary": _as_scalar_field_array(result["mask_binary"].astype(np.float64)),
-        "contour": _as_scalar_field_array(result["contour"].astype(np.float64)),
-    }
+        region_mean_gray
+            Dictionary mapping region ID to its mean normalized grayscale value.
 
-    if store_intermediate:
-        useful = {
-            "image_raw": _as_scalar_field_array(result["image_raw"].astype(np.float64)),
-            "image_norm": _as_scalar_field_array(result["image_norm"].astype(np.float64)),
-            "image_u8": _as_scalar_field_array(result["image_u8"].astype(np.float64)),
-            "image_blur": _as_scalar_field_array(result["image_blur"].astype(np.float64)),
-            "mask_raw": _as_scalar_field_array(result["mask_raw"].astype(np.float64)),
-            "mask_open": _as_scalar_field_array(result["mask_open"].astype(np.float64)),
-            "mask_clean": _as_scalar_field_array(result["mask_clean"].astype(np.float64)),
-            **useful,
-        }
+        region_to_material
+            Dictionary mapping region ID to its assigned material ID.
+        """
+        _validate_gray_tolerance(gray_tolerance)
 
-    return useful
+        labels = np.asarray(phase_mask_label, dtype=np.int32)
+        material_label = np.zeros_like(labels, dtype=np.int32)
 
+        region_ids = np.unique(labels)
+        region_ids = region_ids[region_ids != 0]
 
-def pack_numpy_fields_to_mugrid(
-    numpy_bundle: dict[str, np.ndarray],
-    ghosts: int = 1,
-    verbose: bool = False,
-) -> dict[str, Any]:
-    """
-    Function that packs NumPy arrays into muGrid real_field containers.
+        region_mean_gray: dict[int, float] = {}
 
-    Parameters
-    ----------
-    numpy_bundle : dict
-        Dictionary of arrays with shape [ncomp, nx, ny].
-    ghosts : int
-        Number of ghost points per side.
-    verbose : bool
-        If True, print storage information.
+        for region_id in region_ids:
+            region_id = int(region_id)
+            region_pixels = image_norm[labels == region_id]
 
-    Returns
-    -------
-    bundle : dict
-        Dictionary containing:
-        - "numpy"
-        - "fields"
-        - "report"
-        - "decomposition"
-        - "communicator"
-    """
-    if not numpy_bundle:
-        raise ValueError("numpy_bundle must not be empty.")
+            if region_pixels.size == 0:
+                continue
 
-    first = np.asarray(next(iter(numpy_bundle.values())))
-    if first.ndim != 3:
-        raise ValueError(f"Expected first array to have shape [ncomp, nx, ny], got {first.shape}.")
+            region_mean_gray[region_id] = float(region_pixels.mean())
 
-    _, nx, ny = first.shape
-    comm, decomp = make_mugrid_decomposition(nx=nx, ny=ny, ghosts=ghosts)
+        # 每一組儲存：
+        # [代表平均灰階, 此組包含幾個 region]
+        material_groups: list[list[float]] = []
 
-    fields = {}
-    report = {}
+        region_to_material: dict[int, int] = {}
 
-    for name, arr in numpy_bundle.items():
-        arr = np.asarray(arr)
-        if arr.ndim != 3:
-            raise ValueError(f"Array '{name}' has shape {arr.shape}, expected [ncomp, nx, ny].")
-        if arr.shape[1:] != (nx, ny):
-            raise ValueError(f"Array '{name}' has shape {arr.shape}, expected (*, {nx}, {ny}).")
+        # 先依平均灰階排序，避免 label 的編號順序影響分類結果。
+        sorted_region_ids = sorted(
+            region_mean_gray,
+            key=lambda region_id: region_mean_gray[region_id],
+        )
 
-        ncomp = arr.shape[0]
-        field = decomp.real_field(name, components=(ncomp,))
-        _copy_array_into_field_p(field, arr)
+        for region_id in sorted_region_ids:
+            region_gray = region_mean_gray[region_id]
+            material_id: int | None = None
 
-        fields[name] = field
-        report[name] = {
-            "status": "ok",
-            "shape": tuple(arr.shape),
-            "dtype": str(arr.dtype),
-            "field_p_shape": tuple(np.asarray(field.p).shape),
-            "field_pg_shape": tuple(np.asarray(field.pg).shape),
-        }
+            for group_index, group in enumerate(material_groups):
+                group_mean_gray = group[0]
+                group_region_count = group[1]
 
-        if verbose:
-            print(
-                f"[pack] {name}: arr_shape={arr.shape}, "
-                f"field_p_shape={np.asarray(field.p).shape}, "
-                f"dtype={arr.dtype}",
-                flush=True,
+                if abs(region_gray - group_mean_gray) <= gray_tolerance:
+                    material_id = group_index + 1
+
+                    # 以目前 group 成員的平均值更新代表灰階。
+                    group[0] = (
+                        group_mean_gray * group_region_count + region_gray
+                    ) / (group_region_count + 1)
+
+                    group[1] = group_region_count + 1
+                    break
+
+            # 找不到相近 group，建立一個新材料類別。
+            if material_id is None:
+                material_groups.append([region_gray, 1.0])
+                material_id = len(material_groups)
+
+            region_to_material[region_id] = material_id
+            material_label[labels == region_id] = material_id
+
+        return material_label, region_mean_gray, region_to_material
+    '''
+    # Optional: assign one integer label to each connected region.
+    if regions_label:
+        number_of_labels, phase_mask_label, phase_region_stats, phase_region_centroids = (
+            cv2.connectedComponentsWithStats(
+                phase_mask_binary,
+                connectivity=connectivity,
+                ltype=cv2.CV_32S,
             )
+        )
 
-    return {
-        "numpy": numpy_bundle,
-        "fields": fields,
-        "report": report,
-        "decomposition": decomp,
-        "communicator": comm,
+    results: dict[str, Any] = {
+        "edge_mask": edge_mask,
+        "phase_mask_binary": phase_mask_binary,
+        "phase_mask_label": phase_mask_label,
     }
 
+    # These data exist only when connected-component labeling was requested.
+    if regions_label:
+        results.update(
+            {
+                "number_of_phase_regions": int(number_of_labels - 1),
+                "phase_region_stats": phase_region_stats,
+                "phase_region_centroids": phase_region_centroids,
+            }
+        )
 
-def pack_otsu_results_to_mugrid(
-    result: dict[str, Any],
-    ghosts: int = 1,
-    store_intermediate: bool = True,
-    verbose: bool = False,
-) -> dict[str, Any]:
-    """
-    Function that converts the Otsu/contour result to NumPy and muGrid fields.
-    """
-    numpy_bundle = make_numpy_field_bundle(result, store_intermediate=store_intermediate)
-    packed = pack_numpy_fields_to_mugrid(numpy_bundle, ghosts=ghosts, verbose=verbose)
-    packed["meta"] = result["params"]
-    return packed
+    if return_intermediate:
+        results.update(
+            {
+                "image_norm": image_norm,
+                "image_u8": image_u8,
+                "image_blur": image_blur,
+                "mask_raw": (mask_raw_u8 > 0).astype(np.uint8),
+                "mask_open": (mask_open_u8 > 0).astype(np.uint8),
+                "mask_clean": phase_mask_binary,
+                "otsu_threshold": float(otsu_threshold),
+                "contour_count": int(len(contours)),
+            }
+        )
 
-
-def pack_useful_fields_to_mugrid(
-    result: dict[str, Any],
-    ghosts: int = 1,
-    verbose: bool = False,
-) -> dict[str, Any]:
-    """
-    Function that packs only the most useful outputs for downstream usage.
-
-    Stored fields:
-    - mask_binary
-    - contour
-    """
-    numpy_bundle = {
-        "mask_binary": _as_scalar_field_array(result["mask_binary"].astype(np.float64)),
-        "contour": _as_scalar_field_array(result["contour"].astype(np.float64)),
-    }
-    packed = pack_numpy_fields_to_mugrid(numpy_bundle, ghosts=ghosts, verbose=verbose)
-    packed["meta"] = result["params"]
-    return packed
-
-
-def print_field_summary(field_bundle: dict[str, Any]) -> None:
-    """
-    Function that prints a summary of the stored muGrid fields.
-    """
-    print("\nmuGrid field summary")
-    print("-" * 72)
-
-    for name, report in field_bundle["report"].items():
-        print(f"{name}:")
-        print(f"  status  : {report['status']}")
-        print(f"  shape   : {report['shape']}")
-        print(f"  p_shape : {report['field_p_shape']}")
-        print(f"  pg_shape: {report['field_pg_shape']}")
-        print()
-
-
-# ============================================================
-# Saving helpers
-# ============================================================
-
-
-def save_result_csvs(
-    result: dict[str, Any],
-    output_dir: str | os.PathLike[str],
-) -> dict[str, str]:
-    """
-    Function that saves selected outputs as CSV files.
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    paths = {
-        "mask_binary_csv": str(output_dir / "grain_boundary_mask_1024x1024.csv"),
-        "contour_csv": str(output_dir / "grain_boundary_contour_1024x1024.csv"),
-    }
-
-    pd.DataFrame(result["mask_binary"]).to_csv(paths["mask_binary_csv"], index=False, header=False)
-    pd.DataFrame(result["contour"]).to_csv(paths["contour_csv"], index=False, header=False)
-
-    return paths
-
-
-# ============================================================
-# High-level convenience API
-# ============================================================
-
-
-def process_npy_to_mugrid(
-    input_file: str | os.PathLike[str],
-    ghosts: int = 1,
-    store_intermediate: bool = True,
-    verbose: bool = False,
-    **pipeline_kwargs,
-) -> dict[str, Any]:
-    """
-    Function that loads a .npy image, runs the Otsu/contour pipeline,
-    and packs the result into muGrid.
-    """
-    data = load_npy_image(input_file)
-    result = run_otsu_contour_pipeline(data, **pipeline_kwargs)
-    packed = pack_otsu_results_to_mugrid(
-        result,
-        ghosts=ghosts,
-        store_intermediate=store_intermediate,
-        verbose=verbose,
-    )
-    packed["source"] = str(input_file)
-    return packed
+    return results

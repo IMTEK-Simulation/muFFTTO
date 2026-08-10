@@ -13,7 +13,7 @@ from muFFTTO import solvers
 from muFFTTO.solvers import PCG
 from muFFTTO import microstructure_library
 
-from simple_CG import get_ritz_values, plot_ritz_values, get_cg_polynomial, plot_cg_polynomial, plot_eigenvectors, \
+from trivial_CG_experiments_plot import get_ritz_values, plot_ritz_values, get_cg_polynomial, plot_cg_polynomial, plot_eigenvectors, \
     plot_eigendisplacement
 
 
@@ -89,10 +89,9 @@ def matrix_sqrt_eig(A):
 
 
 def run_simple_CG_Green(initial, RHS, kappa):
-    problem_type = 'elasticity'
+    problem_type = 'conductivity'
     discretization_type = 'finite_element'
     element_type = 'linear_triangles'
-    formulation = 'small_strain'
 
     domain_size = [1, 1]
     geom_n = [3]#, 4, 5

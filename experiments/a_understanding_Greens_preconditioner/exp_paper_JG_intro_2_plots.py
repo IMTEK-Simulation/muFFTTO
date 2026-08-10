@@ -81,10 +81,10 @@ T = number_of_pixels[0]
 for G in [4, 8, 32]:
     file_data_name = (
         f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
-    folder_name = '../exp_data/'
+    folder_name = './exp_data/'
 
-    xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
-    phase_field = np.load('../exp_data/' + file_data_name + f'.npy', allow_pickle=True)
+    xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+    phase_field = np.load('./exp_data/' + file_data_name + f'.npy', allow_pickle=True)
     if counter < 3:
         ax_geom = fig.add_subplot(gs_left[0, counter])
     elif counter < 4:
@@ -177,9 +177,9 @@ linewidths = [3]
 for kontrast in [  100]:
     file_data_name = (
         f'{script_name}_gID{geometry_ID}_T{T}_G{G}_kappa{kontrast}.npy')
-    folder_name = '../exp_data/'
+    folder_name = './exp_data/'
 
-    xopt = np.load('../exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
+    xopt = np.load('./exp_data/' + file_data_name + f'xopt_log.npz', allow_pickle=True)
     ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_G[0]) + 2), xopt.f.nb_it_G[0], 'g', linestyle=linestyles[counter+2],
                   label='Green', linewidth=linewidths[counter], markerfacecolor='white')
     # ax_nb_it.plot(np.arange(2, len(xopt.f.nb_it_J[0]) + 2), xopt.f.nb_it_J[0], "b", linestyle=linestyles[counter+2],
@@ -191,9 +191,9 @@ for kontrast in [  100]:
     ax_nb_it.set_xlabel('\# material phases')#
     ax_nb_it.yaxis.set_label_position("right")
 
-    ax_nb_it.set_ylim([2,25])
-    ax_nb_it.set_yticks([2,5, 10,15, 20,  25])
-    ax_nb_it.set_yticklabels([2,5, 10,15, 20,  25])
+    ax_nb_it.set_ylim([2,32])
+    ax_nb_it.set_yticks([2,5, 10,15, 20,  25,32])
+    ax_nb_it.set_yticklabels([2,5, 10,15, 20,  25,32])
 
     ax_nb_it.set_xlim([2, 32])
     ax_nb_it.set_xticks([2, 8, 16, 24, 32])

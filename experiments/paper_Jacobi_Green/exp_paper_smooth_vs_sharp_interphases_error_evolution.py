@@ -52,12 +52,12 @@ def scale_field_log(field, min_val, max_val):
         min_val))  # Scale to [min_val, max_val]
 
 
-compute = False
+compute = True
 plot = True
 enforce_mean = False
-save_results = False
+save_results = True
 save_in_iteration = False
-plot_strain_evols = True
+plot_strain_evols = False
 
 if compute:
 
