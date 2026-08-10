@@ -131,7 +131,7 @@ def compute_stress_equivalence_potential(actual_stress_ij,
                                          target_stress_ij,
                                          disp=False):
     # evaluate objective functions
-    # f_sigma = ( flux_target-flux_h)^2
+    # f_sigma = ( stress_target-stress_h)^2
 
     # stress difference potential: actual_stress_ij is homogenized stress
     # stress_difference_ij = actual_stress_ij - target_stress_ij
@@ -1376,10 +1376,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
                                           target_stress_ij,
                                           actual_stress_ij,
                                           preconditioner_fun,
-                                          system_matrix_fun,
-                                          formulation,
-                                          p,
-                                          weight, disp=False,
+                                          system_matrix_fun, p,
+                                          weight,
+                                          formulation=None,
+                                          disp=False,
                                           **kwargs):
     cg_tol = kwargs.get('cg_tol', 1e-7)
     r_tol = kwargs.get('r_tol', True)
@@ -1648,8 +1648,6 @@ def sensitivity_elastic_energy_and_adjoint_FE_NEW(discretization,
 
 
 def sensitivity_phase_field_term_FE_NEW(discretization,
-                                        base_material_data_ijkl,
-                                        void_material_data_ijkl,
                                         phase_field_1nxyz,
                                         p,
                                         eta,
@@ -1673,21 +1671,6 @@ def sensitivity_phase_field_term_FE_NEW(discretization,
     # Gradient of material data with respect to phase field
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
-
-    material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_in_sensitivity_reusable')
-    # material_data_field_rho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
-    #                                               ..., np.newaxis, np.newaxis, np.newaxis] * \
-    #                                           np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-    #                                           void_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis]
-    # dim = 2 or 3 (number of spatial dimensions)
-    # quad axis (q) + spatial axes (x, y[, z]) -> dim + 1 trailing axes
-    expand = (...,) + (np.newaxis,) * (dim + 1)
-
-    material_data_field_rho_ijklqxyz.s[...] = \
-        (base_material_data_ijkl - void_material_data_ijkl)[expand] \
-        * np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] \
-        + void_material_data_ijkl[expand]
 
     # -----    Double well potential ----- #
 

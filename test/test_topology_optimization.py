@@ -156,8 +156,6 @@ def test_fd_check_of_whole_objective_function_2D(discretization_fixture, plot=Tr
         s_phase_field.s.fill(0)
 
         topology_optimization.sensitivity_phase_field_term_FE_NEW(discretization=discretization,
-                                                                  base_material_data_ijkl=elastic_C_0_ijkl,
-                                                                  void_material_data_ijkl=elastic_C_void,
                                                                   phase_field_1nxyz=phase_field_1nxyz,
                                                                   p=p,
                                                                   eta=eta,

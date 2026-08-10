@@ -23,7 +23,7 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = 3 * (1,)
-number_of_pixels = (63,63,63)
+number_of_pixels = (15,15,15)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
