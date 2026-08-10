@@ -899,6 +899,44 @@ class Discretization:
         output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,lk...->ij...', material_data_field_ijklqxyz.s,
                                                       output_stress_field_ijqxyz.s)
 
+    def get_flux_field_mugrid(self,
+                              material_data_field_ijqxyz,
+                              temperature_field_inxyz,
+                              macro_gradient_field_ijqxyz,
+                              output_flux_field_ijqxyz):
+        """
+         Function that computes flux field for given data and heat gradient
+            sigma  = C:(E+grad(u_fluctiation))
+         Parameters
+         ----------
+         material_data_field_ijqxyz: numpy ndarray of discretized  material data tangent field [i,j,q,x,y,z]
+            - quadrature point field - q is a quadrature point index
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+
+         temperature_field_inxyz:
+            - nodal point field -  temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         stress_field_ijqxyz: mugrid flux field
+                    - stress= C * (macro_grad + micro_grad))
+                    :param stress_field_ijqxyz:
+         """
+
+        # output_field_ijqxyz is strain field
+        self.apply_gradient_operator_mugrid(u_inxyz=temperature_field_inxyz,
+                                            grad_u_ijqxyz=output_flux_field_ijqxyz)
+        #  macro_grad + micro_grad
+        output_flux_field_ijqxyz.s[...] = output_flux_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        # q = C * (macro_grad + micro_grad)
+        output_flux_field_ijqxyz.s[...] = np.einsum('ij...,uj...->uj...', material_data_field_ijqxyz.s,
+                                                    output_flux_field_ijqxyz.s)
+
     def get_stress_field(self,
                          material_data_field_ijklqxyz,
                          displacement_field_inxyz,

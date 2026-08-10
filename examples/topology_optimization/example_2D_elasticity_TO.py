@@ -538,14 +538,14 @@ if __name__ == '__main__':
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
         print('Optimized elastic tangent =  :\n' +
-              np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
+              np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
         print(f'Target elastic tangent (Voigt):\n' +
-              np.array2string(domain.compute_Voigt_notation_4order(elastic_C_target),
+              np.array2string(material_models.compute_Voigt_notation_4order(elastic_C_target),
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
-    _info['homogenized_C_ijkl'] = domain.compute_Voigt_notation_4order(homogenized_C_ijkl)
-    _info['target_C_ijkl'] = domain.compute_Voigt_notation_4order(elastic_C_target)
+    _info['homogenized_C_ijkl'] = material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)
+    _info['target_C_ijkl'] = material_models.compute_Voigt_notation_4order(elastic_C_target)
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
