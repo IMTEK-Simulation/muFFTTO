@@ -322,6 +322,14 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
     return integral
 
 
+def get_nb_of_entries_global(discretization, field_s):
+    # Number of entries that a field  [f,n,x,y,z] has over the whole unit cell.
+    # field_s.shape holds only the pixels of the current MPI rank, so the number of
+    # pixels has to be taken from the global grid.
+    dim = discretization.domain_dimension
+    return int(np.prod(field_s.shape[:-dim]) * np.prod(discretization.nb_of_pixels_global))
+
+
 def compute_double_well_potential_nodal(discretization,
                                         phase_field_1nxyz,
                                         eta=1):
@@ -330,7 +338,7 @@ def compute_double_well_potential_nodal(discretization,
     # double - well potential
     integrant = (phase_field_1nxyz.s ** 2) * (1 - phase_field_1nxyz.s) ** 2
     integral = discretization.mpi_reduction.sum(integrant)
-    integral = (integral / np.prod(integrant.shape)) * discretization.cell.domain_volume
+    integral = (integral / get_nb_of_entries_global(discretization, integrant)) * discretization.cell.domain_volume
     return integral / eta
 
 
@@ -399,7 +407,8 @@ def partial_der_of_double_well_potential_wrt_density_nodal(discretization,
             2 * phase_field_1nxyz.s * (2 * phase_field_1nxyz.s * phase_field_1nxyz.s - 3 * phase_field_1nxyz.s + 1))
     # integral=discretization.mpi_reduction.sum(integrant_1nxyz)
 
-    integral_fnxyz = (integrant_1nxyz / np.prod(integrant_1nxyz.shape)) * discretization.cell.domain_volume
+    integral_fnxyz = (integrant_1nxyz / get_nb_of_entries_global(discretization,
+                                                                 integrant_1nxyz)) * discretization.cell.domain_volume
     # there is no sum here
     output_1nxyz.s[0, 0] = integral_fnxyz / eta
     return output_1nxyz
