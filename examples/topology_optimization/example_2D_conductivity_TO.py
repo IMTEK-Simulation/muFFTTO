@@ -21,16 +21,18 @@ element_type = 'linear_triangles'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (32,32)
+number_of_pixels = (16,16)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
 # Optimization Parameters
-soft_phase_exponent = 8
+soft_phase_exponent = 4
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
-weight = 10.  # Weight for the stress match term
-cg_setup = {'cg_tol': 1e-4}
+weights=[5,5] # Weight for the flux match term
+cg_setup = {'cg_tol': 1e-6}
+
+
 
 # Initialize periodic unit cell and discretization
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -83,8 +85,8 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties
-conductivity_C_target=np.array([[0.2, 0],
-                                [0, 1.0]])
+conductivity_C_target=np.array([[0.5, 0.],
+                                 [0.,0.1]])
 
 
 if MPI.COMM_WORLD.rank == 0:
@@ -118,10 +120,9 @@ s_sensitivity_field = discretization.get_scalar_field(name='sensitivity_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field')
 s_flux_and_adjoint_load_case = discretization.get_scalar_field(name='flux_adj_sensitivity')
 
-w = weight / nb_load_cases
 
-if MPI.COMM_WORLD.rank == 0:
-    print(f'Penalty p: {p}, Weight w: {w}, Eta: {eta}')
+
+
 
 
 def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
@@ -199,13 +200,14 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
     disp = False
     # 5. Solve mechanical equilibrium and adjoint problems for each load case
-    homogenized_fluxes = np.zeros([nb_load_cases, dim])
+    homogenized_fluxes = np.zeros([nb_load_cases,1, dim])
 
     f_sigmas = np.zeros([nb_load_cases, 1])
     adjoint_energies = np.zeros([nb_load_cases, 1])
     norm_sigma_step = 0
     adjoint_energies_step = 0
     for load_case in np.arange(nb_load_cases):
+        w = weights[load_case]
 
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[load_case],
                                                        macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
@@ -254,7 +256,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             del norms_cg_mech
 
         # compute homogenized stress field corresponding to current displacement
-        homogenized_fluxes[load_case] = discretization.get_homogenized_stress_mugrid(
+        homogenized_fluxes[load_case,0] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_ijqxyz,
             displacement_field_inxyz=temperature_field_load_case[load_case],
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz )
@@ -285,7 +287,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
         s_sensitivity_field.s[0, 0] += s_flux_and_adjoint_load_case.s[0, 0]
 
         objective_function += w * f_sigmas[load_case]
-        objective_function += adjoint_energies[load_case]
+        #objective_function += adjoint_energies[load_case]
         if MPI.COMM_WORLD.rank == 0:
             info_adjoint['num_iteration_adjoint'].append(info_adjoint_current['num_iteration_adjoint'])
             nb_it_adjoint = info_adjoint_current['num_iteration_adjoint']
@@ -335,7 +337,25 @@ if __name__ == '__main__':
     phase_field_0 = discretization.get_scalar_field(name='phase_field_initial')
 
     if random_init:
-        phase_field_0.s[...] += np.random.rand(*phase_field_0.s.shape)
+        # Use a fixed global seed so that the initial field is reproducible and
+        # independent of the number of MPI ranks.  Each rank seeds with the same
+        # value and then draws values only for its own subdomain pixels; because
+        # every rank skips the same number of draws (determined by subdomain
+        # location) the result is consistent across different decompositions.
+        rng = np.random.default_rng(seed=42)
+        # Advance the RNG past the pixels that belong to ranks with lower
+        # subdomain_locations so that each rank draws the correct slice of a
+        # conceptual global random array.
+        loc = discretization.fft.subdomain_locations   # (x0, y0[, z0])
+        nb_global = discretization.nb_of_pixels_global  # (Nx, Ny[, Nz])
+        nb_sub = discretization.fft.nb_subdomain_grid_pts  # (nx, ny[, nz])
+        # Number of pixels that come before this subdomain in row-major order
+        flat_start = int(np.ravel_multi_index(loc, nb_global))
+        # Skip pixels before this subdomain by consuming the same type of draws
+        if flat_start > 0:
+            rng.random(size=flat_start)
+        local_rand = rng.random(size=int(np.prod(nb_sub)))
+        phase_field_0.s[0, 0] = local_rand.reshape(nb_sub)
     else:
         np.random.seed(MPI.COMM_WORLD.rank)
         coords = discretization.fft.coords
@@ -357,7 +377,7 @@ if __name__ == '__main__':
                            discretization.fft.coords[1],
                            x_current.reshape(discretization.nb_of_pixels),
                            cmap=mpl.cm.Greys)
-            #plt.clim(0, 1)
+            plt.clim(0, 1)
             plt.title(f'Iteration {iterat}')
             plt.colorbar()
             plt.show()
@@ -379,8 +399,8 @@ if __name__ == '__main__':
         bounds_lo=0.,
         bounds_hi=1.,
         zero_mask=None,
-        gtol=1e-3,
-        xtol=1e-3,
+        gtol=1e-4,
+        xtol=1e-4,
         maxiter=500,
         maxcor=20,
         c1=1e-4,
@@ -407,7 +427,7 @@ if __name__ == '__main__':
     _info['nb_iterations'] = iterat
 
     # Save optimized phase field
-    file_data_name = f'_eta_{eta}' + f'_w_{weight}' + f'_final'
+    file_data_name = f'_eta_{eta}' + f'_w_{weights[0]}' + f'_final'
     save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
              solution_phase.s[0].mean(axis=0),
              tuple(discretization.fft.subdomain_locations),
@@ -521,5 +541,5 @@ if __name__ == '__main__':
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weight}' + f'_log.npz',
+        np.savez(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weights[0]}' + f'_log.npz',
                  **_info)  # + f'_its_{start}_{start + iterat}'

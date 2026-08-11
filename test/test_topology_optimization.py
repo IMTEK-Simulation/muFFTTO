@@ -67,10 +67,6 @@ def test_fd_check_of_whole_objective_function_2D(discretization_fixture, plot=Tr
     Finite difference check of the whole objective function gradient
     with respect to the phase field.
     """
-    # problem_type = 'elasticity'
-    # discretization_type = 'finite_element'
-    # element_type = 'linear_triangles'
-    # formulation = 'small_strain'
     preconditioner_type = 'Green_Jacobi'
 
     discretization = discretization_fixture

@@ -265,7 +265,7 @@ def partial_derivative_of_objective_function_flux_equivalence_wrt_phase_field(di
     flux_difference_ij = target_flux_ij - actual_flux_ij
 
     double_contraction_flux_qxyz_FE = discretization.get_quad_field_scalar(name='temp_at_quads')
-    double_contraction_flux_qxyz_FE.s[0, 0] = np.einsum('j,ujqxy...->qxy...',
+    double_contraction_flux_qxyz_FE.s[0, 0] = np.einsum('uj,ujqxy...->qxy...',
                                                         flux_difference_ij,
                                                         flux_ijqxyz.s)
     dfflux_drho = discretization.get_scalar_field(name='dfflux_drho_output')

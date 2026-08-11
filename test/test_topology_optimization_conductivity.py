@@ -6,7 +6,7 @@ import time
 
 from muFFTTO import domain
 from muFFTTO import solvers
-from muFFTTO import topology_optimization
+from muFFTTO import topology_optimization_conductivity as topology_optimization
 from muFFTTO import material_models
 
 
@@ -67,10 +67,6 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
     Finite difference check of the whole objective function gradient
     with respect to the phase field.
     """
-    # problem_type = 'elasticity'
-    # discretization_type = 'finite_element'
-    # element_type = 'linear_triangles'
-    # formulation = 'small_strain'
     preconditioner_type = 'Green_Jacobi'
 
     discretization = discretization_fixture
@@ -83,7 +79,7 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
     conductivity_C_0 = np.array([[1., 0], [0, 1.0]])
     #
     soft_phase = 0
-    elastic_C_void = conductivity_C_0 * soft_phase
+    conductivity_C_void = conductivity_C_0 * soft_phase
 
 
     # create target material data
@@ -196,9 +192,9 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
             displacement_field_inxyz=temperature_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz )
 
-        f_sigma = topology_optimization.compute_stress_equivalence_potential(
-            actual_stress_ij=homogenized_flux,
-            target_stress_ij=target_flux_ij)
+        f_sigma = topology_optimization.compute_flux_equivalence_potential(
+            actual_flux_ij=homogenized_flux,
+            target_flux_ij=target_flux_ij)
 
         adjoint_field = discretization.get_unknown_size_field(name='adjoint_field')
         adjoint_field.s.fill(0)
@@ -208,19 +204,18 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
         sensitivity_analytical.s.fill(0)
 
         sensitivity_analytical.s[
-            0, 0], adjoint_field, adjoint_energies, info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
+            0, 0], adjoint_field, adjoint_energies, info_adjoint_current = topology_optimization.sensitivity_flux_and_adjoint(
             discretization=discretization,
-            base_material_data_ijkl=elastic_C_0_ijkl,
-            void_material_data_ijkl=elastic_C_void,
-            displacement_field_inxyz=displacement_field,
+            base_material_data_ijkl=conductivity_C_0,
+            void_material_data_ijkl=conductivity_C_void,
+            displacement_field_inxyz=temperature_field,
             adjoint_field_inxyz=adjoint_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             phase_field_1nxyz=phase_field_1nxyz,
-            target_stress_ij=target_stress_ij,
-            actual_stress_ij=homogenized_stress,
+            target_flux_ij=target_flux_ij,
+            actual_flux_ij=homogenized_flux,
             preconditioner_fun=M_fun,
             system_matrix_fun=K_fun,
-            formulation='small_strain',
             p=p,
             weight=w,
             disp=True,
@@ -229,8 +224,8 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
         sensitivity_analytical.s[...] += s_phase_field.s
 
         objective_function = w * f_sigma + f_phase_field
-        objective_function += adjoint_energies
-
+        #objective_function += adjoint_energies
+        print(f'ob')
         return objective_function, f_sigma, f_phase_field, sensitivity_analytical,
 
     np.random.seed(1)
