@@ -1,8 +1,210 @@
+import muGrid
 import numpy as np
+from abc import ABC, abstractmethod
 
 '''
 Constitute models and related utilities
 '''
+
+
+# ============================================================================
+# Abstract base class — defines the interface every material model must obey
+# ============================================================================
+class MaterialModelElasticity(ABC):
+    """
+    Abstract base class for material models.                                                 finite-strain hyperelastic
+
+    All material models must implement:
+      - get_stress(strain_ijqxyz, stress_ijqxyz)
+      - get_algorithmic_tangent(strain_ijqxyz, tangent_ijklqxyz)
+
+    The convention for array indices is:
+      i, j     : spatial dimensions (0..dim-1)
+      q        : quadrature point index
+      x, y, z  : grid cell indices
+    """
+
+    def __init__(self,
+                 discretization, name: str = 'base_material'):
+        self.name = name
+
+    @abstractmethod
+    def get_stress(self,
+                   strain_ijqxyz,
+                   stress_ijqxyz) -> None:
+        """
+        Compute stress from strain IN-PLACE into stress_ijqxyz.
+
+        Parameters
+        ----------
+        strain_ijqxyz  : muGrid array [i, j, q, x, y, z]  — input strain field
+        stress_ijqxyz  : muGrid array [i, j, q, x, y, z]  — output stress field (written in-place)
+        """
+        ...
+
+    @abstractmethod
+    def get_algorithmic_tangent(self,
+                                strain_ijqxyz,
+                                tangent_ijklqxyz) -> None:
+        """
+        Compute algorithmic tangent from strain IN-PLACE into tangent_ijklqxyz.
+
+        Parameters
+        ----------
+        strain_ijqxyz    : muGrid array [i, j, q, x, y, z]       — input strain field
+        tangent_ijklqxyz : muGrid array [i, j, k, l, q, x, y, z] — output tangent (written in-place)
+        """
+        ...
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(name='{self.name}')"
+
+
+# ============================================================================
+# Concrete implementation 1: Linear elasticity
+# ============================================================================
+
+class LinearElastic(MaterialModelElasticity):
+    """
+    Isotropic linear elasticity for small strain elasticity.
+      σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
+      C_ijkl = λ δ_ij δ_kl  +  μ (δ_ik δ_jl + δ_il δ_jk)
+    """
+
+    def __init__(self, discretization, lam_1qxyz, mu_1qxyz, name: str = 'linear_elastic'):
+        super().__init__(name)
+
+        self.lam = lam_1qxyz  # quadrature field of first lamme moduli
+        self.mu = mu_1qxyz  # quadrature field of shear modullus ratios
+        self.discretization = discretization
+
+    def get_stress(self, strain_ijqxyz, stress_ijqxyz):
+        dim = strain_ijqxyz.s.shape[0]
+        # ε_kk (trace) summed over first two indices
+        eps_trace_11qxyz = self.discretization.get_quad_field_scalar(name='eps_trace')
+        eps_trace_11qxyz.s[0, 0] = np.einsum('iiq...->q...', strain_ijqxyz.s)  # shape [q, x, y, z]
+        # σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
+        stress_ijqxyz.s[...] = 2.0 * self.mu.s * strain_ijqxyz.s
+        for i in range(dim):
+            stress_ijqxyz.s[i, i] += self.lam.s[0, 0] * eps_trace_11qxyz.s[0, 0]
+
+    def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
+        dim = strain_ijqxyz.s.shape[0]
+        I = np.eye(dim)
+
+        # δ_ij δ_kl,  δ_ik δ_jl,  δ_il δ_jk  — shape [i,j,k,l]
+        IxI = np.einsum('ij,kl->ijkl', I, I)
+        IsI1 = np.einsum('ik,jl->ijkl', I, I)
+        IsI2 = np.einsum('il,jk->ijkl', I, I)
+
+        # lam and mu have shape [1,1, q, x, y, z] — add [i,j,k,l] axes in front
+        lam = self.lam.s[0, 0]  # shape [q, x, y, z]
+        mu = self.mu.s[0, 0]  # shape [q, x, y, z]
+
+        # C_ijkl = λ δ_ij δ_kl + μ (δ_ik δ_jl + δ_il δ_jk)
+        # IxI has shape [i,j,k,l], lam has shape [q,x,y,z]
+        # result must be [i,j,k,l,q,x,y,z]
+        # number of trailing axes in lam: q + n_spatial_dims
+        n_extra = lam.ndim
+        index_extender = (...,) + (np.newaxis,) * n_extra
+
+        tangent_ijklqxyz.s[...] = (
+                IxI[index_extender] * lam
+                + IsI1[index_extender] * mu
+                + IsI2[index_extender] * mu
+        )
+
+
+    def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
+        stress_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...',
+                                         tangent_ijklqxyz.s,
+                                         strain_ijqxyz.s)
+
+
+# ============================================================================
+# Concrete implementation 2: Neo-Hookean (Simo-Pister)
+# ============================================================================
+
+class NeoHookeanTMC(MaterialModelElasticity):
+    """
+    Compressible neo-Hookean (Simo-Pister form).
+      W = (λ/2) ln(J)²  +  (μ/2)(I₁ - dim)  -  μ ln(J)
+      P_iJ = λ ln(J) F_iJ^{-T}  +  μ (F_iJ - F_iJ^{-T})
+
+    Here strain_ijqxyz stores the DEFORMATION GRADIENT F (not ε),
+    and stress_ijqxyz stores the 1st Piola-Kirchhoff stress P.
+    """
+
+    def __init__(self, E: float, nu: float, name: str = 'neo_hookean'):
+        super().__init__(name)
+        self.E = E
+        self.nu = nu
+        self.lam = E * nu / ((1 + nu) * (1 - 2 * nu))
+        self.mu = E / (2 * (1 + nu))
+
+    def get_stress(self, strain_ijqxyz, stress_ijqxyz):
+        # strain_ijqxyz = F (deformation gradient field)
+        # Iterate over all quadrature points and grid cells
+        shape = strain_ijqxyz.shape  # [i, j, q, ...]
+        dim = shape[0]
+        extra = strain_ijqxyz.shape[2:]  # (q, x, y, z, ...)
+
+        for idx in np.ndindex(*extra):
+            F = strain_ijqxyz[(slice(None), slice(None)) + idx]  # dim×dim
+            J = np.linalg.det(F)
+            Finv = np.linalg.inv(F)
+            lnJ = np.log(J)
+            P = self.lam * lnJ * Finv.T + self.mu * (F - Finv.T)
+            stress_ijqxyz[(slice(None), slice(None)) + idx] = P
+
+    def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
+        # Material tangent A_iJkL = dP_iJ/dF_kL
+        shape = strain_ijqxyz.shape
+        extra = strain_ijqxyz.shape[2:]
+        dim = shape[0]
+
+        for idx in np.ndindex(*extra):
+            F = strain_ijqxyz[(slice(None), slice(None)) + idx]
+            J = np.linalg.det(F)
+            Finv = np.linalg.inv(F)
+            lnJ = np.log(J)
+            lam, mu = self.lam, self.mu
+
+            A = np.zeros((dim, dim, dim, dim))
+            for i in range(dim):
+                for J_ in range(dim):
+                    for k in range(dim):
+                        for L in range(dim):
+                            # dP_iJ/dF_kL = lam * Finv_Ji * Finv_Lk
+                            #              + (lam*lnJ - mu) * (Finv_Li * Finv_Jk + Finv_Ji * Finv_Lk) -- skipped here
+                            # Closed form (see Holzapfel 2006):
+                            A[i, J_, k, L] = (
+                                    lam * Finv[J_, i] * Finv[L, k]
+                                    + (mu - lam * lnJ) * (Finv[L, i] * Finv[J_, k])
+                                    + mu * (i == k) * (J_ == L)
+                            )
+            tangent_ijklqxyz[(slice(None),) * 4 + idx] = A
+
+
+# ============================================================================
+# Concrete implementation 3: Third Medium (TMC)
+# ============================================================================
+
+class ThirdMediumContact(NeoHookeanTMC):
+    """
+    Third Medium Contact material (Bluhm et al. 2021; Frederiksen et al. 2026).
+    Inherits NeoHookean; scales λ and μ by k_v << 1.
+    """
+
+    def __init__(self, E_solid: float, nu: float,
+                 kv: float = 1e-6,
+                 name: str = 'third_medium'):
+        lam_s = E_solid * nu / ((1 + nu) * (1 - 2 * nu))
+        mu_s = E_solid / (2 * (1 + nu))
+        E_m = kv * E_solid
+        super().__init__(E=E_m, nu=nu, name=name)
+        self.kv = kv
+        self.E_solid = E_solid
 
 
 def compute_Voigt_notation_2order(sigma_ij):
@@ -48,6 +250,7 @@ def get_bulk_and_shear_modulus(E, poisson):
     G = E / (2 * (1 + poisson))
     return K, G
 
+
 def get_lame_parameters(E, poisson):
     """
     Convert Young's modulus and Poisson's ratio to the Lame parameters
@@ -72,11 +275,12 @@ def get_lame_parameters(E, poisson):
     """
     if abs(1 - 2 * poisson) < 1e-10:
         raise ValueError("Poisson's ratio too close to 0.5 (incompressible limit); "
-                          "lambda is undefined/infinite.")
+                         "lambda is undefined/infinite.")
 
     lam = E * poisson / ((1 + poisson) * (1 - 2 * poisson))
     mu = E / (2 * (1 + poisson))
     return lam, mu
+
 
 def get_lame_parameters_from_bulk_and_shear(K, G, dim):
     """
@@ -111,7 +315,6 @@ def get_lame_parameters_from_bulk_and_shear(K, G, dim):
     return lam, mu
 
 
-
 def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
     shape = np.array(4 * [dim, ])
     mat = np.zeros(shape)
@@ -125,6 +328,7 @@ def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
                                                       2 / 3 * kron(alpha, beta) * kron(gamma, delta)))
             # https://en.wikipedia.org/wiki/Linear_elasticity
     return mat
+
 
 def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz, mu_1qxyz, output_stress_ijqxyz):
     """
@@ -142,9 +346,9 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
     output_stress_ijqxyz : mugrid field, shape (dim, dim, nb_quad_points, *nb_nodes)
        Output stress field. Written in place.
     """
-    strain = strain_ijqxyz.s[...]      # (dim, dim, q, *xyz)
-    lam = lam_1qxyz.s[...]             # (1, q, *xyz)
-    mu = mu_1qxyz.s[...]               # (1, q, *xyz)
+    strain = strain_ijqxyz.s[...]  # (dim, dim, q, *xyz)
+    lam = lam_1qxyz.s[...]  # (1, q, *xyz)
+    mu = mu_1qxyz.s[...]  # (1, q, *xyz)
 
     # symmetrize: handles full-gradient input the same way C_ijkl minor symmetry does
     # strain = (strain + np.swapaxes(strain, 0, 1)) / 2
@@ -152,7 +356,7 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
     dim = strain.shape[0]
 
     # trace over the first two (tensor) axes only, keep q,*xyz as-is
-    trace_eps_qxyz = np.einsum('ii...->...', strain)          # shape (q, *xyz)
+    trace_eps_qxyz = np.einsum('ii...->...', strain)  # shape (q, *xyz)
 
     I = np.eye(dim).reshape((dim, dim) + (1,) * (strain.ndim - 2))
 
@@ -164,7 +368,7 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
 # ------------------------------------------------------------
 def get_elastic_tensor_from_lame(dim, lam, mu):
     """
-    Construct linear elastic stiffness tensor from Lamé parameters.
+    Construct a linear elastic stiffness tensor from Lamé parameters.
 
     Parameters
     ----------
@@ -271,7 +475,7 @@ def get_elastic_tangent(E, nu, mode="3D"):
         C = np.array([
             [lam + 2 * mu, lam, lam, 0, 0, 0],
             [lam, lam + 2 * mu, lam, 0, 0, 0],
-            [lam, lam,          lam + 2 * mu, 0, 0, 0],
+            [lam, lam, lam + 2 * mu, 0, 0, 0],
             [0, 0, 0, mu, 0, 0],
             [0, 0, 0, 0, mu, 0],
             [0, 0, 0, 0, 0, mu]
