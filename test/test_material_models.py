@@ -226,44 +226,44 @@ def test_LinearElastic_MaterialModelElasticity_(discretization_fixture):
     """
     rng = np.random.default_rng(0)
     dim = discretization_fixture.domain_dimension
-
     strain_ijqxyz = discretization_fixture.get_strain_sized_field(name='strain_temp')
     stress_ijqxyz = discretization_fixture.get_stress_sized_field(name='stress_temp')
-    lam_11qxyz = discretization_fixture.get_quad_field_scalar(name='lam_temp')
-    mu_11qxyz = discretization_fixture.get_quad_field_scalar(name='mu_temp')
+    lam_11qxyz    = discretization_fixture.get_quad_field_scalar(name='lam_temp')
+    mu_11qxyz     = discretization_fixture.get_quad_field_scalar(name='mu_temp')
 
-    shape = strain_ijqxyz.s[...].shape
-    point_shape = shape[2:]
+    shape       = strain_ijqxyz.s[...].shape    # [i, j, q, x, y, z]
+    point_shape = shape[2:]                     # [q, x, y, z]
 
-    raw = rng.normal(size=shape)
+    raw    = rng.normal(size=shape)
     strain = 0.5 * (raw + np.swapaxes(raw, 0, 1))
     strain_ijqxyz.s[...] = strain
 
-    lam_11qxyz.s[...] = rng.uniform(1.0, 5.0, size=(1,) + point_shape)
-    mu_11qxyz.s[...] = rng.uniform(1.0, 5.0, size=(1,) + point_shape)
-    lam = lam_11qxyz.s[...]
-    mu = mu_11qxyz.s[...]
+    # scalar fields have layout [1, 1, q, x, y, z]
+    lam_11qxyz.s[0, 0] = rng.uniform(1.0, 5.0, size=point_shape)
+    mu_11qxyz.s[0, 0]  = rng.uniform(1.0, 5.0, size=point_shape)
 
-    material=material_models.LinearElastic(discretization=discretization_fixture,
-                                           lam_1qxyz=lam_11qxyz,
-                                           mu_1qxyz=mu_11qxyz,
-                                           name='linear_isotropic_elasticity')
+    material = material_models.LinearElastic(
+        discretization=discretization_fixture,
+        lam_1qxyz=lam_11qxyz,
+        mu_1qxyz=mu_11qxyz,
+        name='linear_isotropic_elasticity'
+    )
 
     def energy_density(eps):
-        strain_perturbed_ijqxyz = discretization_fixture.get_strain_sized_field(name='strain_perturbed_ijqxyz')
+        strain_perturbed_ijqxyz = discretization_fixture.get_strain_sized_field(
+            name='strain_perturbed_ijqxyz'
+        )
         strain_perturbed_ijqxyz.s[...] = eps
         material.get_stress(strain_perturbed_ijqxyz, stress_ijqxyz)
         sigma = stress_ijqxyz.s[...]
         return 0.5 * np.einsum('ij...,ij...->...', sigma, eps)
 
-    # analytic stress
+    # --- stress test ---
     material.get_stress(strain_ijqxyz, stress_ijqxyz)
-
     sigma_analytic = stress_ijqxyz.s[...].copy()
 
-    h = 1e-1
+    h        = 1e-4                              # reduced from 1e-1 for better FD accuracy
     sigma_fd = np.zeros_like(sigma_analytic)
-
     for i in range(dim):
         for j in range(dim):
             dstrain = np.zeros_like(strain)
@@ -272,16 +272,37 @@ def test_LinearElastic_MaterialModelElasticity_(discretization_fixture):
             else:
                 dstrain[i, j, ...] = h / 2
                 dstrain[j, i, ...] = h / 2
-
-            W_plus = energy_density(strain + dstrain)
+            W_plus  = energy_density(strain + dstrain)
             W_minus = energy_density(strain - dstrain)
-
             sigma_fd[i, j, ...] = (W_plus - W_minus) / (2 * h)
 
-    tangent_ijklqxyz=discretization_fixture.get_material_data_size_field_mugrid(name='tangent_ijklqxyz')
-    material.get_algorithmic_tangent( strain_ijqxyz, tangent_ijklqxyz)
+    np.testing.assert_allclose(
+        sigma_analytic, sigma_fd,
+        rtol=1e-5, atol=1e-8,
+        err_msg=(
+            "STRESS TEST FAILED: get_stress is not the gradient of the energy density W. "
+            "Either the stress formula σ_ij = λ δ_ij ε_kk + 2μ ε_ij is wrong, "
+            "or the symmetrisation of the finite difference perturbation is broken. "
+            f"Max absolute error: {np.max(np.abs(sigma_analytic - sigma_fd)):.3e}, "
+            f"Max relative error: {np.max(np.abs((sigma_analytic - sigma_fd) / (sigma_fd + 1e-30))):.3e}"
+        )
+    )
 
-    material.apply_algorithmic_tangent( strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz)
+    # --- tangent test ---
+    tangent_ijklqxyz = discretization_fixture.get_material_data_size_field_mugrid(
+        name='tangent_ijklqxyz'
+    )
+    material.get_algorithmic_tangent(strain_ijqxyz, tangent_ijklqxyz)
+    material.apply_algorithmic_tangent(strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz)
 
-    np.testing.assert_allclose(sigma_analytic  , stress_ijqxyz.s, rtol=1e-5, atol=1e-8)
-    np.testing.assert_allclose(sigma_analytic, sigma_fd, rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(
+        sigma_analytic, stress_ijqxyz.s,
+        rtol=1e-5, atol=1e-8,
+        err_msg=(
+            "TANGENT TEST FAILED: apply_algorithmic_tangent(C, ε) does not reproduce get_stress(ε). "
+            "Either get_algorithmic_tangent builds the wrong C_ijkl, "
+            "or apply_algorithmic_tangent contracts over the wrong indices. "
+            f"Max absolute error: {np.max(np.abs(sigma_analytic - stress_ijqxyz.s)):.3e}, "
+            f"Max relative error: {np.max(np.abs((sigma_analytic - stress_ijqxyz.s) / (sigma_analytic + 1e-30))):.3e}"
+        )
+    )

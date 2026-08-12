@@ -16,7 +16,7 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 
 parser = argparse.ArgumentParser(
-    prog="exp_third_medium_contact_.py",
+    prog="exp_third_medium_contact_2D.py",
     description="Solve non-linear elasticity  exp_third_medium_contact y example "
 )
 parser.add_argument("-n", "--nb_pixel", default="16")
@@ -43,16 +43,16 @@ save_results = True
 _info = {}
 start_time = time.time()
 
-number_of_pixels = (nnn, nnn, nnn)
-domain_size = [1, 1, 1]
+number_of_pixels = (nnn, nnn )
+domain_size = [1, 1 ]
+dim=len(domain_size)
 Nx = number_of_pixels[0]
 Ny = number_of_pixels[1]
-Nz = number_of_pixels[2]
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'trilinear_hexahedron'
-formulation = 'small_strain'
+element_type = 'bilinear_rectangle'
+formulation = 'finite_strain'
 
 _info['problem_type'] = problem_type
 _info['discretization_type'] = discretization_type
@@ -71,9 +71,9 @@ if discretization.communicator.rank == 0:
     print(f'preconditioer {preconditioner_type}')
 file_folder_path = os.path.dirname(os.path.realpath(__file__))  # script directory
 data_folder_path = (
-        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+        file_folder_path + '/exp_data/' + script_name + '/' + f'Nx={Nx}' + f'Ny={Ny}'
         + f'_{preconditioner_type}' + '/')
-figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}' + f'Nz={Nz}'
+figure_folder_path = (file_folder_path + '/figures/' + script_name + '/' f'Nx={Nx}' + f'Ny={Ny}'
                       + f'_{preconditioner_type}' + '/')
 if discretization.communicator.rank == 0:
     if not os.path.exists(file_folder_path):
@@ -90,7 +90,7 @@ start_time = time.time()
 
 # identity tensor                                               [single tensor]
 i = np.eye(discretization.domain_dimension)
-I = np.einsum('ij,xyz', i, np.ones(number_of_pixels))
+I = np.einsum('ij,xy...', i, np.ones(number_of_pixels))
 
 # identity tensors                                            [grid of tensors]
 I4 = np.einsum('il,jk', i, i)
@@ -381,7 +381,7 @@ strain_eq_qx = constitutive(total_strain_field, stress_field, K4_ijklqyz)
 ninc = 1
 _info['ninc'] = ninc
 
-macro_gradient_inc = np.zeros(shape=(3, 3))
+macro_gradient_inc = np.zeros(shape=(dim, dim))
 # macro_gradient_inc[0, 0] += 0.05 / float(ninc)
 macro_gradient_inc[0, 1] += 0.025 / float(ninc)
 macro_gradient_inc[1, 0] += 0.025 / float(ninc)
@@ -413,7 +413,7 @@ sum_CG_its = 0
 sum_Newton_its = 0
 start_time = time.time()
 iteration_total = 0
-# _info['norm_strain_fluc_field']=[]
+_info['norm_strain_fluc_field']=[]
 # incremental loading
 for inc in range(ninc):
     if discretization. communicator.rank == 0:
@@ -649,21 +649,12 @@ for inc in range(ninc):
 
             # rhs *= -1
 
-        # g_norm_div_stress = np.sum(rhs_field * M_fun_Green(rhs_field))
-        # g_norm_div_stress_rel = np.sum(rhs_field * M_fun_Green(rhs_field)) / np.sum(stress_field.s)
-        #
-        # print('=====================')
-        # print('g_norm_stress {}'.format(g_norm_div_stress))
-        # print('g_norm_div_stress_rel {}'.format(g_norm_div_stress_rel))
-        # En = np.linalg.norm(total_strain_field.s)
-        # En = np.sqrt(discretization.fft.communicator.sum(
-        #     np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())))
         norm_rhs = np.sqrt(discretization.communicator.sum(
             np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
         if iiter == 1:
             norm_rhs_0 = norm_rhs
 
-        _info['norm_strain_fluc_field'] = norm_strain_fluc
+        _info['norm_strain_fluc_field'].append(norm_strain_fluc)
         _info['norm_En'] = En
         _info['rhs_t_norm'] = rhs_t_norm
         _info['norm_rhs_field'] = norm_rhs
@@ -693,15 +684,15 @@ for inc in range(ninc):
         # if np.linalg.norm(rhs_field.s) / rhs_t_norm < 1.e-6 and iiter > 0: break
 
         # if norm_rhs / norm_rhs_0 < 1.e-8 and iiter > 0: break  #
-        if norm_strain_fluc / En < 1.e-4 and iiter > 0: break  #
+        if norm_strain_fluc / En < 1.e-8 and iiter > 0: break  #
         if iiter == 100:
             break
     # store material variable
-    # # linear part of displacement(X-domain_size[0]/2)
-    # disp_linear_x = ((X - domain_size[0] / 2) * macro_gradient_inc[0, 0] * inc +
-    #                  Y * macro_gradient_inc[0, 1] * inc)  # (X - domain_size[0] / 2)
-    # disp_linear_y = ((X - domain_size[0] / 2) * macro_gradient_inc[1, 0] * inc
-    #                  + Y * macro_gradient_inc[1, 1] * inc)
+    # linear part of displacement(X-domain_size[0]/2)
+    disp_linear_x = ((X - domain_size[0] / 2) * macro_gradient_inc[0, 0] * inc +
+                     Y * macro_gradient_inc[0, 1] * inc)  # (X - domain_size[0] / 2)
+    disp_linear_y = ((X - domain_size[0] / 2) * macro_gradient_inc[1, 0] * inc
+                     + Y * macro_gradient_inc[1, 1] * inc)
     # displacement in voids should be zero
     # displacement_fluctuation_field.s[:, 0, :, :5] = 0.0
     end_time = time.time()
@@ -736,7 +727,7 @@ for inc in range(ninc):
             np.savez(data_folder_path + f'info_log_final_exp_{n_exp}.npz', **_info)
             print(data_folder_path + f'info_log_final_exp_{n_exp}.npz')
 
-    plot_sol_field = False
+    plot_sol_field = True
     if plot_sol_field:
         import matplotlib as mpl
         from matplotlib import pyplot as plt
@@ -747,14 +738,14 @@ for inc in range(ninc):
 
         plt.show()
 
-        x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :, 0]
-        y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :, 0]
+        x_deformed = X + disp_linear_x + displacement_fluctuation_field.s[0, 0, :, :,]
+        y_deformed = Y + disp_linear_y + displacement_fluctuation_field.s[1, 0, :, :,]
         fig = plt.figure(figsize=(9, 3.0))
         gs = fig.add_gridspec(2, 2, hspace=0.5, wspace=0.5, width_ratios=[1, 1],
                               height_ratios=[1, 1])
 
         ax_strain = fig.add_subplot(gs[1, 0])
-        pcm = ax_strain.pcolormesh(x_deformed, y_deformed, total_strain_field.s.mean(axis=2)[0, 1, ..., 0],
+        pcm = ax_strain.pcolormesh(x_deformed, y_deformed, total_strain_field.s.mean(axis=2)[0, 1, ... ],
                                    cmap=mpl.cm.cividis,  # vmin=1, vmax=3,
                                    rasterized=True)
         plt.colorbar(pcm, ax=ax_strain)
@@ -768,7 +759,7 @@ for inc in range(ninc):
         ax_strain.get_yaxis().set_visible(False)  # hides y-axis only
 
         ax_strain = fig.add_subplot(gs[0, 0])
-        pcm = ax_strain.pcolormesh(x_deformed, y_deformed, strain_fluc_field.s.mean(axis=2)[0, 1, ..., 0],
+        pcm = ax_strain.pcolormesh(x_deformed, y_deformed, strain_fluc_field.s.mean(axis=2)[0, 1, ...],
                                    cmap=mpl.cm.cividis,  # vmin=1, vmax=3,
                                    rasterized=True)
         plt.colorbar(pcm, ax=ax_strain)
@@ -781,13 +772,13 @@ for inc in range(ninc):
         ax_strain.get_yaxis().set_visible(False)  # hides y-axis only
 
         plt.title('strain_fluc_field')
-        max_stress = stress_field.s.mean(axis=2)[0, 1, ..., 0].max()
-        min_stress = stress_field.s.mean(axis=2)[0, 1, ..., 0].min()
+        max_stress = stress_field.s.mean(axis=2)[0, 1, ... ].max()
+        min_stress = stress_field.s.mean(axis=2)[0, 1, ... ].min()
 
         print('stress min ={}'.format(min_stress))
         print('stress max ={}'.format(max_stress))
         ax_stress = fig.add_subplot(gs[1, 1])
-        pcm = ax_stress.pcolormesh(x_deformed, y_deformed, stress_field.s.mean(axis=2)[0, 1, ..., 0],
+        pcm = ax_stress.pcolormesh(x_deformed, y_deformed, stress_field.s.mean(axis=2)[0, 1, ... ],
                                    cmap=mpl.cm.cividis, vmin=min_stress, vmax=max_stress,
                                    rasterized=True)
         ax_stress.spines['top'].set_visible(False)
@@ -802,7 +793,7 @@ for inc in range(ninc):
 
         # plot constitutive tangent
         ax_tangent = fig.add_subplot(gs[0, 1])
-        pcm = ax_tangent.pcolormesh(x_deformed, y_deformed, K4_ijklqyz.s.mean(axis=4)[0, 1, 0, 0, ..., 0],
+        pcm = ax_tangent.pcolormesh(x_deformed, y_deformed, K4_ijklqyz.s.mean(axis=4)[0, 1, 0, 0, ... ],
                                     cmap=mpl.cm.cividis,  # vmin=0, vmax=1500,
                                     rasterized=True)
         ax_tangent.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)

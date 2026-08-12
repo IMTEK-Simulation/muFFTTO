@@ -2,6 +2,9 @@ import muGrid
 import numpy as np
 from abc import ABC, abstractmethod
 
+from .tensor_operations import *
+
+
 '''
 Constitute models and related utilities
 '''
@@ -56,6 +59,10 @@ class MaterialModelElasticity(ABC):
         """
         ...
 
+    def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
+        stress_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...',
+                                         tangent_ijklqxyz.s,
+                                         strain_ijqxyz.s)
     def __repr__(self):
         return f"{self.__class__.__name__}(name='{self.name}')"
 
@@ -72,53 +79,47 @@ class LinearElastic(MaterialModelElasticity):
     """
 
     def __init__(self, discretization, lam_1qxyz, mu_1qxyz, name: str = 'linear_elastic'):
-        super().__init__(name)
-
-        self.lam = lam_1qxyz  # quadrature field of first lamme moduli
-        self.mu = mu_1qxyz  # quadrature field of shear modullus ratios
+        super().__init__(discretization, name)
+        self.lam = lam_1qxyz          # quadrature field of first Lamé modulus
+        self.mu  = mu_1qxyz           # quadrature field of shear modulus
         self.discretization = discretization
 
+
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
+        """
+        σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
+             = λ I_ij tr(ε)  +  2μ ε_ij
+        """
         dim = strain_ijqxyz.s.shape[0]
-        # ε_kk (trace) summed over first two indices
-        eps_trace_11qxyz = self.discretization.get_quad_field_scalar(name='eps_trace')
-        eps_trace_11qxyz.s[0, 0] = np.einsum('iiq...->q...', strain_ijqxyz.s)  # shape [q, x, y, z]
-        # σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
+
+        # tr(ε) = ε_kk — shape [q, x, y, z]
+        eps_trace_1qxyz = self.discretization.get_quad_field_scalar(name='eps_trace')
+        trace2(strain_ijqxyz, eps_trace_1qxyz)
+
+        # σ = 2μ ε  +  λ tr(ε) I
         stress_ijqxyz.s[...] = 2.0 * self.mu.s * strain_ijqxyz.s
-        for i in range(dim):
-            stress_ijqxyz.s[i, i] += self.lam.s[0, 0] * eps_trace_11qxyz.s[0, 0]
+        add_scaled_identity(eps_trace_1qxyz, self.lam, stress_ijqxyz, dim)
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
+        """
+        C_ijkl = λ δ_ij δ_kl  +  μ (δ_ik δ_jl  +  δ_il δ_jk)
+        """
         dim = strain_ijqxyz.s.shape[0]
-        I = np.eye(dim)
+        I   = np.eye(dim)
 
-        # δ_ij δ_kl,  δ_ik δ_jl,  δ_il δ_jk  — shape [i,j,k,l]
-        IxI = np.einsum('ij,kl->ijkl', I, I)
-        IsI1 = np.einsum('ik,jl->ijkl', I, I)
-        IsI2 = np.einsum('il,jk->ijkl', I, I)
+        IxI  = np.einsum('ij,kl->ijkl', I, I)   # δ_ij δ_kl
+        IsI1 = np.einsum('ik,jl->ijkl', I, I)   # δ_ik δ_jl
+        IsI2 = np.einsum('il,jk->ijkl', I, I)   # δ_il δ_jk
 
-        # lam and mu have shape [1,1, q, x, y, z] — add [i,j,k,l] axes in front
-        lam = self.lam.s[0, 0]  # shape [q, x, y, z]
-        mu = self.mu.s[0, 0]  # shape [q, x, y, z]
+        lam = self.lam.s[0, 0]   # shape [q, x, y, z]
+        mu  = self.mu.s[0, 0]    # shape [q, x, y, z]
 
-        # C_ijkl = λ δ_ij δ_kl + μ (δ_ik δ_jl + δ_il δ_jk)
-        # IxI has shape [i,j,k,l], lam has shape [q,x,y,z]
-        # result must be [i,j,k,l,q,x,y,z]
-        # number of trailing axes in lam: q + n_spatial_dims
-        n_extra = lam.ndim
+        n_extra        = lam.ndim
         index_extender = (...,) + (np.newaxis,) * n_extra
 
-        tangent_ijklqxyz.s[...] = (
-                IxI[index_extender] * lam
-                + IsI1[index_extender] * mu
-                + IsI2[index_extender] * mu
-        )
-
-
-    def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
-        stress_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...',
-                                         tangent_ijklqxyz.s,
-                                         strain_ijqxyz.s)
+        tangent_ijklqxyz.s[...] = (  IxI [index_extender] * lam
+                                    + IsI1[index_extender] * mu
+                                    + IsI2[index_extender] * mu  )
 
 
 # ============================================================================
@@ -127,64 +128,119 @@ class LinearElastic(MaterialModelElasticity):
 
 class NeoHookeanTMC(MaterialModelElasticity):
     """
-    Compressible neo-Hookean (Simo-Pister form).
+    Compressible neo-Hookean (Simo-Pister form) for finite strain elasticity.
       W = (λ/2) ln(J)²  +  (μ/2)(I₁ - dim)  -  μ ln(J)
-      P_iJ = λ ln(J) F_iJ^{-T}  +  μ (F_iJ - F_iJ^{-T})
+      P_iJ = λ ln(J) F^{-T}_iJ  +  μ (F_iJ - F^{-T}_iJ)
 
-    Here strain_ijqxyz stores the DEFORMATION GRADIENT F (not ε),
-    and stress_ijqxyz stores the 1st Piola-Kirchhoff stress P.
+    strain_ijqxyz stores the deformation gradient F.
+    stress_ijqxyz stores the 1st Piola-Kirchhoff stress P.
     """
 
-    def __init__(self, E: float, nu: float, name: str = 'neo_hookean'):
-        super().__init__(name)
-        self.E = E
-        self.nu = nu
-        self.lam = E * nu / ((1 + nu) * (1 - 2 * nu))
-        self.mu = E / (2 * (1 + nu))
+    def __init__(self, discretization, lam_1qxyz, mu_1qxyz, name: str = 'neo_hookean'):
+        super().__init__(discretization, name)
+        self.lam = lam_1qxyz
+        self.mu  = mu_1qxyz
+        self.discretization = discretization
+
+    def get_energy_density(self, strain_ijqxyz, energy_1qxyz):
+        """
+        Compute strain energy density  into energy_1qxyz.
+
+        W = (λ/2) (ε_kk)²  +  μ ε_ij ε_ij
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z] — strain field ε
+        energy_1qxyz  : muGrid scalar field [1, 1, q, x, y, z] — output energy density
+        """
+        lam = self.lam.s[0, 0]  # shape [q, x, y, z]
+        mu = self.mu.s[0, 0]  # shape [q, x, y, z]
+
+        # tr(ε) = ε_kk — shape [q, x, y, z]
+        eps_trace_1qxyz = self.discretization.get_quad_field_scalar(name='eps_trace')
+        trace2(strain_ijqxyz, eps_trace_1qxyz)
+        eps_trace = eps_trace_1qxyz.s[0, 0]
+
+        # ε_ij ε_ij — shape [q, x, y, z]
+        eps_sq = np.einsum('ij...,ij...->...', strain_ijqxyz.s, strain_ijqxyz.s)
+
+        # W = (λ/2) tr(ε)²  +  μ ε:ε
+        energy_1qxyz.s[0, 0] = 0.5 * lam * eps_trace ** 2 + mu * eps_sq
 
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
-        # strain_ijqxyz = F (deformation gradient field)
-        # Iterate over all quadrature points and grid cells
-        shape = strain_ijqxyz.shape  # [i, j, q, ...]
-        dim = shape[0]
-        extra = strain_ijqxyz.shape[2:]  # (q, x, y, z, ...)
+        """
+        P = λ ln(J) F^{-T}  +  μ (F - F^{-T})
+        """
+        F    = strain_ijqxyz
+        lam  = self.lam.s[0, 0]   # shape [q, x, y, z]
+        mu   = self.mu.s[0, 0]    # shape [q, x, y, z]
 
-        for idx in np.ndindex(*extra):
-            F = strain_ijqxyz[(slice(None), slice(None)) + idx]  # dim×dim
-            J = np.linalg.det(F)
-            Finv = np.linalg.inv(F)
-            lnJ = np.log(J)
-            P = self.lam * lnJ * Finv.T + self.mu * (F - Finv.T)
-            stress_ijqxyz[(slice(None), slice(None)) + idx] = P
+        # allocate intermediate fields
+        Finv_ijqxyz   = self.discretization.get_strain_sized_field(name='Finv')
+        FinvT_ijqxyz  = self.discretization.get_strain_sized_field(name='FinvT')
+        J_1qxyz       = self.discretization.get_quad_field_scalar(name='J')
+        lnJ_1qxyz     = self.discretization.get_quad_field_scalar(name='lnJ')
+
+        inv2(F,    Finv_ijqxyz)
+        trans2(Finv_ijqxyz, FinvT_ijqxyz)
+        det2(F,    J_1qxyz)
+        log_field(J_1qxyz, lnJ_1qxyz)
+
+        lnJ = lnJ_1qxyz.s[0, 0]   # shape [q, x, y, z]
+
+        # P = λ ln(J) F^{-T}  +  μ (F - F^{-T})
+        stress_ijqxyz.s[...] = (  lam * lnJ * FinvT_ijqxyz.s
+                                + mu  * (F.s - FinvT_ijqxyz.s)  )
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
-        # Material tangent A_iJkL = dP_iJ/dF_kL
-        shape = strain_ijqxyz.shape
-        extra = strain_ijqxyz.shape[2:]
-        dim = shape[0]
+        """
+        A_iJkL = λ F^{-T}_Ji F^{-T}_Lk
+               + (μ - λ ln J) F^{-T}_Li F^{-T}_Jk
+               + μ δ_ik δ_JL
+        """
+        F    = strain_ijqxyz
+        lam  = self.lam.s[0, 0]   # shape [q, x, y, z]
+        mu   = self.mu.s[0, 0]    # shape [q, x, y, z]
+        dim  = F.s.shape[0]
 
-        for idx in np.ndindex(*extra):
-            F = strain_ijqxyz[(slice(None), slice(None)) + idx]
-            J = np.linalg.det(F)
-            Finv = np.linalg.inv(F)
-            lnJ = np.log(J)
-            lam, mu = self.lam, self.mu
+        # allocate intermediate fields
+        Finv_ijqxyz   = self.discretization.get_strain_sized_field(name='Finv')
+        FinvT_ijqxyz  = self.discretization.get_strain_sized_field(name='FinvT')
+        J_1qxyz       = self.discretization.get_quad_field_scalar(name='J')
+        lnJ_1qxyz     = self.discretization.get_quad_field_scalar(name='lnJ')
+        term1_ijklqxyz = self.discretization.get_tangent_sized_field(name='term1')
+        term2_ijklqxyz = self.discretization.get_tangent_sized_field(name='term2')
+        term3_ijklqxyz = self.discretization.get_tangent_sized_field(name='term3')
 
-            A = np.zeros((dim, dim, dim, dim))
-            for i in range(dim):
-                for J_ in range(dim):
-                    for k in range(dim):
-                        for L in range(dim):
-                            # dP_iJ/dF_kL = lam * Finv_Ji * Finv_Lk
-                            #              + (lam*lnJ - mu) * (Finv_Li * Finv_Jk + Finv_Ji * Finv_Lk) -- skipped here
-                            # Closed form (see Holzapfel 2006):
-                            A[i, J_, k, L] = (
-                                    lam * Finv[J_, i] * Finv[L, k]
-                                    + (mu - lam * lnJ) * (Finv[L, i] * Finv[J_, k])
-                                    + mu * (i == k) * (J_ == L)
-                            )
-            tangent_ijklqxyz[(slice(None),) * 4 + idx] = A
+        inv2(F,    Finv_ijqxyz)
+        trans2(Finv_ijqxyz, FinvT_ijqxyz)
+        det2(F,    J_1qxyz)
+        log_field(J_1qxyz, lnJ_1qxyz)
 
+        lnJ  = lnJ_1qxyz.s[0, 0]            # shape [q, x, y, z]
+        coef1 = lam                           # λ
+        coef2 = mu - lam * lnJ               # μ - λ ln(J)
+        coef3 = mu                            # μ
+
+        # term1: λ F^{-T}_ji F^{-T}_lk  ->  A_ijkl = λ FinvT_ij FinvT_kl
+        dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
+        term1_ijklqxyz.s[...] *= coef1
+
+        # term2: (μ - λ lnJ) F^{-T}_li F^{-T}_jk  ->  A_ijkl = coef2 FinvT_kl FinvT_ij (transposed dyad)
+        dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term2_ijklqxyz)
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('ijkl...->klij...', term2_ijklqxyz.s)
+
+        # term3: μ δ_ik δ_jl
+        I    = np.eye(dim)
+        IsI  = np.einsum('ik,jl->ijkl', I, I)
+        n_extra      = lnJ.ndim
+        index_extender = (...,) + (np.newaxis,) * n_extra
+        term3_ijklqxyz.s[...] = IsI[index_extender] * coef3
+
+        # assemble
+        tangent_ijklqxyz.s[...] = (  term1_ijklqxyz.s
+                                    + term2_ijklqxyz.s
+                                    + term3_ijklqxyz.s  )
 
 # ============================================================================
 # Concrete implementation 3: Third Medium (TMC)
