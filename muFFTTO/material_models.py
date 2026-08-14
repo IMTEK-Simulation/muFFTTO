@@ -2,6 +2,7 @@ import muGrid
 import numpy as np
 from abc import ABC, abstractmethod
 
+from .domain import Discretization
 from .tensor_operations import *
 
 
@@ -126,7 +127,7 @@ class LinearElastic(MaterialModelElasticity):
 # Concrete implementation 2: Neo-Hookean (Simo-Pister)
 # ============================================================================
 
-class NeoHookeanTMC(MaterialModelElasticity):
+class NeoHookean(MaterialModelElasticity):
     """
     Compressible neo-Hookean (Simo-Pister form) for finite strain elasticity.
       W = (λ/2) ln(J)²  +  (μ/2)(I₁ - dim)  -  μ ln(J)
@@ -194,91 +195,62 @@ class NeoHookeanTMC(MaterialModelElasticity):
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
-        A_iJkL = λ F^{-T}_Ji F^{-T}_Lk
-               + (μ - λ ln J) F^{-T}_Li F^{-T}_Jk
-               + μ δ_ik δ_JL
+        A_iJkL = λ F^{-T}_iJ F^{-T}_kL
+               + (μ - λ ln J) ( F^{-T}_iL F^{-T}_kJ  +  δ_ik δ_JL )
+
+        Two contributions:
+          term1 : λ        FinvT_ij FinvT_kl          (volumetric)
+          term2 : (μ-λlnJ) FinvT_il FinvT_kj          (distortional, part 1)
+          term3 : (μ-λlnJ) δ_ik δ_jl                  (distortional, part 2)
+
+        term2 + term3 share coef2 = μ - λ ln(J) and together are minor-symmetric.
         """
-        F    = strain_ijqxyz
-        lam  = self.lam.s[0, 0]   # shape [q, x, y, z]
-        mu   = self.mu.s[0, 0]    # shape [q, x, y, z]
-        dim  = F.s.shape[0]
+        F = strain_ijqxyz
+        lam = self.lam.s[0, 0]
+        mu = self.mu.s[0, 0]
+        dim = F.s.shape[0]
 
-        # allocate intermediate fields
-        Finv_ijqxyz   = self.discretization.get_strain_sized_field(name='Finv')
-        FinvT_ijqxyz  = self.discretization.get_strain_sized_field(name='FinvT')
-        J_1qxyz       = self.discretization.get_quad_field_scalar(name='J')
-        lnJ_1qxyz     = self.discretization.get_quad_field_scalar(name='lnJ')
-        term1_ijklqxyz = self.discretization.get_tangent_sized_field(name='term1')
-        term2_ijklqxyz = self.discretization.get_tangent_sized_field(name='term2')
-        term3_ijklqxyz = self.discretization.get_tangent_sized_field(name='term3')
+        Finv_ijqxyz = self.discretization.get_strain_sized_field(name='Finv')
+        FinvT_ijqxyz = self.discretization.get_strain_sized_field(name='FinvT')
+        J_1qxyz = self.discretization.get_quad_field_scalar(name='J')
+        lnJ_1qxyz = self.discretization.get_quad_field_scalar(name='lnJ')
+        term1_ijklqxyz = self.discretization.get_material_data_size_field_mugrid(name='term1')
+        term2_ijklqxyz = self.discretization.get_material_data_size_field_mugrid(name='term2')
+        term3_ijklqxyz = self.discretization.get_material_data_size_field_mugrid(name='term3')
 
-        inv2(F,    Finv_ijqxyz)
+        inv2(F, Finv_ijqxyz)
         trans2(Finv_ijqxyz, FinvT_ijqxyz)
-        det2(F,    J_1qxyz)
+        det2(F, J_1qxyz)
         log_field(J_1qxyz, lnJ_1qxyz)
 
-        lnJ  = lnJ_1qxyz.s[0, 0]            # shape [q, x, y, z]
-        coef1 = lam                           # λ
-        coef2 = mu - lam * lnJ               # μ - λ ln(J)
-        coef3 = mu                            # μ
+        lnJ = lnJ_1qxyz.s[0, 0]
+        coef1 = lam  # λ
+        coef2 = mu - lam * lnJ  # μ - λ ln(J)  — shared by term2 and term3
 
-        # term1: λ F^{-T}_ji F^{-T}_lk  ->  A_ijkl = λ FinvT_ij FinvT_kl
+        n_extra = lnJ.ndim
+        index_extender = (...,) + (np.newaxis,) * n_extra
+
+        # term1: λ FinvT_ij FinvT_kl
         dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
         term1_ijklqxyz.s[...] *= coef1
 
-        # term2: (μ - λ lnJ) F^{-T}_li F^{-T}_jk  ->  A_ijkl = coef2 FinvT_kl FinvT_ij (transposed dyad)
-        dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term2_ijklqxyz)
-        term2_ijklqxyz.s[...] = coef2 * np.einsum('ijkl...->klij...', term2_ijklqxyz.s)
+        # term2: (μ - λ lnJ) FinvT_il FinvT_kj
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,kj...->ijkl...',
+                                                  FinvT_ijqxyz.s,
+                                                  FinvT_ijqxyz.s)
 
-        # term3: μ δ_ik δ_jl
-        I    = np.eye(dim)
-        IsI  = np.einsum('ik,jl->ijkl', I, I)
-        n_extra      = lnJ.ndim
-        index_extender = (...,) + (np.newaxis,) * n_extra
-        term3_ijklqxyz.s[...] = IsI[index_extender] * coef3
+        # term3: (μ - λ lnJ) δ_ik δ_jl  — same coef2, not μ
+        I = np.eye(dim)
+        IsI = np.einsum('ik,jl->ijkl', I, I)
+        term3_ijklqxyz.s[...] = IsI[index_extender] * coef2
 
-        # assemble
-        tangent_ijklqxyz.s[...] = (  term1_ijklqxyz.s
-                                    + term2_ijklqxyz.s
-                                    + term3_ijklqxyz.s  )
+        tangent_ijklqxyz.s[...] = (term1_ijklqxyz.s
+                                   + term2_ijklqxyz.s
+                                   + term3_ijklqxyz.s)
 
 # ============================================================================
 # Concrete implementation 3: Third Medium (TMC)
 # ============================================================================
-
-class ThirdMediumContact(NeoHookeanTMC):
-    """
-    Third Medium Contact material (Bluhm et al. 2021; Frederiksen et al. 2026).
-    Inherits NeoHookean; scales λ and μ by k_v << 1.
-    """
-
-    def __init__(self, E_solid: float, nu: float,
-                 kv: float = 1e-6,
-                 name: str = 'third_medium'):
-        lam_s = E_solid * nu / ((1 + nu) * (1 - 2 * nu))
-        mu_s = E_solid / (2 * (1 + nu))
-        E_m = kv * E_solid
-        super().__init__(E=E_m, nu=nu, name=name)
-        self.kv = kv
-        self.E_solid = E_solid
-
-
-def compute_Voigt_notation_2order(sigma_ij):
-    # function return Voigt notation of second order tensor
-    if len(sigma_ij) == 2:
-        sigma_voigt_k = np.zeros([3])
-        ij_ind = [(0, 0), (1, 1), (0, 1)]
-
-        for k in np.arange(len(sigma_voigt_k)):
-            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
-
-    elif len(sigma_ij) == 3:
-        sigma_voigt_k = np.zeros([6])
-        ij_ind = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
-        for k in np.arange(len(sigma_voigt_k)):
-            sigma_voigt_k[k] = sigma_ij[ij_ind[k]]
-
-    return sigma_voigt_k
 
 
 def compute_Voigt_notation_4order(C_ijkl):

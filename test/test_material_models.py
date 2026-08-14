@@ -306,3 +306,7 @@ def test_LinearElastic_MaterialModelElasticity_(discretization_fixture):
             f"Max relative error: {np.max(np.abs((sigma_analytic - stress_ijqxyz.s) / (sigma_analytic + 1e-30))):.3e}"
         )
     )
+
+
+ # TODO: Add test for symmetricity of the tangent
+
