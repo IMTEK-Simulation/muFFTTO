@@ -29,14 +29,16 @@ def plot_field_on_grid(
 
 
 def get_deformed_grid_coords_two_dim(discretization,
-                                     grid_nodes_displacement_inxyz,
                                      macro_gradient_ij,
-                                     displacement_fluctuation):
+                                     displacement_fluctuation,
+                                     grid_nodes_displacement_inxyz=None):
     """
     This function calculates deformed grid coordinates.
     It uses original coordinates with periodic extension for plotting.
-    Add grid-conforming deformation (grid_nodes_displacement_inxyz), linear macroscopic deformation from macro gradient
-    and a displacement fluctuation (displacement_fluctuation)
+
+     linear macroscopic deformation from macro gradient
+    and a displacement fluctuation (displacement_fluctuation),
+    Add grid-conforming deformation (grid_nodes_displacement_inxyz),
     '
 
     :param discretization:
@@ -50,7 +52,8 @@ def get_deformed_grid_coords_two_dim(discretization,
     # Reference coordinates with periodic extension for plotting
     x_plot_inxyz = discretization.get_nodal_points_coordinates_with_periodic_nodes()
     # add deformation  # x_p = x̃_p + ũ_Φ(x̃_p)
-    x_plot_inxyz[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
+    if grid_nodes_displacement_inxyz is not None:
+        x_plot_inxyz[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
     x_plot_ixyz = np.squeeze(x_plot_inxyz, axis=1)
     # macroscopic displacement of a deformed grid Ex_p = E * x_p
     macro_disp_of_a_deformed_grid = np.einsum('ij...,j...->i...', macro_gradient_ij, x_plot_ixyz)

@@ -11,6 +11,7 @@ from muGrid import Solvers
 from muFFTTO import domain
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
+from muFFTTO import visualization_utils
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -31,22 +32,6 @@ start_time = time.time()
 print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
       f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
 
-# initialize material data
-K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
-
-# create material data field
-elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
-if discretization.communicator.rank == 0:
-    print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
-
-material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
-
-# populate the field with C_1 material
-material_data_field_C_0.s[...] = elastic_C_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-
 
 # material distribution
 geometry_ID = 'square_inclusion'
@@ -55,16 +40,41 @@ phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                           microstructure_name=geometry_ID,
                                                           coordinates=discretization.fft.coords)
-
-mat_contrast = 1
-mat_contrast_2 = 1e2
 matrix_mask = phase_field.s[0, 0] > 0
 inc_mask = phase_field.s[0, 0] == 0
 
-# apply material distribution
+# initialize material data
 
-material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
-material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
+mat_contrast = 1
+mat_contrast_2 = 1e2
+
+K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
+lam, mu = material_models.get_lame_parameters_from_bulk_and_shear(K_0,
+                                                                  G_0,dim=discretization.domain_dimension)
+
+
+lam_11qxyz = discretization.get_quad_field_scalar(name='lam_first_lame')
+mu_11qxyz = discretization.get_quad_field_scalar(name='mu_second_lame')
+
+# apply material distribution
+lam_11qxyz.s[...,matrix_mask] =  mat_contrast_2 * lam
+lam_11qxyz.s[...,inc_mask] =  mat_contrast * lam
+
+mu_11qxyz.s[...,matrix_mask] =  mat_contrast_2 * mu
+mu_11qxyz.s[...,inc_mask] =  mat_contrast * mu
+
+material = material_models.LinearElastic(discretization=discretization,
+                                         lam_1qxyz=lam_11qxyz,
+                                         mu_1qxyz=mu_11qxyz,
+                                         name='linear_isotropic_elasticity')
+material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
+
+# populate the field with C_0 material
+strain_ijqxyz = discretization.get_strain_sized_field( name='macro_gradient_field')
+
+material.get_algorithmic_tangent(strain_ijqxyz, material_data_field_C_0)
+
+
 
 
 def K_fun(x, Ax):
@@ -75,7 +85,13 @@ def K_fun(x, Ax):
                                               formulation='small_strain')
     discretization.fft.communicate_ghosts(Ax)
 
-preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_1)
+
+# preconditioner
+elastic_C_ref = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                 K=K_0,
+                                                 mu=G_0,
+                                                 kind='linear')
+preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_ref)
 
 def M_fun(x, Px):
     """
@@ -131,29 +147,19 @@ for i in range(dim):
 
         if discretization.communicator.size == 1:
             # Plot the first two components of the solution field
-            import matplotlib.pyplot as plt
 
-            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+            x_plot_ixyz=visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+                                             macro_gradient_ij=macro_gradient_ij,
+                                             displacement_fluctuation=solution_field)
 
-            im0 = ax[0].pcolormesh(discretization.fft.coords[0],
-                                   discretization.fft.coords[1],
-                                   solution_field.s[0, 0],vmin=-0.2, vmax=0.2)
-            ax[0].set_title(f'Solution field $u_0$ - macro gradient {macro_gradient_ij} ')
-            ax[0].set_xlabel('x  / L')
-            ax[0].set_ylabel('y  / L')
-            fig.colorbar(im0, ax=ax[0], label=rf'Displacement $u_{0}$')
-
-            im1 = ax[1].pcolormesh(discretization.fft.coords[0],
-                                   discretization.fft.coords[1],
-                                   solution_field.s[1, 0],vmin=-0.2, vmax=0.2)
-            ax[1].set_title(f'Solution field $u_1$ - macro gradient {macro_gradient_ij} ')
-            ax[1].set_xlabel('x  / L')
-            ax[1].set_ylabel('y  / L')
-            fig.colorbar(im1, ax=ax[1], label=rf'Displacement $u_{1}$')
-
-            plt.tight_layout()
-            plt.show()
-
+            visualization_utils.plot_field_on_grid(
+                coordinates_for_plot=x_plot_ixyz,
+                field_to_plot=solution_field.s[0, 0],
+                name = fr'$\tilde{{u}}_{{x}}$   ')
+            visualization_utils.plot_field_on_grid(
+                coordinates_for_plot=x_plot_ixyz,
+                field_to_plot=solution_field.s[1, 0],
+                name=fr'$\tilde{{u}}_{{y}}$   ')
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
         homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(

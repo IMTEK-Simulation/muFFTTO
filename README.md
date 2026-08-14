@@ -3,8 +3,7 @@
 FFT-based micro-scale topology optimization on periodic unit cells using the [muGrid](https://github.com/muSpectre/muGrid) / [muFFT](https://github.com/muSpectre/muFFT) framework.
 
 ## Features
-
-- **Homogenization**: Compute effective material properties (conductivity and elasticity) of periodic microstructures
+ 
 - **Topology optimization**: Phase-field based optimization with adjoint sensitivity analysis
 - **Multi-dimensional**: Supports 1D, 2D, and 3D problems
 - **FEM discretization**: Triangular and hexahedral finite elements with quadrature-based integration
@@ -16,9 +15,35 @@ FFT-based micro-scale topology optimization on periodic unit cells using the [mu
 ### Dependencies
 
 - Python >= 3.8
-- [numpy](https://numpy.org/), [scipy](https://scipy.org/)
-- [muGrid](https://github.com/muSpectre/muGrid) and [muFFT](https://github.com/muSpectre/muFFT) (must be installed separately)
+- [numpy](https://numpy.org/),
+- [scipy](https://scipy.org/)
+- [muGrid](https://github.com/muSpectre/muGrid)  
 
+## Installation
+
+To install `muFFTTO`, you can use `pip`:
+
+```bash
+git clone https://github.com/imtek-simulation/muFFTTO.git
+cd muFFTTO
+pip install .
+```
+
+For development, you can install it in editable mode:
+
+```bash
+pip install -e .
+```
+
+### Installing dependencies
+
+The core dependencies `numpy` and `scipy` will be installed automatically.
+  `muGrid`  must be installed separately. You can install them from source:
+
+```bash 
+pip install git+https://github.com/muSpectre/muGrid.git
+```
+ 
  
 
 ## Package Structure
