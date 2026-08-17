@@ -10,7 +10,7 @@ import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
-from muFFTTO import discretization_library
+from muFFTTO import discretization_library_NEW
 
 
 class PeriodicUnitCell:
@@ -120,6 +120,7 @@ class Discretization:
             self.quad_points_coord_parametric = None
 
             self.get_discretization_info(element_type)
+
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
@@ -2040,7 +2041,7 @@ class Discretization:
         return self.get_rhs_explicit_stress_mugrid(**kwargs)
 
     def get_discretization_info(self, element_type):
-        discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        discretization_library_NEW.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):
         """Scales a 2D  field to be within [min_val, max_val]."""

@@ -21,7 +21,7 @@ element_type = 'linear_triangles'
 geometry_ID = 'square_inclusion'#'sine_wave_'
 
 domain_size = [1, 1]
-number_of_pixels = (9, 9)
+number_of_pixels = (128,128)
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 

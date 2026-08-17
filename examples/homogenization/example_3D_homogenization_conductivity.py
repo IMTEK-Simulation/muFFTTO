@@ -15,7 +15,7 @@ discretization_type = 'finite_element'
 element_type = 'trilinear_hexahedron'
 
 domain_size = [1, 1, 1]
-number_of_pixels = 3 * (32,)
+number_of_pixels = 3 * (128,)
 
 geometry_ID = 'square_inclusion'
 # set up the system
@@ -119,7 +119,7 @@ for i in range(dim):
         b=rhs_field,  # right-hand side
         x=solution_field,
         prec=M_fun,
-        tol=1e-6,
+        rtol=1e-6,
         maxiter=2000,
         callback=callback)
 

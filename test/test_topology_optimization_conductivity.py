@@ -52,7 +52,7 @@ def test_discretization_init(discretization_fixture):
     print(discretization_fixture.domain_size)
     assert hasattr(discretization_fixture, "cell")
     assert hasattr(discretization_fixture, "domain_dimension")
-    assert hasattr(discretization_fixture, "B_gradient")
+    assert hasattr(discretization_fixture, "B_grad_at_pixel_dqnijk")
     assert hasattr(discretization_fixture, "quadrature_weights")
     assert hasattr(discretization_fixture, "nb_quad_points_per_pixel")
     assert hasattr(discretization_fixture, "nb_nodes_per_pixel")

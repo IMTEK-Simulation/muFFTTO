@@ -1,54 +1,357 @@
-import unittest
 import sys
+import warnings
 
 sys.path.append('..')  # Add parent directory to path
 
 import numpy as np
-
+import pytest
 
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import material_models
 
-class DiscretizationTestCase(unittest.TestCase):
-    def test_discretization_initialization(self):
-        domain_size = [3, 4]
-        problem_type = 'elasticity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
 
-        number_of_pixels = (4, 5)
+def test_discretization_initialization():
+    domain_size = [3, 4]
+    problem_type = 'elasticity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
 
-        discretization_type = 'finite_element'
-        element_type = 'bilinear_rectangle'  # 'linear_triangles'
+    number_of_pixels = (4, 5)
 
+    discretization_type = 'finite_element'
+    element_type = 'bilinear_rectangle'  # 'linear_triangles'
+
+    discretization = domain.Discretization(cell=my_cell,
+                                           nb_of_pixels_global=number_of_pixels,
+                                           discretization_type=discretization_type,
+                                           element_type=element_type)
+
+    assert hasattr(discretization, "cell"), 'Discretization has no "cell" '
+    assert hasattr(discretization, "domain_dimension"), 'Discretization has no "domain_dimension"'
+    assert hasattr(discretization, "B_grad_at_pixel_dqnijk"), 'Discretization has no "B_grad_at_pixel_dqnijk" matrix'
+
+    assert hasattr(discretization, "quadrature_weights"), 'Discretization has no "quadrature_weights" '
+
+    assert hasattr(discretization, "nb_quad_points_per_pixel"), \
+        'Discretization has no "nb_quad_points_per_pixel" '
+
+    assert hasattr(discretization, "nb_nodes_per_pixel"), 'Discretization has no "nb_nodes_per_pixel" '
+
+def test_2D_gradients_linear_conductivity():
+    domain_size = [3, 3]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (3, 3)
+
+    discretization_type = 'finite_element'
+    for element_type in ['linear_triangles',
+                         'bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
         discretization = domain.Discretization(cell=my_cell,
                                                nb_of_pixels_global=number_of_pixels,
                                                discretization_type=discretization_type,
                                                element_type=element_type)
 
-        self.assertTrue(hasattr(discretization, "cell"), 'Discretization has no "cell" ')
-        self.assertTrue(hasattr(discretization, "domain_dimension"), 'Discretization has no "domain_dimension"')
-        self.assertTrue(hasattr(discretization, "B_gradient"), 'Discretization has no "B_gradient" matrix')
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
 
-        self.assertTrue(hasattr(discretization, "quadrature_weights"), 'Discretization has no "quadrature_weights" ')
+        u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
+        du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
+        du_fun_3 = lambda y: 3 + 0 * y
 
-        self.assertTrue(hasattr(discretization, "nb_quad_points_per_pixel"),
-                        'Discretization has no "nb_quad_points_per_pixel" ')
+        temperature = discretization.get_temperature_sized_field(name='temperature')
+        temperature_gradient = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(name='anal_gradient_of_temp')
 
-        self.assertTrue(hasattr(discretization, "nb_nodes_per_pixel"), 'Discretization has no "nb_nodes_per_pixel" ')
+        temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                               nodal_coordinates.s[1, 0, :, :])
+        temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
 
-    def test_2D_gradients_linear_conductivity(self):
-        domain_size = [3, 3]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
+        discretization.apply_gradient_operator_mugrid(temperature, temperature_gradient)
 
-        number_of_pixels = (3, 3)
+        # test 1
+        average = np.ndarray.sum(temperature_gradient.s)
+        message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert average <= 1e-14, message
 
-        discretization_type = 'finite_element'
-        for element_type in ['linear_triangles',
-                             'bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
+        # test 2
+        # compare values of gradient element wise --- without last-- periodic pixel that differs
+        value_1 = np.all(
+            temperature_gradient.s[..., 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1])
+        diff = np.ndarray.sum(
+            temperature_gradient.s[..., 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1])
+        value = np.allclose(temperature_gradient.s[..., 0:-1, 0:-1], temperature_gradient_anal.s[..., 0:-1, 0:-1],
+                            rtol=1e-16, atol=1e-14)
+        assert value, 'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+            element_type, problem_type, diff)
+
+def test_2D_mugrid_gradients_linear_conductivity():
+    domain_size = [3, 3]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (8, 9)
+
+    discretization_type = 'finite_element'
+    for element_type in ['linear_triangles',
+                         'bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
+        du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
+        du_fun_3 = lambda y: 3 + 0 * y
+
+        # temperature = discretization.get_temperature_sized_field(name='temperature')
+        # temperature_gradient = discretization.get_temperature_gradient_size_field()
+
+        u_inxyz = discretization.get_temperature_sized_field(name='temperature')
+        grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
+            name='anal_gradient_of_temp')
+
+        u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                           nodal_coordinates.s[1, 0, :, :])
+
+        temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
+
+        # temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
+
+        discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
+
+        # test 1
+        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert average <= 1e-14, message
+        # test 2
+        # compare values of gradient element wise --- without last-- periodic pixel that differs
+        value_1 = np.all(
+            grad_u_ijqxyz.s[..., 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1])
+        diff = np.ndarray.sum(
+            grad_u_ijqxyz.s[..., 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1])
+        value = np.allclose(grad_u_ijqxyz.s[..., 0:-1, 0:-1], temperature_gradient_anal.s[..., 0:-1, 0:-1],
+                            rtol=1e-16, atol=1e-14)
+        assert value, 'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+            element_type, problem_type, diff)
+
+def test_2D_mugrid_Noperator():
+    domain_size = [3, 3]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (3, 3)
+
+    discretization_type = 'finite_element'
+    for element_type in ['linear_triangles', 'linear_triangles_tilled','bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        u_fun_4x3y = lambda x, y: 0 * x + 0 * y+1   # np.sin(x)
+        du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
+        du_fun_3 = lambda y: 3 + 0 * y
+
+        # temperature = discretization.get_temperature_sized_field(name='temperature')
+        # temperature_gradient = discretization.get_temperature_gradient_size_field()
+
+        u_inxyz = discretization.get_temperature_sized_field(name='temperature')
+        nnu_inxyz = discretization.get_temperature_sized_field(name='nnu_inxyz')
+
+        u_iqnxyz = discretization.get_quad_field_scalar(name='temp_at_quads')
+        grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
+            name='anal_gradient_of_temp')
+
+        u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                           nodal_coordinates.s[1, 0, :, :])
+
+        temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
+
+        # temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
+        discretization.apply_N_operator_mugrid(nodal_field_inxyz=u_inxyz, quad_field_ijqnxyz=u_iqnxyz)
+        discretization.apply_N_transposed_operator_mugrid(
+            quad_field_ijqxyz=u_iqnxyz,
+            nodal_field_inxyz=nnu_inxyz,
+            apply_weights=True)
+
+        message = "N_transposed * W * N * 1 is not 1!!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert np.allclose(nnu_inxyz.s, 1.0, rtol=1e-16, atol=1e-12), message
+
+def test_repro_broadcasting_error():
+    domain_size = [3, 4]
+    problem_type = 'elasticity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+    number_of_pixels = (2, 3)
+    discretization_type = 'finite_element'
+
+    for element_type in ['bilinear_rectangle']:
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        # This field has components shape (2, 2) in 2D elasticity (stress-like)
+        grad_field = discretization.get_gradient_size_field(name='grad')
+        # Shape is (2, 2, nb_quad, nx, ny)
+        # weights shape is (nb_quad,)
+
+        div_field = discretization.get_displacement_sized_field(name='div')
+
+        # This should trigger the error if weights are not broadcasted correctly
+        discretization.apply_gradient_transposed_operator_mugrid(
+            gradient_field_ijqxyz=grad_field,
+            div_u_fnxyz=div_field,
+            apply_weights=True)
+
+
+
+def test_3D_gradients_linear_conductivity():
+    domain_size = [3, 4, 5]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5, 6)
+
+    discretization_type = 'finite_element'
+    for element_type in ['trilinear_hexahedron']:
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        u_fun_4x3y = lambda x, y, z: 4 * x + 3 * y + 5 * z  # np.sin(x)
+        du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
+        du_fun_3 = lambda y: 3 + 0 * y
+        du_fun_0 = lambda z: 5 + 0 * z
+
+        u_inxyz = discretization.get_temperature_sized_field(name='temperature')
+        grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
+            name='anal_gradient_of_temp')
+
+        u_inxyz.s[0, 0, :, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :, :],
+                                              nodal_coordinates.s[1, 0, :, :, :],
+                                              nodal_coordinates.s[2, 0, :, :, :])
+
+        temperature_gradient_anal.s[0, 0, :, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :, :])
+        temperature_gradient_anal.s[0, 2, :, :, :, :] = du_fun_0(quad_coordinates.s[2, :, :, :, :])
+
+        discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
+        # TODO[MARTIN] GRADIENT OPERATOR IS NOT WORKING IN 3D... probably wrong stencil
+        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        message = "Gradient does not have zero mean !!!! for 3D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert average <= 1e-12, message
+
+        # test 2
+        # compare values of gradient element wise --- without last-- periodic pixel that differs
+        value_1 = np.all(
+            grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1])
+        diff = np.ndarray.sum(
+            grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1])
+        value = np.allclose(grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1],
+                            temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1],
+                            rtol=1e-16, atol=1e-12)
+        assert value, 'Gradient is not equal to analytical expression for 3D element {} in {} problem. Difference is {}'.format(
+            element_type, problem_type, diff)
+
+def test_2D_gradients_bilinear_conductivity():
+    domain_size = [4, 5]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5)
+
+    discretization_type = 'finite_element'
+    for element_type in ['bilinear_rectangle']:
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        u_fun_4x3y = lambda x, y: x * y  # + 4 * y  # + 3 * y ** 2  # np.sin(x)
+        du_fun_4 = lambda y: y  # np.cos(x)
+        du_fun_3 = lambda x: x
+
+        u_inxyz = discretization.get_temperature_sized_field(name='temperature')
+        grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
+            name='anal_gradient_of_temp')
+
+        u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
+                                           nodal_coordinates.s[1, 0, :, :])
+
+        temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[1, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[0, :, :, :])
+        #
+        discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
+
+        # test 1
+        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert average <= 1e-10, message  ### weaker condition !!!!!
+
+        # test 2
+        # compare values of gradient element wise --- without last-- periodic pixel that differs
+
+        for dir in range(domain_size.__len__()):
+            value_1 = np.all(
+                grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] == temperature_gradient_anal.s[0, dir, ..., 0:-1,
+                0:-1])
+            diff = np.ndarray.sum(
+                grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] - temperature_gradient_anal.s[0, dir, ..., 0:-1,
+                0:-1])
+            value = np.allclose(grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1],
+                                temperature_gradient_anal.s[0, dir, ..., 0:-1, 0:-1],
+                                rtol=1e-12, atol=1e-14)
+            assert value, 'Gradient is not equal to analytical expression in direction {} for 2D element {} in {} ' \
+                ' problem. Difference is {}'.format(
+                    dir,
+                    element_type, problem_type, diff)
+
+def test_2D_gradients_linear_elasticity():
+    domain_size = [3, 4]
+    problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5)
+
+    discretization_type = 'finite_element'
+
+    for direction in range(domain_size.__len__()):
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
             discretization = domain.Discretization(cell=my_cell,
                                                    nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
@@ -58,366 +361,135 @@ class DiscretizationTestCase(unittest.TestCase):
             quad_coordinates = discretization.get_quad_points_coordinates()
 
             u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
-            du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
-            du_fun_3 = lambda y: 3 + 0 * y
+            du_fun_4 = lambda y: 4  # np.cos(x)
+            du_fun_3 = lambda x: 3
 
-            temperature = discretization.get_temperature_sized_field(name='temperature')
-            temperature_gradient = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(name='anal_gradient_of_temp')
+            u_inxyz = discretization.get_displacement_sized_field(name='displacement')
+            grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field(
+                name='gradient_of_displacement')
 
-            temperature.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
-                                                   nodal_coordinates.s[1, 0, :, :])
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
+            displacement_gradient_anal = discretization.get_displacement_gradient_sized_field(
+                name='anal_gradient_of_disp')
 
-            discretization.apply_gradient_operator_mugrid(temperature, temperature_gradient)
+            u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
+                                                       nodal_coordinates.s[1, :, :])
 
-            # test 1
-            average = np.ndarray.sum(temperature_gradient.s)
-            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
-                                                                                                     problem_type)
-            self.assertLessEqual(average, 1e-14, message)
+            displacement_gradient_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, 0])
+            displacement_gradient_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates.s[0, 0])
 
-            # test 2
-            # compare values of gradient element wise --- without last-- periodic pixel that differs
-            value_1 = np.all(
-                temperature_gradient.s[..., 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1])
-            diff = np.ndarray.sum(
-                temperature_gradient.s[..., 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1])
-            value = np.allclose(temperature_gradient.s[..., 0:-1, 0:-1], temperature_gradient_anal.s[..., 0:-1, 0:-1],
-                                rtol=1e-16, atol=1e-14)
-            self.assertTrue(value,
-                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
-                                element_type, problem_type, diff))
-
-    def test_2D_mugrid_gradients_linear_conductivity(self):
-        domain_size = [3, 3]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
-
-        number_of_pixels = (8, 9)
-
-        discretization_type = 'finite_element'
-        for element_type in ['linear_triangles',
-                             'bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
-
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-
-            u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
-            du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
-            du_fun_3 = lambda y: 3 + 0 * y
-
-            # temperature = discretization.get_temperature_sized_field(name='temperature')
-            # temperature_gradient = discretization.get_temperature_gradient_size_field()
-
-            u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
-                name='anal_gradient_of_temp')
-
-            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
-                                               nodal_coordinates.s[1, 0, :, :])
-
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
-
-            # temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-
-            discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-
-            # test 1
-            average = np.ndarray.sum(grad_u_ijqxyz.s)
-            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
-                                                                                                     problem_type)
-            self.assertLessEqual(average, 1e-14, message)
-            # test 2
-            # compare values of gradient element wise --- without last-- periodic pixel that differs
-            value_1 = np.all(
-                grad_u_ijqxyz.s[..., 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1])
-            diff = np.ndarray.sum(
-                grad_u_ijqxyz.s[..., 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1])
-            value = np.allclose(grad_u_ijqxyz.s[..., 0:-1, 0:-1], temperature_gradient_anal.s[..., 0:-1, 0:-1],
-                                rtol=1e-16, atol=1e-14)
-            self.assertTrue(value,
-                            'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
-                                element_type, problem_type, diff))
-
-    def test_2D_mugrid_Noperator(self):
-        domain_size = [3, 3]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
-
-        number_of_pixels = (3, 3)
-
-        discretization_type = 'finite_element'
-        for element_type in ['linear_triangles', 'linear_triangles_tilled','bilinear_rectangle']:  # TODO:{MARTIN} find a way to test 'linear_triangles_tilled'
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
-
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-
-            u_fun_4x3y = lambda x, y: 0 * x + 0 * y+1   # np.sin(x)
-            du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
-            du_fun_3 = lambda y: 3 + 0 * y
-
-            # temperature = discretization.get_temperature_sized_field(name='temperature')
-            # temperature_gradient = discretization.get_temperature_gradient_size_field()
-
-            u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            nnu_inxyz = discretization.get_temperature_sized_field(name='nnu_inxyz')
-
-            u_iqnxyz = discretization.get_quad_field_scalar(name='temp_at_quads')
-            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
-                name='anal_gradient_of_temp')
-
-            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
-                                               nodal_coordinates.s[1, 0, :, :])
-
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
-
-            # temperature_gradient = discretization.apply_gradient_operator(temperature, temperature_gradient)
-            discretization.apply_N_operator_mugrid(nodal_field_inxyz=u_inxyz, quad_field_ijqnxyz=u_iqnxyz)
-            discretization.apply_N_transposed_operator_mugrid(
-                quad_field_ijqxyz=u_iqnxyz,
-                nodal_field_inxyz=nnu_inxyz,
-                apply_weights=True)
-
-            message = "N_transposed * W * N * 1 is not 1!!!! for 2D element {} in {} problem".format(element_type,
-                                                                                                     problem_type)
-            self.assertTrue(np.allclose(nnu_inxyz.s, 1.0, rtol=1e-16, atol=1e-12), message)
-
-    def test_repro_broadcasting_error(self):
-        domain_size = [3, 4]
-        problem_type = 'elasticity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
-        number_of_pixels = (2, 3)
-        discretization_type = 'finite_element'
-
-        for element_type in ['bilinear_rectangle']:
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
-
-            # This field has components shape (2, 2) in 2D elasticity (stress-like)
-            grad_field = discretization.get_gradient_size_field(name='grad')
-            # Shape is (2, 2, nb_quad, nx, ny)
-            # weights shape is (nb_quad,)
-            
-            div_field = discretization.get_displacement_sized_field(name='div')
-            
-            # This should trigger the error if weights are not broadcasted correctly
-            discretization.apply_gradient_transposed_operator_mugrid(
-                gradient_field_ijqxyz=grad_field,
-                div_u_fnxyz=div_field,
-                apply_weights=True)
-
-
-
-    def test_3D_gradients_linear_conductivity(self):
-        domain_size = [3, 4, 5]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
-
-        number_of_pixels = (4, 5, 6)
-
-        discretization_type = 'finite_element'
-        for element_type in ['trilinear_hexahedron']:
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
-
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-
-            u_fun_4x3y = lambda x, y, z: 4 * x + 3 * y + 5 * z  # np.sin(x)
-            du_fun_4 = lambda x: 4 + 0 * x  # np.cos(x)
-            du_fun_3 = lambda y: 3 + 0 * y
-            du_fun_0 = lambda z: 5 + 0 * z
-
-            u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
-                name='anal_gradient_of_temp')
-
-            u_inxyz.s[0, 0, :, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :, :],
-                                                  nodal_coordinates.s[1, 0, :, :, :],
-                                                  nodal_coordinates.s[2, 0, :, :, :])
-
-            temperature_gradient_anal.s[0, 0, :, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :, :])
-            temperature_gradient_anal.s[0, 2, :, :, :, :] = du_fun_0(quad_coordinates.s[2, :, :, :, :])
-
-            discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-            # TODO[MARTIN] GRADIENT OPERATOR IS NOT WORKING IN 3D... probably wrong stencil
-            average = np.ndarray.sum(grad_u_ijqxyz.s)
-            message = "Gradient does not have zero mean !!!! for 3D element {} in {} problem".format(element_type,
-                                                                                                     problem_type)
-            self.assertLessEqual(average, 1e-12, message)
-
-            # test 2
-            # compare values of gradient element wise --- without last-- periodic pixel that differs
-            value_1 = np.all(
-                grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1] == temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1])
-            diff = np.ndarray.sum(
-                grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1] - temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1])
-            value = np.allclose(grad_u_ijqxyz.s[..., 0:-1, 0:-1, 0:-1],
-                                temperature_gradient_anal.s[..., 0:-1, 0:-1, 0:-1],
-                                rtol=1e-16, atol=1e-12)
-            self.assertTrue(value,
-                            'Gradient is not equal to analytical expression for 3D element {} in {} problem. Difference is {}'.format(
-                                element_type, problem_type, diff))
-
-    def test_2D_gradients_bilinear_conductivity(self):
-        domain_size = [4, 5]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
-
-        number_of_pixels = (4, 5)
-
-        discretization_type = 'finite_element'
-        for element_type in ['bilinear_rectangle']:
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
-
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-
-            u_fun_4x3y = lambda x, y: x * y  # + 4 * y  # + 3 * y ** 2  # np.sin(x)
-            du_fun_4 = lambda y: y  # np.cos(x)
-            du_fun_3 = lambda x: x
-
-            u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(name='gradient_of_temp')
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
-                name='anal_gradient_of_temp')
-
-            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, 0, :, :],
-                                               nodal_coordinates.s[1, 0, :, :])
-
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[1, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[0, :, :, :])
-            #
-            discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-
-            # test 1
-            average = np.ndarray.sum(grad_u_ijqxyz.s)
-            message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
-                                                                                                     problem_type)
-            self.assertLessEqual(average, 1e-10, message)  ### weaker condition !!!!!
-
-            # test 2
-            # compare values of gradient element wise --- without last-- periodic pixel that differs
+            discretization.apply_gradient_operator_mugrid(u_inxyz,
+                                                                   grad_u_ijqxyz)
+            # grad_u_ijqxyz.s[0, 0, 0]
 
             for dir in range(domain_size.__len__()):
+                # test 1
+                average = np.ndarray.sum(grad_u_ijqxyz.s)
+                message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(
+                    element_type,
+                    problem_type)
+                assert average <= 1e-13, message
+
+                # test 2
+                # compare values of gradient element wise --- without last-- periodic pixel that differs
                 value_1 = np.all(
-                    grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] == temperature_gradient_anal.s[0, dir, ..., 0:-1,
-                    0:-1])
+                    grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal.s[direction,
+                    dir, :, 0:-1, 0:-1])
                 diff = np.ndarray.sum(
-                    grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1] - temperature_gradient_anal.s[0, dir, ..., 0:-1,
-                    0:-1])
-                value = np.allclose(grad_u_ijqxyz.s[0, dir, ..., 0:-1, 0:-1],
-                                    temperature_gradient_anal.s[0, dir, ..., 0:-1, 0:-1],
-                                    rtol=1e-12, atol=1e-14)
-                self.assertTrue(value,
-                                'Gradient is not equal to analytical expression in direction {} for 2D element {} in {} '
-                                ' problem. Difference is {}'.format(
-                                    dir,
-                                    element_type, problem_type, diff))
+                    grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal.s[direction,
+                    dir, :, 0:-1, 0:-1])
+                value = np.allclose(grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1],
+                                    displacement_gradient_anal.s[direction, dir, :, 0:-1, 0:-1],
+                                    rtol=1e-16, atol=1e-14)
+                assert value, 'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
+                    element_type, problem_type, diff)
 
-    def test_2D_gradients_linear_elasticity(self):
-        domain_size = [3, 4]
-        problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
+def test_2D_gradients_transposed_linear_conductivity():
+    domain_size = [3, 4]
+    problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
 
-        number_of_pixels = (4, 5)
+    number_of_pixels = (4, 5)
 
-        discretization_type = 'finite_element'
+    discretization_type = 'finite_element'
 
-        for direction in range(domain_size.__len__()):
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
+    for element_type in ['linear_triangles', 'bilinear_rectangle']:
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
 
-                nodal_coordinates = discretization.get_nodal_points_coordinates()
-                quad_coordinates = discretization.get_quad_points_coordinates()
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
 
-                u_fun_4x3y = lambda x, y: 4 * x + 3 * y  # np.sin(x)
-                du_fun_4 = lambda y: 4  # np.cos(x)
-                du_fun_3 = lambda x: 3
+        u_fun_4x3y = lambda x, y: 3 * x + 4 * y  # np.sin(x)
+        du_fun_4 = lambda x: 3 + 0 * x  # np.cos(x)
+        du_fun_3 = lambda y: 4 + 0 * y
 
-                u_inxyz = discretization.get_displacement_sized_field(name='displacement')
-                grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field(
-                    name='gradient_of_displacement')
+        u_inxyz = discretization.get_temperature_sized_field(name='temperature')
+        grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(
+            name='gradient_of_temp')
 
-                displacement_gradient_anal = discretization.get_displacement_gradient_sized_field(
-                    name='anal_gradient_of_disp')
+        temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
+            name='anal_gradient_of_temp')
 
-                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
-                                                           nodal_coordinates.s[1, :, :])
+        u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
+                                           nodal_coordinates.s[1, :, :])
+        temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+        temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
 
-                displacement_gradient_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, 0])
-                displacement_gradient_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates.s[0, 0])
+        discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
 
-                discretization.apply_gradient_operator_mugrid(u_inxyz,
-                                                                       grad_u_ijqxyz)
-                # grad_u_ijqxyz.s[0, 0, 0]
+        div_flux_inxyz = discretization.get_temperature_sized_field(name='div_flux')
 
-                for dir in range(domain_size.__len__()):
-                    # test 1
-                    average = np.ndarray.sum(grad_u_ijqxyz.s)
-                    message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(
-                        element_type,
-                        problem_type)
-                    self.assertLessEqual(average, 1e-14, message)
+        discretization.apply_gradient_transposed_operator_mugrid(
+            gradient_field_ijqxyz=grad_u_ijqxyz,
+            div_u_fnxyz=div_flux_inxyz,
+            apply_weights=False)
 
-                    # test 2
-                    # compare values of gradient element wise --- without last-- periodic pixel that differs
-                    value_1 = np.all(
-                        grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] == displacement_gradient_anal.s[direction,
-                        dir, :, 0:-1, 0:-1])
-                    diff = np.ndarray.sum(
-                        grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1] - displacement_gradient_anal.s[direction,
-                        dir, :, 0:-1, 0:-1])
-                    value = np.allclose(grad_u_ijqxyz.s[direction, dir, :, 0:-1, 0:-1],
-                                        displacement_gradient_anal.s[direction, dir, :, 0:-1, 0:-1],
-                                        rtol=1e-16, atol=1e-14)
-                    self.assertTrue(value,
-                                    'Gradient is not equal to analytical expression for 2D element {} in {} problem. Difference is {}'.format(
-                                        element_type, problem_type, diff))
+        # test 1
+        average = np.ndarray.sum(div_flux_inxyz.s)
+        message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
+                                                                                                 problem_type)
+        assert average <= 1e-14, message
 
-    def test_2D_gradients_transposed_linear_conductivity(self):
-        domain_size = [3, 4]
-        problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
+        if element_type in ['linear_triangles']:
+            solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
+                                 [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
+                                  50.0],
+                                 [-50.0, -3.552713678800501e-15, 7.105427357601002e-15, 0.0, 50.0],
+                                 [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
+        elif element_type in ['bilinear_rectangle']:  ### we are missing integration weights !!!
+            solution = 2 * np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
+                                     [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
+                                      50.0],
+                                     [-50.0, -3.552713678800501e-15, 7.105427357601002e-15, 0.0, 50.0],
+                                     [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
+        # test 2
 
-        number_of_pixels = (4, 5)
+        value_1 = np.all(div_flux_inxyz.s == solution)
+        diff = np.ndarray.sum(div_flux_inxyz.s - solution)
+        value = np.allclose(div_flux_inxyz.s, solution,
+                            rtol=1e-16, atol=1e-13)
 
-        discretization_type = 'finite_element'
+        assert value, 'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
+            element_type, problem_type, diff)
 
+        value_grid = np.allclose(div_flux_inxyz.s, solution,
+                                 rtol=1e-16, atol=1e-13)
+        assert value_grid, 'Rolled gradient transposed do not coincide with looped gradient transposed : 2D element {} in {} problem. Difference is {}'.format(
+            element_type, problem_type, diff)
+
+def test_2D_gradients_transposed_linear_elasticity():
+    domain_size = [3, 4]
+    problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5)
+
+    discretization_type = 'finite_element'
+    for direction in range(domain_size.__len__()):
         for element_type in ['linear_triangles', 'bilinear_rectangle']:
             discretization = domain.Discretization(cell=my_cell,
                                                    nb_of_pixels_global=number_of_pixels,
@@ -431,33 +503,32 @@ class DiscretizationTestCase(unittest.TestCase):
             du_fun_4 = lambda x: 3 + 0 * x  # np.cos(x)
             du_fun_3 = lambda y: 4 + 0 * y
 
-            u_inxyz = discretization.get_temperature_sized_field(name='temperature')
-            grad_u_ijqxyz = discretization.get_temperature_gradient_size_field(
-                name='gradient_of_temp')
+            u_inxyz = discretization.get_displacement_sized_field(name='displacement')
+            grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field(
+                name='gradient_of_displacement')
+            grad_u_ijqxyz_anal = discretization.get_displacement_gradient_sized_field(
+                name='anal_gradient_of_disp')
 
-            temperature_gradient_anal = discretization.get_temperature_gradient_size_field(
-                name='anal_gradient_of_temp')
-
-            u_inxyz.s[0, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
-                                               nodal_coordinates.s[1, :, :])
-            temperature_gradient_anal.s[0, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
-            temperature_gradient_anal.s[0, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
+            # assign displacement field
+            u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
+                                                       nodal_coordinates.s[1, :, :])
+            # assign anal gradient of displacement field
+            grad_u_ijqxyz_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
+            grad_u_ijqxyz_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
 
             discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-
-            div_flux_inxyz = discretization.get_temperature_sized_field(name='div_flux')
+            # copute grad transpose
+            force_inxyz_mugrid = discretization.get_displacement_sized_field(name='force')
 
             discretization.apply_gradient_transposed_operator_mugrid(
                 gradient_field_ijqxyz=grad_u_ijqxyz,
-                div_u_fnxyz=div_flux_inxyz,
+                div_u_fnxyz=force_inxyz_mugrid,
                 apply_weights=False)
-
             # test 1
-            average = np.ndarray.sum(div_flux_inxyz.s)
+            average = np.ndarray.sum(grad_u_ijqxyz.s)
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                      problem_type)
-            self.assertLessEqual(average, 1e-14, message)
-
+            assert average <= 1e-14, message
             if element_type in ['linear_triangles']:
                 solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
                                      [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
@@ -466,342 +537,260 @@ class DiscretizationTestCase(unittest.TestCase):
                                      [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
             elif element_type in ['bilinear_rectangle']:  ### we are missing integration weights !!!
                 solution = 2 * np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
-                                         [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
+                                         [-50.0, 3.552713678800501e-15, -3.552713678800501e-15,
+                                          7.105427357601002e-15,
                                           50.0],
                                          [-50.0, -3.552713678800501e-15, 7.105427357601002e-15, 0.0, 50.0],
                                          [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
             # test 2
-
-            value_1 = np.all(div_flux_inxyz.s == solution)
-            diff = np.ndarray.sum(div_flux_inxyz.s - solution)
-            value = np.allclose(div_flux_inxyz.s, solution,
+            # compare values of gradient element wise --- without last-- periodic pixel that differs
+            value_1 = np.all(force_inxyz_mugrid.s[direction, 0] == solution)
+            diff = np.ndarray.sum(force_inxyz_mugrid.s[direction, 0] - solution)
+            value = np.allclose(force_inxyz_mugrid.s[direction, 0], solution,
                                 rtol=1e-16, atol=1e-13)
+            assert value, 'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
+                element_type, problem_type, diff)
 
-            self.assertTrue(value,
-                            'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
-                                element_type, problem_type, diff))
-
-            value_grid = np.allclose(div_flux_inxyz.s, solution,
-                                     rtol=1e-16, atol=1e-13)
-            self.assertTrue(value_grid,
-                            'Rolled gradient transposed do not coincide with looped gradient transposed : 2D element {} in {} problem. Difference is {}'.format(
-                                element_type, problem_type, diff))
-
-    def test_2D_gradients_transposed_linear_elasticity(self):
-        domain_size = [3, 4]
-        problem_type = 'elasticity'  # 'elasticity'#,'conductivity'
+def test_2D_system_matrix_symmetricity():
+    domain_size = [3, 4]
+    for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
-
         number_of_pixels = (4, 5)
-
         discretization_type = 'finite_element'
-        for direction in range(domain_size.__len__()):
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
 
-                nodal_coordinates = discretization.get_nodal_points_coordinates()
-                quad_coordinates = discretization.get_quad_points_coordinates()
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   nb_of_pixels_global=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
 
-                u_fun_4x3y = lambda x, y: 3 * x + 4 * y  # np.sin(x)
-                du_fun_4 = lambda x: 3 + 0 * x  # np.cos(x)
-                du_fun_3 = lambda y: 4 + 0 * y
+            material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
-                u_inxyz = discretization.get_displacement_sized_field(name='displacement')
-                grad_u_ijqxyz = discretization.get_displacement_gradient_sized_field(
-                    name='gradient_of_displacement')
-                grad_u_ijqxyz_anal = discretization.get_displacement_gradient_sized_field(
-                    name='anal_gradient_of_disp')
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
 
-                # assign displacement field
-                u_inxyz.s[direction, 0, :, :] = u_fun_4x3y(nodal_coordinates.s[0, :, :],
-                                                           nodal_coordinates.s[1, :, :])
-                # assign anal gradient of displacement field
-                grad_u_ijqxyz_anal.s[direction, 0, :, :, :] = du_fun_4(quad_coordinates.s[0, :, :, :])
-                grad_u_ijqxyz_anal.s[direction, 1, :, :, :] = du_fun_3(quad_coordinates.s[1, :, :, :])
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                           kind='linear')
 
-                discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-                # copute grad transpose
-                force_inxyz_mugrid = discretization.get_displacement_sized_field(name='force')
+                material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0], [0, 1]])
+                material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+            if problem_type == 'elasticity':
+                K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
+            elif problem_type == 'conductivity':
+                K = discretization.get_system_matrix_mugrid(material_data_field_, formulation=None)
+            # test symmetricity
 
-                discretization.apply_gradient_transposed_operator_mugrid(
-                    gradient_field_ijqxyz=grad_u_ijqxyz,
-                    div_u_fnxyz=force_inxyz_mugrid,
-                    apply_weights=False)
-                # test 1
-                average = np.ndarray.sum(grad_u_ijqxyz.s)
-                message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
-                                                                                                         problem_type)
-                self.assertLessEqual(average, 1e-14, message)
-                if element_type in ['linear_triangles']:
-                    solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
-                                         [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
-                                          50.0],
-                                         [-50.0, -3.552713678800501e-15, 7.105427357601002e-15, 0.0, 50.0],
-                                         [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
-                elif element_type in ['bilinear_rectangle']:  ### we are missing integration weights !!!
-                    solution = 2 * np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
-                                             [-50.0, 3.552713678800501e-15, -3.552713678800501e-15,
-                                              7.105427357601002e-15,
-                                              50.0],
-                                             [-50.0, -3.552713678800501e-15, 7.105427357601002e-15, 0.0, 50.0],
-                                             [-18.0, 32.0, 31.999999999999986, 32.0, 82.0]])
-                # test 2
-                # compare values of gradient element wise --- without last-- periodic pixel that differs
-                value_1 = np.all(force_inxyz_mugrid.s[direction, 0] == solution)
-                diff = np.ndarray.sum(force_inxyz_mugrid.s[direction, 0] - solution)
-                value = np.allclose(force_inxyz_mugrid.s[direction, 0], solution,
-                                    rtol=1e-16, atol=1e-13)
-                self.assertTrue(value,
-                                'B_transpose times B does return wrong field: 2D element {} in {} problem. Difference is {}'.format(
-                                    element_type, problem_type, diff))
+            assert np.allclose(K, K.T, rtol=1e-15, atol=1e-14), \
+                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
+                    element_type, problem_type)
+            # test column sum to be 0
+            for i in np.arange(K.shape[0]):
+                assert np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-13), \
+                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
+                        i,
+                        element_type, problem_type)+f'the error is {np.sum(K[i, :])}'
 
-    def test_2D_system_matrix_symmetricity(self):
-        domain_size = [3, 4]
-        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (4, 5)
-            discretization_type = 'finite_element'
+def test_3D_system_matrix_symmetricity():
+    domain_size = [3, 4, 5]
+    for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (2, 3, 4)
+        discretization_type = 'finite_element'
 
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
+        for element_type in ['trilinear_hexahedron']:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   nb_of_pixels_global=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
 
-                material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
+            material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
 
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                           K=K_1, mu=G_1,
+                                                           kind='linear')
 
-                    material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
-                if problem_type == 'elasticity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
-                elif problem_type == 'conductivity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field_, formulation=None)
-                # test symmetricity
+                material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+            if problem_type == 'elasticity':
+                K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
+            elif problem_type == 'conductivity':
+                K = discretization.get_system_matrix_mugrid(material_data_field_, formulation=None )
 
-                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
-                                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
-                                    element_type, problem_type))
-                # test column sum to be 0
-                for i in np.arange(K.shape[0]):
-                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-13),
-                                    'Sum of  {} -th column of system matrix is not zero: 2D element {} in {} problem.'.format(
-                                        i,
-                                        element_type, problem_type)+f'the error is {np.sum(K[i, :])}')
+            # test symmetricity
 
-    def test_3D_system_matrix_symmetricity(self):
-        domain_size = [3, 4, 5]
-        for problem_type in ['conductivity', 'elasticity']:  # 'elasticity'#,'conductivity'
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (2, 3, 4)
-            discretization_type = 'finite_element'
+            assert np.allclose(K, K.T, rtol=1e-15, atol=1e-14), \
+                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
+                    element_type, problem_type)
+            # test column sum to be 0
+            for i in np.arange(K.shape[0]):
+                assert np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-13), \
+                    'Sum of  {} -th column of system matrix is not zero: 3D element {} in {} problem.'.format(
+                        i,
+                        element_type, problem_type)+f'the error is {np.sum(K[i, :])}'
 
-            for element_type in ['trilinear_hexahedron']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
+def test_2D_homogenization_problem_solution():
+    ## Make a new test with analytical solutions
+    domain_size = [3, 4]
+    for problem_type in ['elasticity', 'conductivity']:
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (4, 5)
+        discretization_type = 'finite_element'
 
-                material_data_field_ = discretization.get_material_data_size_field_mugrid(name='material_dat')
+        for element_type in ['bilinear_rectangle', 'linear_triangles', ]:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   nb_of_pixels_global=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
 
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
+            material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                               K=K_1, mu=G_1,
-                                                               kind='linear')
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.0)
 
-                    material_data_field_.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                    material_data_field_.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-                if problem_type == 'elasticity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field_, formulation='small_strain')
-                elif problem_type == 'conductivity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field_, formulation=None )
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                           kind='linear')
 
-                # test symmetricity
+                material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+                ref_material_data = np.copy(mat_1)
+                material_data_field.s[:, :, :, :, :, 1, 1] = 2 * material_data_field.s[:, :, :, :, :, 1, 1]
 
-                self.assertTrue(np.allclose(K, K.T, rtol=1e-15, atol=1e-14),
-                                'System matrix is not symmetric: 2D element {} in {} problem.'.format(
-                                    element_type, problem_type))
-                # test column sum to be 0
-                for i in np.arange(K.shape[0]):
-                    self.assertTrue(np.allclose(np.sum(K[i, :]), 0, rtol=1e-15, atol=1e-13),
-                                    'Sum of  {} -th column of system matrix is not zero: 3D element {} in {} problem.'.format(
-                                        i,
-                                        element_type, problem_type)+f'the error is {np.sum(K[i, :])}')
-
-    def test_2D_homogenization_problem_solution(self):
-        ## Make a new test with analytical solutions
-        domain_size = [3, 4]
-        for problem_type in ['elasticity', 'conductivity']:
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (4, 5)
-            discretization_type = 'finite_element'
-
-            for element_type in ['bilinear_rectangle', 'linear_triangles', ]:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-
-                material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
-
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.0)
-
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
-
-                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-                    ref_material_data = np.copy(mat_1)
-                    material_data_field.s[:, :, :, :, :, 1, 1] = 2 * material_data_field.s[:, :, :, :, :, 1, 1]
-
-                    macro_gradient = np.array([[1, 0], [0, 1]])
+                macro_gradient = np.array([[1, 0], [0, 1]])
 
 
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
-                    # TODO do not forget about this magic
-                    #  material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
-                    #                                 quad_coordinates[0])
-                    ref_material_data = np.copy(mat_1)
-                    material_data_field.s[:, :, :, 1, 1] = 2 * material_data_field.s[:, :, :, 1, 1]
-                    macro_gradient = np.zeros([1, discretization.domain_dimension])
-                    macro_gradient[0, :] = np.array([1, 0])
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0], [0, 1]])
+                material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+                # TODO do not forget about this magic
+                #  material_data_field = np.einsum('ij,qxy->ijqxy', mat_1,
+                #                                 quad_coordinates[0])
+                ref_material_data = np.copy(mat_1)
+                material_data_field.s[:, :, :, 1, 1] = 2 * material_data_field.s[:, :, :, 1, 1]
+                macro_gradient = np.zeros([1, discretization.domain_dimension])
+                macro_gradient[0, :] = np.array([1, 0])
 
-                    if element_type == 'linear_triangles':  # $ element_type in ['linear_triangles', 'bilinear_rectangle']:
-                        matlab_solution = np.array([[0.0095, 0.0241, 0.0241, 0.0095, 0.0052],
-                                                    [0.0193, 0.0853, 0.0853, 0.0193, 0.0082],
-                                                    [-0.0193, -0.0853, -0.0853, -0.0193, -0.0082],
-                                                    [-0.0095, -0.0241, -0.0241, -0.0095, -0.0052]])
-                        matlab_residials = np.array(
-                            [0.6400, 0.047655764323228, 0.008172361420757, 0.001083793705242, 0.000025955687695,
-                             0.000000003633173])
-                        A_h = np.array([[1.038629693814802, 0], [0, 1.038486005762097]])
+                if element_type == 'linear_triangles':  # $ element_type in ['linear_triangles', 'bilinear_rectangle']:
+                    matlab_solution = np.array([[0.0095, 0.0241, 0.0241, 0.0095, 0.0052],
+                                                [0.0193, 0.0853, 0.0853, 0.0193, 0.0082],
+                                                [-0.0193, -0.0853, -0.0853, -0.0193, -0.0082],
+                                                [-0.0095, -0.0241, -0.0241, -0.0095, -0.0052]])
+                    matlab_residials = np.array(
+                        [0.6400, 0.047655764323228, 0.008172361420757, 0.001083793705242, 0.000025955687695,
+                         0.000000003633173])
+                    A_h = np.array([[1.038629693814802, 0], [0, 1.038486005762097]])
 
-                    elif element_type == 'bilinear_rectangle':
-                        matlab_solution = np.array(
-                            [[0.010881546413312, 0.023360445840561, 0.023360445840561, 0.010881546413312,
-                              0.000240833264357, ],
-                             [0.001825629490337, 0.100100728911584, 0.100100728911584, 0.001825629490337,
-                              0.002321736512470, ],
-                             [- 0.001825629490337, -0.100100728911584, -0.100100728911584, -0.001825629490337,
-                              -0.002321736512470, ],
-                             [-0.010881546413312, -0.023360445840561, -0.023360445840561, -0.010881546413312,
-                              -0.000240833264357]])
-                        matlab_residials = np.array(
-                            [0.640000000000000, 0.023650193538911, 0.000631355256664, 0.000028708702151,
-                             0.000000310696540, 8.490181660642319e-10])
-                        A_h = np.array([[1.036653236145122, 0], [0, 1.036742177950770]])
+                elif element_type == 'bilinear_rectangle':
+                    matlab_solution = np.array(
+                        [[0.010881546413312, 0.023360445840561, 0.023360445840561, 0.010881546413312,
+                          0.000240833264357, ],
+                         [0.001825629490337, 0.100100728911584, 0.100100728911584, 0.001825629490337,
+                          0.002321736512470, ],
+                         [- 0.001825629490337, -0.100100728911584, -0.100100728911584, -0.001825629490337,
+                          -0.002321736512470, ],
+                         [-0.010881546413312, -0.023360445840561, -0.023360445840561, -0.010881546413312,
+                          -0.000240833264357]])
+                    matlab_residials = np.array(
+                        [0.640000000000000, 0.023650193538911, 0.000631355256664, 0.000028708702151,
+                         0.000000310696540, 8.490181660642319e-10])
+                    A_h = np.array([[1.036653236145122, 0], [0, 1.036742177950770]])
 
-                macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
-                discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
-                                                               macro_gradient_field_ijqxyz=macro_gradient_field)
+            macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
+            discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
+                                                           macro_gradient_field_ijqxyz=macro_gradient_field)
 
-                rhs_field = discretization.get_unknown_size_field(name='rhs_field')
-                discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field,
-                                              macro_gradient_field_ijqxyz=macro_gradient_field,
-                                              rhs_inxyz=rhs_field)
+            rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+            discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field,
+                                          macro_gradient_field_ijqxyz=macro_gradient_field,
+                                          rhs_inxyz=rhs_field)
 
-                # rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
+            # rhs = discretization.get_rhs(material_data_field, macro_gradient_field)
 
-                # K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
+            # K_fun = lambda x: discretization.apply_system_matrix(material_data_field, x)
 
-                def K_fun(x, Ax):
-                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
-                                                              input_field_inxyz=x,
-                                                              output_field_inxyz=Ax)
+            def K_fun(x, Ax):
+                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax)
 
-                def M_fun(x, Px):
-                    Px.s[...] = 1 * x.s
+            def M_fun(x, Px):
+                Px.s[...] = 1 * x.s
 
-                # solution, norms = solvers.conjugate_gradients_mugrid(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
-                solution_field = discretization.get_unknown_size_field(name='solution')
-                solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
-                                                   fc=discretization.field_collection,
-                                                   hessp=K_fun,  # linear operator
-                                                   b=rhs_field,
-                                                   x=solution_field,
-                                                   P=M_fun,
-                                                   tol=1e-6,
-                                                   maxiter=100,
-                                                   )
-                # test homogenized stress
-                homogenized_stress = discretization.get_homogenized_stress_mugrid(
-                    material_data_field_ijklqxyz=material_data_field,
-                    displacement_field_inxyz=solution_field,
-                    macro_gradient_field_ijqxyz=macro_gradient_field)
-                if problem_type == 'conductivity':
-                    self.assertTrue(np.allclose(matlab_solution, solution_field.s, rtol=1e-05, atol=1e-04),
-                                    'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'
-                                    .format(element_type, problem_type))
-                    # self.assertTrue(
-                    #     np.allclose(np.asarray(norms['residual_rr']), matlab_residials, rtol=1e-15, atol=1e-14),
-                    #     'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
-                    #         element_type, problem_type))
-                    self.assertTrue(np.allclose(A_h[0], homogenized_stress[0], rtol=1e-6, atol=1e-10),
-                                    'Homogenized stress is not equal to reference MatLab implementation: 2D element {} in {}'
-                                    ' problem.'.format(
-                                        element_type, problem_type))
+            # solution, norms = solvers.conjugate_gradients_mugrid(K_fun, rhs, x0=None, P=M_fun, steps=int(500), toler=1e-10)
+            solution_field = discretization.get_unknown_size_field(name='solution')
+            solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
+                                               fc=discretization.field_collection,
+                                               hessp=K_fun,  # linear operator
+                                               b=rhs_field,
+                                               x=solution_field,
+                                               P=M_fun,
+                                               tol=1e-6,
+                                               maxiter=100,
+                                               )
+            # test homogenized stress
+            homogenized_stress = discretization.get_homogenized_stress_mugrid(
+                material_data_field_ijklqxyz=material_data_field,
+                displacement_field_inxyz=solution_field,
+                macro_gradient_field_ijqxyz=macro_gradient_field)
+            if problem_type == 'conductivity':
+                assert np.allclose(matlab_solution, solution_field.s, rtol=1e-05, atol=1e-04), \
+                    'Solution is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                        element_type, problem_type)
+                # assert np.allclose(np.asarray(norms['residual_rr']), matlab_residials, rtol=1e-15, atol=1e-14), \
+                #     'Residuals are not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                #         element_type, problem_type)
+                assert np.allclose(A_h[0], homogenized_stress[0], rtol=1e-6, atol=1e-10), \
+                    'Homogenized stress is not equal to reference MatLab implementation: 2D element {} in {} problem.'.format(
+                        element_type, problem_type)
 
-                # test if the preconditioner does not change the solution
-                if problem_type == 'elasticity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field, formulation='small_strain')
-                elif problem_type == 'conductivity':
-                    K = discretization.get_system_matrix_mugrid(material_data_field, formulation=None)
+            # test if the preconditioner does not change the solution
+            if problem_type == 'elasticity':
+                K = discretization.get_system_matrix_mugrid(material_data_field, formulation='small_strain')
+            elif problem_type == 'conductivity':
+                K = discretization.get_system_matrix_mugrid(material_data_field, formulation=None)
 
-                preconditioner = discretization.get_preconditioner_Green_mugrid(
-                    reference_material_data_ijkl=ref_material_data)
+            preconditioner = discretization.get_preconditioner_Green_mugrid(
+                reference_material_data_ijkl=ref_material_data)
 
-                def M_fun(x, Px):
-                    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                               input_nodal_field_fnxyz=x,
-                                                               output_nodal_field_fnxyz=Px)
+            def M_fun(x, Px):
+                discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                           input_nodal_field_fnxyz=x,
+                                                           output_nodal_field_fnxyz=Px)
 
-                solution_field_M = discretization.get_unknown_size_field(name='solution_M')
+            solution_field_M = discretization.get_unknown_size_field(name='solution_M')
 
-                solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
-                                                   fc=discretization.field_collection,
-                                                   hessp=K_fun,  # linear operator
-                                                   b=rhs_field,
-                                                   x=solution_field_M,
-                                                   P=M_fun,
-                                                   tol=1e-6,
-                                                   maxiter=2000,
-                                                   )
+            solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
+                                               fc=discretization.field_collection,
+                                               hessp=K_fun,  # linear operator
+                                               b=rhs_field,
+                                               x=solution_field_M,
+                                               P=M_fun,
+                                               tol=1e-6,
+                                               maxiter=2000,
+                                               )
 
-                # test homogenized stress
-                homogenized_stress_M = discretization.get_homogenized_stress_mugrid(
-                    material_data_field_ijklqxyz=material_data_field,
-                    displacement_field_inxyz=solution_field_M,
-                    macro_gradient_field_ijqxyz=macro_gradient_field)
-                self.assertTrue(np.allclose(solution_field.s, solution_field_M.s, rtol=1e-05, atol=1e-04),
-                                'Preconditioned solution is not equal to un preconditioned solution: 2D element {} in {} problem.'.format(
-                                    element_type, problem_type))
+            # test homogenized stress
+            homogenized_stress_M = discretization.get_homogenized_stress_mugrid(
+                material_data_field_ijklqxyz=material_data_field,
+                displacement_field_inxyz=solution_field_M,
+                macro_gradient_field_ijqxyz=macro_gradient_field)
+            assert np.allclose(solution_field.s, solution_field_M.s, rtol=1e-05, atol=1e-04), \
+                'Preconditioned solution is not equal to un preconditioned solution: 2D element {} in {} problem.'.format(
+                    element_type, problem_type)
 
-                self.assertTrue(
-                    np.allclose(homogenized_stress_M[0, 0], homogenized_stress[0, 0], rtol=1e-6, atol=1e-8),
-                    'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
-                        element_type, problem_type))
+            assert np.allclose(homogenized_stress_M[0, 0], homogenized_stress[0, 0], rtol=1e-6, atol=1e-8), \
+                'Preconditioned homogenized stress is not equal to to un preconditioned solution: 2D element {} in {} problem.'.format(
+                    element_type, problem_type)
 
-    def unfinishedtest_2D_integral_linearity(self):  # TODO
+def unfinishedtest_2D_integral_linearity():  # TODO
         global material_data_field
         domain_size = [3, 4]
         for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
@@ -904,339 +893,335 @@ class DiscretizationTestCase(unittest.TestCase):
                 integral_actual_stress_W = np.einsum('ijq...,q->ijq...', actual_stress,
                                                      discretization.quadrature_weights)
 
-    def test_symmetric_multiplication(self):
-        mat_1 = np.array([[2, 1], [1, 3]])
-        B = np.array([[-1, 1, 0, 0],
-                      [-1, 0, 1, 0]])
-        B = np.array([[3],
-                      [4]])
-        AB = np.matmul(mat_1, B)
-        BtA = np.matmul(B.transpose(), mat_1)
+def test_symmetric_multiplication():
+    mat_1 = np.array([[2, 1], [1, 3]])
+    B = np.array([[-1, 1, 0, 0],
+                  [-1, 0, 1, 0]])
+    B = np.array([[3],
+                  [4]])
+    AB = np.matmul(mat_1, B)
+    BtA = np.matmul(B.transpose(), mat_1)
 
-    def test_2D_fft_output(self):
+def test_2D_fft_output():
 
-        global material_data_field
-        domain_size = [2, 3]
-        for problem_type in ['elasticity', 'conductivity'
-                             ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (9, 19)
-            discretization_type = 'finite_element'
-
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-                material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
-
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
-
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
-
-                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-
-
-
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
-
-                ref_material_data = np.copy(mat_1)
-
-                def K_fun(x, Ax):
-                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
-                                                              input_field_inxyz=x,
-                                                              output_field_inxyz=Ax)
-
-                # set up random field
-                f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
-                x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
-                x_0.s[0, 0, 0, 0] = 1
-                K_fun(x_0, f_0)
-
-                ffield = discretization.ffield_collection.complex_field('vector-field', (x_0.nb_components,))
-
-                discretization.fft.fft(f_0, ffield)
-
-                assert_condition = np.allclose(ffield.s[0, 0, 0, 0], 0, rtol=1e-10, atol=1e-10)
-                # print(assert_condition)
-                self.assertTrue(assert_condition,
-                                'FFT of mean field has non-zero zero frequency {} in {} problem.'.format(element_type,
-                                                                                                         problem_type))
-
-    def test_2D_preconditioner_is_inverse_of_homogeneous_problem(self):
-
-        global material_data_field
-        domain_size = [2, 3]
-        for problem_type in ['elasticity', 'conductivity',
-                             ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (4, 6)
-            discretization_type = 'finite_element'
-
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-                material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
-
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
-
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
-                    # # identity tensor                                               [single tensor]
-                    # ii = np.eye(2)
-                    # # identity tensors                                            [grid of tensors]
-                    # I = ii
-                    # I4 = np.einsum('il,jk', ii, ii)
-                    # I4rt = np.einsum('ik,jl', ii, ii)
-                    # mat_1 = (I4 + I4rt) / 2.
-
-                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
-                ref_material_data = np.copy(mat_1)
-
-                def K_fun(x, Ax):
-                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
-                                                              input_field_inxyz=x,
-                                                              output_field_inxyz=Ax)
-
-                preconditioner = discretization.get_preconditioner_Green_mugrid(
-                    reference_material_data_ijkl=ref_material_data)
-
-                def M_fun(x, Px):
-                    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                               input_nodal_field_fnxyz=x,
-                                                               output_nodal_field_fnxyz=Px)
-
-                # preconditioner_Fourier_old = discretization.get_preconditioner_NEW(
-                #     reference_material_data_ijkl=mat_1)
-                # preconditioner_Fourier = discretization.get_preconditioner_Green_fast(
-                #     reference_material_data_ijkl=mat_1)
-                # M_fun = lambda x: discretization.apply_preconditioner_NEW(
-                #     preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
-                #     nodal_field_fnxyz=x)
-
-                # set up random field
-                f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
-                x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
-                x_0.s[...] = np.random.rand(*x_0.s.shape)
-                for f in range(discretization.cell.unknown_shape[0]):
-                    x_0.s[f] -= x_0.s[f].mean()
-                # apply system matrix
-                K_fun(x_0, f_0)
-                # apply preconditioner --- inverse of system matrix for homo-data
-                x_1 = discretization.get_unknown_size_field(name='x_1')
-                M_fun(f_0, x_1)
-
-                diff = x_0.s - x_1.s
-                # print(np.sum(diff))
-                sum_sol = discretization.mpi_reduction.sum(x_0.s - x_1.s)
-                # print(f'sum_sol {sum_sol}')
-                assert_condition = np.allclose(x_0.s, x_1.s, rtol=1e-10, atol=1e-10)
-
-                # print('x_0.s', x_0.s)
-                # print('x_1.s', x_1.s)
-                self.assertTrue(assert_condition,
-                                'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem. \n '
-                                'Discrepancy = {}'.format(element_type, problem_type, np.sum(diff)))
-
-    def test_3D_preconditioner_is_inverse_of_homogeneous_problem(self):
-
-        global material_data_field
-        domain_size = [3, 4, 5]
-        for problem_type in ['conductivity', 'elasticity']:
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (4, 5, 6)
-            discretization_type = 'finite_element'
-
-            for element_type in ['trilinear_hexahedron']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       nb_of_pixels_global=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-
-                material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
-
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
-
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
-
-                    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-
-
-
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                    material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-
-                # ref_material_data_field = np.copy(material_data_field)
-
-                def K_fun(x, Ax):
-                    discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
-                                                              input_field_inxyz=x,
-                                                              output_field_inxyz=Ax)
-
-                preconditioner = discretization.get_preconditioner_Green_mugrid(
-                    reference_material_data_ijkl=mat_1)
-
-                def M_fun(x, Px):
-                    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
-                                                               input_nodal_field_fnxyz=x,
-                                                               output_nodal_field_fnxyz=Px)
-
-                x_0 = discretization.get_unknown_size_field(name='x_0')
-                x_0.s[...] = np.random.rand(*x_0.s.shape)
-
-                for f in range(discretization.cell.unknown_shape[0]):
-                    x_0.s[f] -= x_0.s[f].mean()
-
-                f_0 = discretization.get_unknown_size_field(name='f_0')
-                # apply system matrix
-                K_fun(x_0, f_0)
-                # apply preconditioner --- inverse of system matrix for homo-data
-
-                x_1 = discretization.get_unknown_size_field(name='x_1')
-                M_fun(f_0, x_1)
-
-                diff = x_0.s - x_1.s
-                assert_condition = np.allclose(x_0.s, x_1.s, rtol=1e-10, atol=1e-10)
-                self.assertTrue(assert_condition,
-                                'Preconditioner is not the inverse of the system matrix with homogeneous'
-                                ' data: 3D element {} in {} problem.'.format(
-                                    element_type, problem_type))
-
-    def test_plot_2D_mesh(self, plot=False):
-        # this is a visual test of nodal_coordinates and  quad_coordinates
-
-        domain_size = [3, 4]
-        problem_type = 'conductivity'
+    domain_size = [2, 3]
+    for problem_type in ['elasticity', 'conductivity'
+                         ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
-
-        number_of_pixels = (4, 5)
-
+        number_of_pixels = (9, 19)
         discretization_type = 'finite_element'
+
         for element_type in ['linear_triangles', 'bilinear_rectangle']:
-
             discretization = domain.Discretization(cell=my_cell,
                                                    nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
+            material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
 
-            if plot:
-                import matplotlib.pyplot as plt
-                from matplotlib.collections import LineCollection
-                plt.scatter(nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0])
-                segs1 = np.stack((nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0]), axis=2)
-                segs2 = segs1.transpose(1, 0, 2)
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                           kind='linear')
 
-                plt.gca().add_collection(LineCollection(segs1))
-                plt.gca().add_collection(LineCollection(segs2))
-                for q in range(0, discretization.nb_quad_points_per_pixel):
-                    plt.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q])
+                material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 
-                plt.show()
 
-    def test_plot_3D_mesh(self, plot=False):
-        # this is a visual test of nodal_coordinates and  quad_coordinates
-        domain_size = [3, 4, 5]
-        problem_type = 'conductivity'
+
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0], [0, 1]])
+                material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+
+            ref_material_data = np.copy(mat_1)
+
+            def K_fun(x, Ax):
+                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax)
+
+            # set up random field
+            f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
+            x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
+            x_0.s[0, 0, 0, 0] = 1
+            K_fun(x_0, f_0)
+
+            ffield = discretization.ffield_collection.complex_field('vector-field', (x_0.nb_components,))
+
+            discretization.fft.fft(f_0, ffield)
+
+            assert_condition = np.allclose(ffield.s[0, 0, 0, 0], 0, rtol=1e-10, atol=1e-10)
+            # print(assert_condition)
+            assert assert_condition, 'FFT of mean field has non-zero zero frequency {} in {} problem.'.format(element_type,
+                                                                                                         problem_type)
+
+def test_2D_preconditioner_is_inverse_of_homogeneous_problem():
+
+    domain_size = [2, 3]
+    for problem_type in ['elasticity', 'conductivity',
+                         ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
+        number_of_pixels = (4, 6)
+        discretization_type = 'finite_element'
 
+        for element_type in ['linear_triangles', 'bilinear_rectangle']:
+            discretization = domain.Discretization(cell=my_cell,
+                                                   nb_of_pixels_global=number_of_pixels,
+                                                   discretization_type=discretization_type,
+                                                   element_type=element_type)
+            material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
+
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
+
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                           kind='linear')
+                # # identity tensor                                               [single tensor]
+                # ii = np.eye(2)
+                # # identity tensors                                            [grid of tensors]
+                # I = ii
+                # I4 = np.einsum('il,jk', ii, ii)
+                # I4rt = np.einsum('ik,jl', ii, ii)
+                # mat_1 = (I4 + I4rt) / 2.
+
+                material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0], [0, 1]])
+                material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+            ref_material_data = np.copy(mat_1)
+
+            def K_fun(x, Ax):
+                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax)
+
+            preconditioner = discretization.get_preconditioner_Green_mugrid(
+                reference_material_data_ijkl=ref_material_data)
+
+            def M_fun(x, Px):
+                discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                           input_nodal_field_fnxyz=x,
+                                                           output_nodal_field_fnxyz=Px)
+
+            # preconditioner_Fourier_old = discretization.get_preconditioner_NEW(
+            #     reference_material_data_ijkl=mat_1)
+            # preconditioner_Fourier = discretization.get_preconditioner_Green_fast(
+            #     reference_material_data_ijkl=mat_1)
+            # M_fun = lambda x: discretization.apply_preconditioner_NEW(
+            #     preconditioner_Fourier_fnfnqks=preconditioner_Fourier,
+            #     nodal_field_fnxyz=x)
+
+            # set up random field
+            f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
+            x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
+            x_0.s[...] = np.random.rand(*x_0.s.shape)
+            for f in range(discretization.cell.unknown_shape[0]):
+                x_0.s[f] -= x_0.s[f].mean()
+            # apply system matrix
+            K_fun(x_0, f_0)
+            # apply preconditioner --- inverse of system matrix for homo-data
+            x_1 = discretization.get_unknown_size_field(name='x_1')
+            M_fun(f_0, x_1)
+
+            diff = x_0.s - x_1.s
+            # print(np.sum(diff))
+            sum_sol = discretization.mpi_reduction.sum(x_0.s - x_1.s)
+            # print(f'sum_sol {sum_sol}')
+            assert_condition = np.allclose(x_0.s, x_1.s, rtol=1e-10, atol=1e-10)
+
+            # print('x_0.s', x_0.s)
+            # print('x_1.s', x_1.s)
+            assert assert_condition, \
+                'Preconditioner is not the inverse of the system matrix with homogeneous data: 2D element {} in {} problem. \n ' \
+                'Discrepancy = {}'.format(element_type, problem_type, np.sum(diff))
+
+def test_3D_preconditioner_is_inverse_of_homogeneous_problem():
+
+    domain_size = [3, 4, 5]
+    for problem_type in ['conductivity', 'elasticity']:
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
         number_of_pixels = (4, 5, 6)
-
         discretization_type = 'finite_element'
+
         for element_type in ['trilinear_hexahedron']:
-
             discretization = domain.Discretization(cell=my_cell,
                                                    nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
 
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
+            material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
-            if plot:
-                # Create the figure
-                import matplotlib.pyplot as plt
-                from matplotlib.collections import LineCollection
-                fig = plt.figure()
-                ax = fig.add_subplot(111,
-                                     projection='3d')
-                # ['3d', 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear']
+            if problem_type == 'elasticity':
+                K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
 
-                ax.scatter(nodal_coordinates[0, 0], nodal_coordinates.s[1, 0], nodal_coordinates.s[2, 0], c='b',
-                           marker='o')
-                ax.set_xlabel('X-axis')
-                ax.set_ylabel('Y-axis')
-                ax.set_zlabel('Z-axis')
-                for q in range(0, discretization.nb_quad_points_per_pixel):
-                    ax.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q], quad_coordinates.s[2, q], marker='x')
+                mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
+                                                           kind='linear')
 
-                plt.show()
+                material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
-    def test_elavuate_at_quad_points_2D_mesh(self, plot=False):
-        # this  test interpolates field based on basis functions
 
-        domain_size = [4, 4]
-        problem_type = 'conductivity'
-        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type=problem_type)
 
-        number_of_pixels = (2, 2)
+            elif problem_type == 'conductivity':
+                mat_1 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
-        discretization_type = 'finite_element'
-        for element_type in ['linear_triangles']:
+            # ref_material_data_field = np.copy(material_data_field)
 
-            discretization = domain.Discretization(cell=my_cell,
-                                                   nb_of_pixels_global=number_of_pixels,
-                                                   discretization_type=discretization_type,
-                                                   element_type=element_type)
+            def K_fun(x, Ax):
+                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
+                                                          input_field_inxyz=x,
+                                                          output_field_inxyz=Ax)
 
-            nodal_coordinates = discretization.get_nodal_points_coordinates()
-            quad_coordinates = discretization.get_quad_points_coordinates()
-            phase_field_0 = discretization.get_scalar_field(name='phase_field')
-            phase_field_0.s[...] = np.random.rand(*phase_field_0.s.shape) ** 0  # set random distribution
-            phase_field_0.s[...] = phase_field_0.s * 0
-            phase_field_0.s[0, 0, 0, 1] = 1
-            # linfunc = lambda x: 1 * x
-            # phase_field_0[0, 0] = linfunc(nodal_coordinates[0, 0])
+            preconditioner = discretization.get_preconditioner_Green_mugrid(
+                reference_material_data_ijkl=mat_1)
 
-            interpolated_field = discretization.evaluate_field_at_quad_points(
-                nodal_field_fnxyz=phase_field_0,
-                quad_field_fqnxyz=None,
-                quad_points_coords_iq=None)
+            def M_fun(x, Px):
+                discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                                           input_nodal_field_fnxyz=x,
+                                                           output_nodal_field_fnxyz=Px)
 
-            if plot:
-                import matplotlib.pyplot as plt
-                from matplotlib.collections import LineCollection
-                plt.scatter(nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0])
-                segs1 = np.stack((nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0]), axis=2)
-                segs2 = segs1.transpose(1, 0, 2)
+            x_0 = discretization.get_unknown_size_field(name='x_0')
+            x_0.s[...] = np.random.rand(*x_0.s.shape)
 
-                plt.gca().add_collection(LineCollection(segs1))
-                plt.gca().add_collection(LineCollection(segs2))
-                for q in range(0, discretization.nb_quad_points_per_pixel):
-                    plt.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q])
+            for f in range(discretization.cell.unknown_shape[0]):
+                x_0.s[f] -= x_0.s[f].mean()
 
-                plt.show()
+            f_0 = discretization.get_unknown_size_field(name='f_0')
+            # apply system matrix
+            K_fun(x_0, f_0)
+            # apply preconditioner --- inverse of system matrix for homo-data
+
+            x_1 = discretization.get_unknown_size_field(name='x_1')
+            M_fun(f_0, x_1)
+
+            diff = x_0.s - x_1.s
+            assert_condition = np.allclose(x_0.s, x_1.s, rtol=1e-10, atol=1e-10)
+            assert assert_condition, \
+                'Preconditioner is not the inverse of the system matrix with homogeneous' \
+                ' data: 3D element {} in {} problem.'.format(
+                    element_type, problem_type)
+
+def test_plot_2D_mesh(plot=False):
+    # this is a visual test of nodal_coordinates and  quad_coordinates
+
+    domain_size = [3, 4]
+    problem_type = 'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5)
+
+    discretization_type = 'finite_element'
+    for element_type in ['linear_triangles', 'bilinear_rectangle']:
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        if plot:
+            import matplotlib.pyplot as plt
+            from matplotlib.collections import LineCollection
+            plt.scatter(nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0])
+            segs1 = np.stack((nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0]), axis=2)
+            segs2 = segs1.transpose(1, 0, 2)
+
+            plt.gca().add_collection(LineCollection(segs1))
+            plt.gca().add_collection(LineCollection(segs2))
+            for q in range(0, discretization.nb_quad_points_per_pixel):
+                plt.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q])
+
+            plt.show()
+
+def test_plot_3D_mesh(plot=False):
+    # this is a visual test of nodal_coordinates and  quad_coordinates
+    domain_size = [3, 4, 5]
+    problem_type = 'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (4, 5, 6)
+
+    discretization_type = 'finite_element'
+    for element_type in ['trilinear_hexahedron']:
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+
+        if plot:
+            # Create the figure
+            import matplotlib.pyplot as plt
+            from matplotlib.collections import LineCollection
+            fig = plt.figure()
+            ax = fig.add_subplot(111,
+                                 projection='3d')
+            # ['3d', 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear']
+
+            ax.scatter(nodal_coordinates[0, 0], nodal_coordinates.s[1, 0], nodal_coordinates.s[2, 0], c='b',
+                       marker='o')
+            ax.set_xlabel('X-axis')
+            ax.set_ylabel('Y-axis')
+            ax.set_zlabel('Z-axis')
+            for q in range(0, discretization.nb_quad_points_per_pixel):
+                ax.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q], quad_coordinates.s[2, q], marker='x')
+
+            plt.show()
+
+def test_elavuate_at_quad_points_2D_mesh(plot=False):
+    # this  test interpolates field based on basis functions
+
+    domain_size = [4, 4]
+    problem_type = 'conductivity'
+    my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                      problem_type=problem_type)
+
+    number_of_pixels = (2, 2)
+
+    discretization_type = 'finite_element'
+    for element_type in ['linear_triangles']:
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type=element_type)
+
+        nodal_coordinates = discretization.get_nodal_points_coordinates()
+        quad_coordinates = discretization.get_quad_points_coordinates()
+        phase_field_0 = discretization.get_scalar_field(name='phase_field')
+        phase_field_0.s[...] = np.random.rand(*phase_field_0.s.shape) ** 0  # set random distribution
+        phase_field_0.s[...] = phase_field_0.s * 0
+        phase_field_0.s[0, 0, 0, 1] = 1
+        # linfunc = lambda x: 1 * x
+        # phase_field_0[0, 0] = linfunc(nodal_coordinates[0, 0])
+
+        interpolated_field = discretization.evaluate_field_at_quad_points(
+            nodal_field_fnxyz=phase_field_0,
+            quad_field_fqnxyz=None,
+            quad_points_coords_iq=None)
+
+        if plot:
+            import matplotlib.pyplot as plt
+            from matplotlib.collections import LineCollection
+            plt.scatter(nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0])
+            segs1 = np.stack((nodal_coordinates.s[0, 0], nodal_coordinates.s[1, 0]), axis=2)
+            segs2 = segs1.transpose(1, 0, 2)
+
+            plt.gca().add_collection(LineCollection(segs1))
+            plt.gca().add_collection(LineCollection(segs2))
+            for q in range(0, discretization.nb_quad_points_per_pixel):
+                plt.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q])
+
+            plt.show()
     #
     # def test_2D_gradients_linear_fem_and_tilled_linear_fem(self):
     #     domain_size = [3, np.sqrt(3) / 2]
@@ -1304,15 +1289,7 @@ class DiscretizationTestCase(unittest.TestCase):
     #         phase_field_1nxyz=phase_field_0)
     #     print()
 
-
-if __name__ == '__main__':
-    unittest.main()
-
-
 # --- pytest-style tests for trilinear_hexahedron_1Q ---
-
-import pytest
-import warnings
 
 
 @pytest.fixture

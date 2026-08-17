@@ -18,7 +18,7 @@ element_type = 'trilinear_hexahedron'
 formulation = 'small_strain'
 
 domain_size = [4, 3, 5]
-number_of_pixels = (16,16,16)
+number_of_pixels = (17,17,17)
 geometry_ID = 'circle_inclusion'  # 'sine_wave_' #
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
