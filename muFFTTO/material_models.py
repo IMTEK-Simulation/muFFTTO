@@ -271,6 +271,86 @@ def compute_Voigt_notation_4order(C_ijkl):
     return C_voigt_kl
 
 
+def compute_Voigt_notation_2order(tensor_ij):
+    """
+    Convert a 2nd-order tensor (stress/strain) to Voigt vector notation.
+
+    For 2D (tensor shape (2,2)), Voigt notation maps:
+      [0] → σ_xx or ε_xx
+      [1] → σ_yy or ε_yy
+      [2] → σ_xy or ε_xy
+    Returns (3,) vector.
+
+    For 3D (tensor shape (3,3)), Voigt notation maps:
+      [0] → σ_xx or ε_xx
+      [1] → σ_yy or ε_yy
+      [2] → σ_zz or ε_zz
+      [3] → σ_yz or ε_yz
+      [4] → σ_xz or ε_xz
+      [5] → σ_xy or ε_xy
+    Returns (6,) vector.
+
+    Parameters
+    ----------
+    tensor_ij : ndarray
+        2nd-order tensor in full index notation.
+        Shape (2, 2) for 2D or (3, 3) for 3D.
+
+    Returns
+    -------
+    voigt_vector : ndarray
+        Tensor in Voigt vector notation. Shape (3,) for 2D or (6,) for 3D.
+    """
+    if tensor_ij.shape == (2, 2):
+        return np.array([
+            tensor_ij[0, 0],  # σ_xx or ε_xx
+            tensor_ij[1, 1],  # σ_yy or ε_yy
+            tensor_ij[0, 1]   # σ_xy or ε_xy
+        ])
+    elif tensor_ij.shape == (3, 3):
+        return np.array([
+            tensor_ij[0, 0],  # σ_xx or ε_xx
+            tensor_ij[1, 1],  # σ_yy or ε_yy
+            tensor_ij[2, 2],  # σ_zz or ε_zz
+            tensor_ij[1, 2],  # σ_yz or ε_yz
+            tensor_ij[0, 2],  # σ_xz or ε_xz
+            tensor_ij[0, 1]   # σ_xy or ε_xy
+        ])
+    else:
+        raise ValueError(f"Expected (2,2) or (3,3) tensor, got shape {tensor_ij.shape}")
+
+
+def compute_Voigt_notation(tensor):
+    """
+    Convert a tensor to Voigt notation. Automatically handles 2nd-order and 4th-order tensors.
+
+    For 2nd-order tensors (stress/strain):
+      - 2D (2,2) → (3,) Voigt vector
+      - 3D (3,3) → (6,) Voigt vector
+
+    For 4th-order tensors (stiffness/compliance):
+      - 2D (2,2,2,2) → (3,3) Voigt matrix
+      - 3D (3,3,3,3) → (6,6) Voigt matrix
+
+    Parameters
+    ----------
+    tensor : ndarray
+        Tensor in full index notation. Can be 2nd-order (shape (2,2), (3,3))
+        or 4th-order (shape (2,2,2,2), (3,3,3,3)).
+
+    Returns
+    -------
+    voigt_tensor : ndarray
+        Tensor in Voigt notation.
+    """
+    if tensor.ndim == 2:
+        return compute_Voigt_notation_2order(tensor)
+    elif tensor.ndim == 4:
+        return compute_Voigt_notation_4order(tensor)
+    else:
+        raise ValueError(f"Expected 2nd or 4th order tensor (ndim 2 or 4), got ndim {tensor.ndim}")
+
+
 def get_bulk_and_shear_modulus(E, poisson):
     if abs(1 - 2 * poisson) < 1e-10:
         raise ValueError("Poisson's ratio too close to 0.5 (incompressible limit); K is undefined/infinite.")

@@ -12,6 +12,7 @@ from muGrid import Solvers
 from muFFTTO import domain
 from muFFTTO import microstructure_library
 from muFFTTO.visualization_utils import plot_field_on_grid , get_deformed_grid_coords_two_dim
+from muFFTTO import material_models
 
 # Example of how to usu muFFTTO to solve the homogenization problem for 2D elasticity problem
 # using deformed grid
@@ -34,15 +35,15 @@ discretization = domain.Discretization(cell=my_cell,
                                        element_type=element_type)
 start_time = time.time()
 # initialize material data
-K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
 # create material data field
-elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
 if discretization.communicator.rank == 0:
-    print('elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(elastic_C_1)))
+    print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
 
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
@@ -212,7 +213,7 @@ for i in range(dim):
         # ----------------------------------------------------------------------
         print(
             "Homogenized elastic tangent =\n" +
-            np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
+            np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
                             formatter={'float_kind': lambda x: f"{x:0.8f}"})
         )
 

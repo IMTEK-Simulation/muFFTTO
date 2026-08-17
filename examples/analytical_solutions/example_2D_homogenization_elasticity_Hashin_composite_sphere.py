@@ -9,6 +9,7 @@ from mpi4py import MPI
 
 from muFFTTO import domain
 from muFFTTO import solvers
+from muFFTTO import material_models
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
@@ -40,12 +41,12 @@ r_2 = 0.4
 lambda_1 = 0.001  # first Lamé
 mu_1 = 0.005  # second Lamé
 kappa_1 = lambda_1 + 2 * mu_1 / dim  # bulk
-C_core=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_1, mu=mu_1)
+C_core=material_models.get_elastic_tensor_from_lame(dim=2,  lam=lambda_1, mu=mu_1)
 # shell
 lambda_2 = 1.
 mu_2 = 0.5
 kappa_2 = lambda_2 + 2 * mu_2 / dim
-C_shell=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_2, mu=mu_2)
+C_shell=material_models.get_elastic_tensor_from_lame(dim=2,  lam=lambda_2, mu=mu_2)
 
 # matrix = should be equal to homogenized data
 phi = (r_1 / r_2) ** dim
@@ -59,8 +60,8 @@ kappa_3 = kappa_2 * (1.0 - beta * (alpha * phi) / (1.0 + alpha * phi))
 # kappa_3=0.9
 mu_3= 0.3
 lambda_3 = kappa_3 -   2 * mu_3/ dim
-C_matrix=domain.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
-print('C_matrix = \n {}'.format(domain.compute_Voigt_notation_4order(C_matrix)))
+C_matrix=material_models.get_elastic_tensor_from_lame(dim=2,  lam=lambda_3, mu=mu_3)
+print('C_matrix = \n {}'.format(material_models.compute_Voigt_notation_4order(C_matrix)))
 
 # reference material data
 C_0_ref = np.sqrt(np.einsum('ijkl,klmn->ijmn', C_core, C_shell))
@@ -192,7 +193,7 @@ homogenized_stress = discretization.get_homogenized_stress_mugrid(
     formulation='small_strain')
 
 print('homogenized stress = \n {}'.format(homogenized_stress))
-print('homogenized stress in Voigt notation = \n {}'.format(domain.compute_Voigt_notation_2order(homogenized_stress)))
+print('homogenized stress in Voigt notation = \n {}'.format(material_models.compute_Voigt_notation(homogenized_stress)))
 
 end_time = time.time()
 elapsed_time = end_time - start_time
@@ -236,7 +237,7 @@ for i in range(dim):
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
 
-print('homogenized elastic tangent = \n {}'.format(domain.compute_Voigt_notation_4order(homogenized_C_ijkl)))
+print('homogenized elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)))
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
