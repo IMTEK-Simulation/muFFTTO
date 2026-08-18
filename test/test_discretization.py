@@ -263,7 +263,7 @@ def test_3D_gradients_linear_conductivity():
         temperature_gradient_anal.s[0, 2, :, :, :, :] = du_fun_0(quad_coordinates.s[2, :, :, :, :])
 
         discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
-        # TODO[MARTIN] GRADIENT OPERATOR IS NOT WORKING IN 3D... probably wrong stencil
+
         average = np.ndarray.sum(grad_u_ijqxyz.s)
         message = "Gradient does not have zero mean !!!! for 3D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
