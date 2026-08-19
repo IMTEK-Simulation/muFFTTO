@@ -283,10 +283,6 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
             my_domain.B_gradient = np.zeros([my_domain.domain_dimension, 4,
                                              my_domain.nb_quad_points_per_pixel])
 
-            # det_jacobian = h_x * h_y / 4
-            jacobian = np.array([[h_x, h_x / 2], [0, h_y]])
-            # inv_jacobian = np.linalg.inv(jacobian)
-
             # @formatter:off   B(dim,number of nodal values,quad point ,element)
             # construction of B matrix
             for qp in range(0, my_domain.nb_quad_points_per_pixel):
@@ -310,9 +306,9 @@ def get_shape_function_gradient_matrix(my_domain, element_type):
                     my_domain.B_gradient[:,1, qp]=np.array( [  y_3-y_2, x_2-x_3]) # point 0 1
                     my_domain.B_gradient[:,2, qp]=np.array( [  y_1-y_3, x_3-x_1 ]) # point  1 1
                     my_domain.B_gradient[:,3, qp]=np.array( [  y_2-y_1, x_1-x_2]) # point  1 1
-                #my_domain.B_gradient[:,:, qp] = np.matmul(inv_jacobian,my_domain.B_gradient[:,:, qp])
-                my_domain.B_gradient[:,:, qp]/=(2*element_area)
+                my_domain.B_gradient[:,:, qp]/=element_area
                 # @formatter:on
+                #my_domain.B_gradient[:,:, qp] = np.matmul(inv_jacobian.T, my_domain.B_gradient[:,:, qp])
 
             # @formatter:on
             my_domain.quadrature_weights = np.zeros([my_domain.nb_quad_points_per_pixel])

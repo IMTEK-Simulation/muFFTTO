@@ -1,7 +1,6 @@
 import sys
 import os
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from mpi4py import MPI
 import numpy as np
@@ -10,7 +9,6 @@ from muGrid import Solvers
 
 from muFFTTO import domain
 from muFFTTO import microstructure_library
-from muFFTTO import solvers
 
 # Example of how to usu muFFTTO to solve the homogenization problem for 2D heat conductivity problem
 # We use square inclusion geometry, for which we have analytical solution
@@ -18,10 +16,11 @@ from muFFTTO import solvers
 problem_type = 'conductivity'
 discretization_type = 'finite_element'
 element_type = 'linear_triangles'
-geometry_ID = 'square_inclusion'#'sine_wave_'
+geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (128,128)
+number_of_pixels = (128, 128)
+
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
 
@@ -29,7 +28,7 @@ discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type)
-
+start_time = time.time()
 
 # create material data field
 mat_contrast = 1
@@ -52,12 +51,9 @@ matrix_mask = phase_field_geom > 0
 inc_mask = phase_field_geom == 0
 
 # apply material distribution
-if geometry_ID == 'square_inclusion':
-    material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
-    material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
-else:
-    material_data_field_C_0.s[... ] = phase_field.s[0, 0] * material_data_field_C_0.s[...]
 
+material_data_field_C_0.s[..., matrix_mask] = mat_contrast_2 * material_data_field_C_0.s[..., matrix_mask]
+material_data_field_C_0.s[..., inc_mask] = mat_contrast * material_data_field_C_0.s[..., inc_mask]
 
 def K_fun(x, Ax):
     """
@@ -72,7 +68,6 @@ def K_fun(x, Ax):
 
 
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
-
 
 def M_fun(x, Px):
     """
@@ -91,7 +86,7 @@ rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 
 dim = discretization.domain_dimension
 homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
-start_time = time.time()
+
 for i in range(dim):
     # set macroscopic gradient
     macro_gradient = np.zeros([dim])
@@ -108,35 +103,33 @@ for i in range(dim):
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
 
-
-    def callback(it, x, r, p, z, stop_crit_norm):
-        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
-
+    def callback(iteration, fields):
+        """
+        Callback function to print the current solution, residual, and search direction.
+        """
+        norm_of_rr = fields['rr']
         if discretization.communicator.rank == 0:
-            print(f"{it:5} norm of residual = {norm_of_rr:.5}")
+            print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
 
 
-    solvers.conjugate_gradients_mugrid(
+    Solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
         b=rhs_field,  # right-hand side
         x=solution_field,
-        P=M_fun,
-        tol=1e-5,
+        prec=M_fun,
+        rtol=1e-6,
         maxiter=2000,
-        callback=callback, rtol=True
-    )
+        callback=callback)
 
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field
         import matplotlib.pyplot as plt
-
         plt.figure()
         plt.pcolormesh(discretization.fft.coords[0],
                        discretization.fft.coords[1],
-                       solution_field.s[0, 0])
+                       solution_field.s[0,0])
 
         plt.title(f'Solution field - macro gradient {macro_gradient} ')
         plt.xlabel('x  / L')
@@ -160,57 +153,6 @@ for i in range(dim):
         np.array2string(homogenized_A_ij, formatter={'float_kind': lambda x: f"{x:0.8f}"})
     )
 
-end_time = time.time()
-elapsed_time = end_time - start_time
-if discretization.communicator.rank == 0:
-    print("Elapsed time: ", elapsed_time, 'seconds')
-    print("Elapsed time: ", elapsed_time / 60, 'minutes')
-    J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
-    print(f'Analytical solution conductivity - A^eff_11  : {J_eff:0.8f}')
-    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0, 0]:0.8f}')
-
-# solving using block CG
-
-list_of_solution_field = [discretization.get_unknown_size_field(name=f'solution-{j}') for j in range(dim)]
-list_of_macro_gradient_field = [discretization.get_gradient_size_field(name=f'macro_gradient_field-{j}') for j
-                                in
-                                range(dim)]
-list_of_rhs_field = [discretization.get_unknown_size_field(name=f'rhs_field-{j}') for j in range(dim)]
-
-homogenized_A_ij = np.zeros(np.array(2 * [dim, ]))
-
-start_time = time.time()
-for i in range(dim):
-    # set macroscopic gradient
-    macro_gradient = np.zeros([dim])
-    macro_gradient[i] = 1
-    list_of_macro_gradient_field[i].sg.fill(0)
-    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient,
-                                                   macro_gradient_field_ijqxyz=list_of_macro_gradient_field[i])
-    discretization.fft.communicate_ghosts(field=list_of_macro_gradient_field[i])
-    # Solve equilibrium
-    list_of_rhs_field[i].sg.fill(0)
-    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                  macro_gradient_field_ijqxyz=list_of_macro_gradient_field[i],
-                                  rhs_inxyz=list_of_rhs_field[i])
-
-_, norms = solvers.dr_pbcg_mugrid(comm=discretization.communicator,
-                                  fc=discretization.field_collection,
-                                  hessp=K_fun,
-                                  b_list=list_of_rhs_field,
-                                  x_list=list_of_solution_field,
-                                  P=M_fun,
-                                  tol=1e-10,
-                                  rtol=True)
-if discretization.communicator.rank == 0:
-    norms = np.asarray(norms['residual_frobenius'])
-    print(f"{len(norms):1} norm of residual = {', '.join(f'{v}' for v in norms)}")
-
-for i in range(dim):
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
-        material_data_field_ijklqxyz=material_data_field_C_0,
-        displacement_field_inxyz=list_of_solution_field[i],
-        macro_gradient_field_ijqxyz=list_of_macro_gradient_field[i])
 
 end_time = time.time()
 elapsed_time = end_time - start_time
@@ -219,4 +161,5 @@ if discretization.communicator.rank == 0:
     print("Elapsed time: ", elapsed_time / 60, 'minutes')
     J_eff = mat_contrast_2 * np.sqrt((mat_contrast_2 + 3 * mat_contrast) / (3 * mat_contrast_2 + mat_contrast))
     print(f'Analytical solution conductivity - A^eff_11  : {J_eff:0.8f}')
-    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0, 0]:0.8f}')
+    print(f'Numerical solution  conductivity - A^eff_11  : {homogenized_A_ij[0,0]:0.8f}')
+
