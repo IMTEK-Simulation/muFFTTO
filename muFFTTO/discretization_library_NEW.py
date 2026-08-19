@@ -104,6 +104,11 @@ class Element:
             quadrature_points=quadrature_points_qd,
             jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
         )
+        self._compute_hessian_matrices(
+            shape_functions=shape_functions,
+            quadrature_points=quadrature_points_qd,
+            jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
+        )
 
     def _make_shape_function_array(self):
         """Create an array of callables for each node position."""
@@ -189,6 +194,83 @@ class Element:
         N = N_at_quadrature_points_qn.reshape(n_quadrature_points, *node_layout, order='F')  # (n_qp, *layout)
         N = np.expand_dims(N, axis=1)  # (n_qp, 1, *layout)
         self.N_at_quad_points_qnijk = np.expand_dims(N, axis=0)  # (1, n_qp, 1, *layout)
+
+    def _compute_hessian_matrices(self,
+                                  shape_functions,
+                                  quadrature_points,
+                                  jacobian_inv_per_quadrature_point):
+        """
+        Use AD to compute physical-space shape function Hessians at all quadrature
+        points.
+
+        The chain rule for a second derivative carries two terms:
+
+            d2N/dx_d dx_e = sum_{a,b} (d2N/dxi_a dxi_b) (dxi_a/dx_d) (dxi_b/dx_e)
+                          + sum_a     (dN/dxi_a) (d2 xi_a / dx_d dx_e)
+
+        The second term vanishes iff the reference-to-physical map is affine.
+        Every element in this library has a Jacobian that is constant over the
+        pixel (`jacobian_of_pixel` is a single matrix, tiled across quadrature
+        points), so the term is exactly zero -- not neglected.  This is asserted
+        rather than assumed, so a future curved or non-affine element fails loudly
+        instead of returning a silently wrong operator.
+
+        Fills
+        -----
+        self.H_hess_at_pixel_deqnijk : shape (dim, dim, n_qp, 1, *node_layout)
+            H[d, e, q, 0, i, j, k] = d^2 N_{ijk} / dx_d dx_e at quadrature point q.
+
+        Notes
+        -----
+        For Q1 elements every PURE second derivative is identically zero
+        (d2N/dx_d^2 = 0), so only the dim*(dim-1)/2 mixed pairs carry information:
+        1 pair in 2D, 3 in 3D.  For P1 triangles the whole array is zero, since
+        linear shape functions have no curvature -- a HuHu regularization built on
+        this operator does nothing on `linear_triangles` and
+        `linear_triangles_tilled` by construction.
+        """
+        n_quadrature_points, dim = quadrature_points.shape
+        jacobian_inv = np.asarray(jacobian_inv_per_quadrature_point)
+
+        if not np.allclose(jacobian_inv, jacobian_inv[0]):
+            raise NotImplementedError(
+                'The Jacobian varies between quadrature points, so the '
+                'reference-to-physical map is not affine and d2(xi)/dx2 != 0. '
+                'The second chain-rule term must then be included; it is omitted '
+                'here because every current element has a constant Jacobian.')
+
+        # AD: shape_functions maps R^dim -> R^n_nodes,
+        # jax.hessian gives d2N/dxi_a dxi_b with shape (n_nodes, dim, dim)
+        d2N_dxi2_func = jax.hessian(shape_functions)
+
+        d2N_dxi2_at_quadrature_points_qnab = []  # -> (n_qp, n_nodes, dim, dim)
+        for quadrature_point in quadrature_points:
+            xi = jnp.array(quadrature_point)
+            d2N_dxi2_at_quadrature_points_qnab.append(np.array(d2N_dxi2_func(xi)))
+        d2N_dxi2_at_quadrature_points_qnab = np.array(
+            d2N_dxi2_at_quadrature_points_qnab)
+
+        # Transform parametric Hessians to physical Hessians:
+        #   d2N/dx_d dx_e = sum_{a,b} (d2N/dxi_a dxi_b) J^{-1}[a,d] J^{-1}[b,e]
+        # einsum axes: q=quad point, n=node, a,b=parametric dirs, d,e=physical dirs
+        d2N_dx2_at_quadrature_points = np.einsum(
+            'qnab, qad, qbe -> qnde',
+            d2N_dxi2_at_quadrature_points_qnab,
+            jacobian_inv,
+            jacobian_inv,
+        )  # (n_qp, n_nodes, dim, dim)
+
+        node_layout = tuple([2] * dim)
+
+        # --- Build H_hess_at_pixel_deqnijk : (dim, dim, n_qp, 1, *node_layout) ---
+        # Identical order='F' reshape as B_grad, so node ordering matches it.
+        # Valid because n_nodes == prod(node_layout): the trailing (dim, dim) axes
+        # are carried through untouched.
+        H = d2N_dx2_at_quadrature_points.reshape(
+            n_quadrature_points, *node_layout, dim, dim, order='F')
+        H = np.moveaxis(H, source=[-2, -1], destination=[0, 1])
+        # Insert the "unique nodes per pixel" axis (always 1 for regular grids)
+        self.H_hess_at_pixel_deqnijk = np.expand_dims(H, axis=3)
 
     # -----------------------------------------------------------------------
     # Factory classmethods — one per element type
