@@ -34,7 +34,7 @@ from muFFTTO.grid_adaptation_arbitrary import (
 )
 from muFFTTO import domain
 from muFFTTO.visualization_utils import plot_field_on_grid
-
+from muFFTTO.check_homogenization_health import run_homogenization_health_check
 
 # ============================================================================
 # User settings
@@ -52,7 +52,7 @@ DOMAIN_SIZE = (1.0, 1.0)
 NUMBER_OF_PIXELS = (32,32)
 
 RELAX_ITERS = 400
-RELAX_OMEGA = 0.35
+RELAX_OMEGA = 0.1
 RELAX_B = 0.5
 
 SOLVER_RTOL = 1e-6
@@ -551,7 +551,7 @@ def main() -> None:
         print("det(F) max:", det_F_from_plot.max())
         print("det(F) interior min:", det_F_from_plot[1:-1, 1:-1].min())
         print("det(F) interior max:", det_F_from_plot[1:-1, 1:-1].max())
-
+    health_report = run_homogenization_health_check(det_F, homogenized_A_ij)
 
 if __name__ == "__main__":
     main()

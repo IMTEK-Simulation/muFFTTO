@@ -584,15 +584,15 @@ def run_grid_adaptation_workflow(
     P_init = P0_coarse.copy()
 
     for k, (j, i) in enumerate(interface_node_indices):
-        is_fixed_boundary = (j == 0) or (i == 0)
+        #is_fixed_boundary = (j == 0) or (i == 0)
 
-        if not is_fixed_boundary:
-            P_init[0, j, i] = projected_points[k, 0]
-            P_init[1, j, i] = projected_points[k, 1]
+        #if not is_fixed_boundary:
+        P_init[0, j, i] = projected_points[k, 0]
+        P_init[1, j, i] = projected_points[k, 1]
 
     fixed_mask = coarse_interface_node_refined.copy()
-    fixed_mask[0, :] = True
-    fixed_mask[:, 0] = True
+    #fixed_mask[0, :] = True
+    #fixed_mask[:, 0] = True
 
     # ------------------------------------------------------------------
     # Distance-dependent stiffness and spring relaxation

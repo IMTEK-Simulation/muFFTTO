@@ -56,7 +56,7 @@ if 'number_of_phase_regions' in results:
     print('number_of_phase_regions:', results['number_of_phase_regions'])
 
 # ============================================================
-# Fine edge points and 33x33 fine-edge plot array
+# Fine edge points and [N+1]x[N+1] fine-edge plot array
 # ============================================================
 
 ny, nx = data.shape
@@ -173,21 +173,21 @@ if projection_distance.size:
 
 # ============================================================
 # Build initial coarse grid and impose projected nodes
-# True stored grid: 32x32
-# Plotting-only grid: 33x33 after copy boundary extension
+# True stored grid: NxN
+# Plotting-only grid: [N+1]x[N+1] after copy boundary extension
 # Left and bottom boundaries are fixed
 # ============================================================
 
 P_init = P0_coarse.copy()
 for k, (j, i) in enumerate(interface_node_indices):
-    is_fixed_boundary = (j == 0) or (i == 0)
-    if not is_fixed_boundary:
-        P_init[0, j, i] = projected_points[k, 0]
-        P_init[1, j, i] = projected_points[k, 1]
+    #is_fixed_boundary = (j == 0) or (i == 0)
+    #if not is_fixed_boundary:
+    P_init[0, j, i] = projected_points[k, 0]
+    P_init[1, j, i] = projected_points[k, 1]
 
 fixed_mask = coarse_interface_node_refined.copy()
-fixed_mask[0, :] = True
-fixed_mask[:, 0] = True
+#fixed_mask[0, :] = True
+#fixed_mask[:, 0] = True
 
 # ============================================================
 # Relaxation fields
@@ -260,7 +260,7 @@ plt.tight_layout()
 plt.show()
 
 # ============================================================
-# Plot 3: relaxed 32x32 stored grid shown as 33x33 plotting grid
+# Plot 3: relaxed NxN stored grid shown as [N+1]x[N+1] plotting grid
 # ============================================================
 
 plt.figure(figsize=(10, 10))
@@ -275,13 +275,13 @@ plt.ylim(0, Ly)
 plt.gca().set_aspect('equal')
 plt.xlabel('x')
 plt.ylabel('y')
-plt.title('Relaxed coarse grid (32x32 stored, 33x33 plot)')
+plt.title('Relaxed coarse grid (NxN stored, [N+1]x[N+1] plot)')
 plt.legend(loc='upper right')
 plt.tight_layout()
 plt.show()
 
 # ============================================================
-# Plot 4: displacement magnitude on stored 32x32 grid
+# Plot 4: displacement magnitude on stored NxN grid
 # ============================================================
 
 disp_mag = np.sqrt(U_relaxed[0] ** 2 + U_relaxed[1] ** 2)
