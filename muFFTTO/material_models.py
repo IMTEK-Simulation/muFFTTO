@@ -144,29 +144,20 @@ class NeoHookean(MaterialModelElasticity):
         self.discretization = discretization
 
     def get_energy_density(self, strain_ijqxyz, energy_1qxyz):
-        """
-        Compute strain energy density  into energy_1qxyz.
+        F = strain_ijqxyz
+        lam = self.lam.s[0, 0]
+        mu = self.mu.s[0, 0]
+        dim = F.s.shape[0]
 
-        W = (λ/2) (ε_kk)²  +  μ ε_ij ε_ij
+        J_1qxyz = self.discretization.get_quad_field_scalar(name='J')
+        lnJ_1qxyz = self.discretization.get_quad_field_scalar(name='lnJ')
+        det2(F, J_1qxyz)
+        log_field(J_1qxyz, lnJ_1qxyz)
 
-        Parameters
-        ----------
-        strain_ijqxyz : muGrid field [i, j, q, x, y, z] — strain field ε
-        energy_1qxyz  : muGrid scalar field [1, 1, q, x, y, z] — output energy density
-        """
-        lam = self.lam.s[0, 0]  # shape [q, x, y, z]
-        mu = self.mu.s[0, 0]  # shape [q, x, y, z]
+        lnJ = lnJ_1qxyz.s[0, 0]
+        FF = np.einsum('ij...,ij...->...', F.s, F.s)
 
-        # tr(ε) = ε_kk — shape [q, x, y, z]
-        eps_trace_1qxyz = self.discretization.get_quad_field_scalar(name='eps_trace')
-        trace2(strain_ijqxyz, eps_trace_1qxyz)
-        eps_trace = eps_trace_1qxyz.s[0, 0]
-
-        # ε_ij ε_ij — shape [q, x, y, z]
-        eps_sq = np.einsum('ij...,ij...->...', strain_ijqxyz.s, strain_ijqxyz.s)
-
-        # W = (λ/2) tr(ε)²  +  μ ε:ε
-        energy_1qxyz.s[0, 0] = 0.5 * lam * eps_trace ** 2 + mu * eps_sq
+        energy_1qxyz.s[0, 0] = 0.5 * lam * lnJ ** 2 + 0.5 * mu * (FF - dim) - mu * lnJ
 
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
         """
@@ -195,15 +186,14 @@ class NeoHookean(MaterialModelElasticity):
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
-        A_iJkL = λ F^{-T}_iJ F^{-T}_kL
-               + (μ - λ ln J) ( F^{-T}_iL F^{-T}_kJ  +  δ_ik δ_JL )
+        A_ijkl = λ FinvT_ij FinvT_kl
+               + (μ - λ ln J) FinvT_il FinvT_jk  +  μ δ_il δ_jk
 
-        Two contributions:
+        Three contributions:
           term1 : λ        FinvT_ij FinvT_kl          (volumetric)
-          term2 : (μ-λlnJ) FinvT_il FinvT_kj          (distortional, part 1)
-          term3 : (μ-λlnJ) δ_ik δ_jl                  (distortional, part 2)
+          term2 : (μ-λlnJ) FinvT_il FinvT_jk          (distortional coupling)
+          term3 :    μ  δ_il δ_jk                     (distortional identity)
 
-        term2 + term3 share coef2 = μ - λ ln(J) and together are minor-symmetric.
         """
         F = strain_ijqxyz
         lam = self.lam.s[0, 0]
@@ -224,25 +214,25 @@ class NeoHookean(MaterialModelElasticity):
         log_field(J_1qxyz, lnJ_1qxyz)
 
         lnJ = lnJ_1qxyz.s[0, 0]
-        coef1 = lam  # λ
-        coef2 = mu - lam * lnJ  # μ - λ ln(J)  — shared by term2 and term3
+        #coef1 = lam  # λ
+        coef2 = mu - lam * lnJ  # μ - λ ln(J)  — term2
 
         n_extra = lnJ.ndim
         index_extender = (...,) + (np.newaxis,) * n_extra
 
         # term1: λ FinvT_ij FinvT_kl
         dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
-        term1_ijklqxyz.s[...] *= coef1
+        term1_ijklqxyz.s[...] *= lam
 
-        # term2: (μ - λ lnJ) FinvT_il FinvT_kj
-        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,kj...->ijkl...',
+        # term2: (μ - λ lnJ) FinvT_il FinvT_jk
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,jk...->ijkl...',
                                                   FinvT_ijqxyz.s,
                                                   FinvT_ijqxyz.s)
 
-        # term3: (μ - λ lnJ) δ_ik δ_jl  — same coef2, not μ
+        # term3:  μ δ_il δ_jk
         I = np.eye(dim)
-        IsI = np.einsum('ik,jl->ijkl', I, I)
-        term3_ijklqxyz.s[...] = IsI[index_extender] * coef2
+        IsI = np.einsum('il,jk->ijkl', I, I)
+        term3_ijklqxyz.s[...] = IsI[index_extender] * mu
 
         tangent_ijklqxyz.s[...] = (term1_ijklqxyz.s
                                    + term2_ijklqxyz.s
@@ -269,6 +259,86 @@ def compute_Voigt_notation_4order(C_ijkl):
             for j in np.arange(len(C_voigt_kl[1])):
                 C_voigt_kl[i, j] = C_ijkl[ij_ind[i] + ij_ind[j]]
     return C_voigt_kl
+
+
+def compute_Voigt_notation_2order(tensor_ij):
+    """
+    Convert a 2nd-order tensor (stress/strain) to Voigt vector notation.
+
+    For 2D (tensor shape (2,2)), Voigt notation maps:
+      [0] → σ_xx or ε_xx
+      [1] → σ_yy or ε_yy
+      [2] → σ_xy or ε_xy
+    Returns (3,) vector.
+
+    For 3D (tensor shape (3,3)), Voigt notation maps:
+      [0] → σ_xx or ε_xx
+      [1] → σ_yy or ε_yy
+      [2] → σ_zz or ε_zz
+      [3] → σ_yz or ε_yz
+      [4] → σ_xz or ε_xz
+      [5] → σ_xy or ε_xy
+    Returns (6,) vector.
+
+    Parameters
+    ----------
+    tensor_ij : ndarray
+        2nd-order tensor in full index notation.
+        Shape (2, 2) for 2D or (3, 3) for 3D.
+
+    Returns
+    -------
+    voigt_vector : ndarray
+        Tensor in Voigt vector notation. Shape (3,) for 2D or (6,) for 3D.
+    """
+    if tensor_ij.shape == (2, 2):
+        return np.array([
+            tensor_ij[0, 0],  # σ_xx or ε_xx
+            tensor_ij[1, 1],  # σ_yy or ε_yy
+            tensor_ij[0, 1]   # σ_xy or ε_xy
+        ])
+    elif tensor_ij.shape == (3, 3):
+        return np.array([
+            tensor_ij[0, 0],  # σ_xx or ε_xx
+            tensor_ij[1, 1],  # σ_yy or ε_yy
+            tensor_ij[2, 2],  # σ_zz or ε_zz
+            tensor_ij[1, 2],  # σ_yz or ε_yz
+            tensor_ij[0, 2],  # σ_xz or ε_xz
+            tensor_ij[0, 1]   # σ_xy or ε_xy
+        ])
+    else:
+        raise ValueError(f"Expected (2,2) or (3,3) tensor, got shape {tensor_ij.shape}")
+
+
+def compute_Voigt_notation(tensor):
+    """
+    Convert a tensor to Voigt notation. Automatically handles 2nd-order and 4th-order tensors.
+
+    For 2nd-order tensors (stress/strain):
+      - 2D (2,2) → (3,) Voigt vector
+      - 3D (3,3) → (6,) Voigt vector
+
+    For 4th-order tensors (stiffness/compliance):
+      - 2D (2,2,2,2) → (3,3) Voigt matrix
+      - 3D (3,3,3,3) → (6,6) Voigt matrix
+
+    Parameters
+    ----------
+    tensor : ndarray
+        Tensor in full index notation. Can be 2nd-order (shape (2,2), (3,3))
+        or 4th-order (shape (2,2,2,2), (3,3,3,3)).
+
+    Returns
+    -------
+    voigt_tensor : ndarray
+        Tensor in Voigt notation.
+    """
+    if tensor.ndim == 2:
+        return compute_Voigt_notation_2order(tensor)
+    elif tensor.ndim == 4:
+        return compute_Voigt_notation_4order(tensor)
+    else:
+        raise ValueError(f"Expected 2nd or 4th order tensor (ndim 2 or 4), got ndim {tensor.ndim}")
 
 
 def get_bulk_and_shear_modulus(E, poisson):

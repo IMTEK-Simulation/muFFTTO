@@ -7,8 +7,8 @@ import numpy as np
 from mpi4py import MPI
 from NuMPI.IO import save_npy
 
-sys.path.append('/home/martin/Programming/muFFTTO_paralellFFT_test/muFFTTO')
-sys.path.append('../..')
+# Add the project root to sys.path relatively
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from muFFTTO import domain
 from muFFTTO import solvers
@@ -25,12 +25,18 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument('-n',   '--nb_pixel',       default='64')
 parser.add_argument('-inc', '--nb_increments',  default='50')
+parser.add_argument(
+    '--save_per_it',
+    action='store_false',
+    help='Enable saving every iteration'
+)
+
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
 args        = parser.parse_args()
 nnn         = int(args.nb_pixel)
 ninc        = int(args.nb_increments)
-
+save_per_it =  args.save_per_it
 # ============================================================================
 # problem setup
 # ============================================================================
@@ -184,8 +190,8 @@ def M_fun_Green(x, Px):
 # macroscopic loading
 # ============================================================================
 macro_gradient_inc        = np.zeros((dim, dim))
-macro_gradient_inc[0, 0] += 0.5/ float(ninc)
-# macro_gradient_inc[1, 0] += 0.3 / float(ninc)
+macro_gradient_inc[0, 1] += 0.3/ float(ninc)
+macro_gradient_inc[1, 0] += 0.3 / float(ninc)
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,
@@ -333,7 +339,7 @@ for inc in range(ninc):
 
 
         # save per iteration
-        if discretization.communicator.rank == 0:
+        if save_per_it:
             save_npy(
                 data_folder_path + f'displacement_fluctuation_field_it{iteration_total}.npy',
                 displacement_fluctuation_field.s.mean(axis=1),
@@ -363,9 +369,10 @@ for inc in range(ninc):
             break
     if discretization.communicator.size == 1:
         # Plot the first two components of the solution field
-
+        # Calculate total macroscopic gradient (F - I)
+        total_macro_gradient = (inc + 1) * macro_gradient_inc
         x_plot_ixyz = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
-                                                                           macro_gradient_ij=macro_gradient_inc,
+                                                                           macro_gradient_ij=total_macro_gradient,
                                                                            displacement_fluctuation=displacement_fluctuation_field)
 
         visualization_utils.plot_field_on_grid(

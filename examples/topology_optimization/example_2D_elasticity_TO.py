@@ -168,8 +168,6 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
     topology_optimization.sensitivity_phase_field_term_FE_NEW(
         discretization=discretization,
-        base_material_data_ijkl=elastic_C_0,
-        void_material_data_ijkl=elastic_C_void,
         phase_field_1nxyz=phase_field_1nxyz,
         p=p,
         eta=eta,

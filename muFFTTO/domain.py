@@ -10,7 +10,7 @@ import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
-from muFFTTO import discretization_library
+from muFFTTO import discretization_library_NEW
 
 
 class PeriodicUnitCell:
@@ -120,6 +120,7 @@ class Discretization:
             self.quad_points_coord_parametric = None
 
             self.get_discretization_info(element_type)
+
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
@@ -191,8 +192,20 @@ class Discretization:
             components=(*self.cell.displacement_shape,),  # shape of components
             sub_pt='nodal_points'  # sub-point type
         )
+        # mugrid give coordinates from [0,1)**dim
+        # I transform coordinates from [0,1)**dim to to physical element. Firt by appliing Jacobian of transformation
+        # x= x*J^T
+        #transformed_coordinates_ixyz = np.einsum('ij,jxy->ixy', self.jacobian_of_pixel, self.fft.coords)
 
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
+        # Coordinates above are already in physical units, so each column of the pixel Jacobian
+        # is normalised by its own diagonal entry: that yields a unit diagonal regardless of the
+        # element's reference domain ([0,1] for triangles, [-1,1] for quads) and expresses the
+        # off-diagonal shear per unit physical length instead of per unit parametric length.
+        adjusted_jacobian = self.jacobian_of_pixel / np.diag(self.jacobian_of_pixel)[np.newaxis, :]
+
+        nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...',nodal_points_coordinates_ixyz, adjusted_jacobian )
+
         nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
 
         return nodal_points_coordinates_inxyz
@@ -2040,7 +2053,8 @@ class Discretization:
         return self.get_rhs_explicit_stress_mugrid(**kwargs)
 
     def get_discretization_info(self, element_type):
-        discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        #discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        discretization_library_NEW.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):
         """Scales a 2D  field to be within [min_val, max_val]."""
