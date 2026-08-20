@@ -12,6 +12,7 @@ from mpi4py import MPI
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
+from muFFTTO import material_models
 
 # Problem Configuration
 problem_type = 'elasticity'
@@ -52,7 +53,7 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 
 # Base Material Properties
 K_0, G_0 = 1.0, 0.5
-elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                  K=K_0,
                                                  mu=G_0,
                                                  kind='linear')
@@ -95,15 +96,15 @@ poison_target = -0.5
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
 G_target_auxet = (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poison_target)
-K_target, G_target = domain.get_bulk_and_shear_modulus(E=E_target, poison=poison_target)
+K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poison_target)
 
-elastic_C_target = domain.get_elastic_material_tensor(dim=discretization.domain_dimension,
+elastic_C_target = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
                                                       K=K_target,
                                                       mu=G_target,
                                                       kind='linear')
 
 if MPI.COMM_WORLD.rank == 0:
-    print(f'Target elastic tangent (Voigt):\n{domain.compute_Voigt_notation_4order(elastic_C_target)}')
+    print(f'Target elastic tangent (Voigt):\n{material_models.compute_Voigt_notation_4order(elastic_C_target)}')
 
 # Target stresses and energies
 target_stresses = np.zeros([nb_load_cases, dim, dim])
@@ -167,8 +168,6 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
     topology_optimization.sensitivity_phase_field_term_FE_NEW(
         discretization=discretization,
-        base_material_data_ijkl=elastic_C_0,
-        void_material_data_ijkl=elastic_C_void,
         phase_field_1nxyz=phase_field_1nxyz,
         p=p,
         eta=eta,
@@ -523,14 +522,14 @@ if __name__ == '__main__':
                 formulation='small_strain')
     if MPI.COMM_WORLD.rank == 0:
         print('Optimized elastic tangent =  :\n' + 
-        np.array2string(domain.compute_Voigt_notation_4order(homogenized_C_ijkl),
+        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
                         formatter={'float_kind': lambda x: f"{x:0.5f}"}))
         print(f'Target elastic tangent (Voigt):\n' +
-              np.array2string(domain.compute_Voigt_notation_4order(elastic_C_target),
+              np.array2string(material_models.compute_Voigt_notation_4order(elastic_C_target),
                         formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
-    _info['homogenized_C_ijkl'] = domain.compute_Voigt_notation_4order(homogenized_C_ijkl)
-    _info['target_C_ijkl'] = domain.compute_Voigt_notation_4order(elastic_C_target)
+    _info['homogenized_C_ijkl'] = material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)
+    _info['target_C_ijkl'] = material_models.compute_Voigt_notation_4order(elastic_C_target)
 
     # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
     if MPI.COMM_WORLD.rank == 0:
