@@ -34,3 +34,5 @@ experiments/exp_data/
 .junie/
 
 .output.txt
+
+.idea/
