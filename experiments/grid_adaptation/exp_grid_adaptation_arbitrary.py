@@ -23,7 +23,8 @@ from muFFTTO import domain  # noqa: F401
 # Main script
 # ============================================================
 
-path = r'C:\Users\Test\Desktop\JiaLing\HiWi\Simulation\Grain Boundaries Data\Green_Jacobi_eta_0.01_w_10.0_p_0.0_final.npy'
+path = '/home/martin/Programming/microTopOpt/muFFTTO/experiments/grid_adaptation/Green_Jacobi_eta_0.01_w_10.0_p_0.0_final.npy'
+
 coarse_Nx = 16
 coarse_Ny = 16
 Lx, Ly = 1.0, 1.0

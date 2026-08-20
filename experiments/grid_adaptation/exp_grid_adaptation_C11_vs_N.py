@@ -86,9 +86,7 @@ print("=== end sanity check ===")
 
 # Same input image you used in the original script.
 INPUT_FILE = Path(
-    r"C:\Users\Test\Desktop\JiaLing\HiWi\Simulation"
-    r"\Grain Boundaries Data"
-    r"\Green_Jacobi_eta_0.01_w_10.0_p_0.0_final.npy"
+    "Green_Jacobi_eta_0.01_w_10.0_p_0.0_final.npy"
 )
 
 PROBLEM_TYPE = "conductivity"
@@ -385,9 +383,9 @@ def run_one_N(N: int, communicator) -> dict:
                 macro_gradient_field_ijqxyz=macro_gradient_field,
             )
 
-            macro_gradient_field.s[...] = np.einsum(
-                "ij...,jk...->ik...", macro_gradient_field.s[...], inv_F
-            )
+            # macro_gradient_field.s[...] = np.einsum(
+            #     "ij...,jk...->ik...", macro_gradient_field.s[...], inv_F
+            # )
             discretization.fft.communicate_ghosts(field=macro_gradient_field)
 
             rhs_field.sg.fill(0.0)
