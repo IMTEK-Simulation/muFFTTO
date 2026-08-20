@@ -41,9 +41,7 @@ from muFFTTO.visualization_utils import plot_field_on_grid
 # ============================================================================
 
 INPUT_FILE = Path(
-    r"C:\Users\Test\Desktop\JiaLing\HiWi\Simulation"
-    r"\Grain Boundaries Data"
-    r"\Green_Jacobi_eta_0.01_w_10.0_p_0.0_final.npy"
+    "/home/martin/Programming/microTopOpt/muFFTTO/experiments/grid_adaptation/uv.lock"
 )
 
 PROBLEM_TYPE = "conductivity"
