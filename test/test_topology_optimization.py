@@ -407,7 +407,7 @@ def test_fd_check_of_whole_objective_function_3D(discretization_fixture, plot=Tr
     p = 2
     w = 3
     eta = .3
-    cg_setup = {'cg_tol': 1e-8, 'r_tol': False  }
+    cg_setup = {'cg_tol': 1e-8, 'r_tol': False}
 
     def my_objective_function(phase_field_1nxyz_flat):
         # reshape the field
@@ -440,8 +440,6 @@ def test_fd_check_of_whole_objective_function_3D(discretization_fixture, plot=Tr
         s_phase_field.s.fill(0)
 
         topology_optimization.sensitivity_phase_field_term_FE_NEW(discretization=discretization,
-                                                                  base_material_data_ijkl=elastic_C_0_ijkl,
-                                                                  void_material_data_ijkl=elastic_C_void,
                                                                   phase_field_1nxyz=phase_field_1nxyz,
                                                                   p=p,
                                                                   eta=eta,
@@ -1144,7 +1142,8 @@ def test_fd_check_of_double_well_potential(discretization_fixture, plot=True):
     # epsilons = [1e-4]
     fd_derivative_nodal = discretization_fixture.get_scalar_field(name='fd_derivative_nodal')
     fd_derivative_anal = discretization_fixture.get_scalar_field(name='fd_derivative_anal')
-
+    partial_der_of_double_well_potential_nodal = discretization_fixture.get_scalar_field(
+        name='partial_der_of_double_well_potential_nodal')
     # compute double-well potential without perturbations
     phase_field = discretization_fixture.get_scalar_field(
         name='phase_field')
@@ -1159,7 +1158,8 @@ def test_fd_check_of_double_well_potential(discretization_fixture, plot=True):
     partial_der_of_double_well_potential_nodal = (
         topology_optimization.partial_der_of_double_well_potential_wrt_density_nodal(
             discretization=discretization_fixture,
-            phase_field_1nxyz=phase_field))
+            phase_field_1nxyz=phase_field,
+            output_1nxyz=partial_der_of_double_well_potential_nodal))
 
     partial_der_of_double_well_potential_analytical = discretization_fixture.get_scalar_field(
         name='partial_der_of_double_well_potential_analytical')
@@ -1215,9 +1215,9 @@ def test_fd_check_of_double_well_potential(discretization_fixture, plot=True):
         error_fd_nodal_vs_analytical.append(
             np.linalg.norm((fd_derivative_nodal.s - partial_der_of_double_well_potential_analytical.s)[0, 0], 'fro'))
         error_fd_nodal_vs_nodal.append(
-            np.linalg.norm((fd_derivative_nodal.s - partial_der_of_double_well_potential_nodal)[0, 0], 'fro'))
+            np.linalg.norm((fd_derivative_nodal.s - partial_der_of_double_well_potential_nodal.s)[0, 0], 'fro'))
         error_fd_anal_vs_nodal.append(
-            np.linalg.norm((fd_derivative_anal.s - partial_der_of_double_well_potential_nodal)[0, 0], 'fro'))
+            np.linalg.norm((fd_derivative_anal.s - partial_der_of_double_well_potential_nodal.s)[0, 0], 'fro'))
         error_fd_anal_vs_analytical.append(
             np.linalg.norm((fd_derivative_anal.s - partial_der_of_double_well_potential_analytical.s)[0, 0], 'fro'))
     print('error_fd_nodal_vs_analytical: {}\n'.format(error_fd_nodal_vs_analytical))
@@ -1405,9 +1405,12 @@ def test_integration_of_double_well_potential(plot=True):
         double_well_potential_plus_eps_anal_res.append(double_well_potential_plus_eps_anal)
 
         start_time = time.time()
+        partial_der_of_double_well_potential_nodal = discretization.get_scalar_field(
+            name='partial_der_of_double_well_potential_nodal')
         partial_der_of_double_well_potential = topology_optimization.partial_der_of_double_well_potential_wrt_density_nodal(
             discretization,
-            phase_field)
+            phase_field,
+             partial_der_of_double_well_potential_nodal)
         end_time = time.time()
         elapsed_time = end_time - start_time
         print("partial_der_of_double_well_potential time: ", elapsed_time)
@@ -1436,7 +1439,7 @@ def test_integration_of_double_well_potential(plot=True):
 
         error_nodal_vs_analytical.append(
             np.linalg.norm(
-                (partial_der_of_double_well_potential - partial_der_of_double_well_potential_analytical.s)[0, 0],
+                (partial_der_of_double_well_potential.s - partial_der_of_double_well_potential_analytical.s)[0, 0],
                 'fro'))
         error_gauss_vs_analytical.append(
             np.linalg.norm(
@@ -1444,9 +1447,9 @@ def test_integration_of_double_well_potential(plot=True):
                 'fro'))
         error_nodal_vs_gauss.append(
             np.linalg.norm(
-                (partial_der_of_double_well_potential - partial_der_of_double_well_potential_gauss)[0, 0], 'fro'))
+                (partial_der_of_double_well_potential.s - partial_der_of_double_well_potential_gauss)[0, 0], 'fro'))
 
-        norm_nodal.append(np.linalg.norm(partial_der_of_double_well_potential[0, 0], 'fro'))
+        norm_nodal.append(np.linalg.norm(partial_der_of_double_well_potential.s[0, 0], 'fro'))
         norm_gauss.append(np.linalg.norm(partial_der_of_double_well_potential_gauss[0, 0], 'fro'))
         norm_analytical.append(np.linalg.norm(partial_der_of_double_well_potential_analytical.s[0, 0], 'fro'))
         print()
@@ -1636,9 +1639,9 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
     macro_gradient = np.array([[1., 0], [0, 1.]])
 
     # create material data field
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
-    elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
                                                      kind='linear')
@@ -1847,9 +1850,9 @@ def test_fd_check_of_stress_equivalence_potential_wrt_displacement_FE(discretiza
     p = 5
 
     # create material data field
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
-    elastic_C_1 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
                                                      kind='linear')
@@ -2042,9 +2045,9 @@ def test_fd_check_of_stress_equivalence_potential(discretization_fixture, p, plo
     macro_gradient = np.array([[0.01, 0], [0, 0.02]])
 
     # create material data field
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
-    elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
                                                      kind='linear')
@@ -2241,9 +2244,9 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE(discretization_fixture
     E_0 = 1
     poison_0 = 0.2
 
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=E_0, poisson=poison_0)
 
-    elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
                                                      kind='linear')
@@ -2481,9 +2484,9 @@ def test_fd_check_of_adjoint_potential_wrt_phase_field_FE_2(discretization_fixtu
     macro_gradient = np.array([[0.01, 0], [0, 0.01]])
 
     # create material data field
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
-    material_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    material_C_0 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                       K=K_0,
                                                       mu=G_0,
                                                       kind='linear')
@@ -2640,9 +2643,9 @@ def test_fd_check_of_adjoint_potential_wrt_displacement_FE(discretization_fixtur
     E_0 = 1
     poison_0 = 0.2
 
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=E_0, poison=poison_0)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=E_0, poisson=poison_0)
 
-    elastic_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                      K=K_0,
                                                      mu=G_0,
                                                      kind='linear')
@@ -2812,9 +2815,9 @@ def test_nullity_of_adjoint_potential(discretization_fixture, plot=False):
     is in equilibrium.
     """
     # create material data field
-    K_0, G_0 = domain.get_bulk_and_shear_modulus(E=1, poison=0.2)
+    K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
-    material_C_0 = domain.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
+    material_C_0 = material_models.get_elastic_material_tensor(dim=discretization_fixture.domain_dimension,
                                                       K=K_0,
                                                       mu=G_0,
                                                       kind='linear')
