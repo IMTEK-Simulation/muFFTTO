@@ -7,8 +7,6 @@ import numpy as np
 import pytest
 
 from muFFTTO import domain
-from muFFTTO import solvers
-from muFFTTO import material_models
 
 
 class TestGradientOperatorBasics:
@@ -491,6 +489,4 @@ class TestGradientWeightedSum:
             # Result should be constant and equal to 1
             assert np.allclose(u_back.s, 1.0, rtol=1e-12, atol=1e-12), \
                 f'N^T * W * N * 1 != 1 for {element_type}'
-
-
 

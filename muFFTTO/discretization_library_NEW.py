@@ -5,6 +5,88 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 # ---------------------------------------------------------------------------
+# Shared helper for tensor construction
+# ---------------------------------------------------------------------------
+
+def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leading_dim_axes):
+    """
+    Transform a flat-node-indexed array into a stencil-layout array.
+
+    This helper replaces the duplicated reshape/moveaxis/expand_dims blocks that appear
+    when building B_grad, H_hess, and N tensors from flat per-quadrature-point node vectors.
+    The transformation preserves a critical invariant: the trailing `*node_layout` axes are
+    not an arbitrary flattening — they are literal per-spatial-dimension multi-indices that
+    two independent downstream code paths both depend on:
+
+    1. muGrid.GenericLinearOperator (muFFTTO/domain.py:137,140) treats these axes directly
+       as the stencil_shape of an FFT-convolution kernel, where axis k has size node_layout[k]
+       and represents a pixel offset of 0..node_layout[k]-1 in direction k.
+
+    2. Hand-written code in domain.py (evaluate_field_at_quad_points, get_preconditioner_Jacoby_fast)
+       iterates `for pixel_node in np.ndindex(*node_layout)` and uses the SAME tuple both to
+       index these tensors' trailing axes AND as a literal shift vector for FFT rolling.
+       A node at multi-index (1,0) must mean "+1 pixel in direction 0, +0 elsewhere".
+
+    Consequence: never reorder these axes, never replace the Fortran flat-index convention
+    without also updating every shape_functions implementation, and never treat node_layout
+    as "just an arbitrary flattening of n_nodes".
+
+    Parameters
+    ----------
+    values_q_n_and_leading : ndarray, shape (n_qp, n_nodes, *([dim]*n_leading_dim_axes))
+        The input array with axes: quadrature point (q), flat node index (n, following
+        Fortran order over node_layout), and zero or more trailing physical-direction axes
+        (e.g., d for gradients, d,e for Hessians).
+
+    node_layout : tuple of int, shape (dim,)
+        Number of nodes per spatial direction (e.g., (2,2) for Q1-2D, would be (3,3) for Q2-2D).
+        The flat node index is related to the multi-index via np.ravel_multi_index(..., order='F').
+
+    n_leading_dim_axes : int, in {0, 1, 2}
+        Number of trailing physical-direction axes: 0 for shape-function values (N),
+        1 for gradients (B), 2 for Hessians (H).
+
+    Returns
+    -------
+    ndarray, shape (*([dim]*n_leading_dim_axes), n_qp, 1, *node_layout)
+        Physical-direction axes (if any) moved to the front in their original relative order,
+        followed by the quadrature point axis (q), followed by a size-1 "unique nodes per pixel"
+        axis, followed by the node axis unraveled into node_layout multi-index axes.
+    """
+    n_qp = values_q_n_and_leading.shape[0]
+    n_nodes = values_q_n_and_leading.shape[1]
+    dim = len(node_layout)
+
+    # Sanity checks (never trip on correct input, safe to leave in)
+    assert n_nodes == np.prod(node_layout), (
+        f'Flat node axis size {n_nodes} != prod(node_layout)={np.prod(node_layout)}; '
+        f'check that shape_functions returns correct number of nodes.'
+    )
+    assert values_q_n_and_leading.ndim == 2 + n_leading_dim_axes, (
+        f'Input shape {values_q_n_and_leading.shape} incompatible with n_leading_dim_axes={n_leading_dim_axes}'
+    )
+
+    # Reshape the flat node axis into node_layout, using Fortran order.
+    # This unravels axis 1 into dim new axes, leaving axis 0 (q) and trailing axes untouched.
+    reshaped = values_q_n_and_leading.reshape(
+        n_qp, *node_layout, *values_q_n_and_leading.shape[2:], order='F'
+    )
+
+    # Move trailing physical-direction axes to the front (no-op when n_leading_dim_axes==0).
+    if n_leading_dim_axes > 0:
+        reshaped = np.moveaxis(
+            reshaped,
+            source=list(range(-n_leading_dim_axes, 0)),
+            destination=list(range(n_leading_dim_axes))
+        )
+
+    # Insert a size-1 axis for "nb_unique_nodes_per_pixel" right after the q axis.
+    result = np.expand_dims(reshaped, axis=n_leading_dim_axes + 1)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Integration with the existing discretization API
 # ---------------------------------------------------------------------------
 
@@ -28,17 +110,20 @@ def get_shape_function_gradient_matrix(domain, element_type):
 
     element = _ELEMENT_FACTORIES[element_type](domain)
 
-    domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
-    domain.N_at_quad_points_qnijk = element.N_at_quad_points_qnijk
     domain.quad_points_coord = element.quad_points_coord_physical
     domain.quad_points_coord_parametric = element.quad_points_coord_parametric
     domain.quadrature_weights = element.quadrature_weights
     domain.nb_quad_points_per_pixel = element.quadrature_weights.shape[0]
     domain.nb_nodes_per_pixel = 1
+    # nb_unique_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
+    # Currently unread by any live code, but forward-looking hook for multi-node-per-pixel elements (Q2, etc).
     domain.nb_unique_nodes_per_pixel = 1
     domain.N_basis_interpolator_array = element.N_basis_interpolator_array
     domain.jacobian_of_pixel = element.jacobian_of_pixel
 
+    domain.N_at_quad_points_qnijk = element.N_at_quad_points_qnijk
+    domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
+    domain.H_hess_at_pixel_deqnijk  = element.H_hess_at_pixel_deqnijk
 
 # ---------------------------------------------------------------------------
 # Element class
@@ -64,7 +149,8 @@ class Element:
                  jacobian_inv_per_quadrature_point_qij,
                  pixel_size,
                  quadrature_points_physical_qd,
-                 jacobian_of_pixel):
+                 jacobian_of_pixel,
+                 node_layout=None):
         """
         Parameters
         ----------
@@ -83,6 +169,9 @@ class Element:
             Physical coordinates of quadrature points within one pixel (from its corner).
             Supplied explicitly by each factory because the reference-to-physical mapping
             differs between element families ([-1,1] for quads, [0,1] for triangles).
+        node_layout : tuple of int, optional
+            Number of nodes per spatial direction (e.g., (2,2) for Q1-2D, (3,3) for Q2-2D).
+            Default None means (2,...,2) — one quad per direction.
         """
         self.pixel_size = np.asarray(pixel_size, dtype=float)
         self.quadrature_weights = quadrature_weights_physical_q
@@ -95,6 +184,9 @@ class Element:
         # Store shape functions for later evaluation at arbitrary points
         self.shape_functions = shape_functions
         self.dim = len(np.asarray(pixel_size))
+
+        # Store node_layout: geometry of nodes per pixel per spatial direction
+        self.node_layout = tuple(node_layout) if node_layout is not None else tuple([2] * self.dim)
 
         # Create N_basis_interpolator_array: callable for each node position
         self.N_basis_interpolator_array = self._make_shape_function_array()
@@ -111,26 +203,29 @@ class Element:
         )
 
     def _make_shape_function_array(self):
-        """Create an array of callables for each node position."""
-        node_layout = tuple([2] * self.dim)
-        result = np.empty(node_layout, dtype=object)
+        """
+        Create an array of callables for each node position, indexed by spatial multi-index.
 
-        for idx in np.ndindex(node_layout):
-            node_position = idx
+        Each callable re-evaluates shape_functions at given parametric coordinates
+        (unavoidable: the external contract requires each entry to be independent),
+        but extracts its value by precomputed flat index rather than reshaping the
+        entire vector on every call. This is mathematically equivalent to
+        N.reshape(node_layout, order='F')[node_position] but more efficient and clearer.
+        """
+        result = np.empty(self.node_layout, dtype=object)
 
-            # Create a closure that captures the node position and evaluates shape_functions
-            def make_evaluator(node_pos):
-                def evaluator(*coords):
-                    # Convert to numpy array for jax
-                    xi = np.array(coords)
-                    N = np.array(self.shape_functions(jnp.array(xi)))
-                    # Reshape and extract value for this node position
-                    N_reshaped = N.reshape(node_layout, order='F')
-                    return N_reshaped[node_pos]
+        for node_position in np.ndindex(self.node_layout):
+            # Precompute the flat index for this node position (Fortran order),
+            # then use it to extract the value directly instead of reshaping.
+            flat_index = np.ravel_multi_index(node_position, self.node_layout, order='F')
 
-                return evaluator
+            def evaluator(*coords, flat_index=flat_index):
+                # Must match the Fortran node-flattening convention shape_functions uses
+                xi = np.array(coords)
+                N = np.array(self.shape_functions(jnp.array(xi)))
+                return N[flat_index]
 
-            result[idx] = make_evaluator(node_position)
+            result[node_position] = evaluator
 
         return result
 
@@ -177,23 +272,25 @@ class Element:
             jacobian_inv_per_quadrature_point,
         )  # (n_qp, n_nodes, dim)
 
-        # Each pixel owns 2^dim nodes addressed by multi-index (i,), (i,j), or (i,j,k)
-        node_layout = tuple([2] * dim)  # e.g. (2,2) in 2D, (2,2,2) in 3D
+        # Sanity check: verify that shape_functions returned the right number of nodes
+        n_nodes = N_at_quadrature_points_qn.shape[1]
+        assert n_nodes == np.prod(self.node_layout), (
+            f'shape_functions returned {n_nodes} nodes but node_layout={self.node_layout} '
+            f'implies {np.prod(self.node_layout)}; a future Q2/Q3 element must pass a matching node_layout.'
+        )
 
         # --- Build B_grad_at_pixel_dqnijk : (dim, n_qp, 1, *node_layout) ---
-        # Reshape node axis back into spatial multi-index, then move dim to front
-        # Use Fortran order to match old library convention where first index varies fastest
-        B = dN_dx_at_quadrature_points.reshape(n_quadrature_points, *node_layout, dim,
-                                               order='F')  # (n_qp, *layout, dim)
-        B = np.moveaxis(B, source=-1, destination=0)  # (dim, n_qp, *layout)
-        # Insert the "unique nodes per pixel" axis (always 1 for regular grids)
-        self.B_grad_at_pixel_dqnijk = np.expand_dims(B, axis=2)  # (dim, n_qp, 1, *layout)
+        # Trailing axes are literal per-direction pixel offsets — see _unflatten_node_axis_to_stencil docstring
+        self.B_grad_at_pixel_dqnijk = _unflatten_node_axis_to_stencil(
+            dN_dx_at_quadrature_points, self.node_layout, n_leading_dim_axes=1)
 
         # --- Build N_at_quad_points_qnijk : (1, n_qp, 1, *node_layout) ---
-        # Use Fortran order to match old library convention: shape should be (f, q, n, *layout)
-        N = N_at_quadrature_points_qn.reshape(n_quadrature_points, *node_layout, order='F')  # (n_qp, *layout)
-        N = np.expand_dims(N, axis=1)  # (n_qp, 1, *layout)
-        self.N_at_quad_points_qnijk = np.expand_dims(N, axis=0)  # (1, n_qp, 1, *layout)
+        # Helper produces (n_qp, 1, *node_layout) for n_leading_dim_axes=0. The leading size-1 axis
+        # (nb_output_components=1) is added explicitly here, not by the helper, because N always has
+        # exactly one output component (unlike B/H), so this axis is not a "moved" physical-direction axis.
+        N = _unflatten_node_axis_to_stencil(
+            N_at_quadrature_points_qn, self.node_layout, n_leading_dim_axes=0)
+        self.N_at_quad_points_qnijk = N[np.newaxis, ...]
 
     def _compute_hessian_matrices(self,
                                   shape_functions,
@@ -260,17 +357,10 @@ class Element:
             jacobian_inv,
         )  # (n_qp, n_nodes, dim, dim)
 
-        node_layout = tuple([2] * dim)
-
         # --- Build H_hess_at_pixel_deqnijk : (dim, dim, n_qp, 1, *node_layout) ---
-        # Identical order='F' reshape as B_grad, so node ordering matches it.
-        # Valid because n_nodes == prod(node_layout): the trailing (dim, dim) axes
-        # are carried through untouched.
-        H = d2N_dx2_at_quadrature_points.reshape(
-            n_quadrature_points, *node_layout, dim, dim, order='F')
-        H = np.moveaxis(H, source=[-2, -1], destination=[0, 1])
-        # Insert the "unique nodes per pixel" axis (always 1 for regular grids)
-        self.H_hess_at_pixel_deqnijk = np.expand_dims(H, axis=3)
+        # Trailing axes are literal per-direction pixel offsets — see _unflatten_node_axis_to_stencil docstring
+        self.H_hess_at_pixel_deqnijk = _unflatten_node_axis_to_stencil(
+            d2N_dx2_at_quadrature_points, self.node_layout, n_leading_dim_axes=2)
 
     # -----------------------------------------------------------------------
     # Factory classmethods — one per element type
@@ -312,12 +402,12 @@ class Element:
             # Fortran-order ravel to match expected node ordering: (0,0), (1,0), (0,1), (1,1)
             return jnp.outer(N_xi, N_eta).ravel(order='F')  # (4,) in Fortran-order
 
-        # Physical mapping: x = h_x*xi, y = h_y*eta  (NOT the [-1,1] formula)
         # Reference [-1,1]^2 -> physical [0,h_x] x [0,h_y]
         jacobian_of_pixel = np.array([[h_x / 2, 0.],
                                       [0., h_y / 2]])
+        # J = diag(h_x/2, h_y/2), constant at all quadrature points
 
-
+        # quad coords in reference [-1,1]^2
         gauss_coord = 1.0 / np.sqrt(3)
         gauss_1d = np.array([-gauss_coord, gauss_coord])
 
@@ -327,7 +417,8 @@ class Element:
         # Map quadrature points from [-1,1]^2 to physical element.
         # xi in [-1,1] -> (xi+1) in [0,2] -> J*(xi+1) in [0,h_x] x [0,h_y] -> shift by element origin x0
         x0=  np.array([0, 0])
-        quadrature_points_physical = x0 + (quadrature_points_qi + 1.0) @ jacobian_of_pixel.T        # J = diag(h_x/2, h_y/2), constant at all quadrature points
+        quadrature_points_physical = x0 + (quadrature_points_qi + 1.0) @ jacobian_of_pixel.T
+
 
 
 

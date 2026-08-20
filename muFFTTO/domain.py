@@ -10,7 +10,7 @@ import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
-from muFFTTO import discretization_library_NEW, discretization_library
+from muFFTTO import discretization_library_NEW
 
 
 class PeriodicUnitCell:
