@@ -34,3 +34,7 @@ experiments/exp_data/
 .junie/
 
 .output.txt
+
+.idea/
+
+experiments/grid_adaptation/uv.lock
