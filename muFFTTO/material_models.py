@@ -221,13 +221,18 @@ class NeoHookean(MaterialModelElasticity):
         index_extender = (...,) + (np.newaxis,) * n_extra
 
         # term1: λ FinvT_ij FinvT_kl
-        dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
-        term1_ijklqxyz.s[...] *= lam
+        #dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
+        #term1_ijklqxyz.s[...] *= lam
+        # term1: lam FinvT_ij FinvT_lk        ('kl' -> 'lk')
+        term1_ijklqxyz.s[...] = lam * np.einsum('ij...,lk...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
 
         # term2: (μ - λ lnJ) FinvT_il FinvT_jk
-        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,jk...->ijkl...',
-                                                  FinvT_ijqxyz.s,
-                                                  FinvT_ijqxyz.s)
+        # term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,jk...->ijkl...',
+        #                                           FinvT_ijqxyz.s,
+        #                                           FinvT_ijqxyz.s)
+        # term2: (mu - lam lnJ) FinvT_ik FinvT_lj    ('il,jk' -> 'ik,lj')
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('ik...,lj...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
+
 
         # term3:  μ δ_il δ_jk
         I = np.eye(dim)

@@ -140,7 +140,6 @@ for i in range(dim):
                                                    macro_gradient_field_ijqxyz=macro_gradient_field)
 
     # Macro gradient in reference domain
-    macro_gradient_field.s[...] = np.einsum('ij...,jk...->ik...', macro_gradient_field.s[...], inv_F)
     discretization.fft.communicate_ghosts(field=macro_gradient_field)
 
     # Solve equilibrium

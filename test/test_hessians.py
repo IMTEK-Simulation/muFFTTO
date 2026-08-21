@@ -11,6 +11,7 @@ from muFFTTO import solvers
 from muFFTTO import material_models
 from muFFTTO.discretization_library_NEW import Element
 
+
 class TestHessianOperatorBasics:
     """Tests for H_hess_at_pixel_deqnijk shape function Hessian tensor."""
 
@@ -149,7 +150,10 @@ class TestHessianOperatorBasics:
                         assert np.isclose(H[1, 2, q, 0, i, j, k], expected_yz, rtol=1e-12, atol=1e-14)
 
     def test_hessian_reproduces_field_second_derivatives_2D(self):
-        """Test contracting H_hess_at_pixel_deqnijk with 2D nodal polynomial values."""
+        """
+        Test contracting H_hess_at_pixel_deqnijk with 2D nodal polynomial values.
+        -> this is just Hassian on a single pixel
+        """
         hx, hy = 0.25, 0.5
         elem = Element.bilinear_quad(pixel_size=[hx, hy])
         H = elem.H_hess_at_pixel_deqnijk  # (2, 2, 4, 1, 2, 2)
@@ -166,7 +170,7 @@ class TestHessianOperatorBasics:
         u_nodes = 5.0 * X * Y + 2.0 * X - 4.0 * Y + 7.0
 
         # Contract H with u_nodes: sum_{i,j} H[d, e, q, n, i, j] * u[i, j]
-        d2u = np.einsum('deqnij,ij->deq', H , u_nodes)
+        d2u = np.einsum('deqnij,ij->deq', H, u_nodes)
 
         # Check all quad points
         assert np.allclose(d2u[0, 0, :], 0.0, atol=1e-14), "d^2 u / dx^2 should be 0"
@@ -175,7 +179,9 @@ class TestHessianOperatorBasics:
         assert np.allclose(d2u[1, 0, :], 5.0, rtol=1e-12, atol=1e-14), "d^2 u / dy dx should be 5.0"
 
     def test_hessian_reproduces_field_second_derivatives_3D(self):
-        """Test contracting H_hess_at_pixel_deqnijk with 3D nodal polynomial values."""
+        """Test contracting H_hess_at_pixel_deqnijk with 3D nodal polynomial values.
+                -> this is just Hassian on a single voxel
+        """
         hx, hy, hz = 0.2, 0.3, 0.4
         elem = Element.trilinear_hex(pixel_size=[hx, hy, hz])
         H = elem.H_hess_at_pixel_deqnijk  # (3, 3, 8, 1, 2, 2, 2)
@@ -224,3 +230,264 @@ class TestHessianOperatorBasics:
             assert hasattr(discretization, 'H_hess_at_pixel_deqnijk'), \
                 f'Discretization missing H_hess_at_pixel_deqnijk for {element_type}'
             assert discretization.H_hess_at_pixel_deqnijk is not None
+
+    def test_hessian_reproduces_field_second_derivatives_2D_on_grid(self):
+        """
+        This test test if hassian operator can compute hessian on global fields
+          Test apply_hessian_operator_to_scalar_field_mugrid against 2D nodal polynomial values."""
+        domain_size = [4, 5]
+        dim = len(domain_size)
+        problem_type = 'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (2, 3)
+        discretization_type = 'finite_element'
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='bilinear_rectangle')
+
+        nodal_coords = discretization.get_nodal_points_coordinates()
+
+        X = nodal_coords.s[0, 0, :, :]
+        Y = nodal_coords.s[1, 0, :, :]
+
+        u_inxyz = discretization.get_temperature_sized_field(name='u')
+        # u(x, y) = 5*x*y + 2*x - 4*y + 7
+        # bilinear elements represent this exactly, so
+        #   d2u/dx2 = 0, d2u/dy2 = 0, d2u/dxdy = 5
+        u_inxyz.s[0, 0, :, :] = 5.0 * X * Y + 2.0 * X - 4.0 * Y + 7.0
+
+        hess_u_ijkqxyz = discretization.get_temperature_hessian_size_field(name='Hessian_u')
+
+        discretization.fft.communicate_ghosts(field=u_inxyz)
+        discretization.apply_hessian_operator_to_scalar_field_mugrid(u_inxyz=u_inxyz,
+                                                                     hess_u_ijkqxyz=hess_u_ijkqxyz)
+
+        # symmetry in the derivative pair
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 1], hess_u_ijkqxyz.s[:, 1, 0])
+
+        # Check all quad points
+        assert np.allclose(hess_u_ijkqxyz.s[0, 0, 0, :, :-1, :-1], 0.0,
+                           atol=1e-14), "d^2 u / dx^2 should be 0"
+        assert np.allclose(hess_u_ijkqxyz.s[0, 1, 1, :, :-1, :-1], 0.0,
+                           atol=1e-14), "d^2 u / dy^2 should be 0"
+        assert np.allclose(hess_u_ijkqxyz.s[0, 0, 1, :, :-1, :-1], 5.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dx dy should be 5.0"
+        assert np.allclose(hess_u_ijkqxyz.s[0, 1, 0, :, :-1, :-1], 5.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dy dx should be 5.0"
+
+
+
+    def test_hessian_reproduces_field_second_derivatives_3D_on_grid(self):
+        """
+        This test test if hassian operator can compute hessian on global fields
+          Test apply_hessian_operator_to_scalar_field_mugrid against 3D nodal polynomial values."""
+        domain_size = [4, 5, 3]
+        dim = len(domain_size)
+        problem_type = 'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (2, 3, 4)
+        discretization_type = 'finite_element'
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='trilinear_hexahedron')
+
+        nodal_coords = discretization.get_nodal_points_coordinates()
+
+        X = nodal_coords.s[0, 0, :, :, :]
+        Y = nodal_coords.s[1, 0, :, :, :]
+        Z = nodal_coords.s[2, 0, :, :, :]
+
+        u_inxyz = discretization.get_temperature_sized_field(name='u')
+        # u(x,y,z) = 5*x*y - 3*y*z + 2*x*z + 2*x - 4*y + 6*z + 7
+        # trilinear elements represent this exactly, so
+        #   d2u/dx2 = d2u/dy2 = d2u/dz2 = 0
+        #   d2u/dxdy = 5, d2u/dydz = -3, d2u/dxdz = 2
+        u_inxyz.s[0, 0, :, :, :] = (5.0 * X * Y - 3.0 * Y * Z + 2.0 * X * Z
+                                    + 2.0 * X - 4.0 * Y + 6.0 * Z + 7.0)
+
+        hess_u_ijkqxyz = discretization.get_temperature_hessian_size_field(name='Hessian_u')
+
+        discretization.fft.communicate_ghosts(field=u_inxyz)
+        discretization.apply_hessian_operator_to_scalar_field_mugrid(u_inxyz=u_inxyz,
+                                                                     hess_u_ijkqxyz=hess_u_ijkqxyz)
+
+        # symmetry in the derivative pair
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 1], hess_u_ijkqxyz.s[:, 1, 0])
+        assert np.allclose(hess_u_ijkqxyz.s[:, 1, 2], hess_u_ijkqxyz.s[:, 2, 1])
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 2], hess_u_ijkqxyz.s[:, 2, 0])
+
+        # Check all quad points
+        interior = np.s_[:, :-1, :-1, :-1]
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 0, 0) + interior], 0.0,
+                           atol=1e-14), "d^2 u / dx^2 should be 0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 1, 1) + interior], 0.0,
+                           atol=1e-14), "d^2 u / dy^2 should be 0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 2, 2) + interior], 0.0,
+                           atol=1e-14), "d^2 u / dz^2 should be 0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 0, 1) + interior], 5.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dx dy should be 5.0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 1, 0) + interior], 5.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dy dx should be 5.0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 1, 2) + interior], -3.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dy dz should be -3.0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 2, 1) + interior], -3.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dz dy should be -3.0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 0, 2) + interior], 2.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dx dz should be 2.0"
+        assert np.allclose(hess_u_ijkqxyz.s[(0, 2, 0) + interior], 2.0,
+                           rtol=1e-12, atol=1e-14), "d^2 u / dz dx should be 2.0"
+
+    def test_hessian_reproduces_field_second_derivatives_2D_on_grid_elasticity(self):
+        """
+        This test test if hassian operator can compute hessian on global fields
+          Test apply_hessian_operator_to_vector_field_mugrid against 2D nodal polynomial values."""
+        domain_size = [4, 5]
+        dim = len(domain_size)
+        problem_type = 'elasticity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (2, 2)
+        discretization_type = 'finite_element'
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='bilinear_rectangle')
+        nodal_coords = discretization.get_nodal_points_coordinates()
+        X = nodal_coords.s[0, 0, :, :]
+        Y = nodal_coords.s[1, 0, :, :]
+        u_inxyz = discretization.get_displacement_sized_field(name='u')
+        # u(x, y) = a*x*y + 2*x - 4*y + 7
+        # bilinear elements represent this exactly, so
+        #   d2u/dx2 = 0, d2u/dy2 = 0, d2u/dxdy = a
+        u_inxyz.s[0, 0, :, :] = 5.0 * X * Y + 2.0 * X - 4.0 * Y + 7.0
+        u_inxyz.s[1, 0, :, :] = 8.0 * X * Y + 2.0 * X - 4.0 * Y + 7.0
+        hess_u_ijkqxyz = discretization.get_displacement_hessian_size_field(name='Hessian_u')
+        discretization.fft.communicate_ghosts(field=u_inxyz)
+        discretization.apply_hessian_operator_to_vector_field_mugrid(u_inxyz=u_inxyz,
+                                                                     hess_u_ijkqxyz=hess_u_ijkqxyz)
+        # symmetry in the derivative pair
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 1], hess_u_ijkqxyz.s[:, 1, 0])
+        # Check all quad points, all displacement components
+        interior = np.s_[:, :-1, :-1]
+        mixed = {0: 5.0,
+                 1: 8.0}
+        for f, a in mixed.items():
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 0, 0) + interior], 0.0,
+                               atol=1e-14), f"u_{f}: d^2 u / dx^2 should be 0"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 1, 1) + interior], 0.0,
+                               atol=1e-14), f"u_{f}: d^2 u / dy^2 should be 0"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 0, 1) + interior], a,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dx dy should be {a}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 1, 0) + interior], a,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dy dx should be {a}"
+
+    def test_hessian_reproduces_field_second_derivatives_3D_on_grid_elasticity(self):
+        """
+        This test test if hassian operator can compute hessian on global fields
+          Test apply_hessian_operator_to_vector_field_mugrid against 3D nodal polynomial values."""
+        domain_size = [4, 5, 3]
+        dim = len(domain_size)
+        problem_type = 'elasticity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (2, 2, 2)
+        discretization_type = 'finite_element'
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='trilinear_hexahedron')
+        nodal_coords = discretization.get_nodal_points_coordinates()
+        X = nodal_coords.s[0, 0, :, :, :]
+        Y = nodal_coords.s[1, 0, :, :, :]
+        Z = nodal_coords.s[2, 0, :, :, :]
+        u_inxyz = discretization.get_displacement_sized_field(name='u')
+        # u(x,y,z) = a*x*y + b*y*z + c*x*z + 2*x - 4*y + 6*z + 7
+        # trilinear elements represent this exactly, so
+        #   d2u/dx2 = d2u/dy2 = d2u/dz2 = 0
+        #   d2u/dxdy = a, d2u/dydz = b, d2u/dxdz = c
+        u_inxyz.s[0, 0, :, :, :] = (5.0 * X * Y - 3.0 * Y * Z + 2.0 * X * Z
+                                    + 2.0 * X - 4.0 * Y + 6.0 * Z + 7.0)
+        u_inxyz.s[1, 0, :, :, :] = (8.0 * X * Y + 1.0 * Y * Z - 6.0 * X * Z
+                                    + 2.0 * X - 4.0 * Y + 6.0 * Z + 7.0)
+        u_inxyz.s[2, 0, :, :, :] = (-2.0 * X * Y + 4.0 * Y * Z + 7.0 * X * Z
+                                    + 2.0 * X - 4.0 * Y + 6.0 * Z + 7.0)
+        hess_u_ijkqxyz = discretization.get_displacement_hessian_size_field(name='Hessian_u')
+        discretization.fft.communicate_ghosts(field=u_inxyz)
+        discretization.apply_hessian_operator_to_vector_field_mugrid(u_inxyz=u_inxyz,
+                                                                     hess_u_ijkqxyz=hess_u_ijkqxyz)
+        # symmetry in the derivative pair
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 1], hess_u_ijkqxyz.s[:, 1, 0])
+        assert np.allclose(hess_u_ijkqxyz.s[:, 1, 2], hess_u_ijkqxyz.s[:, 2, 1])
+        assert np.allclose(hess_u_ijkqxyz.s[:, 0, 2], hess_u_ijkqxyz.s[:, 2, 0])
+        # Check all quad points, all displacement components
+        interior = np.s_[:, :-1, :-1, :-1]
+        mixed = {0: (5.0, -3.0, 2.0),
+                 1: (8.0, 1.0, -6.0),
+                 2: (-2.0, 4.0, 7.0)}
+        for f, (a, b, c) in mixed.items():
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 0, 0) + interior], 0.0,
+                               atol=1e-14), f"u_{f}: d^2 u / dx^2 should be 0"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 1, 1) + interior], 0.0,
+                               atol=1e-14), f"u_{f}: d^2 u / dy^2 should be 0"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 2, 2) + interior], 0.0,
+                               atol=1e-14), f"u_{f}: d^2 u / dz^2 should be 0"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 0, 1) + interior], a,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dx dy should be {a}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 1, 0) + interior], a,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dy dx should be {a}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 1, 2) + interior], b,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dy dz should be {b}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 2, 1) + interior], b,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dz dy should be {b}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 0, 2) + interior], c,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dx dz should be {c}"
+            assert np.allclose(hess_u_ijkqxyz.s[(f, 2, 0) + interior], c,
+                               rtol=1e-12, atol=1e-14), f"u_{f}: d^2 u / dz dx should be {c}"
+
+    def test_hessian_operator_transposed_is_adjoint_2D(self):
+        """<H u, V>_W == <u, H^T V>  for random u, V."""
+        self._check_hessian_adjointness(domain_size=[4, 5],
+                                        number_of_pixels=(4, 5),
+                                        element_type='bilinear_rectangle')
+
+    def test_hessian_operator_transposed_is_adjoint_3D(self):
+        """<H u, V>_W == <u, H^T V>  for random u, V."""
+        self._check_hessian_adjointness(domain_size=[4, 5, 3],
+                                        number_of_pixels=(4, 5, 3),
+                                        element_type='trilinear_hexahedron')
+
+    def _check_hessian_adjointness(self, domain_size, number_of_pixels, element_type):
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type='elasticity')
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type='finite_element',
+                                               element_type=element_type)
+        rng = np.random.default_rng(0)
+
+        u = discretization.get_displacement_sized_field(name='u')
+        V = discretization.get_displacement_hessian_size_field(name='V')
+        Hu = discretization.get_displacement_hessian_size_field(name='Hu')
+        HtV = discretization.get_displacement_sized_field(name='HtV')
+
+        u.s[...] = rng.random(u.s.shape)
+        V.s[...] = rng.random(V.s.shape)
+        V.s[...] = 0.5 * (V.s + np.swapaxes(V.s, 1, 2))  # H^T only sees the (j,k)-symmetric part
+
+        discretization.apply_hessian_operator_to_vector_field_mugrid(
+            u_inxyz=u, hess_u_ijkqxyz=Hu)
+        discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+            hess_u_ijkqxyz=V, u_inxyz=HtV)
+
+        lhs = discretization.communicator.sum(
+            np.einsum('ijkq...,ijkq...,q->', Hu.s, V.s, discretization.quadrature_weights))
+        rhs = discretization.communicator.sum(np.sum(u.s * HtV.s))
+
+        assert np.isclose(lhs, rhs, rtol=1e-12, atol=1e-14), \
+            f'adjointness violated: <Hu,V> = {lhs:.12e}, <u,H^T V> = {rhs:.12e}'

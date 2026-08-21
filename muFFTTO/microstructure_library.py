@@ -16,7 +16,7 @@ def get_geometry(nb_voxels,
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
                                    'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles','cos_wave',
-                                   '2_circles',
+                                   '2_circles', 'contact_test_geometry_1',
                                    'symmetric_linear', 'hashin_inclusion_2D',
                                    'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
                                    'laminate', 'laminate2', 'laminate_log',
@@ -30,15 +30,6 @@ def get_geometry(nb_voxels,
     # if not nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19 and nb_voxels[0]//5!=0 and nb_voxels[1]//5!=0 and nb_voxels[2]//5!=0:
     #     raise ValueError('Microstructure_name {} is implemented only when Size of any dimension is more than 10 and it is multiple of 5'.format(microstructure_name))
 
-    # TODO [Bharat] put this condition into proper positions!
-    # if nb_voxels[0] != nb_voxels[1] != nb_voxels[2]:
-    #     raise ValueError(
-    #         'Microstructure_name {} is implemented only in Nx=Ny=Nz grids'.format(microstructure_name))
-    # if not (nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19):
-    #     # and nb_voxels[0] % 5 == 0 and nb_voxels[1] % 5 == 0 and nb_voxels[2] % 5 == 0
-    #     raise ValueError('Microstructure_name {} is implemented only when Size '
-    #                      'of any dimension is more than 19 and it is a multiple of 5'.format(
-    #         microstructure_name))
 
     match microstructure_name:
         case 'random_distribution':
@@ -58,6 +49,19 @@ def get_geometry(nb_voxels,
                                        np.logical_and(np.logical_and(coordinates[1] < 0.75, coordinates[2] < 0.75),
                                                       np.logical_and(coordinates[1] >= 0.25,
                                                                      coordinates[2] >= 0.25)))] = 0
+        case 'contact_test_geometry_1':
+            phase_field = np.ones(nb_voxels)
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.45, coordinates[1] < 0.55),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.45))] = 1
+
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.95, coordinates[1] < 0.55),
+                                       np.logical_and(coordinates[0] >= 0.55, coordinates[1] >= 0.45))] = 1
+
+            # phase_field[:, :3] = 0
+            # phase_field[:, -3:] = 0
+
 
         case 'hashin_inclusion_2D':
             r1 = kwargs['rad_1']

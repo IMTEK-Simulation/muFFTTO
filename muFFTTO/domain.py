@@ -134,7 +134,14 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
 
-            self.conv_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+            self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+
+            # Hessian operator ---> due to muGrid set up, we can't have ij outpu shape. So I reshape the Hessian operator
+            H_deqnijk = self.H_hess_at_pixel_deqnijk
+            H_flat_Dqnijk = np.ascontiguousarray(
+                self.H_hess_at_pixel_deqnijk.reshape(self.domain_dimension * self.domain_dimension,
+                                                     *H_deqnijk.shape[2:]))
+            self.hessian_op = GenericLinearOperator(point_of_origin, H_flat_Dqnijk)
 
             try:
                 self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_qnijk)
@@ -195,7 +202,7 @@ class Discretization:
         # mugrid give coordinates from [0,1)**dim
         # I transform coordinates from [0,1)**dim to to physical element. Firt by appliing Jacobian of transformation
         # x= x*J^T
-        #transformed_coordinates_ixyz = np.einsum('ij,jxy->ixy', self.jacobian_of_pixel, self.fft.coords)
+        # transformed_coordinates_ixyz = np.einsum('ij,jxy->ixy', self.jacobian_of_pixel, self.fft.coords)
 
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
         # Coordinates above are already in physical units, so each column of the pixel Jacobian
@@ -204,7 +211,7 @@ class Discretization:
         # off-diagonal shear per unit physical length instead of per unit parametric length.
         adjusted_jacobian = self.jacobian_of_pixel / np.diag(self.jacobian_of_pixel)[np.newaxis, :]
 
-        nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...',nodal_points_coordinates_ixyz, adjusted_jacobian )
+        nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
 
         nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
 
@@ -334,39 +341,8 @@ class Discretization:
             raise ("apply_gradient_operator_mugrid does not supprot ndarray")
 
         self.fft.communicate_ghosts(field=u_inxyz)
-        self.conv_op.apply(nodal_field=u_inxyz,
-                           quadrature_point_field=grad_u_ijqxyz)
-
-    def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
-        """
-        Function that computes symmetrized gradient of function u.
-        Depending on the discretization stencil.
-
-        Parameters
-        ----------
-        u_inxyz: numpy ndarray of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-
-        Returns
-        -------
-        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
-                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
-                - q is quadrature point index
-        """
-        # computes symmetrized gradient (small-strain)
-
-        # 1. compute gradient
-        if grad_u_ijqxyz is not None:
-            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz,
-                                                         grad_u_ijqxyz=grad_u_ijqxyz)
-        else:
-            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz)
-
-        # 2. symmetrize it
-        # \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
-        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
-        return grad_u_ijqxyz
+        self.gradient_op.apply(nodal_field=u_inxyz,
+                               quadrature_point_field=grad_u_ijqxyz)
 
     def apply_gradient_operator_symmetrized_mugrid(self, u_inxyz, grad_u_ijqxyz):
         """
@@ -433,11 +409,108 @@ class Discretization:
         #   convolution operator
         self.fft.communicate_ghosts(field=gradient_field_ijqxyz)
         # apply B^transposed via the convolution operator
-        self.conv_op.transpose(quadrature_point_field=gradient_field_ijqxyz,
-                               nodal_field=div_u_fnxyz,
-                               weights=weights)
+        self.gradient_op.transpose(quadrature_point_field=gradient_field_ijqxyz,
+                                   nodal_field=div_u_fnxyz,
+                                   weights=weights)
 
         self.fft.communicate_ghosts(field=div_u_fnxyz)
+
+    def apply_hessian_operator_to_scalar_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
+        """
+        Function that computes the Hessian (second derivatives) of function u,
+        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
+
+        muGrid's convolution operator carries a single component axis per
+        quadrature point, so the two derivative indices (j,k) of the Hessian
+        stencil are flattened into one axis J = j*dim + k. The operator is
+        applied in that flat layout and the result is unflattened here.
+
+        Parameters
+        ----------
+        u_inxyz: mugrid field of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+
+        Returns
+        -------
+        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j,k indices indicate directions of the two derivatives,
+                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
+                - q is quadrature point index
+                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        """
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(u_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
+        hess_u_iJqxyz = self.get_temperature_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+
+        # compute Hessian
+        self.hessian_op.apply(nodal_field=u_inxyz,
+                              quadrature_point_field=hess_u_iJqxyz)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+        hess_u_ijkqxyz.s[...] = hess_u_iJqxyz.s.reshape(hess_u_iJqxyz.s.shape[0], dim, dim,
+                                                        *hess_u_iJqxyz.s.shape[2:])
+
+        self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
+
+    def apply_hessian_operator_to_vector_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
+        """
+        Function that computes the Hessian (second derivatives) of function u,
+        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
+
+        muGrid's convolution operator carries a single component axis per
+        quadrature point, so the two derivative indices (j,k) of the Hessian
+        stencil are flattened into one axis J = j*dim + k. The operator is
+        applied in that flat layout and the result is unflattened here.
+
+        Parameters
+        ----------
+        u_inxyz: mugrid field of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+        Returns
+        -------
+        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j,k indices indicate directions of the two derivatives,
+                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
+                - q is quadrature point index
+                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        """
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(u_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
+        hess_u_iJqxyz = self.get_displacement_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+
+        # compute Hessian
+        self.hessian_op.apply(nodal_field=u_inxyz,
+                              quadrature_point_field=hess_u_iJqxyz)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+        hess_u_ijkqxyz.s[...] = hess_u_iJqxyz.s.reshape(hess_u_iJqxyz.s.shape[0], dim, dim,
+                                                        *hess_u_iJqxyz.s.shape[2:])
+
+        self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
 
     def evaluate_field_at_quad_points(self,
                                       nodal_field_fnxyz,
@@ -640,6 +713,11 @@ class Discretization:
 
         gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
+
+        # Macro gradient in reference domain
+        gradient_ijqxyz.s[...] = np.einsum('ij...,jk...->ik...', gradient_ijqxyz.s[...], inv_F)
+        self.fft.communicate_ghosts(field=gradient_ijqxyz)
+
         # apply constitutive law
         self.apply_material_data_mugrid(material_data_field_ijklqxyz, gradient_ijqxyz)
 
@@ -1956,7 +2034,7 @@ class Discretization:
                 'Cell problem type is {}. But temperature gradient  sized field  is returned !!!'.format(
                     self.cell.problem_type))
 
-        # Get a tensor-field (for example to represent the strain)
+        # Get a tensor-field (for example to represent the heat gradient)
 
         grad_u_ijqxyz = self.field_collection.real_field(
             name=name,  # name of the field
@@ -1964,6 +2042,72 @@ class Discretization:
             sub_pt='quad_points'  # sub-point type
         )
         return grad_u_ijqxyz
+
+    def get_temperature_hessian_size_field(self, name):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([1, self.domain_dimension, self.domain_dimension],
+                                              dtype=int)
+        hess_u_ijkqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        return hess_u_ijkqxyz
+
+    def get_temperature_hessian_size_field_mugrid_compatible(self, name):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([1, self.domain_dimension * self.domain_dimension],
+                                              dtype=int)
+        hess_u_iJqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        # her J is a composition of jk indices. J is flattened jk
+        return hess_u_iJqxyz
+
+
+    def get_displacement_hessian_size_field(self, name):
+        # return zero field for  the  (discretized)  Hessian of displacement
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([self.domain_dimension, self.domain_dimension, self.domain_dimension],
+                                              dtype=int)
+        hess_u_ijkqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        return hess_u_ijkqxyz
+
+    def get_displacement_hessian_size_field_mugrid_compatible(self, name):
+        # return zero field for  the  (discretized)   Hessian of displacement
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([self.domain_dimension , self.domain_dimension * self.domain_dimension],
+                                              dtype=int)
+        hess_u_iJqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        # her J is a composition of jk indices. J is flattened jk
+        return hess_u_iJqxyz
+
+
+
 
     def get_temperature_material_data_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature
@@ -2053,7 +2197,7 @@ class Discretization:
         return self.get_rhs_explicit_stress_mugrid(**kwargs)
 
     def get_discretization_info(self, element_type):
-        #discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        # discretization_library.get_shape_function_gradient_matrix(self, element_type)
         discretization_library_NEW.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):

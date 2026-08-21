@@ -6,11 +6,12 @@ import argparse
 import numpy as np
 from mpi4py import MPI
 from NuMPI.IO import save_npy
+from matplotlib import pyplot as plt
 
 # Add the project root to sys.path relatively
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
-from muFFTTO import domain
+from muFFTTO import domain, tensor_operations
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
@@ -23,42 +24,41 @@ parser = argparse.ArgumentParser(
     prog='exp_finite_strain_2D_NeoHookean.py',
     description='Solve finite strain NeoHookean elasticity in 2D'
 )
-parser.add_argument('-n',   '--nb_pixel',       default='64')
-parser.add_argument('-inc', '--nb_increments',  default='50')
+parser.add_argument('-n', '--nb_pixel', default='64')
+parser.add_argument('-inc', '--nb_increments', default='100')
 parser.add_argument(
     '--save_per_it',
-    action='store_false',
+    action='store_true',
     help='Enable saving every iteration'
 )
 
-
 script_name = os.path.splitext(os.path.basename(__file__))[0]
-args        = parser.parse_args()
-nnn         = int(args.nb_pixel)
-ninc        = int(args.nb_increments)
-save_per_it =  args.save_per_it
+args = parser.parse_args()
+nnn = int(args.nb_pixel)
+ninc = int(args.nb_increments)
+save_per_it = args.save_per_it
 # ============================================================================
 # problem setup
 # ============================================================================
 number_of_pixels = (nnn, nnn)
-domain_size      = [1, 1]
-dim              = len(domain_size)
+domain_size = [1, 1]
+dim = len(domain_size)
 
-problem_type        = 'elasticity'
+problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type        = 'bilinear_rectangle'
-formulation         = 'finite_strain'
+element_type = 'bilinear_rectangle'
+formulation = 'finite_strain'
 preconditioner_type = 'Green'
 
 _info = {
-    'problem_type':        problem_type,
+    'problem_type': problem_type,
     'discretization_type': discretization_type,
-    'element_type':        element_type,
-    'formulation':         formulation,
+    'element_type': element_type,
+    'formulation': formulation,
     'preconditioner_type': preconditioner_type,
-    'nb_of_pixels':        number_of_pixels,
-    'domain_size':         domain_size,
-    'ninc':                ninc,
+    'nb_of_pixels': number_of_pixels,
+    'domain_size': domain_size,
+    'ninc': ninc,
 }
 
 # ============================================================================
@@ -75,43 +75,50 @@ discretization = domain.Discretization(cell=my_cell,
 # ============================================================================
 # output folders
 # ============================================================================
-file_folder_path   = os.path.dirname(os.path.realpath(__file__))
-data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={nnn}Ny={nnn}_{preconditioner_type}/')
+file_folder_path = os.path.dirname(os.path.realpath(__file__))
+data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/'
+                    + f'Nx={nnn}Ny={nnn}_{preconditioner_type}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
                       + f'Nx={nnn}Ny={nnn}_{preconditioner_type}/')
 
 if discretization.communicator.rank == 0:
-    os.makedirs(data_folder_path,   exist_ok=True)
+    os.makedirs(data_folder_path, exist_ok=True)
     os.makedirs(figure_folder_path, exist_ok=True)
 
 # ============================================================================
 # material parameters
 # ============================================================================
 # matrix: soft neo-Hookean
-E_matrix   = 1.0
-nu_matrix  = 0.3
+E_matrix = 100.0
+nu_matrix = 0.3
 lam_matrix = E_matrix * nu_matrix / ((1 + nu_matrix) * (1 - 2 * nu_matrix))
-mu_matrix  = E_matrix / (2 * (1 + nu_matrix))
+mu_matrix = E_matrix / (2 * (1 + nu_matrix))
+K,G =material_models.get_bulk_and_shear_modulus(E_matrix, nu_matrix)
 
-# inclusion: stiff neo-Hookean
-E_inc   = 10.0
-nu_inc  = 0.3
-lam_inc = E_inc * nu_inc / ((1 + nu_inc) * (1 - 2 * nu_inc))
-mu_inc  = E_inc / (2 * (1 + nu_inc))
+# third medium ("void"): same neo-Hookean as the matrix, k_v times softer
+k_v = 1e-3  # TMC contrast, Table 1
+E_void = k_v * E_matrix
+nu_void = nu_matrix  # keep the solid's Poisson ratio
+lam_void = E_void * nu_void / ((1 + nu_void) * (1 - 2 * nu_void))
+mu_void = E_void / (2 * (1 + nu_void))
+
+# HuHu regularization
+alpha=1e-6
+k_r = alpha * domain_size[0]* 2* (K + G*4/3 )
+
 
 # reference material for Green preconditioner
-i    = np.eye(dim)
-II   = np.einsum('ij,kl->ijkl', i, i)
+i = np.eye(dim)
+II = np.einsum('ij,kl->ijkl', i, i)
 I4rt = np.einsum('ik,jl->ijkl', i, i)
-I4s  = 0.5 * (I4rt + np.einsum('il,jk->ijkl', i, i))
-I4d  = I4s - II / 2.0       # 2D: divide by dim=2 not 3
+I4s = 0.5 * (I4rt + np.einsum('il,jk->ijkl', i, i))
+I4d = I4s - II / 2.0  # 2D: divide by dim=2 not 3
 ref_mat = lam_matrix * II + 2.0 * mu_matrix * I4s
 
 _info['lam_matrix'] = lam_matrix
-_info['mu_matrix']  = mu_matrix
-_info['lam_inc']    = lam_inc
-_info['mu_inc']     = mu_inc
+_info['mu_matrix'] = mu_matrix
+_info['lam_inc'] = lam_void
+_info['mu_inc'] = mu_void
 
 # ============================================================================
 # geometry — square inclusion
@@ -119,23 +126,23 @@ _info['mu_inc']     = mu_inc
 phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
-    microstructure_name='square_inclusion',
+    microstructure_name='contact_test_geometry_1',
     coordinates=discretization.fft.coords
 )
 
 matrix_mask = phase_field.s[0, 0] > 0
-inc_mask    = phase_field.s[0, 0] == 0
+inc_mask = phase_field.s[0, 0] == 0
 
 # ============================================================================
 # material fields
 # ============================================================================
 lam_field = discretization.get_quad_field_scalar(name='lam_field')
-mu_field  = discretization.get_quad_field_scalar(name='mu_field')
+mu_field = discretization.get_quad_field_scalar(name='mu_field')
 
 lam_field.s[0, 0, :, matrix_mask] = lam_matrix
-lam_field.s[0, 0, :, inc_mask]    = lam_inc
-mu_field.s[0, 0,  :, matrix_mask] = mu_matrix
-mu_field.s[0, 0,  :, inc_mask]    = mu_inc
+lam_field.s[0, 0, :, inc_mask] = lam_void
+mu_field.s[0, 0, :, matrix_mask] = mu_matrix
+mu_field.s[0, 0, :, inc_mask] = mu_void
 
 if discretization.communicator.rank == 0:
     print(f'lam min/max : {lam_field.s.min():.4f} / {lam_field.s.max():.4f}')
@@ -154,15 +161,15 @@ material = material_models.NeoHookean(
 # ============================================================================
 # fields
 # ============================================================================
-macro_gradient_inc_field       = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
+macro_gradient_inc_field = discretization.get_gradient_size_field(name='macro_gradient_inc_field')
 displacement_fluctuation_field = discretization.get_unknown_size_field(name='displacement_fluctuation_field')
-displacement_increment_field   = discretization.get_unknown_size_field(name='displacement_increment_field')
-strain_fluc_field              = discretization.get_displacement_gradient_sized_field(name='strain_fluctuation_field')
-total_strain_field             = discretization.get_displacement_gradient_sized_field(name='total_strain_field')
-stress_field                   = discretization.get_displacement_gradient_sized_field(name='stress_field')
-tangent_field                  = discretization.get_material_data_size_field_mugrid(name='tangent_field')
-rhs_field                      = discretization.get_unknown_size_field(name='rhs_field')
-energy_field                   = discretization.get_quad_field_scalar(name='energy_field')
+displacement_increment_field = discretization.get_unknown_size_field(name='displacement_increment_field')
+strain_fluc_field = discretization.get_displacement_gradient_sized_field(name='strain_fluctuation_field')
+total_strain_field = discretization.get_displacement_gradient_sized_field(name='total_strain_field')
+stress_field = discretization.get_displacement_gradient_sized_field(name='stress_field')
+tangent_field = discretization.get_material_data_size_field_mugrid(name='tangent_field')
+rhs_field = discretization.get_unknown_size_field(name='rhs_field')
+energy_field = discretization.get_quad_field_scalar(name='energy_field')
 
 # ============================================================================
 # initialize F = I (reference configuration)
@@ -178,6 +185,7 @@ preconditioner = discretization.get_preconditioner_Green_mugrid(
     reference_material_data_ijkl=ref_mat
 )
 
+
 def M_fun_Green(x, Px):
     discretization.fft.communicate_ghosts(x)
     discretization.apply_preconditioner_mugrid(
@@ -186,20 +194,23 @@ def M_fun_Green(x, Px):
         output_nodal_field_fnxyz=Px
     )
 
+
 # ============================================================================
 # macroscopic loading
 # ============================================================================
-macro_gradient_inc        = np.zeros((dim, dim))
-macro_gradient_inc[0, 1] += 0.8/ float(ninc)
-macro_gradient_inc[1, 1] += 0.3 / float(ninc)
+macro_gradient_inc = np.zeros((dim, dim))
+macro_gradient_inc[0, 0] += -0.2 / float(ninc)
+# macro_gradient_inc[1, 1] += 0.3 / float(ninc)
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,
     macro_gradient_field_ijqxyz=macro_gradient_inc_field
 )
 
-_info['macro_gradient_inc']     = macro_gradient_inc
+_info['macro_gradient_inc'] = macro_gradient_inc
 _info['norm_strain_fluc_field'] = []
+_info['mean_stress_field'] = []
+_info['total_macro_gradient'] = []
 
 # initial constitutive evaluation
 material.get_stress(total_strain_field, stress_field)
@@ -211,14 +222,16 @@ if discretization.communicator.rank == 0:
 # ============================================================================
 # incremental loading — Newton-CG loop
 # ============================================================================
-sum_CG_its      = 0
-sum_Newton_its  = 0
+sum_CG_its = 0
+sum_Newton_its = 0
 iteration_total = 0
-start_time      = time.time()
+start_time = time.time()
 
 for inc in range(ninc):
     if discretization.communicator.rank == 0:
         print(f'Increment {inc}')
+        print(f'Load {inc*macro_gradient_inc[0, 0] }')
+
         print('=' * 70)
 
     # apply macroscopic deformation gradient increment
@@ -251,7 +264,7 @@ for inc in range(ninc):
     # ------------------------------------------------------------------
     # Newton loop
     # ------------------------------------------------------------------
-    iiter    = 0
+    iiter = 0
     norm_rhs = norm_rhs_0
 
     while True:
@@ -265,13 +278,16 @@ for inc in range(ninc):
             )
             discretization.fft.communicate_ghosts(Ax)
 
+
         norms = {'residual_rr': [], 'residual_rz': []}
+
 
         def callback(it, x, r, p, z, stop_crit_norm):
             norm_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
             norm_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
             norms['residual_rr'].append(norm_rr)
             norms['residual_rz'].append(norm_rz)
+
 
         displacement_increment_field.s.fill(0)
 
@@ -285,13 +301,13 @@ for inc in range(ninc):
             tol=1e-5,
             maxiter=1000,
             callback=callback,
-            #rtol=True,
+            # rtol=True,
         )
 
-        nb_it_cg    = len(norms['residual_rr'])
+        nb_it_cg = len(norms['residual_rr'])
         sum_CG_its += nb_it_cg
-        iiter      += 1
-        sum_Newton_its  += 1
+        iiter += 1
+        sum_Newton_its += 1
         iteration_total += 1
 
         if discretization.communicator.rank == 0:
@@ -308,7 +324,7 @@ for inc in range(ninc):
         ))
 
         # update total strain and displacement
-        total_strain_field.s[...]             += strain_fluc_field.s[...]
+        total_strain_field.s[...] += strain_fluc_field.s[...]
         displacement_fluctuation_field.s[...] += displacement_increment_field.s[...]
 
         # re-evaluate constitutive response
@@ -333,10 +349,11 @@ for inc in range(ninc):
 
         if discretization.communicator.rank == 0:
             print(f'  norm(strain_fluc) / En          {norm_strain_fluc / En:10.2e}')
+
             print(f'  norm(rhs) / norm(rhs_0)         {norm_rhs / norm_rhs_0:10.2e}')
             print(f'  norm(rhs)                       {norm_rhs:10.2e}')
-
-
+            print(fr' $\sigma_{{xx}}$         {stress_field.s[0, 0].mean():10.2e}')
+            print(fr' $\sigma_{{yy}}$         {stress_field.s[1, 1].mean():10.2e}')
 
         # save per iteration
         if save_per_it:
@@ -367,28 +384,44 @@ for inc in range(ninc):
             break
         if iiter >= 100:
             break
+    _info['mean_stress_field'].append(stress_field.s[1, 1].mean())
+    total_macro_gradient = (inc + 1) * macro_gradient_inc
+    _info['total_macro_gradient'].append(total_macro_gradient)
     if discretization.communicator.size == 1:
         # Plot the first two components of the solution field
         # Calculate total macroscopic gradient (F - I)
-        total_macro_gradient = (inc + 1) * macro_gradient_inc
+
         x_plot_ixyz = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
                                                                            macro_gradient_ij=total_macro_gradient,
                                                                            displacement_fluctuation=displacement_fluctuation_field)
-
+        J_1qxyz = discretization.get_quad_field_scalar(name='J')
+        tensor_operations.det2(total_strain_field, J_1qxyz)
         visualization_utils.plot_field_on_grid(
             coordinates_for_plot=x_plot_ixyz,
-            field_to_plot=tangent_field.s[0, 0, 0, 0, 0],
+            field_to_plot=J_1qxyz.s.mean(2)[0,0],
             name=fr'$\tilde{{u}}_{{x}}$' + f'load increment {inc}   ')
+    F = np.asarray(_info['total_macro_gradient'])[..., 0, 0]
+    P = np.asarray(_info['mean_stress_field'])
+
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5), sharex=True)
+
+    ax.plot(F, P, '-o', ms=3, color='k')
+    ax.set_ylabel(r'$\bar{P}_{00}$')
+    ax.grid(alpha=.3)
+
+    fig.tight_layout()
+    fig.savefig(figure_folder_path + 'response.png', dpi=150)
+    plt.show()
 # ============================================================================
 # timing and summary
 # ============================================================================
-end_time     = time.time()
+end_time = time.time()
 elapsed_time = end_time - start_time
 
-_info['sum_Newton_its']  = sum_Newton_its
-_info['sum_CG_its']      = sum_CG_its
+_info['sum_Newton_its'] = sum_Newton_its
+_info['sum_CG_its'] = sum_CG_its
 _info['iteration_total'] = iteration_total
-_info['elapsed_time']    = elapsed_time
+_info['elapsed_time'] = elapsed_time
 
 if discretization.communicator.rank == 0:
     print('=' * 70)
