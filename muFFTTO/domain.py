@@ -2150,9 +2150,9 @@ class Discretization:
 
     def get_displacement_hessian_size_field(self, name):
         # return zero field for  the  (discretized)  Hessian of displacement
-        if not self.cell.problem_type == 'conductivity':
+        if not self.cell.problem_type == 'elasticity':
             warnings.warn(
-                'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
+                'Cell problem type is {}. But elasticity Hessian  sized field  is returned !!!'.format(
                     self.cell.problem_type))
         shape_of_hessian_of_scalar = np.array([self.domain_dimension, self.domain_dimension, self.domain_dimension],
                                               dtype=int)
@@ -2165,7 +2165,7 @@ class Discretization:
 
     def get_displacement_hessian_size_field_mugrid_compatible(self, name):
         # return zero field for  the  (discretized)   Hessian of displacement
-        if not self.cell.problem_type == 'conductivity':
+        if not self.cell.problem_type == 'elasticity':
             warnings.warn(
                 'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
                     self.cell.problem_type))

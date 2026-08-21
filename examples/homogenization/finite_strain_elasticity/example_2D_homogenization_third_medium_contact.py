@@ -96,7 +96,7 @@ mu_matrix = E_matrix / (2 * (1 + nu_matrix))
 K,G =material_models.get_bulk_and_shear_modulus(E_matrix, nu_matrix)
 
 # third medium ("void"): same neo-Hookean as the matrix, k_v times softer
-k_v = 1e-3  # TMC contrast, Table 1
+k_v = 1e-5  # TMC contrast, Table 1
 E_void = k_v * E_matrix
 nu_void = nu_matrix  # keep the solid's Poisson ratio
 lam_void = E_void * nu_void / ((1 + nu_void) * (1 - 2 * nu_void))
@@ -104,7 +104,7 @@ mu_void = E_void / (2 * (1 + nu_void))
 
 # HuHu regularization
 alpha=1e-6
-k_r = alpha * domain_size[0]* 2* (K + G*4/3 )
+k_r = alpha * domain_size[0]**2 * (K + G*4/3 )
 
 
 # reference material for Green preconditioner
@@ -126,7 +126,7 @@ _info['mu_inc'] = mu_void
 phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
-    microstructure_name='contact_test_geometry_1',
+    microstructure_name='contact_test_geometry_2',
     coordinates=discretization.fft.coords
 )
 
@@ -170,6 +170,8 @@ stress_field = discretization.get_displacement_gradient_sized_field(name='stress
 tangent_field = discretization.get_material_data_size_field_mugrid(name='tangent_field')
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 energy_field = discretization.get_quad_field_scalar(name='energy_field')
+hess_u_ijkqxyz = discretization.get_displacement_hessian_size_field(name='hess_u')
+HtH_field = discretization.get_unknown_size_field(name='HtH')
 
 # ============================================================================
 # initialize F = I (reference configuration)
@@ -199,8 +201,8 @@ def M_fun_Green(x, Px):
 # macroscopic loading
 # ============================================================================
 macro_gradient_inc = np.zeros((dim, dim))
-macro_gradient_inc[0, 0] += -0.2 / float(ninc)
-# macro_gradient_inc[1, 1] += 0.3 / float(ninc)
+# macro_gradient_inc[0, 1] += 0.2 / float(ninc)
+macro_gradient_inc[1, 0] += -0.3 / float(ninc)
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,
@@ -230,7 +232,7 @@ start_time = time.time()
 for inc in range(ninc):
     if discretization.communicator.rank == 0:
         print(f'Increment {inc}')
-        print(f'Load {inc*macro_gradient_inc[0, 0] }')
+        print(f'Load {inc*macro_gradient_inc[1, 0] }')
 
         print('=' * 70)
 
@@ -276,6 +278,11 @@ for inc in range(ninc):
                 output_field_inxyz=Ax,
                 formulation=formulation
             )
+            discretization.apply_hessian_operator_to_vector_field_mugrid(
+                u_inxyz=x, hess_u_ijkqxyz=hess_u_ijkqxyz)
+            discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+                hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
+            Ax.s[...] += k_r * HtH_field.s
             discretization.fft.communicate_ghosts(Ax)
 
 
@@ -298,10 +305,10 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             P=M_fun_Green,
-            tol=1e-5,
-            maxiter=1000,
+            tol=1e-4,
+            maxiter=4000,
             callback=callback,
-            # rtol=True,
+            rtol=True,
         )
 
         nb_it_cg = len(norms['residual_rr'])
@@ -340,7 +347,11 @@ for inc in range(ninc):
             apply_weights=True
         )
         rhs_field.s[...] *= -1
-
+        discretization.apply_hessian_operator_to_vector_field_mugrid(
+            u_inxyz=displacement_fluctuation_field, hess_u_ijkqxyz=hess_u_ijkqxyz)
+        discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+            hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
+        rhs_field.s[...] -= k_r * HtH_field.s
         norm_rhs = np.sqrt(discretization.communicator.sum(
             np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())
         ))
@@ -380,11 +391,16 @@ for inc in range(ninc):
             )
 
         # convergence check
-        if norm_strain_fluc / En < 1e-8 and iiter > 0:
+        if norm_strain_fluc / En < 1e-4 and iiter > 0:
             break
         if iiter >= 100:
             break
-    _info['mean_stress_field'].append(stress_field.s[1, 1].mean())
+        # if norm_rhs / norm_rhs_0 < 1e-8:
+        #     break
+        # if iiter >= 100:
+        #     raise RuntimeError(f'Newton failed, rel res {norm_rhs / norm_rhs_0:.2e}')
+
+    _info['mean_stress_field'].append(stress_field.s[0, 0].mean())
     total_macro_gradient = (inc + 1) * macro_gradient_inc
     _info['total_macro_gradient'].append(total_macro_gradient)
     if discretization.communicator.size == 1:
@@ -398,20 +414,22 @@ for inc in range(ninc):
         tensor_operations.det2(total_strain_field, J_1qxyz)
         visualization_utils.plot_field_on_grid(
             coordinates_for_plot=x_plot_ixyz,
-            field_to_plot=J_1qxyz.s.mean(2)[0,0],
+            field_to_plot=phase_field.s[0, 0],
             name=fr'$\tilde{{u}}_{{x}}$' + f'load increment {inc}   ')
-    F = np.asarray(_info['total_macro_gradient'])[..., 0, 0]
-    P = np.asarray(_info['mean_stress_field'])
+        print('Minimum of J '+ f'{np.min(J_1qxyz.s[...])}')
 
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5), sharex=True)
+F = np.asarray(_info['total_macro_gradient'])[..., 0, 0]
+P = np.asarray(_info['mean_stress_field'])
 
-    ax.plot(F, P, '-o', ms=3, color='k')
-    ax.set_ylabel(r'$\bar{P}_{00}$')
-    ax.grid(alpha=.3)
+fig, ax = plt.subplots(1, 1, figsize=(5, 5), sharex=True)
 
-    fig.tight_layout()
-    fig.savefig(figure_folder_path + 'response.png', dpi=150)
-    plt.show()
+ax.plot(F, P, '-o', ms=3, color='k')
+ax.set_ylabel(r'$\bar{P}_{00}$')
+ax.grid(alpha=.3)
+
+fig.tight_layout()
+fig.savefig(figure_folder_path + 'response.png', dpi=150)
+plt.show()
 # ============================================================================
 # timing and summary
 # ============================================================================

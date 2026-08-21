@@ -16,7 +16,7 @@ def get_geometry(nb_voxels,
     if not microstructure_name in ['random_distribution', 'square_inclusion', 'circle_inclusion', 'circle_inclusions',
                                    'sine_wave', 'sine_wave_', 'linear', 'bilinear', 'tanh', 'sine_wave_inv', 'abs_val',
                                    'right_cluster_x3', 'left_cluster_x3', 'uniform_x1', 'n_laminate', 'circles','cos_wave',
-                                   '2_circles', 'contact_test_geometry_1',
+                                   '2_circles', 'contact_test_geometry_1','contact_test_geometry_2',
                                    'symmetric_linear', 'hashin_inclusion_2D',
                                    'square_inclusion_equal_volfrac', 'sine_wave_rapid', 'n_squares',
                                    'laminate', 'laminate2', 'laminate_log',
@@ -51,17 +51,31 @@ def get_geometry(nb_voxels,
                                                                      coordinates[2] >= 0.25)))] = 0
         case 'contact_test_geometry_1':
             phase_field = np.ones(nb_voxels)
+            # frame
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
                                        np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
+            # left stick
+
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.45, coordinates[1] < 0.55),
                                        np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.45))] = 1
-
+            # right stick
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.95, coordinates[1] < 0.55),
                                        np.logical_and(coordinates[0] >= 0.55, coordinates[1] >= 0.45))] = 1
 
-            # phase_field[:, :3] = 0
+            # phase_field[:, :3] = 0 # remove boundary
             # phase_field[:, -3:] = 0
 
+        case 'contact_test_geometry_2':
+            phase_field = np.ones(nb_voxels)
+            # frame
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
+            # left lower stick
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.65, coordinates[1] < 0.45),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.35))] = 1
+            # right upper stick
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.95, coordinates[1] < 0.65),
+                                       np.logical_and(coordinates[0] >= 0.35, coordinates[1] >= 0.55))] = 1
 
         case 'hashin_inclusion_2D':
             r1 = kwargs['rad_1']
