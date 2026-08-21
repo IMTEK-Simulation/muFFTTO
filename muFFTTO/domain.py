@@ -452,6 +452,7 @@ class Discretization:
         # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
         hess_u_iJqxyz = self.get_temperature_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
 
+        self.fft.communicate_ghosts(field=u_inxyz)
         # compute Hessian
         self.hessian_op.apply(nodal_field=u_inxyz,
                               quadrature_point_field=hess_u_iJqxyz)
@@ -499,6 +500,7 @@ class Discretization:
 
         # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
         hess_u_iJqxyz = self.get_displacement_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        self.fft.communicate_ghosts(field=u_inxyz)
 
         # compute Hessian
         self.hessian_op.apply(nodal_field=u_inxyz,
@@ -511,6 +513,78 @@ class Discretization:
                                                         *hess_u_iJqxyz.s.shape[2:])
 
         self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
+
+    def apply_hessian_operator_transposed_to_scalar_field_mugrid(self, hess_u_ijkqxyz, nodal_field_inxyz,
+                                                                 apply_weights=True):
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # flatten the derivative pair into the muGrid-compatible layout:
+        # [i,j,k,q,x,y,z] -> [i,J,q,x,y,z],  J = j*dim + k
+        hess_u_iJqxyz = self.get_temperature_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        hess_u_iJqxyz.s[...] = hess_u_ijkqxyz.s.reshape(hess_u_ijkqxyz.s.shape[0], dim * dim,
+                                                        *hess_u_ijkqxyz.s.shape[3:])
+
+        # get quadrature weights
+        if apply_weights:
+            weights = self.quadrature_weights
+        else:
+            weights = np.ones(self.quadrature_weights.shape)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+
+        self.fft.communicate_ghosts(field=hess_u_iJqxyz)
+        # apply H^transposed via the convolution operator
+        self.hessian_op.transpose(quadrature_point_field=hess_u_iJqxyz,
+                                  nodal_field=nodal_field_inxyz,
+                                  weights=weights)
+
+        self.fft.communicate_ghosts(field=nodal_field_inxyz)
+
+    def apply_hessian_operator_transposed_to_vector_field_mugrid(self, hess_u_ijkqxyz, nodal_field_inxyz,
+                                                                 apply_weights=True):
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # flatten the derivative pair into the muGrid-compatible layout:
+        # [i,j,k,q,x,y,z] -> [i,J,q,x,y,z],  J = j*dim + k
+        hess_u_iJqxyz = self.get_displacement_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        hess_u_iJqxyz.s[...] = hess_u_ijkqxyz.s.reshape(hess_u_ijkqxyz.s.shape[0], dim * dim,
+                                                        *hess_u_ijkqxyz.s.shape[3:])
+
+        # get quadrature weights
+        if apply_weights:
+            weights = self.quadrature_weights
+        else:
+            weights = np.ones(self.quadrature_weights.shape)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+
+        self.fft.communicate_ghosts(field=hess_u_iJqxyz)
+        # apply H^transposed via the convolution operator
+        self.hessian_op.transpose(quadrature_point_field=hess_u_iJqxyz,
+                                  nodal_field=nodal_field_inxyz,
+                                  weights=weights)
+
+        self.fft.communicate_ghosts(field=nodal_field_inxyz)
 
     def evaluate_field_at_quad_points(self,
                                       nodal_field_fnxyz,
@@ -2074,7 +2148,6 @@ class Discretization:
         # her J is a composition of jk indices. J is flattened jk
         return hess_u_iJqxyz
 
-
     def get_displacement_hessian_size_field(self, name):
         # return zero field for  the  (discretized)  Hessian of displacement
         if not self.cell.problem_type == 'conductivity':
@@ -2096,7 +2169,7 @@ class Discretization:
             warnings.warn(
                 'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
                     self.cell.problem_type))
-        shape_of_hessian_of_scalar = np.array([self.domain_dimension , self.domain_dimension * self.domain_dimension],
+        shape_of_hessian_of_scalar = np.array([self.domain_dimension, self.domain_dimension * self.domain_dimension],
                                               dtype=int)
         hess_u_iJqxyz = self.field_collection.real_field(
             name=name,  # name of the field
@@ -2105,9 +2178,6 @@ class Discretization:
         )
         # her J is a composition of jk indices. J is flattened jk
         return hess_u_iJqxyz
-
-
-
 
     def get_temperature_material_data_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature

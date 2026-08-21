@@ -453,40 +453,64 @@ class TestHessianOperatorBasics:
     def test_hessian_operator_transposed_is_adjoint_2D(self):
         """<H u, V>_W == <u, H^T V>  for random u, V."""
         self._check_hessian_adjointness(domain_size=[4, 5],
-                                        number_of_pixels=(4, 5),
+                                        number_of_pixels=(3, 4),
                                         element_type='bilinear_rectangle')
 
     def test_hessian_operator_transposed_is_adjoint_3D(self):
         """<H u, V>_W == <u, H^T V>  for random u, V."""
         self._check_hessian_adjointness(domain_size=[4, 5, 3],
-                                        number_of_pixels=(4, 5, 3),
+                                        number_of_pixels=(3, 4, 5),
                                         element_type='trilinear_hexahedron')
 
-    def _check_hessian_adjointness(self, domain_size, number_of_pixels, element_type):
+    def test_hessian_operator_transposed_is_adjoint_2D_temperature(self):
+        """<H u, V>_W == <u, H^T V>  for random u, V."""
+        self._check_hessian_adjointness(domain_size=[4, 5],
+                                        number_of_pixels=(3, 4),
+                                        element_type='bilinear_rectangle',
+                                        problem_type='conductivity')
+
+    def test_hessian_operator_transposed_is_adjoint_3D_temperature(self):
+        """<H u, V>_W == <u, H^T V>  for random u, V."""
+        self._check_hessian_adjointness(domain_size=[4, 5, 3],
+                                        number_of_pixels=(3, 4, 5),
+                                        element_type='trilinear_hexahedron',
+                                        problem_type='conductivity')
+
+    def _check_hessian_adjointness(self, domain_size, number_of_pixels, element_type,
+                                   problem_type='elasticity'):
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                          problem_type='elasticity')
+                                          problem_type=problem_type)
         discretization = domain.Discretization(cell=my_cell,
                                                nb_of_pixels_global=number_of_pixels,
                                                discretization_type='finite_element',
                                                element_type=element_type)
         rng = np.random.default_rng(0)
 
-        u = discretization.get_displacement_sized_field(name='u')
-        V = discretization.get_displacement_hessian_size_field(name='V')
-        Hu = discretization.get_displacement_hessian_size_field(name='Hu')
-        HtV = discretization.get_displacement_sized_field(name='HtV')
+        if problem_type == 'conductivity':
+            get_nodal = discretization.get_temperature_sized_field
+            get_hessian = discretization.get_temperature_hessian_size_field
+            apply_H = discretization.apply_hessian_operator_to_scalar_field_mugrid
+            apply_Ht = discretization.apply_hessian_operator_transposed_to_scalar_field_mugrid
+        else:
+            get_nodal = discretization.get_displacement_sized_field
+            get_hessian = discretization.get_displacement_hessian_size_field
+            apply_H = discretization.apply_hessian_operator_to_vector_field_mugrid
+            apply_Ht = discretization.apply_hessian_operator_transposed_to_vector_field_mugrid
+
+        u = get_nodal(name='u')
+        V = get_hessian(name='V')
+        Hu = get_hessian(name='Hu')
+        HtV = get_nodal(name='HtV')
 
         u.s[...] = rng.random(u.s.shape)
         V.s[...] = rng.random(V.s.shape)
         V.s[...] = 0.5 * (V.s + np.swapaxes(V.s, 1, 2))  # H^T only sees the (j,k)-symmetric part
 
-        discretization.apply_hessian_operator_to_vector_field_mugrid(
-            u_inxyz=u, hess_u_ijkqxyz=Hu)
-        discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
-            hess_u_ijkqxyz=V, u_inxyz=HtV)
+        apply_H(u_inxyz=u, hess_u_ijkqxyz=Hu)
+        apply_Ht(hess_u_ijkqxyz=V, nodal_field_inxyz=HtV, apply_weights=True)
 
         lhs = discretization.communicator.sum(
-            np.einsum('ijkq...,ijkq...,q->', Hu.s, V.s, discretization.quadrature_weights))
+            np.sum(np.einsum('ijkq...,q->ijkq...', Hu.s, discretization.quadrature_weights) * V.s))
         rhs = discretization.communicator.sum(np.sum(u.s * HtV.s))
 
         assert np.isclose(lhs, rhs, rtol=1e-12, atol=1e-14), \
