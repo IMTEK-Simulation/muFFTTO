@@ -139,18 +139,18 @@ class TestGradientOperatorBasics:
         quad_coords = discretization.get_quad_points_coordinates()
 
         # u(x, y) = x*y
-        x = nodal_coords.s[0, 0, :, :]
-        y = nodal_coords.s[1, 0, :, :]
+        x = nodal_coords.s[0,...]
+        y = nodal_coords.s[1, ...]
         u = discretization.get_temperature_sized_field(name='u')
-        u.s[0, 0, :, :] = x * y
+        u.s[0,...] = x  * y
 
         grad_u = discretization.get_temperature_gradient_size_field(name='grad_u')
         grad_u_analytical = discretization.get_temperature_gradient_size_field(
             name='grad_u_analytical')
 
         # Analytical gradient: ∂u/∂x = y, ∂u/∂y = x
-        grad_u_analytical.s[0, 0, :, :, :] = quad_coords.s[1, :, :, :]  # ∂u/∂x = y
-        grad_u_analytical.s[0, 1, :, :, :] = quad_coords.s[0, :, :, :]  # ∂u/∂y = x
+        grad_u_analytical.s[0,0, ...] = quad_coords.s[1, ...]  # ∂u/∂x = y
+        grad_u_analytical.s[0,1, ...] = quad_coords.s[0, ...]  # ∂u/∂y = x
 
         discretization.apply_gradient_operator_mugrid(u, grad_u)
 

@@ -122,7 +122,7 @@ def get_shape_function_gradient_matrix(domain, element_type):
     #domain.N_basis_interpolator_array = element.N_basis_interpolator_array
     domain.jacobian_of_pixel = element.jacobian_of_pixel
 
-    domain.N_at_quad_points_qnijk = element.N_at_quad_points_qnijk
+    domain.N_at_quad_points_dqnijk = element.N_at_quad_points_dqnijk
     domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
     #domain.H_hess_at_pixel_deqnijk = element.H_hess_at_pixel_deqnijk
 
@@ -307,8 +307,8 @@ class Element:
         # (nb_output_components=1) is added explicitly here, not by the helper, because N always has
         # # exactly one output component (unlike B/H), so this axis is not a "moved" physical-direction axis.
         # N = _unflatten_node_axis_to_stencil(
-        #     N_at_quadrature_points_qn, self.node_layout, n_leading_dim_axes=0)
-        self.N_at_quad_points_qnijk = N_at_quadrature_points_qnijk #np.expand_dims(N_at_quadrature_points_qnijk, axis=1) #
+        # add dummy dimension in the beginning.
+        self.N_at_quad_points_dqnijk =   np.expand_dims(N_at_quadrature_points_qnijk, axis=0) #
 
 
     def _compute_hessian_matrices(self,

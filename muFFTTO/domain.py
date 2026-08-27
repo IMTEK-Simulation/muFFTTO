@@ -146,7 +146,7 @@ class Discretization:
             except:
                 print(f'self.hessian_op does not exist ')
             try:
-                self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_qnijk)
+                self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_dqnijk)
             except:
                 print(f'self.interpolation_op does not exist ')
             # displacement              [f,n,x,y,z]
