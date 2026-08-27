@@ -50,7 +50,7 @@ class TestGradientOperatorBasics:
         number_of_pixels = (4, 5)
         discretization_type = 'finite_element'
 
-        for element_type in [ 'linear_triangles_tilled', 'linear_triangles','bilinear_rectangle',]:
+        for element_type in ['linear_triangles','bilinear_rectangle', 'linear_triangles_tilled']: # ,
             discretization = domain.Discretization(cell=my_cell,
                                                    nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
@@ -121,6 +121,46 @@ class TestGradientOperatorBasics:
                                rtol=1e-12, atol=1e-14), \
                 f'Gradient not accurate for x*y field, direction {direction}: max_error={error}'
 
+    def test_gradient_quadratic_field_quadratic_elements(self):
+        """Test gradient of quadratic field (u = x*y)."""
+        domain_size = [4, 5]
+        problem_type = 'conductivity'
+        my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
+                                          problem_type=problem_type)
+        number_of_pixels = (4, 5)
+        discretization_type = 'finite_element'
+
+        discretization = domain.Discretization(cell=my_cell,
+                                               nb_of_pixels_global=number_of_pixels,
+                                               discretization_type=discretization_type,
+                                               element_type='biquadratic_rectangle')
+
+        nodal_coords = discretization.get_nodal_points_coordinates()
+        quad_coords = discretization.get_quad_points_coordinates()
+
+        # u(x, y) = x*y
+        x = nodal_coords.s[0, 0, :, :]
+        y = nodal_coords.s[1, 0, :, :]
+        u = discretization.get_temperature_sized_field(name='u')
+        u.s[0, 0, :, :] = x * y
+
+        grad_u = discretization.get_temperature_gradient_size_field(name='grad_u')
+        grad_u_analytical = discretization.get_temperature_gradient_size_field(
+            name='grad_u_analytical')
+
+        # Analytical gradient: ∂u/∂x = y, ∂u/∂y = x
+        grad_u_analytical.s[0, 0, :, :, :] = quad_coords.s[1, :, :, :]  # ∂u/∂x = y
+        grad_u_analytical.s[0, 1, :, :, :] = quad_coords.s[0, :, :, :]  # ∂u/∂y = x
+
+        discretization.apply_gradient_operator_mugrid(u, grad_u)
+
+        for direction in range(domain_size.__len__()):
+            error = np.max(np.abs(grad_u.s[0, direction, ..., :-1, :-1] -
+                                  grad_u_analytical.s[0, direction, ..., :-1, :-1]))
+            assert np.allclose(grad_u.s[0, direction, ..., :-1, :-1],
+                               grad_u_analytical.s[0, direction, ..., :-1, :-1],
+                               rtol=1e-12, atol=1e-14), \
+                f'Gradient not accurate for x*y field, direction {direction}: max_error={error}'
 
     def test_gradient_linear_field_tilled_triangles_diagnostic(self):
         """Diagnostic test for linear_triangles_tilled gradient computation."""
@@ -489,4 +529,6 @@ class TestGradientWeightedSum:
             # Result should be constant and equal to 1
             assert np.allclose(u_back.s, 1.0, rtol=1e-12, atol=1e-12), \
                 f'N^T * W * N * 1 != 1 for {element_type}'
+
+
 

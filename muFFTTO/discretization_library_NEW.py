@@ -1,8 +1,9 @@
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
+
 
 # ---------------------------------------------------------------------------
 # Shared helper for tensor construction
@@ -48,14 +49,13 @@ def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leadi
 
     Returns
     -------
-    ndarray, shape (*([dim]*n_leading_dim_axes), n_qp, 1, *node_layout)
+    ndarray, shape (*([dim]*n_leading_dim_axes), n_qp,  *node_layout)
         Physical-direction axes (if any) moved to the front in their original relative order,
-        followed by the quadrature point axis (q), followed by a size-1 "unique nodes per pixel"
+        followed by the quadrature point axis (q), followed by a size  of "unique nodes per pixel"
         axis, followed by the node axis unraveled into node_layout multi-index axes.
     """
     n_qp = values_q_n_and_leading.shape[0]
     n_nodes = values_q_n_and_leading.shape[1]
-    dim = len(node_layout)
 
     # Sanity checks (never trip on correct input, safe to leave in)
     assert n_nodes == np.prod(node_layout), (
@@ -93,6 +93,8 @@ def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leadi
 _ELEMENT_FACTORIES = {
     'linear_1D': lambda domain: Element.linear_1d(domain.pixel_size),
     'bilinear_rectangle': lambda domain: Element.bilinear_quad(domain.pixel_size),
+    # biquadratic_rectangle is available at Element level; not yet wired for multi-pixel FFT homogenization via domain.Discretization (which currently supports nb_nodes_per_pixel = 1)
+    'biquadratic_rectangle': lambda domain: Element.biquadratic_quad(domain.pixel_size),
     'trilinear_hexahedron': lambda domain: Element.trilinear_hex(domain.pixel_size),
     'trilinear_hexahedron_1Q': lambda domain: Element.trilinear_hex_1Q(domain.pixel_size),
     'linear_triangles': lambda domain: Element.linear_triangle(domain.pixel_size),
@@ -114,16 +116,16 @@ def get_shape_function_gradient_matrix(domain, element_type):
     domain.quad_points_coord_parametric = element.quad_points_coord_parametric
     domain.quadrature_weights = element.quadrature_weights
     domain.nb_quad_points_per_pixel = element.quadrature_weights.shape[0]
-    domain.nb_nodes_per_pixel = 1
-    # nb_unique_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
+    domain.nb_nodes_per_pixel = element.nb_nodes_per_pixel
+    # nb_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
     # Currently unread by any live code, but forward-looking hook for multi-node-per-pixel elements (Q2, etc).
-    domain.nb_unique_nodes_per_pixel = 1
     domain.N_basis_interpolator_array = element.N_basis_interpolator_array
     domain.jacobian_of_pixel = element.jacobian_of_pixel
 
     domain.N_at_quad_points_qnijk = element.N_at_quad_points_qnijk
     domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
-    domain.H_hess_at_pixel_deqnijk  = element.H_hess_at_pixel_deqnijk
+    #domain.H_hess_at_pixel_deqnijk = element.H_hess_at_pixel_deqnijk
+
 
 # ---------------------------------------------------------------------------
 # Element class
@@ -150,6 +152,7 @@ class Element:
                  pixel_size,
                  quadrature_points_physical_qd,
                  jacobian_of_pixel,
+                 nb_nodes_per_pixel=1,
                  node_layout=None):
         """
         Parameters
@@ -180,7 +183,7 @@ class Element:
         self.quad_points_coord_parametric = quadrature_points_qd.T
         self.quad_points_coord_physical = quadrature_points_physical_qd.T
         self.jacobian_of_pixel = jacobian_of_pixel
-
+        self.nb_nodes_per_pixel = nb_nodes_per_pixel
         # Store shape functions for later evaluation at arbitrary points
         self.shape_functions = shape_functions
         self.dim = len(np.asarray(pixel_size))
@@ -196,11 +199,11 @@ class Element:
             quadrature_points=quadrature_points_qd,
             jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
         )
-        self._compute_hessian_matrices(
-            shape_functions=shape_functions,
-            quadrature_points=quadrature_points_qd,
-            jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
-        )
+        # self._compute_hessian_matrices(
+        #     shape_functions=shape_functions,
+        #     quadrature_points=quadrature_points_qd,
+        #     jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
+        # )
 
     def _make_shape_function_array(self):
         """
@@ -238,10 +241,10 @@ class Element:
 
         Fills
         -----
-        self.B_grad_at_pixel_dqnijk : shape (dim, n_qp, 1, *node_layout)
+        self.B_grad_at_pixel_dqnijk : shape (dim, n_qp, n_np, *node_layout)
             Physical-space shape function gradients.
-            B[d, q, 0, i, j, k] = dN_{ijk} / dx_d  evaluated at quadrature point q.
-        self.N_at_quad_points_qnijk : shape (1, 1, n_qp, 1, *node_layout)
+            B[d, q, n_np, i, j, k] = dN_{ijk} / dx_d  evaluated at quadrature point q.
+        self.N_at_quad_points_qnijk : shape (1, 1, n_qp, n_np, *node_layout)
             Shape function values at quadrature points.
         """
         n_quadrature_points, dim = quadrature_points.shape
@@ -251,29 +254,34 @@ class Element:
         dN_dxi_func = jax.jacobian(shape_functions)
 
         # Evaluate N and dN/dxi at every quadrature point
-        N_at_quadrature_points_qn = []  # will become (n_qp, n_nodes)
-        dN_dxi_at_quadrature_points_qnj = []  # will become (n_qp, n_nodes, dim)
+        N_at_quadrature_points_qnijk = []  # will become (n_qp, ,IJK)
+        dN_dxi_at_quadrature_points_qnijkd = []  # will become (n_qp, n_nodes, IJK, directopm of derivative)
 
         for quadrature_point in quadrature_points:
+            # quadrature points position  (xi, eta, ..)
             xi = jnp.array(quadrature_point)
-            N_at_quadrature_points_qn.append(np.array(shape_functions(xi)))
-            dN_dxi_at_quadrature_points_qnj.append(np.array(dN_dxi_func(xi)))
+            # Shape function in quadrature point  #
+            N_at_quadrature_points_qnijk.append(np.array(shape_functions(xi)))
+            # Gradeint of shape functions in quadrature point
+            dN_dxi_at_quadrature_points_qnijkd.append(np.array(dN_dxi_func(xi)))
 
         # this is in parametric domain
-        N_at_quadrature_points_qn = np.array(N_at_quadrature_points_qn)  # (n_qp, n_nodes)
-        dN_dxi_at_quadrature_points_qnj = np.array(dN_dxi_at_quadrature_points_qnj)  # (n_qp, n_nodes, dim)
+        N_at_quadrature_points_qnijk = np.array(
+            N_at_quadrature_points_qnijk)  # (n_qp, n,I J K)
+        dN_dxi_at_quadrature_points_qnijkd = np.array(dN_dxi_at_quadrature_points_qnijkd)  # (n_qp, n_nodes, dim)
 
         # Transform parametric gradients to physical gradients:
+        # We only consider linear  transformation of the parametric pixel. Not general isoparametric like in standard fem
         #   dN/dx_d = sum_e (dN/dxi_e) * (dxi_e/dx_d),  where J^{-1}[e, d] = dxi_e/dx_d
         # einsum axes: q=quadrature point, n=node, e=parametric dir, d=physical dir
-        dN_dx_at_quadrature_points = np.einsum(
-            'qne, qed -> qnd',
-            dN_dxi_at_quadrature_points_qnj,
+        dN_dx_at_quadrature_points_qnijkd = np.einsum(
+            'qni...e, qed -> qni...d',
+            dN_dxi_at_quadrature_points_qnijkd,
             jacobian_inv_per_quadrature_point,
-        )  # (n_qp, n_nodes, dim)
+        )  # (n_qp, n_nodes, I,J ,K, dir) * J
 
         # Sanity check: verify that shape_functions returned the right number of nodes
-        n_nodes = N_at_quadrature_points_qn.shape[1]
+        n_nodes = np.prod(N_at_quadrature_points_qnijk.shape[1:])
         assert n_nodes == np.prod(self.node_layout), (
             f'shape_functions returned {n_nodes} nodes but node_layout={self.node_layout} '
             f'implies {np.prod(self.node_layout)}; a future Q2/Q3 element must pass a matching node_layout.'
@@ -281,16 +289,27 @@ class Element:
 
         # --- Build B_grad_at_pixel_dqnijk : (dim, n_qp, 1, *node_layout) ---
         # Trailing axes are literal per-direction pixel offsets — see _unflatten_node_axis_to_stencil docstring
-        self.B_grad_at_pixel_dqnijk = _unflatten_node_axis_to_stencil(
-            dN_dx_at_quadrature_points, self.node_layout, n_leading_dim_axes=1)
+        # self.B_grad_at_pixel_dqnijk =dN_dxi_at_quadrature_points_qnijkd
+
+       #dN_dx_at_quadrature_points_dqnijk=np.swapaxes(dN_dx_at_quadrature_points_qnijkd, -1, 0)
+
+
+        # Move the last axis (d) to the front
+        dN_dx_at_quadrature_points_dqnijk = np.moveaxis(dN_dx_at_quadrature_points_qnijkd,  -1, 0)
+        # Result: (d, q, n, i, j, k)
+        self.B_grad_at_pixel_dqnijk = dN_dx_at_quadrature_points_dqnijk #np.expand_dims(dN_dx_at_quadrature_points_dqnijk, axis=2)
+
+        # unflatten_node_axis_to_stencil(
+        #   dN_dx_at_quadrature_points, self.node_layout, n_leading_dim_axes=1)
 
         # --- Build N_at_quad_points_qnijk : (1, n_qp, 1, *node_layout) ---
         # Helper produces (n_qp, 1, *node_layout) for n_leading_dim_axes=0. The leading size-1 axis
         # (nb_output_components=1) is added explicitly here, not by the helper, because N always has
-        # exactly one output component (unlike B/H), so this axis is not a "moved" physical-direction axis.
-        N = _unflatten_node_axis_to_stencil(
-            N_at_quadrature_points_qn, self.node_layout, n_leading_dim_axes=0)
-        self.N_at_quad_points_qnijk = N[np.newaxis, ...]
+        # # exactly one output component (unlike B/H), so this axis is not a "moved" physical-direction axis.
+        # N = _unflatten_node_axis_to_stencil(
+        #     N_at_quadrature_points_qn, self.node_layout, n_leading_dim_axes=0)
+        self.N_at_quad_points_qnijk = N_at_quadrature_points_qnijk #np.expand_dims(N_at_quadrature_points_qnijk, axis=1) #
+
 
     def _compute_hessian_matrices(self,
                                   shape_functions,
@@ -400,7 +419,9 @@ class Element:
             N_xi = (1.0 + signs * xi[0]) / 2.0  # (2,) — factors along xi
             N_eta = (1.0 + signs * xi[1]) / 2.0  # (2,) — factors along eta
             # Fortran-order ravel to match expected node ordering: (0,0), (1,0), (0,1), (1,1)
-            return jnp.outer(N_xi, N_eta).ravel(order='F')  # (4,) in Fortran-order
+            #return jnp.outer(N_xi, N_eta)  # .ravel(order='F')  # (4,) in Fortran-order
+
+            return jnp.expand_dims(jnp.outer(N_xi, N_eta), axis=0)
 
         # Reference [-1,1]^2 -> physical [0,h_x] x [0,h_y]
         jacobian_of_pixel = np.array([[h_x / 2, 0.],
@@ -412,22 +433,19 @@ class Element:
         gauss_1d = np.array([-gauss_coord, gauss_coord])
 
         quadrature_points_qi = np.array([[xi, eta]
-                                      for eta in gauss_1d
-                                      for xi in gauss_1d])  # (4, 2) — parametric
+                                         for eta in gauss_1d
+                                         for xi in gauss_1d])  # (4, 2) — parametric
         # Map quadrature points from [-1,1]^2 to physical element.
         # xi in [-1,1] -> (xi+1) in [0,2] -> J*(xi+1) in [0,h_x] x [0,h_y] -> shift by element origin x0
-        x0=  np.array([0, 0])
+        x0 = np.array([0, 0])
         quadrature_points_physical = x0 + (quadrature_points_qi + 1.0) @ jacobian_of_pixel.T
-
-
-
 
         # Scale reference weights by |J| to account for the mapping from parametric to physical space
         quadrature_weights = np.full(4, 1.)
         quadrature_weights_physical_q = quadrature_weights * np.linalg.det(jacobian_of_pixel)
 
         jacobian_inv_single = np.linalg.inv(jacobian_of_pixel)
-        jacobian_inv_qij = np.tile(jacobian_inv_single, (4,1,1 ))  # (4, 2, 2)
+        jacobian_inv_qij = np.tile(jacobian_inv_single, (4, 1, 1))  # (4, 2, 2)
 
         return cls(shape_functions=shape_functions,
                    quadrature_points_qd=quadrature_points_qi,
@@ -435,7 +453,84 @@ class Element:
                    jacobian_inv_per_quadrature_point_qij=jacobian_inv_qij,
                    pixel_size=pixel_size,
                    quadrature_points_physical_qd=quadrature_points_physical,
-                   jacobian_of_pixel=jacobian_of_pixel ) # this 2 is here because I need it to scale coordinates
+                   jacobian_of_pixel=jacobian_of_pixel,
+                   node_layout=(1, 2, 2))
+
+    @classmethod
+    def biquadratic_quad(cls, pixel_size):
+        """9-node biquadratic quadrilateral (Q9). Reference element: [-1,1]^2. 3x3 Gauss quadrature."""
+        h_x, h_y = pixel_size
+        ''' nodes order       n_np, i, j
+        |                    |                       
+        |                    |                       
+        2,0,1      3,0,1     2,1,1      3,1,1       
+        |                    |                       
+        |                    |                      
+        0,0,1 ____ 1,0,1 ___ 0,1,1 ____ 1,1,1 ___     
+        |                    |                    
+        |                    |                    
+        2,0,0      3,0,0     2,1,0      3,1,0     
+        |                    |                   
+        |                    |                   
+        0,0,0 ____ 1,0,0 ___ 0,1,0 ____ 1,1,0 ___ 
+        '''
+
+        #  TODO [Martin] I have to add 4x2x2 basis, For the stencil, I wave to take into account the 4x2x2 basis
+        # while
+        def shape_functions(xi):
+            # 1D quadratic Lagrange factors on nodes at xi in {-1, 0, 1}
+            # index 0 -> xi = -1, index 1 -> xi = 0, index 2 -> xi = +1
+            N_xi = jnp.array([
+                xi[0] * (xi[0] - 1.0) / 2.0,
+                1.0 - xi[0] ** 2,
+                xi[0] * (xi[0] + 1.0) / 2.0,
+                xi[0] * 0
+            ])
+            N_eta = jnp.array([
+                xi[1] * (xi[1] - 1.0) / 2.0,
+                1.0 - xi[1] ** 2,
+                xi[1] * (xi[1] + 1.0) / 2.0,
+                xi[1] * 0
+            ])
+            # Fortran-order ravel to match expected node ordering: (0,0), (1,0), (2,0), (0,1), etc.
+            return jnp.outer(N_xi, N_eta).ravel(order='F')  # (9,) in Fortran-order
+
+        # Reference [-1,1]^2 -> physical [0,h_x] x [0,h_y]
+        jacobian_of_pixel = np.array([[h_x / 2, 0.],
+                                      [0., h_y / 2]])
+
+        # 3x3 Gauss-Legendre quadrature in reference [-1,1]^2
+        gauss_coord = np.sqrt(3.0 / 5.0)
+        gauss_1d_pts = np.array([-gauss_coord, 0.0, gauss_coord])
+        gauss_1d_w = np.array([5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0])
+
+        quadrature_points_qi = np.array([[xi, eta]
+                                         for eta in gauss_1d_pts
+                                         for xi in gauss_1d_pts])  # (9, 2) — parametric
+
+        x0 = np.array([0, 0])
+        quadrature_points_physical = x0 + (quadrature_points_qi + 1.0) @ jacobian_of_pixel.T
+
+        # Reference weights for tensor-product 3x3 Gauss rule
+        quadrature_weights_ref = np.array([w_x * w_y
+                                           for w_y in gauss_1d_w
+                                           for w_x in gauss_1d_w])  # (9,)
+
+        # Scale reference weights by |J| to account for the mapping from parametric to physical space
+        quadrature_weights_physical_q = quadrature_weights_ref * np.linalg.det(jacobian_of_pixel)
+
+        jacobian_inv_single = np.linalg.inv(jacobian_of_pixel)
+        jacobian_inv_qij = np.tile(jacobian_inv_single, (9, 1, 1))  # (9, 2, 2)
+
+        return cls(shape_functions=shape_functions,
+                   quadrature_points_qd=quadrature_points_qi,
+                   quadrature_weights_physical_q=quadrature_weights_physical_q,
+                   jacobian_inv_per_quadrature_point_qij=jacobian_inv_qij,
+                   pixel_size=pixel_size,
+                   quadrature_points_physical_qd=quadrature_points_physical,
+                   jacobian_of_pixel=jacobian_of_pixel,
+                   nb_nodes_per_pixel=4,
+                   node_layout=(4, 2, 2))
 
     @classmethod
     def trilinear_hex(cls, pixel_size):
@@ -448,8 +543,12 @@ class Element:
             N_eta = (1.0 + signs * xi[1]) / 2.0  # (2,)
             N_zeta = (1.0 + signs * xi[2]) / 2.0  # (2,)
             # Fortran-order ravel to match expected node ordering
-            return jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta).ravel(order='F')  # (8,)
+            # return jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta).ravel(order='F')  # (8,)
 
+            return jnp.expand_dims(
+                jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta),
+                axis=0
+            )
         gauss_coord = 1.0 / np.sqrt(3)
         gauss_1d = np.array([-gauss_coord, gauss_coord])
 
@@ -482,7 +581,11 @@ class Element:
             N_xi = (1.0 + signs * xi[0]) / 2.0  # (2,)
             N_eta = (1.0 + signs * xi[1]) / 2.0  # (2,)
             N_zeta = (1.0 + signs * xi[2]) / 2.0  # (2,)
-            return jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta).ravel(order='F')  # (8,)
+            return jnp.expand_dims(
+                jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta),
+                axis=0
+            )
+
 
         # Single quadrature point at center of reference element
         quadrature_points = np.array([[0.0, 0.0, 0.0]])  # (1, 3)
@@ -521,22 +624,21 @@ class Element:
         h_x, h_y = pixel_size
 
         def shape_functions(xi):
-            N_lower = jnp.array([1.0 - xi[0] - xi[1],  # node (0,0)
-                                 xi[0],  # node (1,0)
-                                 xi[1],  # node (0,1)
-                                 0.0])  # node (1,1) — absent in lower
 
-            N_upper = jnp.array([0.0,  # node (0,0) — absent in upper
-                                 1.0 - xi[1],  # node (1,0)
-                                 1.0 - xi[0],  # node (0,1)
-                                 xi[0] + xi[1] - 1.0])  # node (1,1)
+            N_lower = jnp.array([[1.0 - xi[0] - xi[1], xi[1]],  # nodes (0,0), (0,1)
+                                 [xi[0], 0.0]])  # nodes (1,0), (1,1)
 
+            N_upper = jnp.array([[0.0, 1.0 - xi[0]],  # nodes (0,0), (0,1)
+                                 [1.0 - xi[1], xi[0] + xi[1] - 1.0]])  # nodes (1,0), (1,1)
+            # Expand dimension to fit the  requared shape n_n, I,J,K
+            N_lower =jnp.expand_dims(N_lower, axis=0)
+            N_upper = jnp.expand_dims(N_upper, axis=0)
             return jnp.where(xi[1] < 1.0 - xi[0], N_lower, N_upper)
 
         # Physical mapping: x = h_x*xi, y = h_y*eta  (NOT the [-1,1] formula)
         # Reference [0,1]^2 -> physical [0,h_x] x [0,h_y]
         jacobian_of_pixel = np.array([[h_x, 0.],
-                                               [0., h_y]])
+                                      [0., h_y]])
 
         # One quadrature point per triangle (centroid of the reference simplex)
         quadrature_points_qi = np.array([[1.0 / 3.0, 1.0 / 3.0],  # lower triangle centroid
@@ -547,7 +649,7 @@ class Element:
             quadrature_points_qi) @ jacobian_of_pixel.T  # J = diag(h_x/2, h_y/2), constant at all quadrature points
 
         # Scale reference weights by |J| to account for the mapping from parametric to physical space
-        quadrature_weights_q = np.array([1/2, 1/2])
+        quadrature_weights_q = np.array([1 / 2, 1 / 2])
         quadrature_weights_physical_q = quadrature_weights_q * np.linalg.det(jacobian_of_pixel)
 
         # J = diag(h_x, h_y) is the SAME for both triangles since they share parametric space
@@ -587,22 +689,20 @@ class Element:
         x_shear = h_x / 2.0  # x-offset per unit eta (half pixel width)
 
         def shape_functions(xi):
-            N_lower = jnp.array([1.0 - xi[0] - xi[1],  # node (0,0)
-                                 xi[0],  # node (1,0)
-                                 xi[1],  # node (0,1)
-                                 0.0])  # node (1,1) — absent in lower triangle
+            N_lower = jnp.array([[1.0 - xi[0] - xi[1], xi[1]],  # nodes (0,0), (0,1)
+                                 [xi[0], 0.0]])  # nodes (1,0), (1,1)
 
-            N_upper = jnp.array([0.0,  # node (0,0) — absent in upper triangle
-                                 1.0 - xi[1],  # node (1,0)
-                                 1.0 - xi[0],  # node (0,1)
-                                 xi[0] + xi[1] - 1.0])  # node (1,1)
-
+            N_upper = jnp.array([[0.0, 1.0 - xi[0]],  # nodes (0,0), (0,1)
+                                 [1.0 - xi[1], xi[0] + xi[1] - 1.0]])  # nodes (1,0), (1,1)
+            # Expand dimension to fit the  requared shape n_n, I,J,K
+            N_lower = jnp.expand_dims(N_lower, axis=0)
+            N_upper = jnp.expand_dims(N_upper, axis=0)
             return jnp.where(xi[1] < 1.0 - xi[0], N_lower, N_upper)
 
         # Physical mapping: x = h_x*xi, y = h_y*eta  (NOT the [-1,1] formula)
         # Reference [0,1]^2 -> physical [0,h_x] x [0,h_y]
         jacobian_of_pixel = np.array([[h_x, x_shear],
-                                       [0., h_y]])
+                                      [0., h_y]])
 
         # One quadrature point per triangle (centroid of the reference simplex)
         quadrature_points_qi = np.array([[1.0 / 3.0, 1.0 / 3.0],  # lower triangle centroid
@@ -612,17 +712,15 @@ class Element:
         x0 = np.array([0, 0])
         # quadrature_points_physical_qi = x0 + (
         #     quadrature_points_qi) @ jacobian_of_pixel   #   constant at all quadrature points
-        quadrature_points_physical_qi = np.einsum('qi,ji->qj',quadrature_points_qi, jacobian_of_pixel )
+        quadrature_points_physical_qi = np.einsum('qi,ji->qj', quadrature_points_qi, jacobian_of_pixel)
 
         # Scale reference weights by |J| to account for the mapping from parametric to physical space
-        quadrature_weights_q = np.array([1/2, 1/2])
+        quadrature_weights_q = np.array([1 / 2, 1 / 2])
         quadrature_weights_physical_q = quadrature_weights_q * np.linalg.det(jacobian_of_pixel)
-
 
         # Sheared Jacobian J = [[h_x, x_shear], [0, h_y]] — constant for both triangles
         jacobian_inv_pixel = np.linalg.inv(jacobian_of_pixel)
         jacobian_inv = np.tile(jacobian_inv_pixel, (2, 1, 1))  # (2, 2, 2) — same at both quadrature points
-
 
         return cls(shape_functions=shape_functions,
                    quadrature_points_qd=quadrature_points_qi,

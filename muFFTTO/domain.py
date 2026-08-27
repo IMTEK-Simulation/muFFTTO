@@ -136,13 +136,15 @@ class Discretization:
 
             self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
 
-            # Hessian operator ---> due to muGrid set up, we can't have ij outpu shape. So I reshape the Hessian operator
-            H_deqnijk = self.H_hess_at_pixel_deqnijk
-            H_flat_Dqnijk = np.ascontiguousarray(
-                self.H_hess_at_pixel_deqnijk.reshape(self.domain_dimension * self.domain_dimension,
-                                                     *H_deqnijk.shape[2:]))
-            self.hessian_op = GenericLinearOperator(point_of_origin, H_flat_Dqnijk)
-
+            try:
+                # Hessian operator ---> due to muGrid set up, we can't have ij outpu shape. So I reshape the Hessian operator
+                H_deqnijk = self.H_hess_at_pixel_deqnijk
+                H_flat_Dqnijk = np.ascontiguousarray(
+                    self.H_hess_at_pixel_deqnijk.reshape(self.domain_dimension * self.domain_dimension,
+                                                         *H_deqnijk.shape[2:]))
+                self.hessian_op = GenericLinearOperator(point_of_origin, H_flat_Dqnijk)
+            except:
+                print(f'self.hessian_op does not exist ')
             try:
                 self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_qnijk)
             except:
@@ -188,15 +190,13 @@ class Discretization:
          nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
          nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
-        if self.nb_nodes_per_pixel != 1:
-            raise ValueError(
-                'get_nodal_points_coordinates does not support more than one nodal point')
+
 
         dim = self.domain_dimension
         # creates a field with coordinates of all nodal points
         nodal_points_coordinates_inxyz = self.field_collection.real_field(
             name="nodal_points_coordinates_inxyz",  # name of the field
-            components=(*self.cell.displacement_shape,),  # shape of components
+            components=(dim,),  # shape of components
             sub_pt='nodal_points'  # sub-point type
         )
         # mugrid give coordinates from [0,1)**dim
@@ -212,8 +212,42 @@ class Discretization:
         adjusted_jacobian = self.jacobian_of_pixel / np.diag(self.jacobian_of_pixel)[np.newaxis, :]
 
         nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
+        if self.nb_nodes_per_pixel == 1:
+            nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+        elif self.nb_nodes_per_pixel == 4:
+            half_pixel_size = self.pixel_size / 2
+            # first node
+            nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
 
-        nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+            if dim == 2:
+                # second node
+                nodal_points_coordinates_inxyz.s[0, 1, ...] +=half_pixel_size[0]
+                # third node
+                nodal_points_coordinates_inxyz.s[1, 2, ...] += half_pixel_size[1]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[0, 3, ...] += half_pixel_size[0]
+                nodal_points_coordinates_inxyz.s[1, 3, ...] += half_pixel_size[1]
+            if dim == 3:
+                # second node
+                nodal_points_coordinates_inxyz.s[0, 5, ...] += half_pixel_size[0]
+                # third node
+                nodal_points_coordinates_inxyz.s[1, 6, ...] += half_pixel_size[1]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[0, 7, ...] += half_pixel_size[0]
+                nodal_points_coordinates_inxyz.s[1, 7, ...] += half_pixel_size[1]
+                # z direction add
+                # second node
+                nodal_points_coordinates_inxyz.s[2, 5, ...] += half_pixel_size[2]
+                # third node
+                nodal_points_coordinates_inxyz.s[2, 6, ...] += half_pixel_size[2]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[2, 7, ...] += half_pixel_size[2]
+                nodal_points_coordinates_inxyz.s[2, 7, ...] += half_pixel_size[2]
+
+        else:
+            warnings.warn(
+                "get_nodal_points_coordinates does not support more than one nodal point"
+            )
 
         return nodal_points_coordinates_inxyz
 
@@ -263,10 +297,11 @@ class Discretization:
         -------
          quad_points_coordinates_iqxyz = spatial coordinates of quadrature nodes [i,q,x,y,z]
         """
+        dim=self.domain_dimension
         # creates a field with coordinates of all quadrature points
         quad_points_coordinates_iqxyz = self.field_collection.real_field(
             name="quad_points_coordinates_iqxyz",  # name of the field
-            components=(*self.cell.displacement_shape,),  # shape of components
+            components=(dim,),  # shape of components
             sub_pt='quad_points'  # sub-point type
         )
 
