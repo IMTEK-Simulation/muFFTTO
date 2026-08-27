@@ -27,14 +27,14 @@ class TestBiquadraticQuadElement:
     def test_shapes(self, q9_element):
         """Test node_layout and tensor shapes for N, B_grad, and H_hess."""
         elem = q9_element
-        assert elem.node_layout == (3, 3)
+        assert elem.node_layout == (4,2, 2)
         assert elem.dim == 2
-        # N: (1, n_qp, 1, 3, 3) where n_qp = 9
-        assert elem.N_at_quad_points_qnijk.shape == (1, 9, 1, 3, 3)
+        # N: (1, n_qp, 4, 2, 2) where n_qp = 9
+        assert elem.N_at_quad_points_qnijk.shape == (9, 4, 2, 2)
         # B: (dim, n_qp, 1, 3, 3)
-        assert elem.B_grad_at_pixel_dqnijk.shape == (2, 9, 1, 3, 3)
+        assert elem.B_grad_at_pixel_dqnijk.shape == (2, 9, 4, 2, 2)
         # H: (dim, dim, n_qp, 1, 3, 3)
-        assert elem.H_hess_at_pixel_deqnijk.shape == (2, 2, 9, 1, 3, 3)
+        assert elem.H_hess_at_pixel_deqnijk.shape == (2, 2, 9, 4, 2, 2)
 
     def test_quadrature(self, q9_element, non_square_pixel_size):
         """Test that 3x3 Gauss quadrature points and weights integrate area correctly."""
@@ -134,7 +134,7 @@ class TestBiquadraticQuadElement:
         yq = elem.quad_points_coord_physical[1]
 
         # 1. Check field interpolation: N . u_nodes
-        u_interp = np.einsum('cqnij,ij->q', elem.N_at_quad_points_qnijk, u_nodes)
+        u_interp = np.einsum('qnij,ij->q', elem.N_at_quad_points_qnijk, u_nodes)
         u_exact = u_poly(xq, yq)
         assert np.allclose(u_interp, u_exact, rtol=1e-12, atol=1e-14), \
             f"Field interpolation error: max err = {np.max(np.abs(u_interp - u_exact))}"

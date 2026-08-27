@@ -720,6 +720,7 @@ class Discretization:
         self.fft.communicate_ghosts(field=nodal_field_inxyz)
         self.interpolation_op.apply(nodal_field=nodal_field_inxyz,
                                     quadrature_point_field=quad_field_ijqnxyz)
+        self.fft.communicate_ghosts(field=quad_field_ijqnxyz)
 
     def apply_N_transposed_operator_mugrid(self,
                                            quad_field_ijqxyz,

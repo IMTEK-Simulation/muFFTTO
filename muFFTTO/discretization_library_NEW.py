@@ -119,7 +119,7 @@ def get_shape_function_gradient_matrix(domain, element_type):
     domain.nb_nodes_per_pixel = element.nb_nodes_per_pixel
     # nb_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
     # Currently unread by any live code, but forward-looking hook for multi-node-per-pixel elements (Q2, etc).
-    domain.N_basis_interpolator_array = element.N_basis_interpolator_array
+    #domain.N_basis_interpolator_array = element.N_basis_interpolator_array
     domain.jacobian_of_pixel = element.jacobian_of_pixel
 
     domain.N_at_quad_points_qnijk = element.N_at_quad_points_qnijk
@@ -192,7 +192,7 @@ class Element:
         self.node_layout = tuple(node_layout) if node_layout is not None else tuple([2] * self.dim)
 
         # Create N_basis_interpolator_array: callable for each node position
-        self.N_basis_interpolator_array = self._make_shape_function_array()
+        #self.N_basis_interpolator_array = self._make_shape_function_array()
 
         self._compute_element_matrices(
             shape_functions=shape_functions,
@@ -474,8 +474,24 @@ class Element:
         |                    |                   
         0,0,0 ____ 1,0,0 ___ 0,1,0 ____ 1,1,0 ___ 
         '''
+        # so it may be easier to define basiss with shape (4x4) but the we need to reshape it
+        # columns: a, b, n_np, local_i, local_j  (source idx..., target idx...)
+        MAPPING = np.array([
+            [0, 0, 0, 0, 0], [1, 0, 1, 0, 0], [2, 0, 0, 1, 0], [3, 0, 1, 1, 0],
+            [0, 1, 2, 0, 0], [1, 1, 3, 0, 0], [2, 1, 2, 1, 0], [3, 1, 3, 1, 0],
+            [0, 2, 0, 0, 1], [1, 2, 1, 0, 1], [2, 2, 0, 1, 1], [3, 2, 1, 1, 1],
+            [0, 3, 2, 0, 1], [1, 3, 3, 0, 1], [2, 3, 2, 1, 1], [3, 3, 3, 1, 1],
+        ])
 
-        #  TODO [Martin] I have to add 4x2x2 basis, For the stencil, I wave to take into account the 4x2x2 basis
+        def make_gather(mapping, n_src_dims, target_shape):
+            """Build gather-index arrays from an (source..., target...) table.
+            One vectorized scatter — no python loop, works for any dim counts."""
+            src, tgt = mapping[:, :n_src_dims], mapping[:, n_src_dims:]
+            gather = np.zeros(target_shape + (n_src_dims,), dtype=int)
+            gather[tuple(tgt.T)] = src
+            return [jnp.array(gather[..., d]) for d in range(n_src_dims)]
+
+        GATHER_A, GATHER_B = make_gather(MAPPING, n_src_dims=2, target_shape=(4, 2, 2))
         # while
         def shape_functions(xi):
             # 1D quadratic Lagrange factors on nodes at xi in {-1, 0, 1}
@@ -492,8 +508,13 @@ class Element:
                 xi[1] * (xi[1] + 1.0) / 2.0,
                 xi[1] * 0
             ])
-            # Fortran-order ravel to match expected node ordering: (0,0), (1,0), (2,0), (0,1), etc.
-            return jnp.outer(N_xi, N_eta).ravel(order='F')  # (9,) in Fortran-order
+
+            basis_IJ = jnp.outer(N_xi, N_eta)  # (4, 4), axes (a=xi_idx, b=eta_idx)
+           # reshaped = basis_IJ.reshape(2, 2, 2, 2)  # (local_i, p, local_j, q)
+            #basis_nij = jnp.transpose(reshaped, (3, 1, 0, 2)).reshape(4, 2, 2)  # (n_np, local_i, local_j)
+            basis_nij = basis_IJ[GATHER_A, GATHER_B]  # (4, 2, 2), via the mapping table
+
+            return basis_nij
 
         # Reference [-1,1]^2 -> physical [0,h_x] x [0,h_y]
         jacobian_of_pixel = np.array([[h_x / 2, 0.],
@@ -542,8 +563,6 @@ class Element:
             N_xi = (1.0 + signs * xi[0]) / 2.0  # (2,)
             N_eta = (1.0 + signs * xi[1]) / 2.0  # (2,)
             N_zeta = (1.0 + signs * xi[2]) / 2.0  # (2,)
-            # Fortran-order ravel to match expected node ordering
-            # return jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta).ravel(order='F')  # (8,)
 
             return jnp.expand_dims(
                 jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta),
