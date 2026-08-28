@@ -93,7 +93,6 @@ def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leadi
 _ELEMENT_FACTORIES = {
     'linear_1D': lambda domain: Element.linear_1d(domain.pixel_size),
     'bilinear_rectangle': lambda domain: Element.bilinear_quad(domain.pixel_size),
-    # biquadratic_rectangle is available at Element level; not yet wired for multi-pixel FFT homogenization via domain.Discretization (which currently supports nb_nodes_per_pixel = 1)
     'biquadratic_rectangle': lambda domain: Element.biquadratic_quad(domain.pixel_size),
     'trilinear_hexahedron': lambda domain: Element.trilinear_hex(domain.pixel_size),
     'trilinear_hexahedron_1Q': lambda domain: Element.trilinear_hex_1Q(domain.pixel_size),
@@ -116,6 +115,8 @@ def get_shape_function_gradient_matrix(domain, element_type):
     domain.quad_points_coord_parametric = element.quad_points_coord_parametric
     domain.quadrature_weights = element.quadrature_weights
     domain.nb_quad_points_per_pixel = element.quadrature_weights.shape[0]
+    # this does not mean corners of rectangle. This means uniques nodes associated with each pixel.
+    # typically, this is 1
     domain.nb_nodes_per_pixel = element.nb_nodes_per_pixel
     # nb_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
     # Currently unread by any live code, but forward-looking hook for multi-node-per-pixel elements (Q2, etc).
@@ -124,7 +125,7 @@ def get_shape_function_gradient_matrix(domain, element_type):
 
     domain.N_at_quad_points_dqnijk = element.N_at_quad_points_dqnijk
     domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
-    #domain.H_hess_at_pixel_deqnijk = element.H_hess_at_pixel_deqnijk
+    domain.H_hess_at_pixel_deqnijk = element.H_hess_at_pixel_deqnijk
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +200,11 @@ class Element:
             quadrature_points=quadrature_points_qd,
             jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
         )
-        # self._compute_hessian_matrices(
-        #     shape_functions=shape_functions,
-        #     quadrature_points=quadrature_points_qd,
-        #     jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
-        # )
+        self._compute_hessian_matrices(
+            shape_functions=shape_functions,
+            quadrature_points=quadrature_points_qd,
+            jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
+        )
 
     def _make_shape_function_array(self):
         """
@@ -262,7 +263,7 @@ class Element:
             xi = jnp.array(quadrature_point)
             # Shape function in quadrature point  #
             N_at_quadrature_points_qnijk.append(np.array(shape_functions(xi)))
-            # Gradeint of shape functions in quadrature point
+            # Gradient of shape functions in quadrature point
             dN_dxi_at_quadrature_points_qnijkd.append(np.array(dN_dxi_func(xi)))
 
         # this is in parametric domain
@@ -333,7 +334,7 @@ class Element:
 
         Fills
         -----
-        self.H_hess_at_pixel_deqnijk : shape (dim, dim, n_qp, 1, *node_layout)
+        self.H_hess_at_pixel_deqnijk : shape (dim, dim, n_qp, n_un, *node_layout)
             H[d, e, q, 0, i, j, k] = d^2 N_{ijk} / dx_d dx_e at quadrature point q.
 
         Notes
@@ -359,27 +360,38 @@ class Element:
         # jax.hessian gives d2N/dxi_a dxi_b with shape (n_nodes, dim, dim)
         d2N_dxi2_func = jax.hessian(shape_functions)
 
-        d2N_dxi2_at_quadrature_points_qnab = []  # -> (n_qp, n_nodes, dim, dim)
+        d2N_dxi2_at_quadrature_points_qnab = []  # -> will become (n_qp, n_nodes, IJK, dim, dim)
+
+        # evaluate Hessian at each quadrature point
         for quadrature_point in quadrature_points:
+            # quadrature points position  (xi, eta, ..)
             xi = jnp.array(quadrature_point)
+            # Hessian of shape functions in quadrature point
             d2N_dxi2_at_quadrature_points_qnab.append(np.array(d2N_dxi2_func(xi)))
+
+        # cast to numpy array
         d2N_dxi2_at_quadrature_points_qnab = np.array(
             d2N_dxi2_at_quadrature_points_qnab)
 
         # Transform parametric Hessians to physical Hessians:
         #   d2N/dx_d dx_e = sum_{a,b} (d2N/dxi_a dxi_b) J^{-1}[a,d] J^{-1}[b,e]
         # einsum axes: q=quad point, n=node, a,b=parametric dirs, d,e=physical dirs
-        d2N_dx2_at_quadrature_points = np.einsum(
-            'qnab, qad, qbe -> qnde',
+        d2N_dx2_at_quadrature_points_qnijkab = np.einsum(
+            'qni...ab, qad, qbe -> qni...de',
             d2N_dxi2_at_quadrature_points_qnab,
             jacobian_inv,
             jacobian_inv,
         )  # (n_qp, n_nodes, dim, dim)
 
-        # --- Build H_hess_at_pixel_deqnijk : (dim, dim, n_qp, 1, *node_layout) ---
+        # --- Build H_hess_at_pixel_deqnijk : (dim, dim, n_qp, n_un, *node_layout) ---
         # Trailing axes are literal per-direction pixel offsets — see _unflatten_node_axis_to_stencil docstring
-        self.H_hess_at_pixel_deqnijk = _unflatten_node_axis_to_stencil(
-            d2N_dx2_at_quadrature_points, self.node_layout, n_leading_dim_axes=2)
+        d2N_dx2_at_quadrature_points_abqnijk = np.moveaxis(
+            d2N_dx2_at_quadrature_points_qnijkab,
+            (-2, -1),  # source axes: a and b (positions -2 and -1)
+            (0, 1)  # destination axes: move to front
+        )
+
+        self.H_hess_at_pixel_deqnijk =  d2N_dx2_at_quadrature_points_abqnijk
 
     # -----------------------------------------------------------------------
     # Factory classmethods — one per element type
@@ -391,8 +403,10 @@ class Element:
         h = pixel_size[0]
 
         def shape_functions(xi):
-            return jnp.array([(1.0 - xi[0]) / 2.0,
+            N_xi=jnp.array([(1.0 - xi[0]) / 2.0,
                               (1.0 + xi[0]) / 2.0])
+
+            return jnp.expand_dims(N_xi, axis=0)
 
         # One quadrature point at the midpoint of [-1,1]
         quadrature_points = np.array([[0.0]])  # (1, 1) — parametric midpoint

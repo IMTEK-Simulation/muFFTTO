@@ -66,6 +66,15 @@ class Discretization:
         self.domain_size = cell.domain_size
         # total number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
+        # pixel properties
+        self.pixel_size = self.domain_size / self.nb_of_pixels_global
+        self.nb_nodes_per_pixel = None
+        self.nodal_points_coordinates = None
+        self.nb_vertices_per_pixel = 2 ** self.domain_dimension
+
+        self.get_discretization_info(element_type)
+
+
         # number of ghost buffers -> # TODO[Martin]: have to be changed base on the stencil
         left_ghosts = [1, ] * self.domain_dimension
         right_ghosts = [1, ] * self.domain_dimension
@@ -73,6 +82,7 @@ class Discretization:
                                     communicator=communicator,
                                     nb_ghosts_left=left_ghosts,
                                     nb_ghosts_right=right_ghosts,
+                                    # nb_sub_pts=self.nb_nodes_per_pixel
                                     )
         self.communicator = communicator
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
@@ -105,11 +115,7 @@ class Discretization:
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
         self.discretization_type = discretization_type  # only finite elements for now
 
-        # pixel properties
-        self.pixel_size = self.domain_size / self.nb_of_pixels_global
-        self.nb_nodes_per_pixel = None
-        self.nodal_points_coordinates = None
-        self.nb_vertices_per_pixel = 2 ** self.domain_dimension
+
 
         if discretization_type == 'finite_element':
             # finite element properties
@@ -621,7 +627,7 @@ class Discretization:
 
         self.fft.communicate_ghosts(field=nodal_field_inxyz)
 
-    def evaluate_field_at_quad_points(self,
+    def evaluate_field_at_quad_points_old(self,
                                       nodal_field_fnxyz,
                                       quad_field_fqnxyz=None,
                                       quad_points_coords_iq=None):
@@ -691,6 +697,24 @@ class Discretization:
                     warnings.warn('Interpolation is not tested for 3D.')
                     # TODO 3D interpolation is not tested
         return quad_field_fqnxyz, N_at_quad_points_qnijk
+
+    def evaluate_field_at_quad_points(self,
+                                      nodal_field_fnxyz,
+                                      quad_field_fqnxyz=None,
+                                      quad_points_coords_iq=None):
+        """
+        Function that evaluates nodal field at quad points.
+        """
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_fnxyz, np.ndarray):
+            raise ("apply_N_operator_mugrid does not supprot ndarray")
+
+        self.fft.communicate_ghosts(field=nodal_field_fnxyz)
+        self.interpolation_op.apply(nodal_field=nodal_field_fnxyz,
+                                    quadrature_point_field=quad_field_fqnxyz)
+        self.fft.communicate_ghosts(field=quad_field_fqnxyz)
+
+        return quad_field_fqnxyz
 
     def apply_N_operator_mugrid(self, nodal_field_inxyz, quad_field_ijqnxyz):
         """

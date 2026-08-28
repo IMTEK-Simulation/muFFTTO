@@ -1203,10 +1203,11 @@ def test_elavuate_at_quad_points_2D_mesh(plot=False):
         phase_field_0.s[0, 0, 0, 1] = 1
         # linfunc = lambda x: 1 * x
         # phase_field_0[0, 0] = linfunc(nodal_coordinates[0, 0])
+        interpolated_field = discretization.get_quad_field_scalar(name='phase_field_at_quads')
 
         interpolated_field = discretization.evaluate_field_at_quad_points(
             nodal_field_fnxyz=phase_field_0,
-            quad_field_fqnxyz=None,
+            quad_field_fqnxyz=interpolated_field,
             quad_points_coords_iq=None)
 
         if plot:
@@ -1222,74 +1223,6 @@ def test_elavuate_at_quad_points_2D_mesh(plot=False):
                 plt.scatter(quad_coordinates.s[0, q], quad_coordinates.s[1, q])
 
             plt.show()
-    #
-    # def test_2D_gradients_linear_fem_and_tilled_linear_fem(self):
-    #     domain_size = [3, np.sqrt(3) / 2]
-    #     problem_type = 'conductivity'  # 'elasticity'#,'conductivity'
-    #     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-    #                                       problem_type=problem_type)
-    #
-    #     number_of_pixels = (2, 5)
-    #
-    #     discretization_type = 'finite_element'
-    #     discretization_right_angle = domain.Discretization(cell=my_cell,
-    #                                                        nb_of_pixels_global=number_of_pixels,
-    #                                                        discretization_type=discretization_type,
-    #                                                        element_type='linear_triangles')
-    #     discretization_60_angle = domain.Discretization(cell=my_cell,
-    #                                                     nb_of_pixels_global=number_of_pixels,
-    #                                                     discretization_type=discretization_type,
-    #                                                     element_type='linear_triangles_tilled')
-    #
-    #     diff_B_ = discretization_right_angle.B_gradient - discretization_60_angle.B_gradient
-    #     diff_B_dqnijk = discretization_right_angle.B_grad_at_pixel_dqnijk - discretization_60_angle.B_grad_at_pixel_dqnijk
-    #     print(diff_B_)
-    #
-    #     quad_points_coords_right_angle_dq = discretization_right_angle.quad_points_coord_parametric  # quad_points_coord[:,q]=[x_q,y_q,z_q]
-    #     quad_points_coords_60_angle_dq = discretization_60_angle.quad_points_coord_parametric
-    #
-    #     nb_quad_points_per_pixel_right_angle = quad_points_coords_right_angle_dq.shape[-1]
-    #     nb_quad_points_per_pixel_60_angle = quad_points_coords_60_angle_dq.shape[-1]
-    #     for pixel_node in np.ndindex(
-    #             *np.ones([discretization_right_angle.domain_dimension],
-    #                      dtype=int) * 2):  # iteration over all voxel corners
-    #         # pixel_node = np.asarray(pixel_node)
-    #         print(f'pixel_node  f{pixel_node}')
-    #         for quad_point_idx in range(nb_quad_points_per_pixel_right_angle):
-    #             quad_point_coords = quad_points_coords_right_angle_dq[:, quad_point_idx]
-    #             print(f'quad_point_coords _right_angle f{quad_point_coords}')
-    #             N_at_qp_right_angle = discretization_right_angle.N_basis_interpolator_array[pixel_node](
-    #                 *quad_point_coords)
-    #             N_at_qp_60_angle = discretization_60_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
-    #             print(N_at_qp_right_angle - N_at_qp_60_angle)
-    #
-    #         for quad_point_idx in range(nb_quad_points_per_pixel_60_angle):
-    #             quad_point_coords = quad_points_coords_right_angle_dq[:, quad_point_idx]
-    #             print(f'quad_point_coords l_60_angle f{quad_point_coords}')
-    #             N_at_qp_right_angle = discretization_right_angle.N_basis_interpolator_array[pixel_node](
-    #                 *quad_point_coords)
-    #             N_at_qp_60_angle = discretization_60_angle.N_basis_interpolator_array[pixel_node](*quad_point_coords)
-    #             print(N_at_qp_right_angle - N_at_qp_60_angle)
-    #
-    #     # phase_field_0 = np.random.randint(0, high=2, size=discretization_60_angle.get_scalar_sized_field().shape) ** 1
-    #     phase_field_0 = np.random.random(size=discretization_60_angle.get_scalar_sized_field().shape) ** 1
-    #
-    #     # phase_field_0 = discretization_60_angle.get_scalar_sized_field()+0.5
-    #     f_dw_quad_60_angle = topology_optimization.compute_double_well_potential_Gauss_quad(
-    #         discretization=discretization_60_angle,
-    #         phase_field_1nxyz=phase_field_0)
-    #
-    #     f_dw_quad_right_angle = topology_optimization.compute_double_well_potential_Gauss_quad(
-    #         discretization=discretization_right_angle,
-    #         phase_field_1nxyz=phase_field_0)
-    #     f_dw = topology_optimization.compute_double_well_potential_analytical(discretization=discretization_right_angle,
-    #                                                                           phase_field_1nxyz=phase_field_0)
-    #     f_dw_60_angle = topology_optimization.compute_double_well_potential_analytical(
-    #         discretization=discretization_60_angle,
-    #         phase_field_1nxyz=phase_field_0)
-    #     print()
-
-# --- pytest-style tests for trilinear_hexahedron_1Q ---
 
 
 @pytest.fixture
@@ -1317,18 +1250,18 @@ def test_1Q_quadrature_weight(disc_1Q):
 
 def test_1Q_N_shape(disc_1Q):
     """N_at_quad_points_qnijk must have shape (1, 1, 1, 2, 2, 2)."""
-    assert disc_1Q.N_at_quad_points_qnijk.shape == (1, 1, 1, 2, 2, 2)
+    assert disc_1Q.N_at_quad_points_dqnijk.shape == (1, 1, 1, 2, 2, 2)
 
 
 def test_1Q_N_partition_of_unity(disc_1Q):
     """All 8 shape functions evaluated at the centroid must sum to 1."""
-    N = disc_1Q.N_at_quad_points_qnijk
+    N = disc_1Q.N_at_quad_points_dqnijk
     assert np.isclose(N[0, 0, 0].sum(), 1.0)
 
 
 def test_1Q_N_equal_weights(disc_1Q):
     """At the centroid all 8 shape functions must equal 1/8."""
-    N = disc_1Q.N_at_quad_points_qnijk
+    N = disc_1Q.N_at_quad_points_dqnijk
     assert np.allclose(N[0, 0, 0], 1.0 / 8.0)
 
 
