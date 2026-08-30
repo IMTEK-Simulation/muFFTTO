@@ -1631,10 +1631,10 @@ class Discretization:
                 # TODO[] Unit impulse response is correct
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
-                print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+                #print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
-                print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                #print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
 
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
 
@@ -1679,9 +1679,9 @@ class Discretization:
                 if np.any(np.all(self.fft.icoords == 0, axis=0)):
                     # set 1 --- the unit impulse --- to a proper positions
                     unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
-                    print(f"Unit impulse set at position {impulse_position}")
-                    print(
-                        f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
+                    # print(f"Unit impulse set at position {impulse_position}")
+                    # print(
+                    #     f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
 
                 unit_impulse_response_inxyz.sg.fill(0)
                 self.apply_system_matrix_mugrid(
@@ -1692,7 +1692,7 @@ class Discretization:
                 # TODO[] Unit impulse response is correct
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
-                print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+               # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 unit_impulse_response_inqks.sg.fill(0)
                 #self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
@@ -1700,7 +1700,7 @@ class Discretization:
                 # Forward FFT: real -> Fourier
                 self.multinodal_fft(real_field=unit_impulse_response_inxyz,
                                               fourier_field=unit_impulse_response_inqks)
-                print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                #print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
                 # Unpack tuple to get normal indexing:
                 i, n = impulse_position
                 preconditioner_diagonals_ininqks.s[i, n, ...] = np.copy(unit_impulse_response_inqks.s[...])

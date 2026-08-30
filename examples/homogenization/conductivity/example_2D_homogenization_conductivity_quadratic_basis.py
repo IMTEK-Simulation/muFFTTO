@@ -15,11 +15,11 @@ from muFFTTO import microstructure_library
 
 problem_type = 'conductivity'
 discretization_type = 'finite_element'
-element_type =  'biquadratic_rectangle'#'linear_triangles'
+element_type = 'biquadratic_rectangle'#'biquadratic_rectangle'#
 geometry_ID ='square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (16, 16)
+number_of_pixels = (1024,1024)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -78,7 +78,7 @@ def M_fun(x, Px):
     discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
                                                input_nodal_field_fnxyz=x,
                                                output_nodal_field_fnxyz=Px)
-    Px.s[...]=x.s[...]*1.
+    #Px.s[...]=x.s[...]*1.
     discretization.fft.communicate_ghosts(Px)
 
 solution_field = discretization.get_unknown_size_field(name='solution')

@@ -15,11 +15,11 @@ from muFFTTO import visualization_utils
 
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'linear_triangles'
+element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (32,32)
+number_of_pixels = (128,128)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -147,19 +147,21 @@ for i in range(dim):
 
         if discretization.communicator.size == 1:
             # Plot the first two components of the solution field
+            try:
+                x_plot_ixyz=visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+                                                 macro_gradient_ij=macro_gradient_ij,
+                                                 displacement_fluctuation=solution_field)
 
-            x_plot_ixyz=visualization_utils.get_deformed_grid_coords_two_dim(discretization,
-                                             macro_gradient_ij=macro_gradient_ij,
-                                             displacement_fluctuation=solution_field)
-
-            visualization_utils.plot_field_on_grid(
-                coordinates_for_plot=x_plot_ixyz,
-                field_to_plot=solution_field.s[0, 0],
-                name = fr'$\tilde{{u}}_{{x}}$   ')
-            visualization_utils.plot_field_on_grid(
-                coordinates_for_plot=x_plot_ixyz,
-                field_to_plot=solution_field.s[1, 0],
-                name=fr'$\tilde{{u}}_{{y}}$   ')
+                visualization_utils.plot_field_on_grid(
+                    coordinates_for_plot=x_plot_ixyz,
+                    field_to_plot=solution_field.s[0, 0],
+                    name = fr'$\tilde{{u}}_{{x}}$   ')
+                visualization_utils.plot_field_on_grid(
+                    coordinates_for_plot=x_plot_ixyz,
+                    field_to_plot=solution_field.s[1, 0],
+                    name=fr'$\tilde{{u}}_{{y}}$   ')
+            except:
+                print(f"Plotting failed:  ")
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
         homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
