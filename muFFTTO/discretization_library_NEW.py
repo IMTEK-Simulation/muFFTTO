@@ -92,6 +92,7 @@ def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leadi
 
 _ELEMENT_FACTORIES = {
     'linear_1D': lambda domain: Element.linear_1d(domain.pixel_size),
+    'quadratic_1D': lambda domain: Element.quadratic_1D(domain.pixel_size),
     'bilinear_rectangle': lambda domain: Element.bilinear_quad(domain.pixel_size),
     'biquadratic_rectangle': lambda domain: Element.biquadratic_quad(domain.pixel_size),
     'trilinear_hexahedron': lambda domain: Element.trilinear_hex(domain.pixel_size),
@@ -120,7 +121,7 @@ def get_shape_function_gradient_matrix(domain, element_type):
     domain.nb_nodes_per_pixel = element.nb_nodes_per_pixel
     # nb_nodes_per_pixel is the size of the 'n' axis in N/B/H tensors (currently 1).
     # Currently unread by any live code, but forward-looking hook for multi-node-per-pixel elements (Q2, etc).
-    #domain.N_basis_interpolator_array = element.N_basis_interpolator_array
+    # domain.N_basis_interpolator_array = element.N_basis_interpolator_array
     domain.jacobian_of_pixel = element.jacobian_of_pixel
 
     domain.N_at_quad_points_dqnijk = element.N_at_quad_points_dqnijk
@@ -193,7 +194,7 @@ class Element:
         self.node_layout = tuple(node_layout) if node_layout is not None else tuple([2] * self.dim)
 
         # Create N_basis_interpolator_array: callable for each node position
-        #self.N_basis_interpolator_array = self._make_shape_function_array()
+        # self.N_basis_interpolator_array = self._make_shape_function_array()
 
         self._compute_element_matrices(
             shape_functions=shape_functions,
@@ -292,13 +293,12 @@ class Element:
         # Trailing axes are literal per-direction pixel offsets — see _unflatten_node_axis_to_stencil docstring
         # self.B_grad_at_pixel_dqnijk =dN_dxi_at_quadrature_points_qnijkd
 
-       #dN_dx_at_quadrature_points_dqnijk=np.swapaxes(dN_dx_at_quadrature_points_qnijkd, -1, 0)
-
+        # dN_dx_at_quadrature_points_dqnijk=np.swapaxes(dN_dx_at_quadrature_points_qnijkd, -1, 0)
 
         # Move the last axis (d) to the front
-        dN_dx_at_quadrature_points_dqnijk = np.moveaxis(dN_dx_at_quadrature_points_qnijkd,  -1, 0)
+        dN_dx_at_quadrature_points_dqnijk = np.moveaxis(dN_dx_at_quadrature_points_qnijkd, -1, 0)
         # Result: (d, q, n, i, j, k)
-        self.B_grad_at_pixel_dqnijk = dN_dx_at_quadrature_points_dqnijk #np.expand_dims(dN_dx_at_quadrature_points_dqnijk, axis=2)
+        self.B_grad_at_pixel_dqnijk = dN_dx_at_quadrature_points_dqnijk  # np.expand_dims(dN_dx_at_quadrature_points_dqnijk, axis=2)
 
         # unflatten_node_axis_to_stencil(
         #   dN_dx_at_quadrature_points, self.node_layout, n_leading_dim_axes=1)
@@ -309,8 +309,7 @@ class Element:
         # # exactly one output component (unlike B/H), so this axis is not a "moved" physical-direction axis.
         # N = _unflatten_node_axis_to_stencil(
         # add dummy dimension in the beginning.
-        self.N_at_quad_points_dqnijk =   np.expand_dims(N_at_quadrature_points_qnijk, axis=0) #
-
+        self.N_at_quad_points_dqnijk = np.expand_dims(N_at_quadrature_points_qnijk, axis=0)  #
 
     def _compute_hessian_matrices(self,
                                   shape_functions,
@@ -391,7 +390,7 @@ class Element:
             (0, 1)  # destination axes: move to front
         )
 
-        self.H_hess_at_pixel_deqnijk =  d2N_dx2_at_quadrature_points_abqnijk
+        self.H_hess_at_pixel_deqnijk = d2N_dx2_at_quadrature_points_abqnijk
 
     # -----------------------------------------------------------------------
     # Factory classmethods — one per element type
@@ -403,7 +402,7 @@ class Element:
         h = pixel_size[0]
 
         def shape_functions(xi):
-            N_xi=jnp.array([(1.0 - xi[0]) / 2.0,
+            N_xi = jnp.array([(1.0 - xi[0]) / 2.0,
                               (1.0 + xi[0]) / 2.0])
 
             return jnp.expand_dims(N_xi, axis=0)
@@ -424,6 +423,64 @@ class Element:
                    jacobian_of_pixel=jacobian_of_pixel)
 
     @classmethod
+    def quadratic_1D(cls, pixel_size):
+        """2-node quadratic. Reference element: [-1,1]. 3 Gauss quadrature."""
+        h_x = pixel_size
+        ''' nodes order       n_np, i, j
+        |                    |                   
+        0,0 ____ 1,0 ___ 0,1 ____ 1,1 ___ 
+        '''
+
+        def shape_functions(xi):
+            # 1D quadratic Lagrange factors on nodes at xi in {-1, 0, 1}
+            # index 0 -> xi = -1, index 1 -> xi = 0, index 2 -> xi = +1
+            N_xi = jnp.array([
+                xi[0] * (xi[0] - 1.0) / 2.0,
+                1.0 - xi[0] ** 2,
+                xi[0] * (xi[0] + 1.0) / 2.0,
+                xi[0] * 0
+            ])
+            # reshape to (2,2), 2 nodes and two pixels
+            basis_ni = jnp.array([
+                [N_xi[0], N_xi[2]],
+                [N_xi[1], N_xi[3]]
+            ])
+
+            return basis_ni
+
+        # Reference [-1,1] -> physical [0,h_x]
+        jacobian_of_pixel = np.array([h_x / 2])
+
+        # 3x3 Gauss-Legendre quadrature in reference [-1,1]^2
+        gauss_coord = np.sqrt(3.0 / 5.0)
+        gauss_1d_pts = np.array([-gauss_coord, 0.0, gauss_coord])
+        gauss_1d_w = np.array([5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0])
+
+        quadrature_points_qi = np.array([[xi] for xi in gauss_1d_pts])  # (9, 2) — parametric
+
+        x0 = np.array([0])
+        quadrature_points_physical = x0 + (quadrature_points_qi + 1.0) @ jacobian_of_pixel.T
+
+        # Reference weights for tensor-product 3 Gauss rule
+        quadrature_weights_ref = np.array([w_x  for w_x in gauss_1d_w])  # (9,)
+
+        # Scale reference weights by |J| to account for the mapping from parametric to physical space
+        quadrature_weights_physical_q = quadrature_weights_ref * np.linalg.det(jacobian_of_pixel)
+
+        jacobian_inv_single = np.linalg.inv(jacobian_of_pixel)
+        jacobian_inv_qij = np.tile(jacobian_inv_single, (3, 1, 1))  # (9, 2, 2)
+
+        return cls(shape_functions=shape_functions,
+                   quadrature_points_qd=quadrature_points_qi,
+                   quadrature_weights_physical_q=quadrature_weights_physical_q,
+                   jacobian_inv_per_quadrature_point_qij=jacobian_inv_qij,
+                   pixel_size=pixel_size,
+                   quadrature_points_physical_qd=quadrature_points_physical,
+                   jacobian_of_pixel=jacobian_of_pixel,
+                   nb_nodes_per_pixel=2,
+                   node_layout=(2,2))
+
+    @classmethod
     def bilinear_quad(cls, pixel_size):
         """4-node bilinear quadrilateral. Reference element: [-1,1]^2. 2x2 Gauss quadrature."""
         h_x, h_y = pixel_size
@@ -433,7 +490,7 @@ class Element:
             N_xi = (1.0 + signs * xi[0]) / 2.0  # (2,) — factors along xi
             N_eta = (1.0 + signs * xi[1]) / 2.0  # (2,) — factors along eta
             # Fortran-order ravel to match expected node ordering: (0,0), (1,0), (0,1), (1,1)
-            #return jnp.outer(N_xi, N_eta)  # .ravel(order='F')  # (4,) in Fortran-order
+            # return jnp.outer(N_xi, N_eta)  # .ravel(order='F')  # (4,) in Fortran-order
 
             return jnp.expand_dims(jnp.outer(N_xi, N_eta), axis=0)
 
@@ -506,6 +563,7 @@ class Element:
             return [jnp.array(gather[..., d]) for d in range(n_src_dims)]
 
         GATHER_A, GATHER_B = make_gather(MAPPING, n_src_dims=2, target_shape=(4, 2, 2))
+
         # while
         def shape_functions(xi):
             # 1D quadratic Lagrange factors on nodes at xi in {-1, 0, 1}
@@ -524,8 +582,8 @@ class Element:
             ])
 
             basis_IJ = jnp.outer(N_xi, N_eta)  # (4, 4), axes (a=xi_idx, b=eta_idx)
-           # reshaped = basis_IJ.reshape(2, 2, 2, 2)  # (local_i, p, local_j, q)
-            #basis_nij = jnp.transpose(reshaped, (3, 1, 0, 2)).reshape(4, 2, 2)  # (n_np, local_i, local_j)
+            # reshaped = basis_IJ.reshape(2, 2, 2, 2)  # (local_i, p, local_j, q)
+            # basis_nij = jnp.transpose(reshaped, (3, 1, 0, 2)).reshape(4, 2, 2)  # (n_np, local_i, local_j)
             basis_nij = basis_IJ[GATHER_A, GATHER_B]  # (4, 2, 2), via the mapping table
 
             return basis_nij
@@ -582,6 +640,7 @@ class Element:
                 jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta),
                 axis=0
             )
+
         gauss_coord = 1.0 / np.sqrt(3)
         gauss_1d = np.array([-gauss_coord, gauss_coord])
 
@@ -618,7 +677,6 @@ class Element:
                 jnp.einsum('i,j,k->ijk', N_xi, N_eta, N_zeta),
                 axis=0
             )
-
 
         # Single quadrature point at center of reference element
         quadrature_points = np.array([[0.0, 0.0, 0.0]])  # (1, 3)
@@ -657,14 +715,13 @@ class Element:
         h_x, h_y = pixel_size
 
         def shape_functions(xi):
-
             N_lower = jnp.array([[1.0 - xi[0] - xi[1], xi[1]],  # nodes (0,0), (0,1)
                                  [xi[0], 0.0]])  # nodes (1,0), (1,1)
 
             N_upper = jnp.array([[0.0, 1.0 - xi[0]],  # nodes (0,0), (0,1)
                                  [1.0 - xi[1], xi[0] + xi[1] - 1.0]])  # nodes (1,0), (1,1)
             # Expand dimension to fit the  requared shape n_n, I,J,K
-            N_lower =jnp.expand_dims(N_lower, axis=0)
+            N_lower = jnp.expand_dims(N_lower, axis=0)
             N_upper = jnp.expand_dims(N_upper, axis=0)
             return jnp.where(xi[1] < 1.0 - xi[0], N_lower, N_upper)
 

@@ -74,7 +74,6 @@ class Discretization:
 
         self.get_discretization_info(element_type)
 
-
         # number of ghost buffers -> # TODO[Martin]: have to be changed base on the stencil
         left_ghosts = [1, ] * self.domain_dimension
         right_ghosts = [1, ] * self.domain_dimension
@@ -114,8 +113,6 @@ class Discretization:
                 'Unrecognised discretization type {}. Choose from ' \
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
         self.discretization_type = discretization_type  # only finite elements for now
-
-
 
         if discretization_type == 'finite_element':
             # finite element properties
@@ -181,6 +178,80 @@ class Discretization:
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
 
+    def multinodal_fft(self, real_field, fourier_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        fx_0_single_node = self.ffield_collection.complex_field(
+            name='fourier_field_inqks_single_fft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+
+        x_0_single_node = self.field_collection.real_field(
+            name='real_field_inqks_single_fft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # copy from  multinodal field to single
+            x_0_single_node.s[:, 0, ...] = np.copy(real_field.s[:, node, ...])
+
+            self.fft.communicate_ghosts(x_0_single_node)
+            fx_0_single_node.sg.fill(0)
+            #   FFT:  Fourier -> real
+            self.fft.fft(x_0_single_node, fx_0_single_node)
+
+            # return to the multinodal field
+            fourier_field.s[:, node, ...] = np.copy(fx_0_single_node.s[:, 0, ...])
+
+    # hot fix of mugrid iFFT on multinodal fields
+    def multinodal_ifft(self, fourier_field, real_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        fx_0_single_node = self.ffield_collection.complex_field(
+            name='fourier_field_inqks_single_ifft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+
+        x_0_single_node = self.field_collection.real_field(
+            name='real_field_inqks_single_ifft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # copy from  multinodal field to single
+            fx_0_single_node.s[:, 0, ...] = np.copy(fourier_field.s[:, node, ...])
+
+            # self.fft.communicate_ghosts(fx_0_single_node)
+            x_0_single_node.sg.fill(0)
+            # Inverse FFT: Fourier -> real
+            self.fft.ifft(fx_0_single_node, x_0_single_node)
+
+            # return to the multinodal field
+            real_field.s[:, node, ...] = np.copy(x_0_single_node.s[:, 0, ...])
+
+    def multinodal_fft_normalisation(self, real_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # Apply normalization for roundtrip
+            real_field.s[:, node, ...] *= self.fft.normalisation
+
     def get_nodal_points_coordinates(self):
         """
         Function to calculate  coordinates of nodal points for a domain of general rectangular shape.
@@ -196,7 +267,6 @@ class Discretization:
          nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
          nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
-
 
         dim = self.domain_dimension
         # creates a field with coordinates of all nodal points
@@ -227,7 +297,7 @@ class Discretization:
 
             if dim == 2:
                 # second node
-                nodal_points_coordinates_inxyz.s[0, 1, ...] +=half_pixel_size[0]
+                nodal_points_coordinates_inxyz.s[0, 1, ...] += half_pixel_size[0]
                 # third node
                 nodal_points_coordinates_inxyz.s[1, 2, ...] += half_pixel_size[1]
                 # fourth node
@@ -303,7 +373,7 @@ class Discretization:
         -------
          quad_points_coordinates_iqxyz = spatial coordinates of quadrature nodes [i,q,x,y,z]
         """
-        dim=self.domain_dimension
+        dim = self.domain_dimension
         # creates a field with coordinates of all quadrature points
         quad_points_coordinates_iqxyz = self.field_collection.real_field(
             name="quad_points_coordinates_iqxyz",  # name of the field
@@ -628,9 +698,9 @@ class Discretization:
         self.fft.communicate_ghosts(field=nodal_field_inxyz)
 
     def evaluate_field_at_quad_points_old(self,
-                                      nodal_field_fnxyz,
-                                      quad_field_fqnxyz=None,
-                                      quad_points_coords_iq=None):
+                                          nodal_field_fnxyz,
+                                          quad_field_fqnxyz=None,
+                                          quad_points_coords_iq=None):
         """
         Function that evaluates nodal field at quad points.
 
@@ -1537,6 +1607,7 @@ class Discretization:
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
                 name='Greens_diagonal_fast',  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+                sub_pt='nodal_points'
             )  #
             unit_impulse_response_inqks = self.ffield_collection.complex_field(
                 name='unit_impulse_response_inqks',  # name of the field
@@ -1548,6 +1619,9 @@ class Discretization:
                 if np.any(np.all(self.fft.icoords == 0, axis=0)):
                     # set 1 --- the unit impulse --- to a proper positions
                     unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
+                    print(f"Unit impulse set at position {impulse_position}")
+                    print(
+                        f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
 
                 self.apply_system_matrix_mugrid(
                     material_data_field=reference_material_data_ijkl,
@@ -1557,8 +1631,10 @@ class Discretization:
                 # TODO[] Unit impulse response is correct
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
+                print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+                print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
 
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
 
@@ -1583,8 +1659,77 @@ class Discretization:
 
             preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
         else:
-            raise ValueError(f'The fast assembly of Green preconditioner for does  work yet '
-                             f' for {self.nb_nodes_per_pixel} number of nodes per pixel ')
+            # for one node per pixel, we can simplify the algorithm
+            # for more nodes per pixel, we can add it later
+            unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
+            unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
+
+            preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
+                name='Greens_diagonal_fast',  # name of the field
+                components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+                sub_pt='nodal_points'  # sub-point type
+            )  #
+            unit_impulse_response_inqks = self.ffield_collection.complex_field(
+                name='unit_impulse_response_inqks',  # name of the field
+                components=(self.unknown_size[0],),  # shape of components
+                sub_pt='nodal_points'
+            )
+            for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
+                unit_impulse_inxyz.sg.fill(0)  # empty the unit impulse vector
+                if np.any(np.all(self.fft.icoords == 0, axis=0)):
+                    # set 1 --- the unit impulse --- to a proper positions
+                    unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
+                    print(f"Unit impulse set at position {impulse_position}")
+                    print(
+                        f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
+
+                unit_impulse_response_inxyz.sg.fill(0)
+                self.apply_system_matrix_mugrid(
+                    material_data_field=reference_material_data_ijkl,
+                    input_field_inxyz=unit_impulse_inxyz,
+                    output_field_inxyz=unit_impulse_response_inxyz,
+                    formulation=formulation)
+                # TODO[] Unit impulse response is correct
+
+                self.fft.communicate_ghosts(unit_impulse_response_inxyz)
+                print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+
+                unit_impulse_response_inqks.sg.fill(0)
+                #self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+
+                # Forward FFT: real -> Fourier
+                self.multinodal_fft(real_field=unit_impulse_response_inxyz,
+                                              fourier_field=unit_impulse_response_inqks)
+                print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                # Unpack tuple to get normal indexing:
+                i, n = impulse_position
+                preconditioner_diagonals_ininqks.s[i, n, ...] = np.copy(unit_impulse_response_inqks.s[...])
+
+            # THE SIZE OF DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
+            # compute inverse of diagonals
+            original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape
+
+            #prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(0, 2))
+
+            # Reshape the array to (n_u_dofs, n_u_dofs, ndof) for easier processing
+            # reshaped_matrices = preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
+            reshaped_matrices =  preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
+            # d mean nb_dofs_per_voxel
+            # Transpose to shape (N, n_dof, n_dof) for batch inversion
+            G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
+            # Invert each matrix using np.linalg.inv (vectorized)
+            if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
+                G_batch[0, ...] = np.linalg.pinv(G_batch[0, ...], rcond=1e-8)  # shape: (N, d, d) # do not invert zero mode
+
+                G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not invert zero mode
+            else:
+                G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
+
+            # Reshape the result back to the original shape
+            G_diag_ijxy = G_batch.transpose(1, 2, 0).reshape(original_shape_ininqks)
+
+            preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
+
         return preconditioner_diagonals_ininqks
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
@@ -1818,21 +1963,33 @@ class Discretization:
 
         ffield_fnqks = self.ffield_collection.complex_field(
             name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            components=(*self.cell.unknown_shape,))  # sub-point type
+            components=(*self.cell.unknown_shape,),  # shape of components
+            sub_pt='nodal_points')  # sub-point type
 
         if isinstance(input_nodal_field_fnxyz, np.ndarray):
             raise ("apply_preconditioner_mugrid does not support  ndarray")
 
         # FFTn of input array
-        self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
+        if self.nb_nodes_per_pixel == 1:
+            self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
+        else:
+            self.multinodal_fft( real_field=input_nodal_field_fnxyz,
+                                 fourier_field=ffield_fnqks)
 
         # multiplication with a diagonals of preconditioner
-        ffield_fnqks.s[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
+        ffield_fnqks.s[...] = np.einsum('cdab...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
 
-        # normalization
-        ffield_fnqks.s[...] *= self.fft.normalisation
-        # iFFTn
-        self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
+        if self.nb_nodes_per_pixel == 1:
+            # iFFTn
+            self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
+            # normalization
+            output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
+        else:
+            # Inverse FFT: Fourier -> real
+            self.multinodal_ifft(fourier_field=ffield_fnqks,
+                               real_field=output_nodal_field_fnxyz)
+
+            self.multinodal_fft_normalisation(real_field=output_nodal_field_fnxyz)
 
     def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
                                                jacobi_half_fnfnxyz,

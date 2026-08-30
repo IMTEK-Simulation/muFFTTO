@@ -67,7 +67,7 @@ def K_fun(x, Ax):
     discretization.fft.communicate_ghosts(Ax)
 
 
-# preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
+preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=conductivity_C_1)
 
 def M_fun(x, Px):
     """
@@ -75,9 +75,9 @@ def M_fun(x, Px):
     The Preconditioner is represented by the convolution operator.
     """
     discretization.fft.communicate_ghosts(x)
-    # discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
-    #                                            input_nodal_field_fnxyz=x,
-    #                                            output_nodal_field_fnxyz=Px)
+    discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner,
+                                               input_nodal_field_fnxyz=x,
+                                               output_nodal_field_fnxyz=Px)
     Px.s[...]=x.s[...]*1.
     discretization.fft.communicate_ghosts(Px)
 
