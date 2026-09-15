@@ -9,7 +9,7 @@ import pytest
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import material_models
-from muFFTTO.discretization_library_NEW import Element
+from muFFTTO.discretization_library import Element
 
 
 class TestHessianOperatorBasics:

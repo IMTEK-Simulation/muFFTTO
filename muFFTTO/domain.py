@@ -10,7 +10,7 @@ import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
-from muFFTTO import discretization_library_NEW
+from muFFTTO import discretization_library
 
 
 class PeriodicUnitCell:
@@ -186,79 +186,6 @@ class Discretization:
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
 
-    def multinodal_fft(self, real_field, fourier_field):
-
-        """
-        it seems that mugrid fft does not properly handle multinodal fields
-        this includes ffts on quad point field or multinodal fields like in quadratic elements
-        """
-        if self.nb_nodes_per_pixel == 1:
-            warnings.warn(f"Are you sure you want to use multinodal fft?")
-
-        fx_0_single_node = self.ffield_collection.complex_field(
-            name='fourier_field_inqks_single_fft',  # name of the field
-            components=(real_field.s.shape[0],),  # shape of components
-        )
-
-        x_0_single_node = self.field_collection.real_field(
-            name='real_field_inqks_single_fft',  # name of the field
-            components=(real_field.s.shape[0],),  # shape of components
-        )
-        for node in np.arange(self.nb_nodes_per_pixel):
-            # copy from  multinodal field to single
-            x_0_single_node.s[:, 0, ...] = np.copy(real_field.s[:, node, ...])
-
-            self.fft.communicate_ghosts(x_0_single_node)
-            fx_0_single_node.sg.fill(0)
-            #   FFT:  Fourier -> real
-            self.fft.fft(x_0_single_node, fx_0_single_node)
-
-            # return to the multinodal field
-            fourier_field.s[:, node, ...] = np.copy(fx_0_single_node.s[:, 0, ...])
-
-    # hot fix of mugrid iFFT on multinodal fields
-    def multinodal_ifft(self, fourier_field, real_field):
-
-        """
-        it seems that mugrid fft does not properly handle multinodal fields
-        this includes ffts on quad point field or multinodal fields like in quadratic elements
-        """
-        if self.nb_nodes_per_pixel == 1:
-            warnings.warn(f"Are you sure you want to use multinodal fft?")
-
-        fx_0_single_node = self.ffield_collection.complex_field(
-            name='fourier_field_inqks_single_ifft',  # name of the field
-            components=(real_field.s.shape[0],),  # shape of components
-        )
-
-        x_0_single_node = self.field_collection.real_field(
-            name='real_field_inqks_single_ifft',  # name of the field
-            components=(real_field.s.shape[0],),  # shape of components
-        )
-        for node in np.arange(self.nb_nodes_per_pixel):
-            # copy from  multinodal field to single
-            fx_0_single_node.s[:, 0, ...] = np.copy(fourier_field.s[:, node, ...])
-
-            # self.fft.communicate_ghosts(fx_0_single_node)
-            x_0_single_node.sg.fill(0)
-            # Inverse FFT: Fourier -> real
-            self.fft.ifft(fx_0_single_node, x_0_single_node)
-
-            # return to the multinodal field
-            real_field.s[:, node, ...] = np.copy(x_0_single_node.s[:, 0, ...])
-
-    def multinodal_fft_normalisation(self, real_field):
-
-        """
-        it seems that mugrid fft does not properly handle multinodal fields
-        this includes ffts on quad point field or multinodal fields like in quadratic elements
-        """
-        if self.nb_nodes_per_pixel == 1:
-            warnings.warn(f"Are you sure you want to use multinodal fft?")
-
-        for node in np.arange(self.nb_nodes_per_pixel):
-            # Apply normalization for roundtrip
-            real_field.s[:, node, ...] *= self.fft.normalisation
 
     def get_nodal_points_coordinates(self):
         """
@@ -1985,26 +1912,19 @@ class Discretization:
             raise ("apply_preconditioner_mugrid does not support  ndarray")
 
         # FFTn of input array
-        if self.nb_nodes_per_pixel == 1:
-            self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
-        else:
-            self.multinodal_fft(real_field=input_nodal_field_fnxyz,
-                                fourier_field=ffield_fnqks)
+
+        self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
+
 
         # multiplication with a diagonals of preconditioner
         ffield_fnqks.s[...] = np.einsum('cdab...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
 
-        if self.nb_nodes_per_pixel == 1:
-            # iFFTn
-            self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
-            # normalization
-            output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
-        else:
-            # Inverse FFT: Fourier -> real
-            self.multinodal_ifft(fourier_field=ffield_fnqks,
-                                 real_field=output_nodal_field_fnxyz)
 
-            self.multinodal_fft_normalisation(real_field=output_nodal_field_fnxyz)
+        # iFFTn
+        self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
+        # normalization
+        output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
+
 
     def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
                                                jacobi_half_fnfnxyz,
@@ -2482,8 +2402,7 @@ class Discretization:
         return self.get_rhs_explicit_stress_mugrid(**kwargs)
 
     def get_discretization_info(self, element_type):
-        # discretization_library.get_shape_function_gradient_matrix(self, element_type)
-        discretization_library_NEW.get_shape_function_gradient_matrix(self, element_type)
+        discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):
         """Scales a 2D  field to be within [min_val, max_val]."""

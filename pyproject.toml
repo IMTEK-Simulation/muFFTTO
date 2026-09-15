@@ -13,7 +13,13 @@ authors = [
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
-    "Programming Language :: Python"
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
 ]
 requires-python = ">=3.10.0"
 dynamic = [ "version" ]
@@ -22,16 +28,12 @@ dependencies = [
     "scipy",
     "muGrid",
     "NuMPI",
+    "mpi4py",
     "jax",
-    "matplotlib",
-    "opencv-python"
+    "matplotlib"
 ]
 
 [project.optional-dependencies]
-mpi = [
-    "mpi4py",
-    "NuMPI"
-]
 test = [
     "pytest",
     "pytest-cov",
@@ -45,4 +47,4 @@ test = [
 [project.urls]
 documentation = "https://imtek-simulation.github.io/muFFTTO/"
 repository = "https://github.com/imtek-simulation/muFFTTO"
-changelog = "https://github.com/imtek-simulation/muFFTTO/blob/master/CHANGELOG.md"
+changelog = "https://github.com/imtek-simulation/muFFTTO/blob/main/CHANGELOG.md"

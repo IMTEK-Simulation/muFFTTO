@@ -14,11 +14,15 @@ FFT-based micro-scale topology optimization on periodic unit cells using the [mu
  
 ### Dependencies
 
-- Python >= 3.8
-- [numpy](https://numpy.org/),
+- Python >= 3.10
+- [numpy](https://numpy.org/)
 - [scipy](https://scipy.org/)
-- [muGrid](https://github.com/muSpectre/muGrid)  
-
+- [muGrid](https://github.com/muSpectre/muGrid)
+- [NuMPI](https://github.com/muSpectre/NuMPI)
+- [mpi4py](https://mpi4py.readthedocs.io/)
+- [JAX](https://github.com/google/jax)
+- [matplotlib](https://matplotlib.org/)
+ 
 ## Installation
 
 To install `muFFTTO`, you can use `pip`:
@@ -51,21 +55,39 @@ pip install git+https://github.com/muSpectre/muGrid.git
 | Module | Description |
 |--------|-------------|
 | `domain.py` | Core classes `PeriodicUnitCell` and `Discretization` for setting up the computational domain, fields, and operators |
-| `topology_optimization.py` | Objective functions, sensitivity analysis (adjoint method), and phase-field potentials |
+| `topology_optimization.py` | Objective functions, sensitivity analysis (adjoint method), and phase-field potentials for elasticity |
+| `topology_optimization_conductivity.py` | Topology optimization for thermal conductivity problems |
 | `solvers.py` | Preconditioned conjugate gradient (PCG) and Adam optimizer for solving linear systems and optimization problems |
+| `solvers_nonlinear.py` | Nonlinear solver implementations for advanced optimization |
 | `discretization_library.py` | Shape function gradient matrices for various element types (linear triangles, bilinear rectangles, trilinear hexahedra) |
+| `material_models.py` | Abstract base classes and implementations for material constitutive models |
 | `microstructure_library.py` | Parametric geometry definitions for generating periodic microstructures |
+| `grid_adaptation_methods.py` | Methods for adaptive mesh refinement and grid adaptation |
+| `grid_adaptation_arbitrary.py` | Arbitrary grid adaptation strategies |
+| `analytical_grid_adaptation.py` | Analytical solutions for grid adaptation |
+| `tensor_operations.py` | Utility functions for tensor operations and indexing |
+| `visualization_utils.py` | Visualization and post-processing utilities |
 
 ## Examples
 
-The `examples/` directory contains working examples:
+The `examples/` directory contains working examples organized by topic:
 
-- `example_2D_homogenization_conductivity_*.py` - 2D thermal conductivity homogenization
-- `example_2D_homogenization_elasticity.py` - 2D elasticity homogenization with FEM
-- `example_2D_elasticity_TO.py` - 2D topology optimization for elasticity
-- `example_3D_homogenization_conductivity.py` - 3D thermal conductivity homogenization
-- `example_3D_homogenization_elasticity.py` - 3D elastic homogenization
-- `example_2D_homogenization_elasticity_Hashin_composite_sphere.py` - Validation against Hashin analytical bounds
+**Homogenization** (`examples/homogenization/`)
+- Thermal conductivity: 2D and 3D examples with various discretization methods
+- Small-strain elasticity: 2D and 3D homogenization with FEM
+
+**Topology Optimization** (`examples/topology_optimization/`)
+- 2D and 3D topology optimization for elasticity and conductivity
+- Grid tiling and adaptive refinement strategies
+
+**Analytical Solutions** (`examples/analytical_solutions/`)
+- Validation against Hashin analytical bounds for composite materials
+
+**Grid Adaptation** (`examples/grid_adaptation/`)
+- Examples of mesh refinement and coordinate transformations
+
+**Internal Contact** (`examples/internal_contact/`)
+- Contact mechanics and third-medium interaction problems
 
  
 

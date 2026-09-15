@@ -4,7 +4,7 @@ import pytest
 
 sys.path.append('..')
 
-from muFFTTO.discretization_library_NEW import Element, _ELEMENT_FACTORIES
+from muFFTTO.discretization_library import Element, _ELEMENT_FACTORIES
 
 
 class DummyDomain:
