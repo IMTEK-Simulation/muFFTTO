@@ -25,7 +25,8 @@ dependencies = [
 [project.optional-dependencies]
 mpi = [
     "mpi4py",
-    "NuMPI"
+    "NuMPI",
+    "flake8"
 ]
 test = [
     "pytest",
