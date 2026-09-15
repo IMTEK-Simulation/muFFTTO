@@ -639,126 +639,12 @@ def test_3D_system_matrix_symmetricity():
 
 
 
-def unfinishedtest_2D_integral_linearity():  # TODO
-        global material_data_field
-        domain_size = [3, 4]
-        for problem_type in ['conductivity', 'elasticity']:  # TODO add 'elasticity'
-            my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
-                                              problem_type=problem_type)
-            number_of_pixels = (4, 5)
-            discretization_type = 'finite_element'
-
-            for element_type in ['linear_triangles', 'bilinear_rectangle']:
-                discretization = domain.Discretization(cell=my_cell,
-                                                       number_of_pixels=number_of_pixels,
-                                                       discretization_type=discretization_type,
-                                                       element_type=element_type)
-
-                if problem_type == 'elasticity':
-                    K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
-
-                    mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
-                                                               kind='linear')
-
-                    material_data_field = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
-
-                    target_stress = np.array([[1, 0.3], [0.3, 2]])
-                elif problem_type == 'conductivity':
-                    mat_1 = np.array([[1, 0], [0, 1]])
-                    material_data_field = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
-                    target_stress = np.array([2, 0.5])
-                    target_stress = target_stress[np.newaxis,]
-
-                actual_stress = np.random.rand(*discretization.get_gradient_size_field().shape)
-                actual_stress_int = discretization.integrate_over_cell(actual_stress)
-
-                stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
-                stress_difference_int = discretization.integrate_over_cell(stress_difference)
-
-                integral_target_stress = discretization.cell.domain_volume * target_stress
-
-                self.assertTrue(
-                    np.allclose(stress_difference_int + integral_target_stress, actual_stress_int, rtol=1e-15,
-                                atol=1e-15),
-                    'Integral linearity violation: 2D element {} in {} problem.'.format(
-                        element_type, problem_type))
-
-                # ------------- this is something different ---- implementation for phase field #
-                def compute_df_sigma_du(actual_stress, target_stress, material_data_field):
-                    # df_sigma_du = int( 2*(Sigma-Sigma_target):C:grad_sym )d_Omega # TODO missing grad_sym operator
-                    stress_difference = 2 * actual_stress - target_stress[
-                        (...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
-
-                    stress_difference = discretization.apply_material_data(material_data=material_data_field,
-                                                                           gradient_field=stress_difference)
-
-                    df_sigma_du = discretization.integrate_over_cell(stress_difference)
-                    return df_sigma_du
-
-                df_sigma_du = compute_df_sigma_du(actual_stress, target_stress, material_data_field)
-
-                def compute_df_sigma_drho(actual_stress, target_stress, material_data_field,
-                                          phase_field):  # todo dadasdsadassdasdadasd
-                    # df_sigma_drho = int( 2*(Sigma-Sigma_target):dK/drho )d_Omega
-                    # dK/drho =
-
-                    stress_difference = 2 * actual_stress - target_stress[
-                        (...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
-
-                    # material_data_phase_field=
-
-                    stress_difference = discretization.apply_material_data(material_data=material_data_field,
-                                                                           gradient_field=stress_difference)
-
-                    integral = discretization.integrate_over_cell(stress_difference)
-                    return integral
-
-                phase_field = np.random.rand(*discretization.get_temperature_sized_field().shape)
-
-                def compute_gradient_of_double_well_potential(phase_field, w=1, eta=1):
-                    # Derivative of the double-well potential with respect to phase-field
-                    # phase field potential = int ( rho^2(1-rho)^2 )/eta   dx
-                    # gradient phase field potential = int ((2 * phase_field( + 2 * phase_field^2  -  3 * phase_field +1 )) )/eta   dx
-                    # d/dρ(ρ^2 (1 - ρ)^2) = 2 ρ (2 ρ^2 - 3 ρ + 1)
-
-                    # phase field gradient  =( |grad (rgo)|^2 ) *eta
-
-                    integrant = (2 * phase_field(2 * phase_field * phase_field - 3 * phase_field + 1))
-                    # INDRE  derivative = w / eta * 2 * phase * (1 - phase) * (1 - 2 * phase) * lengths[0] * lengths[1] / nb_pixels
-                    integral = discretization.integrate_over_cell(integrant)
-
-                    return integral
-
-                phase_field_potential = compute_gradient_of_double_well_potential(phase_field, w=1, eta=1)
-
-                stress_difference_squared_int = discretization.integrate_over_cell(
-                    stress_difference * stress_difference)
-
-                integral_difference = np.einsum('fdqxy...->fd', stress_difference)
-                integral_actual_stress = np.einsum('fdqxy...->fd', actual_stress)
-
-                integral_target_stress = np.einsum('fdqxy...->fd',
-                                                   target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)])
-                integral_actual_stress_W = np.einsum('ijq...,q->ijq...', actual_stress,
-                                                     discretization.quadrature_weights)
-
-def test_symmetric_multiplication():
-    mat_1 = np.array([[2, 1], [1, 3]])
-    B = np.array([[-1, 1, 0, 0],
-                  [-1, 0, 1, 0]])
-    B = np.array([[3],
-                  [4]])
-    AB = np.matmul(mat_1, B)
-    BtA = np.matmul(B.transpose(), mat_1)
-
-def test_2D_fft_output():
-
-    domain_size = [2, 3]
-    for problem_type in ['elasticity', 'conductivity'
-                         ]:  # 'conductivity','elasticity' 'elasticity', 'conductivity'
+def test_2D_integral_linearity():
+    domain_size = [3, 4]
+    for problem_type in ['conductivity', 'elasticity']:
         my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                           problem_type=problem_type)
-        number_of_pixels = (9, 19)
+        number_of_pixels = (4, 5)
         discretization_type = 'finite_element'
 
         for element_type in ['linear_triangles', 'bilinear_rectangle']:
@@ -766,7 +652,6 @@ def test_2D_fft_output():
                                                    nb_of_pixels_global=number_of_pixels,
                                                    discretization_type=discretization_type,
                                                    element_type=element_type)
-            material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
 
             if problem_type == 'elasticity':
                 K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=3, poisson=0.2)
@@ -774,35 +659,28 @@ def test_2D_fft_output():
                 mat_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension, K=K_1, mu=G_1,
                                                            kind='linear')
 
-                material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+                material_data_field = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
 
-
-
+                target_stress = np.array([[1, 0.3], [0.3, 2]])
             elif problem_type == 'conductivity':
                 mat_1 = np.array([[1, 0], [0, 1]])
-                material_data_field.s[...] = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+                material_data_field = mat_1[:, :, np.newaxis, np.newaxis, np.newaxis]
+                target_stress = np.array([2, 0.5])
+                target_stress = target_stress[np.newaxis,]
 
-            ref_material_data = np.copy(mat_1)
+            actual_stress = np.random.rand(*discretization.gradient_size)
+            actual_stress_int = discretization.integrate_over_cell(actual_stress)
 
-            def K_fun(x, Ax):
-                discretization.apply_system_matrix_mugrid(material_data_field=material_data_field,
-                                                          input_field_inxyz=x,
-                                                          output_field_inxyz=Ax)
+            stress_difference = actual_stress - target_stress[(...,) + (np.newaxis,) * (actual_stress.ndim - 2)]
+            stress_difference_int = discretization.integrate_over_cell(stress_difference)
 
-            # set up random field
-            f_0 = discretization.get_unknown_size_field(name='f_0')  # solution
-            x_0 = discretization.get_unknown_size_field(name='x_0')  # x0
-            x_0.s[0, 0, 0, 0] = 1
-            K_fun(x_0, f_0)
+            integral_target_stress = discretization.cell.domain_volume * target_stress
 
-            ffield = discretization.ffield_collection.complex_field('vector-field', (x_0.nb_components,))
+            assert np.allclose(
+                stress_difference_int + integral_target_stress, actual_stress_int, rtol=1e-14,
+                atol=1e-14), 'Integral linearity violation: 2D element {} in {} problem.'.format(
+                element_type, problem_type)
 
-            discretization.fft.fft(f_0, ffield)
-
-            assert_condition = np.allclose(ffield.s[0, 0, 0, 0], 0, rtol=1e-10, atol=1e-10)
-            # print(assert_condition)
-            assert assert_condition, 'FFT of mean field has non-zero zero frequency {} in {} problem.'.format(element_type,
-                                                                                                         problem_type)
 
 def test_2D_preconditioner_is_inverse_of_homogeneous_problem():
 

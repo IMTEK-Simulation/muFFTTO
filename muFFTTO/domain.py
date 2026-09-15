@@ -2091,38 +2091,7 @@ class Discretization:
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)
 
-    def apply_system_matrix_without_data_field(self,
-                                               constitutive_law,
-                                               input_field_inxyz,
-                                               output_field_inxyz,
-                                               formulation=None,
-                                               **kwargs):
 
-        if isinstance(input_field_inxyz, np.ndarray):
-            raise ("apply_system_matrix_mugrid does not supprot ndarray")
-
-        self.fft.communicate_ghosts(input_field_inxyz)
-        # allocate temporary fields
-        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
-
-        if np.all(formulation == 'small_strain'):
-            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
-                                                            grad_u_ijqxyz=gradient_ijqxyz)
-
-        else:
-            self.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz,
-                                                grad_u_ijqxyz=gradient_ijqxyz)
-
-        # compute stress/flux field
-        constitutive_law
-        constitutive_law
-        self.apply_material_data_mugrid(material_data=material_data_field,
-                                        gradient_field=gradient_ijqxyz)
-
-        self.fft.communicate_ghosts(gradient_ijqxyz)
-        self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
-                                                       div_u_fnxyz=output_field_inxyz,
-                                                       apply_weights=True)
 
     def apply_system_matrix_mugrid_deformed_grid(self,
                                                  material_data_field,

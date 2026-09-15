@@ -1587,10 +1587,6 @@ if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as plt
 
-    # Display the image
-    plt.imshow(image, cmap='gray')
-    plt.axis('off')
-    plt.show()
 
     # plot  geometry
     geometry_ID = 'geometry_III_5_3D'
