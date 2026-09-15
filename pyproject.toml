@@ -19,18 +19,23 @@ requires-python = ">=3.8.0"
 dynamic = [ "version" ]
 dependencies = [
     "numpy",
-    "scipy"
+    "scipy",
+    "muGrid",
+    "NuMPI",
+    "jax",
+    "matplotlib",
+    "opencv-python"
 ]
 
 [project.optional-dependencies]
 mpi = [
     "mpi4py",
-    "NuMPI",
-    "flake8"
+    "NuMPI"
 ]
 test = [
     "pytest",
-    "pytest-cov"
+    "pytest-cov",
+    "flake8"
 ]
 
 # Note: muGrid and muFFT must be installed separately from the muSpectre project:
