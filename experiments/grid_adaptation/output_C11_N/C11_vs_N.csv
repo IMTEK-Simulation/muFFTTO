@@ -1,0 +1,7 @@
+N,C11,converged,det_F_min,det_F_max,error
+4,1.0638724332487728,True,0.223022,1.380671,
+8,1.0973768309052,True,0.241699,1.493446,
+16,1.0133770870734817,True,0.335205,1.625178,
+32,1.0179302485875124,True,0.287109,1.546759,
+64,nan,False,0.066406,1.699051,Preconditioned conjugate gradient algorithm did not converge
+128,nan,False,0.313617,1.412041,Preconditioned conjugate gradient algorithm did not converge
