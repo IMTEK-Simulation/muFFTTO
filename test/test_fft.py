@@ -17,7 +17,7 @@ def test_fft_per_quadrature_point():
 
     # Setup discretization
     domain_size = [2, 3]
-    problem_type = 'conductivity'
+    problem_type = 'elasticity'
 
     my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                       problem_type=problem_type)
@@ -50,8 +50,9 @@ def test_fft_per_quadrature_point():
         mu=G_1,
         kind='linear'
     )
+
     material_data_field = discretization.get_material_data_size_field_mugrid(name='material_dat')
-    material_data_field.s[...] = mat_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis]
+    material_data_field.s[...] = mat_1[:, :,:, :,  np.newaxis, np.newaxis, np.newaxis]
 
     print(f"Unknown shape: {discretization.unknown_size}")
     print(f"Number of quadrature points: {discretization.unknown_size[1]}")

@@ -137,8 +137,10 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
 
-            self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
-
+            try:
+                self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+            except:
+                print(f'self.gradient_op does not exist ')
             try:
                 # Hessian operator ---> due to muGrid set up, we can't have ij outpu shape. So I reshape the Hessian operator
                 H_deqnijk = self.H_hess_at_pixel_deqnijk
@@ -152,6 +154,12 @@ class Discretization:
                 self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_dqnijk)
             except:
                 print(f'self.interpolation_op does not exist ')
+
+            try:
+                self.laplacian = GenericLinearOperator(point_of_origin, self.L_laplace_at_pixel_eqnijk)
+            except:
+                print(f'self.interpolation_op does not exist ')
+
             # displacement              [f,n,x,y,z]
             # rhs                       [f,n,x,y,z]
             # macro_gradient_field    [f,d,q,x,y,z]
@@ -344,9 +352,9 @@ class Discretization:
         nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
         nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
-        if self.nb_nodes_per_pixel != 1:
-            raise ValueError(
-                'get_nodal_points_coordinates does not support more than one nodal point')
+        # if self.nb_nodes_per_pixel != 1:
+        #     raise ValueError(
+        #         'get_nodal_points_coordinates does not support more than one nodal point')
 
         # create nd array  with proper shape including periodic nodes
         extended_number_of_nodes = (len(self.nb_of_pixels_global), self.nb_nodes_per_pixel) + tuple(
@@ -508,8 +516,8 @@ class Discretization:
         if isinstance(gradient_field_ijqxyz, np.ndarray):
             raise ("apply_gradient_transposed_operator_mugrid does not supprot ndarray")
 
-        if self.nb_nodes_per_pixel > 1:
-            warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
+        # if self.nb_nodes_per_pixel > 1:
+        #     warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
         # clear div array
         # get quadrature weights
         if apply_weights:
@@ -600,8 +608,8 @@ class Discretization:
                 - q is quadrature point index
                 - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
         """
-        if self.nb_nodes_per_pixel > 1:
-            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+        # if self.nb_nodes_per_pixel > 1:
+        #     warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
 
         # if the input is ndArray, create muGrid field out of it
         if isinstance(u_inxyz, np.ndarray):
@@ -663,9 +671,6 @@ class Discretization:
 
     def apply_hessian_operator_transposed_to_vector_field_mugrid(self, hess_u_ijkqxyz, nodal_field_inxyz,
                                                                  apply_weights=True):
-
-        if self.nb_nodes_per_pixel > 1:
-            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
 
         # if the input is ndArray, create muGrid field out of it
         if isinstance(nodal_field_inxyz, np.ndarray):
@@ -1592,7 +1597,8 @@ class Discretization:
         return self.get_preconditioner_Green_fast(**kwargs)
 
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
-                                        formulation=None):
+                                        formulation=None,
+                                        operator=None):
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1622,19 +1628,22 @@ class Discretization:
                     print(f"Unit impulse set at position {impulse_position}")
                     print(
                         f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
-
-                self.apply_system_matrix_mugrid(
-                    material_data_field=reference_material_data_ijkl,
-                    input_field_inxyz=unit_impulse_inxyz,
-                    output_field_inxyz=unit_impulse_response_inxyz,
-                    formulation=formulation)
-                # TODO[] Unit impulse response is correct
+                if operator is None:
+                    self.apply_system_matrix_mugrid(
+                        material_data_field=reference_material_data_ijkl,
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz,
+                        formulation=formulation)
+                else:
+                    operator(
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz)
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
-                #print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+                # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
-                #print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                # print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
 
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
 
@@ -1684,23 +1693,28 @@ class Discretization:
                     #     f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
 
                 unit_impulse_response_inxyz.sg.fill(0)
-                self.apply_system_matrix_mugrid(
-                    material_data_field=reference_material_data_ijkl,
-                    input_field_inxyz=unit_impulse_inxyz,
-                    output_field_inxyz=unit_impulse_response_inxyz,
-                    formulation=formulation)
-                # TODO[] Unit impulse response is correct
+                if operator is None:
+                    self.apply_system_matrix_mugrid(
+                        material_data_field=reference_material_data_ijkl,
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz,
+                        formulation=formulation)
+                else:
+                    operator(
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz)
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
-               # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+                # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 unit_impulse_response_inqks.sg.fill(0)
-                #self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+                # self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
 
                 # Forward FFT: real -> Fourier
-                self.multinodal_fft(real_field=unit_impulse_response_inxyz,
-                                              fourier_field=unit_impulse_response_inqks)
-                #print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                # self.multinodal_fft(real_field=unit_impulse_response_inxyz,
+                #                     fourier_field=unit_impulse_response_inqks)
+                self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+                # print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
                 # Unpack tuple to get normal indexing:
                 i, n = impulse_position
                 preconditioner_diagonals_ininqks.s[i, n, ...] = np.copy(unit_impulse_response_inqks.s[...])
@@ -1709,17 +1723,18 @@ class Discretization:
             # compute inverse of diagonals
             original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape
 
-            #prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(0, 2))
+            # prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(0, 2))
 
             # Reshape the array to (n_u_dofs, n_u_dofs, ndof) for easier processing
             # reshaped_matrices = preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
-            reshaped_matrices =  preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
+            reshaped_matrices = preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
             # d mean nb_dofs_per_voxel
             # Transpose to shape (N, n_dof, n_dof) for batch inversion
             G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
-                G_batch[0, ...] = np.linalg.pinv(G_batch[0, ...], rcond=1e-8)  # shape: (N, d, d) # do not invert zero mode
+                G_batch[0, ...] = np.linalg.pinv(G_batch[0, ...],
+                                                 rcond=1e-8)  # shape: (N, d, d) # do not invert zero mode
 
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not invert zero mode
             else:
@@ -1973,8 +1988,8 @@ class Discretization:
         if self.nb_nodes_per_pixel == 1:
             self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
         else:
-            self.multinodal_fft( real_field=input_nodal_field_fnxyz,
-                                 fourier_field=ffield_fnqks)
+            self.multinodal_fft(real_field=input_nodal_field_fnxyz,
+                                fourier_field=ffield_fnqks)
 
         # multiplication with a diagonals of preconditioner
         ffield_fnqks.s[...] = np.einsum('cdab...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
@@ -1987,7 +2002,7 @@ class Discretization:
         else:
             # Inverse FFT: Fourier -> real
             self.multinodal_ifft(fourier_field=ffield_fnqks,
-                               real_field=output_nodal_field_fnxyz)
+                                 real_field=output_nodal_field_fnxyz)
 
             self.multinodal_fft_normalisation(real_field=output_nodal_field_fnxyz)
 
@@ -2395,6 +2410,20 @@ class Discretization:
         )
         # her J is a composition of jk indices. J is flattened jk
         return hess_u_iJqxyz
+
+    def get_displacement_laplacian_at_quad_field(self, name):
+        # return zero field for  the  (discretized)  Hessian of displacement
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But elasticity Laplacian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+
+        lap_u_ikqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(self.domain_dimension, 1,),  # shape of components # for temperature, it will be just 1,1
+            sub_pt='quad_points'  # sub-point type
+        )
+        return lap_u_ikqxyz
 
     def get_temperature_material_data_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature

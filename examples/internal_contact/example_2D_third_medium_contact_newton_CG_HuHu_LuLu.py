@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(
     prog='exp_finite_strain_2D_NeoHookean.py',
     description='Solve finite strain NeoHookean elasticity in 2D'
 )
-parser.add_argument('-n', '--nb_pixel', default='64')
+parser.add_argument('-n', '--nb_pixel', default='16')
 parser.add_argument('-inc', '--nb_increments', default='100')
 parser.add_argument(
     '--save_per_it',
@@ -46,7 +46,7 @@ dim = len(domain_size)
 tol_newton = 1e-4
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'bilinear_rectangle'
+element_type = 'biquadratic_rectangle'
 formulation = 'finite_strain'
 preconditioner_type = "Green"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 
@@ -169,8 +169,12 @@ stress_field = discretization.get_displacement_gradient_sized_field(name='stress
 tangent_field = discretization.get_material_data_size_field_mugrid(name='tangent_field')
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
 energy_field = discretization.get_quad_field_scalar(name='energy_field')
+
 hess_u_ijkqxyz = discretization.get_displacement_hessian_size_field(name='hess_u')
 HtH_field = discretization.get_unknown_size_field(name='HtH')
+
+lap_u_inxyz = discretization.get_displacement_laplacian_at_quad_field(name='lap_u_ijnxyz')
+LtL_field = discretization.get_displacement_sized_field(name='LtL_field')
 
 # ============================================================================
 # initialize F = I (reference configuration)
@@ -179,11 +183,42 @@ total_strain_field.s[...] = 0.0
 for d in range(dim):
     total_strain_field.s[d, d] = 1.0
 
+
 # ============================================================================
 # preconditioner
 # ============================================================================
+inv_tr_I = 1.0 / dim  # = 1/Tr(I), Eq. (4)
+
+def add_regularization(x, out, scale=1.0):
+    """out += k_r * (HtH - LtL/dim) applied to x. Must mirror K_fun exactly."""
+    discretization.apply_hessian_operator_to_vector_field_mugrid(
+        u_inxyz=x, hess_u_ijkqxyz=hess_u_ijkqxyz)
+    discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+        hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
+
+    discretization.laplacian.apply(nodal_field=x, quadrature_point_field=lap_u_inxyz)
+    discretization.laplacian.transpose(quadrature_point_field=lap_u_inxyz,
+                                       nodal_field=LtL_field,
+                                       weights=discretization.quadrature_weights)
+
+    out.s[...] += scale * k_r * (HtH_field.s - inv_tr_I * LtL_field.s)
+
+
+def operator_for_preconditioner(input_field_inxyz, output_field_inxyz):
+    discretization.fft.communicate_ghosts(field=input_field_inxyz)
+    # elastic energy part
+    discretization.apply_system_matrix_mugrid(
+        material_data_field=ref_mat,
+        input_field_inxyz=input_field_inxyz,
+        output_field_inxyz=output_field_inxyz,
+        formulation=formulation
+    )
+    add_regularization(input_field_inxyz, output_field_inxyz)
+
+
 preconditioner = discretization.get_preconditioner_Green_mugrid(
-    reference_material_data_ijkl=ref_mat
+    reference_material_data_ijkl=ref_mat,
+    operator=operator_for_preconditioner,
 )
 
 
@@ -220,6 +255,21 @@ material.get_algorithmic_tangent(total_strain_field, tangent_field)
 if discretization.communicator.rank == 0:
     print(f'tangent min/max : {tangent_field.s.min():.4f} / {tangent_field.s.max():.4f}')
 
+
+
+def assemble_rhs():
+    discretization.fft.communicate_ghosts(stress_field)
+    discretization.apply_gradient_transposed_operator_mugrid(
+        gradient_field_ijqxyz=stress_field, div_u_fnxyz=rhs_field, apply_weights=True)
+    rhs_field.s[...] *= -1
+
+    discretization.fft.communicate_ghosts(displacement_fluctuation_field)  # needed in MPI
+
+    add_regularization(x=displacement_fluctuation_field,
+                       out=rhs_field,
+                       scale=-1.0)
+
+
 # ============================================================================
 # incremental loading — Newton-CG loop
 # ============================================================================
@@ -245,15 +295,25 @@ for inc in range(ninc):
     # constitutive response at new F
     material.get_stress(total_strain_field, stress_field)
     material.get_algorithmic_tangent(total_strain_field, tangent_field)
+    discretization.fft.communicate_ghosts(stress_field)
 
     # assemble rhs = -div(P)
-    discretization.fft.communicate_ghosts(stress_field)
-    discretization.apply_gradient_transposed_operator_mugrid(
-        gradient_field_ijqxyz=stress_field,
-        div_u_fnxyz=rhs_field,
-        apply_weights=True
+    assemble_rhs()
+
+    # Recompute preconditioner
+    ref_mat = tangent_field.s.mean(axis=tuple(range(4, tangent_field.s.ndim)))  # check index layout
+    preconditioner = discretization.get_preconditioner_Green_mugrid(
+        reference_material_data_ijkl=ref_mat,
+        operator=operator_for_preconditioner,
     )
-    rhs_field.s[...] *= -1
+
+    # discretization.fft.communicate_ghosts(stress_field)
+    # discretization.apply_gradient_transposed_operator_mugrid(
+    #     gradient_field_ijqxyz=stress_field,
+    #     div_u_fnxyz=rhs_field,
+    #     apply_weights=True
+    # )
+    # rhs_field.s[...] *= -1
 
     En = np.sqrt(discretization.communicator.sum(
         np.dot(total_strain_field.s.ravel(), total_strain_field.s.ravel())
@@ -300,17 +360,34 @@ for inc in range(ninc):
     while True:
 
         def K_fun(x, Ax):
+            discretization.fft.communicate_ghosts(field=x)
+            # elastic energy part
             discretization.apply_system_matrix_mugrid(
                 material_data_field=tangent_field,
                 input_field_inxyz=x,
                 output_field_inxyz=Ax,
                 formulation=formulation
             )
-            discretization.apply_hessian_operator_to_vector_field_mugrid(
-                u_inxyz=x, hess_u_ijkqxyz=hess_u_ijkqxyz)
-            discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
-                hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
-            Ax.s[...] += k_r * HtH_field.s
+
+            # # HuHu regularization
+            # discretization.apply_hessian_operator_to_vector_field_mugrid(
+            #     u_inxyz=x, hess_u_ijkqxyz=hess_u_ijkqxyz)
+            # discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+            #     hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
+            #
+            # # LuLu   regularization
+            # discretization.laplacian.apply(nodal_field=x,
+            #                                quadrature_point_field=lap_u_inxyz)
+            #
+            # discretization.laplacian.transpose(quadrature_point_field=lap_u_inxyz,
+            #                                    nodal_field=LtL_field,
+            #                                    weights=discretization.quadrature_weights)
+            #
+            # # add Huhu term
+            # Ax.s[...] += k_r * (HtH_field.s - inv_tr_I * LtL_field.s)
+
+            add_regularization(x, Ax)
+
             discretization.fft.communicate_ghosts(Ax)
 
 
@@ -371,18 +448,23 @@ for inc in range(ninc):
         material.get_energy_density(total_strain_field, energy_field)
 
         # recompute rhs
-        discretization.fft.communicate_ghosts(stress_field)
-        discretization.apply_gradient_transposed_operator_mugrid(
-            gradient_field_ijqxyz=stress_field,
-            div_u_fnxyz=rhs_field,
-            apply_weights=True
-        )
-        rhs_field.s[...] *= -1
-        discretization.apply_hessian_operator_to_vector_field_mugrid(
-            u_inxyz=displacement_fluctuation_field, hess_u_ijkqxyz=hess_u_ijkqxyz)
-        discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
-            hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
-        rhs_field.s[...] -= k_r * HtH_field.s
+        assemble_rhs()
+        # discretization.fft.communicate_ghosts(stress_field)
+        # discretization.apply_gradient_transposed_operator_mugrid(
+        #     gradient_field_ijqxyz=stress_field,
+        #     div_u_fnxyz=rhs_field,
+        #     apply_weights=True
+        # )
+        # rhs_field.s[...] *= -1
+
+        # discretization.apply_hessian_operator_to_vector_field_mugrid(
+        #     u_inxyz=displacement_fluctuation_field, hess_u_ijkqxyz=hess_u_ijkqxyz)
+        # discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
+        #     hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
+        #
+
+        # rhs_field.s[...] -= k_r * HtH_field.s
+
         norm_rhs = np.sqrt(discretization.communicator.sum(
             np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())
         ))
@@ -447,7 +529,7 @@ for inc in range(ninc):
         tensor_operations.det2(total_strain_field, J_1qxyz)
         visualization_utils.plot_field_on_grid(
             coordinates_for_plot=x_plot_ixyz,
-            field_to_plot=phase_field.s[0,0],# J_1qxyz.s.mean(axis=2)[0, 0],
+            field_to_plot=phase_field.s[0, 0],  # J_1qxyz.s.mean(axis=2)[0, 0],
             name=fr'$\tilde{{u}}_{{x}}$' + f'load increment {inc}   ')
         print('Minimum of J ' + f'{np.min(J_1qxyz.s[...])}')
 

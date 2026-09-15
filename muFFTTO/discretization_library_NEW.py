@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-
+import warnings
 jax.config.update("jax_enable_x64", True)
 
 
@@ -126,7 +126,9 @@ def get_shape_function_gradient_matrix(domain, element_type):
 
     domain.N_at_quad_points_dqnijk = element.N_at_quad_points_dqnijk
     domain.B_grad_at_pixel_dqnijk = element.B_grad_at_pixel_dqnijk
+
     domain.H_hess_at_pixel_deqnijk = element.H_hess_at_pixel_deqnijk
+    domain.L_laplace_at_pixel_eqnijk = element.L_laplace_at_pixel_eqnijk
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +208,12 @@ class Element:
             quadrature_points=quadrature_points_qd,
             jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
         )
+        self._compute_laplacian_matrices(
+            shape_functions=shape_functions,
+            quadrature_points=quadrature_points_qd,
+            jacobian_inv_per_quadrature_point=jacobian_inv_per_quadrature_point_qij,
+        )
+
 
     def _make_shape_function_array(self):
         """
@@ -392,6 +400,101 @@ class Element:
 
         self.H_hess_at_pixel_deqnijk = d2N_dx2_at_quadrature_points_abqnijk
 
+    def _compute_laplacian_matrices(self,
+                                    shape_functions,
+                                    quadrature_points,
+                                    jacobian_inv_per_quadrature_point):
+        """
+        Use AD to compute physical-space shape function Laplacians at all
+        quadrature points.
+
+        The Laplacian is the trace of the physical Hessian:
+
+            lap N = sum_d d2N/dx_d dx_d
+                  = sum_{a,b} (d2N/dxi_a dxi_b) G[a,b]
+                  + sum_a     (dN/dxi_a) (sum_d d2 xi_a / dx_d dx_d)
+
+        with the inverse metric  G = J^{-1} J^{-T},  G[a,b] = sum_d J^{-1}[a,d] J^{-1}[b,d].
+
+        The second term vanishes iff the reference-to-physical map is affine.
+        Every element in this library has a Jacobian that is constant over the
+        pixel (`jacobian_of_pixel` is a single matrix, tiled across quadrature
+        points), so the term is exactly zero -- not neglected.  This is asserted
+        rather than assumed, so a future curved or non-affine element fails loudly
+        instead of returning a silently wrong operator.
+
+        Fills
+        -----
+        self.H_lapl_at_pixel_qnijk : shape (n_qp, n_un, *node_layout)
+            H[q, 0, i, j, k] = lap N_{ijk} at quadrature point q.
+
+        Notes
+        -----
+        The zero cases are broader here than for the full Hessian.  For Q1 elements
+        every PURE reference second derivative is identically zero
+        (d2N/dxi_a^2 = 0), so only the off-diagonal metric entries can carry signal:
+
+            lap N = sum_{a != b} (d2N/dxi_a dxi_b) G[a,b].
+
+        On axis-aligned pixels J^{-1} is diagonal, so G is diagonal, so the
+        Laplacian is EXACTLY ZERO everywhere -- unlike the Hessian, which keeps its
+        dim*(dim-1)/2 mixed entries.  Only a sheared or rotated pixel
+        (non-orthogonal rows of J^{-1}) yields a nonzero Q1 Laplacian.  For P1
+        triangles it is zero regardless, since linear shape functions have no
+        curvature.  A Laplacian-based regularization is therefore a no-op on the
+        standard rectangular Q1 grid and on `linear_triangles` /
+        `linear_triangles_tilled`; a warning is emitted so this is not discovered
+        downstream as a penalty term that mysteriously does nothing.
+        """
+        n_quadrature_points, dim = quadrature_points.shape
+        jacobian_inv = np.asarray(jacobian_inv_per_quadrature_point)
+        if not np.allclose(jacobian_inv, jacobian_inv[0]):
+            raise NotImplementedError(
+                'The Jacobian varies between quadrature points, so the '
+                'reference-to-physical map is not affine and d2(xi)/dx2 != 0. '
+                'The second chain-rule term must then be included; it is omitted '
+                'here because every current element has a constant Jacobian.')
+
+        # AD: shape_functions maps R^dim -> R^n_nodes,
+        # jax.hessian gives d2N/dxi_a dxi_b with shape (n_nodes, dim, dim)
+        d2N_dxi2_func = jax.hessian(shape_functions)
+        d2N_dxi2_at_quadrature_points_qnab = []  # -> (n_qp, n_nodes, IJK, dim, dim)
+        # evaluate Hessian at each quadrature point
+        for quadrature_point in quadrature_points:
+            # quadrature points position  (xi, eta, ..)
+            xi = jnp.array(quadrature_point)
+            # Hessian of shape functions in quadrature point
+            d2N_dxi2_at_quadrature_points_qnab.append(np.array(d2N_dxi2_func(xi)))
+        # cast to numpy array
+        d2N_dxi2_at_quadrature_points_qnab = np.array(
+            d2N_dxi2_at_quadrature_points_qnab)
+
+        # Trace of the physical Hessian, taken inside the contraction (e -> d):
+        #   lap N = sum_{a,b,d} (d2N/dxi_a dxi_b) J^{-1}[a,d] J^{-1}[b,d]
+        # einsum axes: q=quad point, n=node, a,b=parametric dirs,
+        #              d=physical dir (summed, not emitted)
+        lapN_at_quadrature_points_qnijk = np.einsum(
+            'qni...ab, qad, qbd -> qni...',
+            d2N_dxi2_at_quadrature_points_qnab,
+            jacobian_inv,
+            jacobian_inv,
+        )  # (n_qp, n_un, *node_layout)
+        lapN_at_quadrature_points_iqnIJK = np.expand_dims(
+            lapN_at_quadrature_points_qnijk, axis=(0))
+        if np.allclose(lapN_at_quadrature_points_iqnIJK, 0.0):
+            warnings.warn(
+                'The discrete Laplacian operator is identically zero for this '
+                'element/geometry combination, so any term built on it will have '
+                'no effect. This is expected for P1 elements (no curvature) and '
+                'for Q1 elements on axis-aligned pixels, where J^-1 is diagonal '
+                'and the mixed reference derivatives are annihilated by the '
+                'metric. Use the full Hessian operator if you need a nonzero '
+                'second-derivative penalty.',
+                RuntimeWarning, stacklevel=2)
+
+        # Trailing axes are literal per-direction pixel offsets
+        # -- see _unflatten_node_axis_to_stencil docstring
+        self.L_laplace_at_pixel_eqnijk = lapN_at_quadrature_points_iqnIJK
     # -----------------------------------------------------------------------
     # Factory classmethods — one per element type
     # -----------------------------------------------------------------------

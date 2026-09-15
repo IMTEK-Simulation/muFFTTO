@@ -46,7 +46,7 @@ dim = len(domain_size)
 tol_newton = 1e-4
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'bilinear_rectangle'
+element_type = 'bilinear_rectangle' #biquadratic_rectangle
 formulation = 'finite_strain'
 preconditioner_type = "Green"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 

@@ -540,14 +540,14 @@ def partial_derivative_of_gradient_of_phase_field_potential(discretization,
 
     discretization.fft.communicate_ghosts(phase_field_1nxyz)
 
-    discretization.conv_op.apply(nodal_field=phase_field_1nxyz,
+    discretization.gradient_op.apply(nodal_field=phase_field_1nxyz,
                                  quadrature_point_field=phase_field_grad_1jqxyz)
 
     weights = discretization.quadrature_weights
 
     discretization.fft.communicate_ghosts(phase_field_grad_1jqxyz)
 
-    discretization.conv_op.transpose(quadrature_point_field=phase_field_grad_1jqxyz,
+    discretization.gradient_op.transpose(quadrature_point_field=phase_field_grad_1jqxyz,
                                      nodal_field=output_1nxyz,
                                      weights=weights)
 
@@ -802,7 +802,7 @@ def adjoint_potential(discretization,
         name='force_field_inxyz_in_adjoint_potential_temporary')
     discretization.fft.communicate_ghosts(stress_field_ijqxyz)
 
-    discretization.conv_op.transpose(quadrature_point_field=stress_field_ijqxyz,
+    discretization.gradient_op.transpose(quadrature_point_field=stress_field_ijqxyz,
                                      nodal_field=force_field_inxyz,
                                      weights=weights)
 

@@ -19,7 +19,7 @@ element_type = 'biquadratic_rectangle'#'biquadratic_rectangle'#
 geometry_ID ='square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (1024,1024)
+number_of_pixels = (64,64)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)

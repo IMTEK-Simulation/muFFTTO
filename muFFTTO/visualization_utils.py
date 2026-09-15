@@ -54,7 +54,7 @@ def get_deformed_grid_coords_two_dim(discretization,
     # add deformation  # x_p = x̃_p + ũ_Φ(x̃_p)
     if grid_nodes_displacement_inxyz is not None:
         x_plot_inxyz[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
-    x_plot_ixyz = np.squeeze(x_plot_inxyz, axis=1)
+    x_plot_ixyz = x_plot_inxyz[:,0,...]
     # macroscopic displacement of a deformed grid Ex_p = E * x_p
     macro_disp_of_a_deformed_grid = np.einsum('ij...,j...->i...', macro_gradient_ij, x_plot_ixyz)
     # add macroscopic displacement
