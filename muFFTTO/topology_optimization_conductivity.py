@@ -53,7 +53,7 @@ def adjoint_potential(discretization,
         name='temporary_field_inxyz_in_adjoint_potential_temporary')
     discretization.fft.communicate_ghosts(force_field_inxyz)
 
-    discretization.conv_op.transpose(quadrature_point_field=flux_field_ijqxyz,
+    discretization.gradient_op.transpose(quadrature_point_field=flux_field_ijqxyz,
                                      nodal_field=force_field_inxyz,
                                      weights=weights)
 
