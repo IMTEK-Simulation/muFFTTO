@@ -36,5 +36,3 @@ experiments/exp_data/
 .output.txt
 
 .idea/
-
-experiments/grid_adaptation/uv.lock

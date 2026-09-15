@@ -308,5 +308,4 @@ def test_LinearElastic_MaterialModelElasticity_(discretization_fixture):
     )
 
 
- # TODO: Add test for symmetricity of the tangent
-
+# TODO: Add test for symmetricity of the tangent

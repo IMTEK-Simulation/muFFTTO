@@ -10,7 +10,7 @@ import muGrid
 from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
-from muFFTTO import discretization_library
+from muFFTTO import discretization_library_NEW
 
 
 class PeriodicUnitCell:
@@ -66,6 +66,14 @@ class Discretization:
         self.domain_size = cell.domain_size
         # total number of pixels/voxels, without periodic nodes
         self.nb_of_pixels_global = tuple(map(int, nb_of_pixels_global))
+        # pixel properties
+        self.pixel_size = self.domain_size / self.nb_of_pixels_global
+        self.nb_nodes_per_pixel = None
+        self.nodal_points_coordinates = None
+        self.nb_vertices_per_pixel = 2 ** self.domain_dimension
+
+        self.get_discretization_info(element_type)
+
         # number of ghost buffers -> # TODO[Martin]: have to be changed base on the stencil
         left_ghosts = [1, ] * self.domain_dimension
         right_ghosts = [1, ] * self.domain_dimension
@@ -73,6 +81,7 @@ class Discretization:
                                     communicator=communicator,
                                     nb_ghosts_left=left_ghosts,
                                     nb_ghosts_right=right_ghosts,
+                                    # nb_sub_pts=self.nb_nodes_per_pixel
                                     )
         self.communicator = communicator
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
@@ -105,12 +114,6 @@ class Discretization:
                 ' : finite_element, finite_difference, or Fourier'.format(discretization_type))
         self.discretization_type = discretization_type  # only finite elements for now
 
-        # pixel properties
-        self.pixel_size = self.domain_size / self.nb_of_pixels_global
-        self.nb_nodes_per_pixel = None
-        self.nodal_points_coordinates = None
-        self.nb_vertices_per_pixel = 2 ** self.domain_dimension
-
         if discretization_type == 'finite_element':
             # finite element properties
             self.element_type = element_type
@@ -120,6 +123,7 @@ class Discretization:
             self.quad_points_coord_parametric = None
 
             self.get_discretization_info(element_type)
+
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
@@ -133,12 +137,29 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
 
-            self.conv_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
-
             try:
-                self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_qnijk)
+                self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
+            except:
+                print(f'self.gradient_op does not exist ')
+            try:
+                # Hessian operator ---> due to muGrid set up, we can't have ij outpu shape. So I reshape the Hessian operator
+                H_deqnijk = self.H_hess_at_pixel_deqnijk
+                H_flat_Dqnijk = np.ascontiguousarray(
+                    self.H_hess_at_pixel_deqnijk.reshape(self.domain_dimension * self.domain_dimension,
+                                                         *H_deqnijk.shape[2:]))
+                self.hessian_op = GenericLinearOperator(point_of_origin, H_flat_Dqnijk)
+            except:
+                print(f'self.hessian_op does not exist ')
+            try:
+                self.interpolation_op = GenericLinearOperator(point_of_origin, self.N_at_quad_points_dqnijk)
             except:
                 print(f'self.interpolation_op does not exist ')
+
+            try:
+                self.laplacian = GenericLinearOperator(point_of_origin, self.L_laplace_at_pixel_eqnijk)
+            except:
+                print(f'self.interpolation_op does not exist ')
+
             # displacement              [f,n,x,y,z]
             # rhs                       [f,n,x,y,z]
             # macro_gradient_field    [f,d,q,x,y,z]
@@ -165,6 +186,80 @@ class Discretization:
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
 
+    def multinodal_fft(self, real_field, fourier_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        fx_0_single_node = self.ffield_collection.complex_field(
+            name='fourier_field_inqks_single_fft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+
+        x_0_single_node = self.field_collection.real_field(
+            name='real_field_inqks_single_fft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # copy from  multinodal field to single
+            x_0_single_node.s[:, 0, ...] = np.copy(real_field.s[:, node, ...])
+
+            self.fft.communicate_ghosts(x_0_single_node)
+            fx_0_single_node.sg.fill(0)
+            #   FFT:  Fourier -> real
+            self.fft.fft(x_0_single_node, fx_0_single_node)
+
+            # return to the multinodal field
+            fourier_field.s[:, node, ...] = np.copy(fx_0_single_node.s[:, 0, ...])
+
+    # hot fix of mugrid iFFT on multinodal fields
+    def multinodal_ifft(self, fourier_field, real_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        fx_0_single_node = self.ffield_collection.complex_field(
+            name='fourier_field_inqks_single_ifft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+
+        x_0_single_node = self.field_collection.real_field(
+            name='real_field_inqks_single_ifft',  # name of the field
+            components=(real_field.s.shape[0],),  # shape of components
+        )
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # copy from  multinodal field to single
+            fx_0_single_node.s[:, 0, ...] = np.copy(fourier_field.s[:, node, ...])
+
+            # self.fft.communicate_ghosts(fx_0_single_node)
+            x_0_single_node.sg.fill(0)
+            # Inverse FFT: Fourier -> real
+            self.fft.ifft(fx_0_single_node, x_0_single_node)
+
+            # return to the multinodal field
+            real_field.s[:, node, ...] = np.copy(x_0_single_node.s[:, 0, ...])
+
+    def multinodal_fft_normalisation(self, real_field):
+
+        """
+        it seems that mugrid fft does not properly handle multinodal fields
+        this includes ffts on quad point field or multinodal fields like in quadratic elements
+        """
+        if self.nb_nodes_per_pixel == 1:
+            warnings.warn(f"Are you sure you want to use multinodal fft?")
+
+        for node in np.arange(self.nb_nodes_per_pixel):
+            # Apply normalization for roundtrip
+            real_field.s[:, node, ...] *= self.fft.normalisation
+
     def get_nodal_points_coordinates(self):
         """
         Function to calculate  coordinates of nodal points for a domain of general rectangular shape.
@@ -180,20 +275,63 @@ class Discretization:
          nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
          nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
-        if self.nb_nodes_per_pixel != 1:
-            raise ValueError(
-                'get_nodal_points_coordinates does not support more than one nodal point')
 
         dim = self.domain_dimension
         # creates a field with coordinates of all nodal points
         nodal_points_coordinates_inxyz = self.field_collection.real_field(
             name="nodal_points_coordinates_inxyz",  # name of the field
-            components=(*self.cell.displacement_shape,),  # shape of components
+            components=(dim,),  # shape of components
             sub_pt='nodal_points'  # sub-point type
         )
+        # mugrid give coordinates from [0,1)**dim
+        # I transform coordinates from [0,1)**dim to to physical element. Firt by appliing Jacobian of transformation
+        # x= x*J^T
+        # transformed_coordinates_ixyz = np.einsum('ij,jxy->ixy', self.jacobian_of_pixel, self.fft.coords)
 
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
-        nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+        # Coordinates above are already in physical units, so each column of the pixel Jacobian
+        # is normalised by its own diagonal entry: that yields a unit diagonal regardless of the
+        # element's reference domain ([0,1] for triangles, [-1,1] for quads) and expresses the
+        # off-diagonal shear per unit physical length instead of per unit parametric length.
+        adjusted_jacobian = self.jacobian_of_pixel / np.diag(self.jacobian_of_pixel)[np.newaxis, :]
+
+        nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
+        if self.nb_nodes_per_pixel == 1:
+            nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+        elif self.nb_nodes_per_pixel == 4:
+            half_pixel_size = self.pixel_size / 2
+            # first node
+            nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
+
+            if dim == 2:
+                # second node
+                nodal_points_coordinates_inxyz.s[0, 1, ...] += half_pixel_size[0]
+                # third node
+                nodal_points_coordinates_inxyz.s[1, 2, ...] += half_pixel_size[1]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[0, 3, ...] += half_pixel_size[0]
+                nodal_points_coordinates_inxyz.s[1, 3, ...] += half_pixel_size[1]
+            if dim == 3:
+                # second node
+                nodal_points_coordinates_inxyz.s[0, 5, ...] += half_pixel_size[0]
+                # third node
+                nodal_points_coordinates_inxyz.s[1, 6, ...] += half_pixel_size[1]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[0, 7, ...] += half_pixel_size[0]
+                nodal_points_coordinates_inxyz.s[1, 7, ...] += half_pixel_size[1]
+                # z direction add
+                # second node
+                nodal_points_coordinates_inxyz.s[2, 5, ...] += half_pixel_size[2]
+                # third node
+                nodal_points_coordinates_inxyz.s[2, 6, ...] += half_pixel_size[2]
+                # fourth node
+                nodal_points_coordinates_inxyz.s[2, 7, ...] += half_pixel_size[2]
+                nodal_points_coordinates_inxyz.s[2, 7, ...] += half_pixel_size[2]
+
+        else:
+            warnings.warn(
+                "get_nodal_points_coordinates does not support more than one nodal point"
+            )
 
         return nodal_points_coordinates_inxyz
 
@@ -214,9 +352,9 @@ class Discretization:
         nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
         nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
         """
-        if self.nb_nodes_per_pixel != 1:
-            raise ValueError(
-                'get_nodal_points_coordinates does not support more than one nodal point')
+        # if self.nb_nodes_per_pixel != 1:
+        #     raise ValueError(
+        #         'get_nodal_points_coordinates does not support more than one nodal point')
 
         # create nd array  with proper shape including periodic nodes
         extended_number_of_nodes = (len(self.nb_of_pixels_global), self.nb_nodes_per_pixel) + tuple(
@@ -243,10 +381,11 @@ class Discretization:
         -------
          quad_points_coordinates_iqxyz = spatial coordinates of quadrature nodes [i,q,x,y,z]
         """
+        dim = self.domain_dimension
         # creates a field with coordinates of all quadrature points
         quad_points_coordinates_iqxyz = self.field_collection.real_field(
             name="quad_points_coordinates_iqxyz",  # name of the field
-            components=(*self.cell.displacement_shape,),  # shape of components
+            components=(dim,),  # shape of components
             sub_pt='quad_points'  # sub-point type
         )
 
@@ -321,39 +460,8 @@ class Discretization:
             raise ("apply_gradient_operator_mugrid does not supprot ndarray")
 
         self.fft.communicate_ghosts(field=u_inxyz)
-        self.conv_op.apply(nodal_field=u_inxyz,
-                           quadrature_point_field=grad_u_ijqxyz)
-
-    def apply_gradient_operator_symmetrized(self, u_inxyz, grad_u_ijqxyz=None):
-        """
-        Function that computes symmetrized gradient of function u.
-        Depending on the discretization stencil.
-
-        Parameters
-        ----------
-        u_inxyz: numpy ndarray of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-
-        Returns
-        -------
-        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
-                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
-                - q is quadrature point index
-        """
-        # computes symmetrized gradient (small-strain)
-
-        # 1. compute gradient
-        if grad_u_ijqxyz is not None:
-            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz,
-                                                         grad_u_ijqxyz=grad_u_ijqxyz)
-        else:
-            grad_u_ijqxyz = self.apply_gradient_operator(u_inxyz=u_inxyz)
-
-        # 2. symmetrize it
-        # \epsilon_{ij} = \frac{1}{2} (u_{i,j} + u_{j,i})
-        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
-        return grad_u_ijqxyz
+        self.gradient_op.apply(nodal_field=u_inxyz,
+                               quadrature_point_field=grad_u_ijqxyz)
 
     def apply_gradient_operator_symmetrized_mugrid(self, u_inxyz, grad_u_ijqxyz):
         """
@@ -408,8 +516,8 @@ class Discretization:
         if isinstance(gradient_field_ijqxyz, np.ndarray):
             raise ("apply_gradient_transposed_operator_mugrid does not supprot ndarray")
 
-        if self.nb_nodes_per_pixel > 1:
-            warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
+        # if self.nb_nodes_per_pixel > 1:
+        #     warnings.warn('Gradient operator is not tested for multiple nodal points per pixel.')
         # clear div array
         # get quadrature weights
         if apply_weights:
@@ -420,16 +528,184 @@ class Discretization:
         #   convolution operator
         self.fft.communicate_ghosts(field=gradient_field_ijqxyz)
         # apply B^transposed via the convolution operator
-        self.conv_op.transpose(quadrature_point_field=gradient_field_ijqxyz,
-                               nodal_field=div_u_fnxyz,
-                               weights=weights)
+        self.gradient_op.transpose(quadrature_point_field=gradient_field_ijqxyz,
+                                   nodal_field=div_u_fnxyz,
+                                   weights=weights)
 
         self.fft.communicate_ghosts(field=div_u_fnxyz)
 
-    def evaluate_field_at_quad_points(self,
-                                      nodal_field_fnxyz,
-                                      quad_field_fqnxyz=None,
-                                      quad_points_coords_iq=None):
+    def apply_hessian_operator_to_scalar_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
+        """
+        Function that computes the Hessian (second derivatives) of function u,
+        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
+
+        muGrid's convolution operator carries a single component axis per
+        quadrature point, so the two derivative indices (j,k) of the Hessian
+        stencil are flattened into one axis J = j*dim + k. The operator is
+        applied in that flat layout and the result is unflattened here.
+
+        Parameters
+        ----------
+        u_inxyz: mugrid field of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+
+        Returns
+        -------
+        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j,k indices indicate directions of the two derivatives,
+                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
+                - q is quadrature point index
+                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        """
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(u_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
+        hess_u_iJqxyz = self.get_temperature_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+
+        self.fft.communicate_ghosts(field=u_inxyz)
+        # compute Hessian
+        self.hessian_op.apply(nodal_field=u_inxyz,
+                              quadrature_point_field=hess_u_iJqxyz)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+        hess_u_ijkqxyz.s[...] = hess_u_iJqxyz.s.reshape(hess_u_iJqxyz.s.shape[0], dim, dim,
+                                                        *hess_u_iJqxyz.s.shape[2:])
+
+        self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
+
+    def apply_hessian_operator_to_vector_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
+        """
+        Function that computes the Hessian (second derivatives) of function u,
+        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
+
+        muGrid's convolution operator carries a single component axis per
+        quadrature point, so the two derivative indices (j,k) of the Hessian
+        stencil are flattened into one axis J = j*dim + k. The operator is
+        applied in that flat layout and the result is unflattened here.
+
+        Parameters
+        ----------
+        u_inxyz: mugrid field of discretized function u
+                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - n is a nodal point index
+        Returns
+        -------
+        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
+                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+                - j,k indices indicate directions of the two derivatives,
+                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
+                - q is quadrature point index
+                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        """
+        # if self.nb_nodes_per_pixel > 1:
+        #     warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(u_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # scratch field with the derivative pair flattened: [i,J,q,x,y,z], J = j*dim + k
+        hess_u_iJqxyz = self.get_displacement_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        self.fft.communicate_ghosts(field=u_inxyz)
+
+        # compute Hessian
+        self.hessian_op.apply(nodal_field=u_inxyz,
+                              quadrature_point_field=hess_u_iJqxyz)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+        hess_u_ijkqxyz.s[...] = hess_u_iJqxyz.s.reshape(hess_u_iJqxyz.s.shape[0], dim, dim,
+                                                        *hess_u_iJqxyz.s.shape[2:])
+
+        self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
+
+    def apply_hessian_operator_transposed_to_scalar_field_mugrid(self, hess_u_ijkqxyz, nodal_field_inxyz,
+                                                                 apply_weights=True):
+
+        if self.nb_nodes_per_pixel > 1:
+            warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # flatten the derivative pair into the muGrid-compatible layout:
+        # [i,j,k,q,x,y,z] -> [i,J,q,x,y,z],  J = j*dim + k
+        hess_u_iJqxyz = self.get_temperature_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        hess_u_iJqxyz.s[...] = hess_u_ijkqxyz.s.reshape(hess_u_ijkqxyz.s.shape[0], dim * dim,
+                                                        *hess_u_ijkqxyz.s.shape[3:])
+
+        # get quadrature weights
+        if apply_weights:
+            weights = self.quadrature_weights
+        else:
+            weights = np.ones(self.quadrature_weights.shape)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+
+        self.fft.communicate_ghosts(field=hess_u_iJqxyz)
+        # apply H^transposed via the convolution operator
+        self.hessian_op.transpose(quadrature_point_field=hess_u_iJqxyz,
+                                  nodal_field=nodal_field_inxyz,
+                                  weights=weights)
+
+        self.fft.communicate_ghosts(field=nodal_field_inxyz)
+
+    def apply_hessian_operator_transposed_to_vector_field_mugrid(self, hess_u_ijkqxyz, nodal_field_inxyz,
+                                                                 apply_weights=True):
+
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_inxyz, np.ndarray):
+            raise ("apply_hessian_operator_mugrid does not supprot ndarray")
+
+        dim = self.domain_dimension
+
+        # flatten the derivative pair into the muGrid-compatible layout:
+        # [i,j,k,q,x,y,z] -> [i,J,q,x,y,z],  J = j*dim + k
+        hess_u_iJqxyz = self.get_displacement_hessian_size_field_mugrid_compatible(name='Hessian_u_flat')
+        hess_u_iJqxyz.s[...] = hess_u_ijkqxyz.s.reshape(hess_u_ijkqxyz.s.shape[0], dim * dim,
+                                                        *hess_u_ijkqxyz.s.shape[3:])
+
+        # get quadrature weights
+        if apply_weights:
+            weights = self.quadrature_weights
+        else:
+            weights = np.ones(self.quadrature_weights.shape)
+
+        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
+        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
+        # .s is a strided window into the ghosted buffer
+
+        self.fft.communicate_ghosts(field=hess_u_iJqxyz)
+        # apply H^transposed via the convolution operator
+        self.hessian_op.transpose(quadrature_point_field=hess_u_iJqxyz,
+                                  nodal_field=nodal_field_inxyz,
+                                  weights=weights)
+
+        self.fft.communicate_ghosts(field=nodal_field_inxyz)
+
+    def evaluate_field_at_quad_points_old(self,
+                                          nodal_field_fnxyz,
+                                          quad_field_fqnxyz=None,
+                                          quad_points_coords_iq=None):
         """
         Function that evaluates nodal field at quad points.
 
@@ -497,6 +773,24 @@ class Discretization:
                     # TODO 3D interpolation is not tested
         return quad_field_fqnxyz, N_at_quad_points_qnijk
 
+    def evaluate_field_at_quad_points(self,
+                                      nodal_field_fnxyz,
+                                      quad_field_fqnxyz=None,
+                                      quad_points_coords_iq=None):
+        """
+        Function that evaluates nodal field at quad points.
+        """
+        # if the input is ndArray, create muGrid field out of it
+        if isinstance(nodal_field_fnxyz, np.ndarray):
+            raise ("apply_N_operator_mugrid does not supprot ndarray")
+
+        self.fft.communicate_ghosts(field=nodal_field_fnxyz)
+        self.interpolation_op.apply(nodal_field=nodal_field_fnxyz,
+                                    quadrature_point_field=quad_field_fqnxyz)
+        self.fft.communicate_ghosts(field=quad_field_fqnxyz)
+
+        return quad_field_fqnxyz
+
     def apply_N_operator_mugrid(self, nodal_field_inxyz, quad_field_ijqnxyz):
         """
         Function that interpolate nodal function u at quadrature points, using mugrid:ConvolutionOperator.
@@ -525,6 +819,7 @@ class Discretization:
         self.fft.communicate_ghosts(field=nodal_field_inxyz)
         self.interpolation_op.apply(nodal_field=nodal_field_inxyz,
                                     quadrature_point_field=quad_field_ijqnxyz)
+        self.fft.communicate_ghosts(field=quad_field_ijqnxyz)
 
     def apply_N_transposed_operator_mugrid(self,
                                            quad_field_ijqxyz,
@@ -627,6 +922,11 @@ class Discretization:
 
         gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
+
+        # Macro gradient in reference domain
+        gradient_ijqxyz.s[...] = np.einsum('ij...,jk...->ik...', gradient_ijqxyz.s[...], inv_F)
+        self.fft.communicate_ghosts(field=gradient_ijqxyz)
+
         # apply constitutive law
         self.apply_material_data_mugrid(material_data_field_ijklqxyz, gradient_ijqxyz)
 
@@ -1297,7 +1597,8 @@ class Discretization:
         return self.get_preconditioner_Green_fast(**kwargs)
 
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
-                                        formulation=None):
+                                        formulation=None,
+                                        operator=None):
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1312,6 +1613,7 @@ class Discretization:
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
                 name='Greens_diagonal_fast',  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+                sub_pt='nodal_points'
             )  #
             unit_impulse_response_inqks = self.ffield_collection.complex_field(
                 name='unit_impulse_response_inqks',  # name of the field
@@ -1323,17 +1625,25 @@ class Discretization:
                 if np.any(np.all(self.fft.icoords == 0, axis=0)):
                     # set 1 --- the unit impulse --- to a proper positions
                     unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
-
-                self.apply_system_matrix_mugrid(
-                    material_data_field=reference_material_data_ijkl,
-                    input_field_inxyz=unit_impulse_inxyz,
-                    output_field_inxyz=unit_impulse_response_inxyz,
-                    formulation=formulation)
-                # TODO[] Unit impulse response is correct
+                    print(f"Unit impulse set at position {impulse_position}")
+                    print(
+                        f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
+                if operator is None:
+                    self.apply_system_matrix_mugrid(
+                        material_data_field=reference_material_data_ijkl,
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz,
+                        formulation=formulation)
+                else:
+                    operator(
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz)
 
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
+                # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+                # print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
 
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
 
@@ -1358,8 +1668,83 @@ class Discretization:
 
             preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
         else:
-            raise ValueError(f'The fast assembly of Green preconditioner for does  work yet '
-                             f' for {self.nb_nodes_per_pixel} number of nodes per pixel ')
+            # for one node per pixel, we can simplify the algorithm
+            # for more nodes per pixel, we can add it later
+            unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
+            unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
+
+            preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
+                name='Greens_diagonal_fast',  # name of the field
+                components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
+                sub_pt='nodal_points'  # sub-point type
+            )  #
+            unit_impulse_response_inqks = self.ffield_collection.complex_field(
+                name='unit_impulse_response_inqks',  # name of the field
+                components=(self.unknown_size[0],),  # shape of components
+                sub_pt='nodal_points'
+            )
+            for impulse_position in np.ndindex(unit_impulse_inxyz.s.shape[0:2]):
+                unit_impulse_inxyz.sg.fill(0)  # empty the unit impulse vector
+                if np.any(np.all(self.fft.icoords == 0, axis=0)):
+                    # set 1 --- the unit impulse --- to a proper positions
+                    unit_impulse_inxyz.s[impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)] = 1
+                    # print(f"Unit impulse set at position {impulse_position}")
+                    # print(
+                    #     f"impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2){impulse_position + (0,) * (unit_impulse_inxyz.s.ndim - 2)}")
+
+                unit_impulse_response_inxyz.sg.fill(0)
+                if operator is None:
+                    self.apply_system_matrix_mugrid(
+                        material_data_field=reference_material_data_ijkl,
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz,
+                        formulation=formulation)
+                else:
+                    operator(
+                        input_field_inxyz=unit_impulse_inxyz,
+                        output_field_inxyz=unit_impulse_response_inxyz)
+
+                self.fft.communicate_ghosts(unit_impulse_response_inxyz)
+                # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
+
+                unit_impulse_response_inqks.sg.fill(0)
+                # self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+
+                # Forward FFT: real -> Fourier
+                # self.multinodal_fft(real_field=unit_impulse_response_inxyz,
+                #                     fourier_field=unit_impulse_response_inqks)
+                self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
+                # print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
+                # Unpack tuple to get normal indexing:
+                i, n = impulse_position
+                preconditioner_diagonals_ininqks.s[i, n, ...] = np.copy(unit_impulse_response_inqks.s[...])
+
+            # THE SIZE OF DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
+            # compute inverse of diagonals
+            original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape
+
+            # prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(0, 2))
+
+            # Reshape the array to (n_u_dofs, n_u_dofs, ndof) for easier processing
+            # reshaped_matrices = preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
+            reshaped_matrices = preconditioner_diagonals_ininqks.s.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
+            # d mean nb_dofs_per_voxel
+            # Transpose to shape (N, n_dof, n_dof) for batch inversion
+            G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
+            # Invert each matrix using np.linalg.inv (vectorized)
+            if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
+                G_batch[0, ...] = np.linalg.pinv(G_batch[0, ...],
+                                                 rcond=1e-8)  # shape: (N, d, d) # do not invert zero mode
+
+                G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not invert zero mode
+            else:
+                G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
+
+            # Reshape the result back to the original shape
+            G_diag_ijxy = G_batch.transpose(1, 2, 0).reshape(original_shape_ininqks)
+
+            preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
+
         return preconditioner_diagonals_ininqks
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
@@ -1593,21 +1978,33 @@ class Discretization:
 
         ffield_fnqks = self.ffield_collection.complex_field(
             name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            components=(*self.cell.unknown_shape,))  # sub-point type
+            components=(*self.cell.unknown_shape,),  # shape of components
+            sub_pt='nodal_points')  # sub-point type
 
         if isinstance(input_nodal_field_fnxyz, np.ndarray):
             raise ("apply_preconditioner_mugrid does not support  ndarray")
 
         # FFTn of input array
-        self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
+        if self.nb_nodes_per_pixel == 1:
+            self.fft.fft(input_nodal_field_fnxyz, ffield_fnqks)
+        else:
+            self.multinodal_fft(real_field=input_nodal_field_fnxyz,
+                                fourier_field=ffield_fnqks)
 
         # multiplication with a diagonals of preconditioner
-        ffield_fnqks.s[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
+        ffield_fnqks.s[...] = np.einsum('cdab...,cd...->ab...', preconditioner_Fourier_fnfnqks.s, ffield_fnqks.s)
 
-        # normalization
-        ffield_fnqks.s[...] *= self.fft.normalisation
-        # iFFTn
-        self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
+        if self.nb_nodes_per_pixel == 1:
+            # iFFTn
+            self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
+            # normalization
+            output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
+        else:
+            # Inverse FFT: Fourier -> real
+            self.multinodal_ifft(fourier_field=ffield_fnqks,
+                                 real_field=output_nodal_field_fnxyz)
+
+            self.multinodal_fft_normalisation(real_field=output_nodal_field_fnxyz)
 
     def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
                                                jacobi_half_fnfnxyz,
@@ -1943,7 +2340,7 @@ class Discretization:
                 'Cell problem type is {}. But temperature gradient  sized field  is returned !!!'.format(
                     self.cell.problem_type))
 
-        # Get a tensor-field (for example to represent the strain)
+        # Get a tensor-field (for example to represent the heat gradient)
 
         grad_u_ijqxyz = self.field_collection.real_field(
             name=name,  # name of the field
@@ -1951,6 +2348,82 @@ class Discretization:
             sub_pt='quad_points'  # sub-point type
         )
         return grad_u_ijqxyz
+
+    def get_temperature_hessian_size_field(self, name):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([1, self.domain_dimension, self.domain_dimension],
+                                              dtype=int)
+        hess_u_ijkqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        return hess_u_ijkqxyz
+
+    def get_temperature_hessian_size_field_mugrid_compatible(self, name):
+        # return zero field for  the  (discretized)  gradient of temperature
+        if not self.cell.problem_type == 'conductivity':
+            warnings.warn(
+                'Cell problem type is {}. But temperature Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([1, self.domain_dimension * self.domain_dimension],
+                                              dtype=int)
+        hess_u_iJqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        # her J is a composition of jk indices. J is flattened jk
+        return hess_u_iJqxyz
+
+    def get_displacement_hessian_size_field(self, name):
+        # return zero field for  the  (discretized)  Hessian of displacement
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But elasticity Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([self.domain_dimension, self.domain_dimension, self.domain_dimension],
+                                              dtype=int)
+        hess_u_ijkqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        return hess_u_ijkqxyz
+
+    def get_displacement_hessian_size_field_mugrid_compatible(self, name):
+        # return zero field for  the  (discretized)   Hessian of displacement
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But displacement Hessian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+        shape_of_hessian_of_scalar = np.array([self.domain_dimension, self.domain_dimension * self.domain_dimension],
+                                              dtype=int)
+        hess_u_iJqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(*shape_of_hessian_of_scalar,),  # shape of components
+            sub_pt='quad_points'  # sub-point type
+        )
+        # her J is a composition of jk indices. J is flattened jk
+        return hess_u_iJqxyz
+
+    def get_displacement_laplacian_at_quad_field(self, name):
+        # return zero field for  the  (discretized)  Hessian of displacement
+        if not self.cell.problem_type == 'elasticity':
+            warnings.warn(
+                'Cell problem type is {}. But elasticity Laplacian  sized field  is returned !!!'.format(
+                    self.cell.problem_type))
+
+        lap_u_ikqxyz = self.field_collection.real_field(
+            name=name,  # name of the field
+            components=(self.domain_dimension, 1,),  # shape of components # for temperature, it will be just 1,1
+            sub_pt='quad_points'  # sub-point type
+        )
+        return lap_u_ikqxyz
 
     def get_temperature_material_data_size_field(self):
         # return zero field for  the  (discretized)  gradient of temperature
@@ -2040,7 +2513,8 @@ class Discretization:
         return self.get_rhs_explicit_stress_mugrid(**kwargs)
 
     def get_discretization_info(self, element_type):
-        discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        # discretization_library.get_shape_function_gradient_matrix(self, element_type)
+        discretization_library_NEW.get_shape_function_gradient_matrix(self, element_type)
 
     def scale_field_mugrid(self, field, min_val, max_val):
         """Scales a 2D  field to be within [min_val, max_val]."""
