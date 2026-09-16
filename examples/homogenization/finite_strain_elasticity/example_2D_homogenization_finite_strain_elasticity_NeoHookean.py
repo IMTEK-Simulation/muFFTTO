@@ -46,7 +46,7 @@ dim              = len(domain_size)
 
 problem_type        = 'elasticity'
 discretization_type = 'finite_element'
-element_type        = 'bilinear_rectangle'
+element_type        = 'bilinear_rectangle' #
 formulation         = 'finite_strain'
 preconditioner_type = 'Green'
 

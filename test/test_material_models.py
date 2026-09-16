@@ -308,4 +308,123 @@ def test_LinearElastic_MaterialModelElasticity_(discretization_fixture):
     )
 
 
+@discretization_cases
+def test_NeoHookean_MaterialModelElasticity_(discretization_fixture):
+    """
+    Correctness check for NeoHookean tangent contraction convention.
+
+    The project uses the reversed contraction convention P_ij = A_ijkl F_lk,
+    not the direct order P_ij = A_ijkl F_kl. Since NeoHookean's stress P(F)
+    is nonlinear, C:F ≠ P, so we cannot use the "tangent reproduces stress" check.
+    Instead, we verify the directional derivative: A·dF must match dP/dF (dF̂).
+
+    The test builds F without symmetrizing to exercise the bug that hides in
+    the LinearElastic test (whose tangent is symmetric under k↔l, so direct
+    and reversed orders give identical results for symmetric strains).
+    """
+    rng = np.random.default_rng(42)
+    dim = discretization_fixture.domain_dimension
+
+    strain_ijqxyz = discretization_fixture.get_strain_sized_field(name='strain_temp')
+    stress_ijqxyz = discretization_fixture.get_stress_sized_field(name='stress_temp')
+    tangent_ijklqxyz = discretization_fixture.get_material_data_size_field_mugrid(
+        name='tangent_ijklqxyz'
+    )
+    lam_11qxyz = discretization_fixture.get_quad_field_scalar(name='lam_temp')
+    mu_11qxyz = discretization_fixture.get_quad_field_scalar(name='mu_temp')
+
+    shape = strain_ijqxyz.s[...].shape  # [i, j, q, x, y, z]
+    point_shape = shape[2:]  # [q, x, y, z]
+
+    # Build F = I + small perturbation, WITHOUT symmetrizing (this is the key difference)
+    # Use small scale (~0.1-0.2) to ensure J > 0 and good conditioning
+    raw = rng.normal(0.0, 0.1, size=shape)
+    F = np.eye(dim).reshape((dim, dim) + (1,) * (len(shape) - 2))
+    F = F + raw  # Non-symmetric deformation gradient
+    strain_ijqxyz.s[...] = F
+
+    # Set material parameters
+    lam_11qxyz.s[0, 0] = rng.uniform(1.0, 5.0, size=point_shape)
+    mu_11qxyz.s[0, 0] = rng.uniform(1.0, 5.0, size=point_shape)
+
+    material = material_models.NeoHookean(
+        discretization=discretization_fixture,
+        lam_1qxyz=lam_11qxyz,
+        mu_1qxyz=mu_11qxyz,
+        name='neo_hookean'
+    )
+
+    # --- Part A: Verify stress against dW/dF (sanity check, independent of contraction convention) ---
+    def energy_density(F_test):
+        strain_perturbed_ijqxyz = discretization_fixture.get_strain_sized_field(
+            name='strain_perturbed_ijqxyz'
+        )
+        strain_perturbed_ijqxyz.s[...] = F_test
+        W_field = discretization_fixture.get_quad_field_scalar(name='W_temp')
+        material.get_energy_density(strain_perturbed_ijqxyz, W_field)
+        return W_field.s[0, 0].copy()
+
+    material.get_stress(strain_ijqxyz, stress_ijqxyz)
+    P_analytic = stress_ijqxyz.s[...].copy()
+
+    h_stress = 1e-4
+    P_fd = np.zeros_like(P_analytic)
+    for i in range(dim):
+        for j in range(dim):
+            dF = np.zeros_like(F)
+            dF[i, j, ...] = h_stress
+            W_plus = energy_density(F + dF)
+            W_minus = energy_density(F - dF)
+            P_fd[i, j, ...] = (W_plus - W_minus) / (2 * h_stress)
+
+    np.testing.assert_allclose(
+        P_analytic, P_fd,
+        rtol=1e-5, atol=1e-6,
+        err_msg=(
+            "STRESS TEST FAILED for NeoHookean: get_stress does not match dW/dF. "
+            "The energy density W or the stress formula P = dW/dF is broken. "
+            f"Max absolute error: {np.max(np.abs(P_analytic - P_fd)):.3e}"
+        )
+    )
+
+    # --- Part B: Verify tangent contraction convention using directional derivative ---
+    # Pick a random non-symmetric perturbation direction dF_hat
+    dF_hat = rng.normal(0.0, 0.05, size=shape)
+
+    # Compute dP via FD: dP = (P(F + h·dF_hat) - P(F - h·dF_hat)) / (2h)
+    h_tangent = 1e-4
+    strain_plus = discretization_fixture.get_strain_sized_field(name='strain_plus')
+    strain_minus = discretization_fixture.get_strain_sized_field(name='strain_minus')
+    stress_plus = discretization_fixture.get_stress_sized_field(name='stress_plus')
+    stress_minus = discretization_fixture.get_stress_sized_field(name='stress_minus')
+
+    strain_plus.s[...] = F + h_tangent * dF_hat
+    strain_minus.s[...] = F - h_tangent * dF_hat
+    material.get_stress(strain_plus, stress_plus)
+    material.get_stress(strain_minus, stress_minus)
+    dP_fd = (stress_plus.s[...] - stress_minus.s[...]) / (2 * h_tangent)
+
+    # Compute dP via tangent contraction: use the real apply_algorithmic_tangent
+    material.get_algorithmic_tangent(strain_ijqxyz, tangent_ijklqxyz)
+    dF_hat_field = discretization_fixture.get_strain_sized_field(name='dF_hat_field')
+    dF_hat_field.s[...] = dF_hat
+    dP_tangent_field = discretization_fixture.get_stress_sized_field(name='dP_tangent')
+    material.apply_algorithmic_tangent(dF_hat_field, dP_tangent_field, tangent_ijklqxyz)
+    dP_tangent = dP_tangent_field.s[...]
+
+    np.testing.assert_allclose(
+        dP_fd, dP_tangent,
+        rtol=1e-5, atol=1e-6,
+        err_msg=(
+            "TANGENT TEST FAILED for NeoHookean: apply_algorithmic_tangent(A, dF) does not match "
+            "the directional derivative dP computed via finite differences. "
+            "This indicates an error in either get_algorithmic_tangent (building the wrong A_ijkl) "
+            "or apply_algorithmic_tangent (contracting over wrong indices). "
+            "The project's contraction convention is P_ij = A_ijkl F_lk (see tensor_operations.py). "
+            f"Max absolute error: {np.max(np.abs(dP_fd - dP_tangent)):.3e}, "
+            f"Max relative error: {np.max(np.abs((dP_fd - dP_tangent) / (np.abs(dP_fd) + 1e-30))):.3e}"
+        )
+    )
+
+
 # TODO: Add test for symmetricity of the tangent

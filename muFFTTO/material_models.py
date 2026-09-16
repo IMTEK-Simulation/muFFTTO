@@ -61,9 +61,8 @@ class MaterialModelElasticity(ABC):
         ...
 
     def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
-        stress_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...',
-                                         tangent_ijklqxyz.s,
-                                         strain_ijqxyz.s)
+        """C_ij = tangent_ijkl · strain_lk (project contraction convention, see tensor_operations.py)."""
+        ddot42(tangent_ijklqxyz, strain_ijqxyz, stress_ijqxyz)
     def __repr__(self):
         return f"{self.__class__.__name__}(name='{self.name}')"
 
@@ -186,14 +185,18 @@ class NeoHookean(MaterialModelElasticity):
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
-        A_ijkl = λ FinvT_ij FinvT_kl
-               + (μ - λ ln J) FinvT_il FinvT_jk  +  μ δ_il δ_jk
+        Stored tangent, already expressed in this project's reversed contraction
+        convention  P_ij = A_ijkl F_lk  (see tensor_operations.py module docstring),
+        i.e. with the last two indices of the standard dP_ij/dF_kl swapped:
+
+          A_ijkl = λ FinvT_ij FinvT_lk
+                 + (μ - λ ln J) FinvT_ik FinvT_lj
+                 + μ δ_il δ_jk
 
         Three contributions:
-          term1 : λ        FinvT_ij FinvT_kl          (volumetric)
-          term2 : (μ-λlnJ) FinvT_il FinvT_jk          (distortional coupling)
-          term3 :    μ  δ_il δ_jk                     (distortional identity)
-
+          term1 : λ          FinvT_ij FinvT_lk   (volumetric)
+          term2 : (μ-λ ln J)  FinvT_ik FinvT_lj   (distortional coupling)
+          term3 :     μ       δ_il δ_jk           (distortional identity)
         """
         F = strain_ijqxyz
         lam = self.lam.s[0, 0]

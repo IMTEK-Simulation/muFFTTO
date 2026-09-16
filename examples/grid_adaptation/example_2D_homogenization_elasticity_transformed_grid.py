@@ -11,7 +11,7 @@ from muGrid import Solvers
 
 from muFFTTO import domain
 from muFFTTO import microstructure_library
-from muFFTTO.visualization_utils import plot_field_on_grid , get_deformed_grid_coords_two_dim
+from muFFTTO.visualization_utils import plot_field_on_grid, get_deformed_grid_coords_two_dim
 from muFFTTO import material_models
 
 # Example of how to usu muFFTTO to solve the homogenization problem for 2D elasticity problem
@@ -24,7 +24,7 @@ formulation = 'small_strain'
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (28, 28)
+number_of_pixels = (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -39,9 +39,9 @@ K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
 
 # create material data field
 elastic_C_1 = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
-                                                 K=K_0,
-                                                 mu=G_0,
-                                                 kind='linear')
+                                                          K=K_0,
+                                                          mu=G_0,
+                                                          kind='linear')
 if discretization.communicator.rank == 0:
     print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
 
@@ -95,12 +95,16 @@ F_ijqxy = discretization.get_displacement_gradient_sized_field(name='Grid_Deform
 discretization.fft.communicate_ghosts(grid_nodes_displacement_inxyz)
 discretization.apply_gradient_operator_mugrid(grid_nodes_displacement_inxyz, F_ijqxy)
 F_ijqxy.s[...] += np.eye(2)[:, :, None, None, None]
+
 # determinant and inverse of the deformation gradient
-det_F = np.linalg.det(F_ijqxy.s.transpose(2, 3, 4, 0, 1))
-inv_F = np.linalg.pinv(F_ijqxy.s.transpose(2, 3, 4, 0, 1)).transpose(3, 4, 0, 1, 2)
+det_F = discretization.get_quad_field_scalar(name='determinant_F')
+det_F.s[0, 0, ...] = np.linalg.det(F_ijqxy.s.transpose(2, 3, 4, 0, 1))
+
+inv_F = discretization.get_displacement_gradient_sized_field(name='inverse_of_F')
+inv_F.s[...] = np.linalg.pinv(F_ijqxy.s.transpose(2, 3, 4, 0, 1)).transpose(3, 4, 0, 1, 2)
 
 # plot def_F in grid
-plot_field_on_grid(coordinates_for_plot=x_plot, field_to_plot=det_F[0], name='det(F)')
+plot_field_on_grid(coordinates_for_plot=x_plot, field_to_plot=det_F.s[0,0,0], name='det(F)')
 
 
 # --------------------------------------------------
@@ -151,7 +155,7 @@ for i in range(dim):
                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
 
         # Macro gradient in reference domain
-        macro_gradient_field.s[...] = np.einsum('ij...,jk...->ik...', macro_gradient_field.s[...], inv_F)
+        #macro_gradient_field.s[...] = np.einsum('ij...,jk...->ik...', macro_gradient_field.s[...], inv_F)
         discretization.fft.communicate_ghosts(field=macro_gradient_field)
 
         # Solve mechanical equilibrium constrain
@@ -185,10 +189,10 @@ for i in range(dim):
 
         if discretization.communicator.size == 1:
             # plot deformed domain
-            x_plot_ixyz=get_deformed_grid_coords_two_dim(discretization=discretization,
-                                             grid_nodes_displacement_inxyz=grid_nodes_displacement_inxyz,
-                                             macro_gradient_ij=macro_gradient_ij,
-                                             displacement_fluctuation=displacement_fluctuation)
+            x_plot_ixyz = get_deformed_grid_coords_two_dim(discretization=discretization,
+                                                           grid_nodes_displacement_inxyz=grid_nodes_displacement_inxyz,
+                                                           macro_gradient_ij=macro_gradient_ij,
+                                                           displacement_fluctuation=displacement_fluctuation)
 
             x_plot_ixyz[1, -1, -1] += displacement_fluctuation.s[1, 0, 0, 0]
 

@@ -20,7 +20,7 @@ def run_finite_difference_check(
     epsilons=(1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7),
     rtol=1e-4,
     min_rate=None,
-    plot=True,
+    plot=False,
     title='Finite Difference Check',
 ):
     """

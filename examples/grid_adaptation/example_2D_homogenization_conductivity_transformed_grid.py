@@ -22,7 +22,7 @@ element_type = 'linear_triangles'
 geometry_ID = 'square_inclusion'
 
 domain_size = [1, 1]
-number_of_pixels = (28, 28)
+number_of_pixels =  (32, 32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -89,11 +89,14 @@ discretization.fft.communicate_ghosts(grid_nodes_displacement_inxyz)
 discretization.apply_gradient_operator_mugrid(grid_nodes_displacement_inxyz, F_ijqxy)
 F_ijqxy.s[...] += np.eye(2)[:, :, None, None, None]
 # determinant and inverse of the deformation gradient
-det_F = np.linalg.det(F_ijqxy.s.transpose(2, 3, 4, 0, 1))
-inv_F = np.linalg.pinv(F_ijqxy.s.transpose(2, 3, 4, 0, 1)).transpose(3, 4, 0, 1, 2)
+det_F = discretization.get_quad_field_scalar(name='determinant_F')
+det_F.s[0,0,...] = np.linalg.det(F_ijqxy.s.transpose(2, 3, 4, 0, 1))
+
+inv_F = discretization.get_displacement_gradient_sized_field(name='inverse_of_F')
+inv_F.s[...] = np.linalg.pinv(F_ijqxy.s.transpose(2, 3, 4, 0, 1)).transpose(3, 4, 0, 1, 2)
 
 # plot def_F in grid
-plot_field_on_grid(coordinates_for_plot=x_plot, field_to_plot=det_F[0], name='det(F)')
+plot_field_on_grid(coordinates_for_plot=x_plot, field_to_plot=det_F.s[0,0,0], name='det(F)')
 
 
 def K_fun(x, Ax):
