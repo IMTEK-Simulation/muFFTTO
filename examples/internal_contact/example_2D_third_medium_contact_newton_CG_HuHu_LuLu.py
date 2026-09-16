@@ -369,22 +369,6 @@ for inc in range(ninc):
                 formulation=formulation
             )
 
-            # # HuHu regularization
-            # discretization.apply_hessian_operator_to_vector_field_mugrid(
-            #     u_inxyz=x, hess_u_ijkqxyz=hess_u_ijkqxyz)
-            # discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(
-            #     hess_u_ijkqxyz=hess_u_ijkqxyz, nodal_field_inxyz=HtH_field, apply_weights=True)
-            #
-            # # LuLu   regularization
-            # discretization.laplacian.apply(nodal_field=x,
-            #                                quadrature_point_field=lap_u_inxyz)
-            #
-            # discretization.laplacian.transpose(quadrature_point_field=lap_u_inxyz,
-            #                                    nodal_field=LtL_field,
-            #                                    weights=discretization.quadrature_weights)
-            #
-            # # add Huhu term
-            # Ax.s[...] += k_r * (HtH_field.s - inv_tr_I * LtL_field.s)
 
             add_regularization(x, Ax)
 

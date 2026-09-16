@@ -55,8 +55,8 @@ def get_geometry(nb_voxels,
                                        np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
             # left stick
 
-            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.45, coordinates[1] < 0.55),
-                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.45))] = 1
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.45, coordinates[1] < 0.6),
+                                       np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.5))] = 1
             # right stick
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.95, coordinates[1] < 0.55),
                                        np.logical_and(coordinates[0] >= 0.55, coordinates[1] >= 0.45))] = 1

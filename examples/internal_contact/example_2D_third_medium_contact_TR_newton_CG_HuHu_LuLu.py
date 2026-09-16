@@ -69,7 +69,7 @@ parser = argparse.ArgumentParser(
     prog='example_2D_third_medium_contact_TR_newton_CG_HuHu_LuLu.py',
     description='Finite strain neo-Hookean TMC in 2D, trust-region Newton-CG'
 )
-parser.add_argument('-n', '--nb_pixel', default='64')
+parser.add_argument('-n', '--nb_pixel', default='32')
 parser.add_argument('-inc', '--nb_increments', default='100')
 parser.add_argument('--save_per_it', action='store_true')
 parser.add_argument('--check_derivatives', action='store_true',
