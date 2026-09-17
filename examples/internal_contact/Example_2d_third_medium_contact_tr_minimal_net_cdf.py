@@ -14,24 +14,41 @@ M = G^T C_ref G + R, built once from a fixed reference material.
 The load is applied in equal increments of lam from 0 to 1, and each
 increment is one plain call to `tr_newton_bounded`.
 
-SAVING
-------
-One NetCDF file, written frame by frame as the run proceeds:
+SAVING (for muEye)
+------------------
+One NetCDF file, written frame by frame, holding fields muEye can render:
 
-  <output>   frames of u_fluc, F and P, plus the static phase field.
-             Every `dump_every` increments, and the final increment always.
-             Global attributes carry the run parameters, the command line
-             and the per-increment histories.
+  u_total      displacement, dim components   -> Dataset panel "Displacement"
+  phase_field  1 = matrix, 0 = third medium
+  detF         det F
+  F_flat       F, 4 components, c = i*dim + j
+  P_flat       P, 4 components, c = i*dim + j
 
-The phase field says which material each pixel is: phase > 0 is the matrix,
-phase == 0 the third medium.  That mapping is written as global attributes
-(`phase_matrix_value`, `phase_void_value`, `phase_note`) alongside the field
-itself, so the array is readable without this script.  If muGrid cannot lay
-the field out, it falls back to `phase_field_flat` + `phase_field_shape`.
+In muEye: Dataset panel -> Displacement = u_total, then pick a field and a
+component.  Warp scale 1.0 is the physical deformation.
 
-det F is not stored: it is a pure function of F.  Recompute it on read with
-J = F[0,0]*F[1,1] - F[0,1]*F[1,0].  (As a quad scalar it also trips muGrid's
-NetCDF layout check.)  min(det F) per increment is in `hist_min_J`.
+Three things muEye's format forces, each of which the raw solver fields break:
+
+1. Geometry is warped as x = C.s + u, with C from the `deformation_gradient`
+   global attribute -- written ONCE at file creation, so it cannot follow
+   lam.  The macro part is therefore folded into the displacement,
+
+       u_total = lam * H_macro . X + u_fluc
+
+   and the cell is left orthogonal (deformation_gradient = I).  The full
+   deformed configuration then animates across frames, which the attribute
+   route cannot do.
+
+2. "Fields on a sub-point (quadrature) subdivision are read, but derived
+   scalars operate on sub-point 0 only."  F and P live on quadrature points,
+   so muEye would show one quadrature point rather than the average.  The
+   copies here are averaged over the quadrature axis.  NOTE this smooths:
+   a single collapsing quadrature point looks milder than hist_min_J says.
+
+3. A (i, j, q, x, y) field gives dimensions tensor_dim__F-0 and -1, which a
+   collection registering F as one 4-component field cannot map -- the
+   'has 2 entries ... expects 4 entries' error.  One component axis avoids
+   it.
 
 All fields of a frame go out in ONE write() call.  muGrid opens a new frame
 per append_frame(), so writing them one at a time would scatter them across
@@ -72,12 +89,12 @@ from muFFTTO import visualization_utils
 # ============================================================================
 # problem setup
 # ============================================================================
-nnn = 32
-ninc = 10
+nnn = 128
+ninc = 100
 
 # plotting: deformed mesh every `plot_every` increments (0 = only the final
 # response curves).  Serial runs only -- the fields are distributed under MPI.
-plot_every = 1
+plot_every = 0
 
 # saving: write a frame every `dump_every` increments.  The final increment
 # is always written.  0 = final frame only.
@@ -387,12 +404,107 @@ def hessp(x, v):
 # macroscopic loading:  F_bar = I + lam * H_macro,  lam: 0 -> 1
 # ============================================================================
 H_macro = np.zeros((dim, dim))
-H_macro[1, 0] = -0.2
+H_macro[1, 0] = -0.3
+
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=H_macro,
     macro_gradient_field_ijqxyz=macro_gradient_full_field
 )
+
+# ============================================================================
+# muEye view fields
+#
+# Pixel level, no sub-point axis, one component axis -- see the module
+# docstring for why the raw F / P / u_fluc cannot be used directly.
+# ============================================================================
+def _pixel_field(name, ncomp):
+    """A pixel-level field with `ncomp` components and no sub-point axis.
+
+    Signature as in muEye's scripts/make_test_volume.py:
+    `fc.real_field(name, [ncomp])`, written through `.p` with shape
+    (ncomp, nx, ny).  Older spellings are kept as fallbacks.
+    """
+    fc = discretization.field_collection
+    errs = []
+    for args in ((name, [ncomp]), (name, (ncomp,)), (name, ncomp)):
+        try:
+            return fc.real_field(*args)
+        except Exception as err:                        # noqa: BLE001
+            errs.append(f'  real_field{args}: {err}')
+    raise RuntimeError(f'could not create view field {name!r}:\n'
+                       + '\n'.join(errs))
+
+
+# Undeformed node positions X, for the affine part of the displacement.
+# fft.coords is integer grid indices in some muFFT versions and normalized
+# [0, 1) coordinates in others, so the scaling is chosen accordingly.
+_coords = np.asarray(discretization.fft.coords)
+_scale = np.asarray(domain_size, dtype=float)
+if np.issubdtype(_coords.dtype, np.integer):
+    _scale = _scale / np.asarray(number_of_pixels, dtype=float)
+_positions = _coords * _scale.reshape((dim,) + (1,) * dim)
+
+# muEye's displacement is in GRID-POINT units (see its
+# scripts/make_test_volume.py), while everything here is in physical length.
+# Dividing by the grid spacing makes muEye's "Warp scale" = 1.0 the actual
+# physical deformation rather than one 1/nb_pixels of it.
+_grid_spacing = (np.asarray(domain_size, dtype=float)
+                 / np.asarray(number_of_pixels, dtype=float))
+_u_to_grid = (1.0 / _grid_spacing).reshape((dim,) + (1,) * dim)
+
+view_fields = {
+    'u_total': _pixel_field('u_total', dim),         # muEye "Displacement"
+    # The fluctuation alone, same units.  Selecting this as the Displacement
+    # in muEye shows the fluctuation on its own, with no affine part: if the
+    # picture is flat, the fluctuation really is negligible; if it wiggles,
+    # then u_total carries it too and the affine part is simply larger.
+    'u_fluc_only': _pixel_field('u_fluc_only', dim),
+    'detF': _pixel_field('detF', 1),
+    'F_flat': _pixel_field('F_flat', dim * dim),     # c = i*dim + j
+    'P_flat': _pixel_field('P_flat', dim * dim),
+}
+
+# Filled by update_view_fields, reported per frame: the affine and
+# fluctuation parts of the warp, in grid points.
+warp_magnitudes = {'affine': 0.0, 'fluct': 0.0}
+
+
+def update_view_fields(lam):
+    """Refresh the muEye copies from the current F / P / u state.
+
+    `total_strain_field`, `stress_field` and `displacement_fluctuation_field`
+    must already hold the state being written.  Pixel fields are written
+    through `.p`, which is (ncomp, nx, ny) -- the layout muEye expects.
+    """
+    # displacement = affine macro part + stored fluctuation
+    u_f = np.asarray(displacement_fluctuation_field.s)
+    u_f = u_f.reshape((dim, -1) + u_f.shape[-dim:])[:, 0]
+    # trim any ghost/buffer padding: the view fields are exactly nb_pixels
+    nx_loc = view_fields['u_total'].p.shape[1:]
+    u_f = u_f[(slice(None),) + tuple(slice(0, n) for n in nx_loc)]
+
+    affine = np.tensordot(lam * H_macro, _positions, axes=(1, 0))
+    affine = affine[(slice(None),) + tuple(slice(0, n) for n in nx_loc)]
+
+    affine_g = affine * _u_to_grid
+    fluct_g = u_f * _u_to_grid
+
+    view_fields['u_total'].p[...] = affine_g + fluct_g
+    view_fields['u_fluc_only'].p[...] = fluct_g
+
+    warp_magnitudes['affine'] = global_max(np.max(np.abs(affine_g)))
+    warp_magnitudes['fluct'] = global_max(np.max(np.abs(fluct_g)))
+
+    # tensors: average over the quadrature axis, fold (i, j) -> i*dim + j
+    Fp = np.asarray(total_strain_field.s).mean(axis=2)
+    Pp = np.asarray(stress_field.s).mean(axis=2)
+    view_fields['F_flat'].p[...] = Fp.reshape((dim * dim,) + Fp.shape[2:])
+    view_fields['P_flat'].p[...] = Pp.reshape((dim * dim,) + Pp.shape[2:])
+
+    J = Fp[0, 0] * Fp[1, 1] - Fp[0, 1] * Fp[1, 0]
+    view_fields['detF'].p[...] = J.reshape((1,) + J.shape)
+
 
 # ============================================================================
 # output file: fields as frames, scalars as global attributes
@@ -413,13 +525,9 @@ fio = muGrid.FileIONetCDF(output_path,
 
 # Every field of a frame must go out in ONE write() call (see module
 # docstring), so they are collected into a single list.
-#
-# det F is deliberately NOT stored: it is a pure function of F, which is
-# here, and as a quad scalar its (1, 1, q, x, y) layout trips muGrid's
-# NetCDF consistency check (count has 6 entries, imap 5).  Recompute it on
-# read with  J = F[0,0]*F[1,1] - F[0,1]*F[1,0].
 frame_fields = []
-for _name in ['u_fluc', 'F', 'P', 'phase_field']:
+for _name in ['u_total', 'u_fluc_only', 'phase_field', 'detF',
+              'F_flat', 'P_flat']:
     try:
         fio.register_field_collection(discretization.field_collection,
                                       field_names=[_name])
@@ -434,6 +542,22 @@ for _name in ['u_fluc', 'F', 'P', 'phase_field']:
 if not frame_fields:
     raise RuntimeError('no field could be registered for output')
 root_print('writing fields: ' + ', '.join(frame_fields))
+
+# muEye reads the cell shape from this attribute, and global attributes are
+# defined at file creation -- so it cannot follow lam.  Identity keeps the
+# cell orthogonal; the macro deformation rides in u_total instead, which is
+# what lets the deformed shape animate frame to frame.
+fio.write_global_attribute('deformation_gradient',
+                           [float(v) for v in np.eye(dim).ravel()])
+fio.write_global_attribute('displacement_field', 'u_total')
+fio.write_global_attribute(
+    'displacement_units',
+    'grid points (physical displacement / grid spacing), so Warp scale 1.0 '
+    'is the physical deformation')
+fio.write_global_attribute(
+    'component_order',
+    'F_flat / P_flat: component c = i*dim + j (row-major), '
+    'quadrature-averaged to pixel values')
 
 # The phase field is static and only says which material each pixel is, so
 # what it MEANS has to travel with it: without the mapping below a reader
@@ -496,15 +620,44 @@ for _name in ('nb_outer', 'nb_hessp', 'nb_precond', 'converged'):
     fio.write_global_attribute(f'hist_{_name}', [0] * _maxlen)
 fio.write_global_attribute('frame_increments', [-1] * _max_frames)
 
+# Per-frame, grid-less quantities belong in frame variables, not in padded
+# global attributes: `applied_deformation_gradient` is the macro F_bar of
+# that frame, which muEye's (file-constant) `deformation_gradient` attribute
+# cannot express.  register_frame_variable returns a numpy view that is
+# filled before each write.
+frame_vars = {}
+try:
+    frame_vars['applied_deformation_gradient'] = fio.register_frame_variable(
+        'applied_deformation_gradient', [dim, dim], np.float64)
+    frame_vars['lam'] = fio.register_frame_variable('lam', [1], np.float64)
+    frame_vars['min_det_F'] = fio.register_frame_variable(
+        'min_det_F', [1], np.float64)
+    # 1 = this increment reached gtol, 0 = it did not and is not an
+    # equilibrium.  Per frame, so a frame can be judged on its own.
+    frame_vars['converged'] = fio.register_frame_variable(
+        'converged', [1], np.float64)
+except Exception as _err:                                # noqa: BLE001
+    root_print(f'WARNING: frame variables unavailable ({_err}); '
+               'per-frame lam/F_bar not stored')
+    frame_vars = {}
+
+frame_fields += list(frame_vars)
+
 flush_frames = (not no_flush) and hasattr(fio, 'sync')
 frame_increments = []
 
 
-def write_frame(inc):
-    """Commit the current u / F / P as one new frame.
-
-    The fields must already hold the state of interest; this only writes.
-    """
+def write_frame(inc, lam):
+    """Refresh the muEye view fields and commit them as one new frame."""
+    update_view_fields(lam)
+    if frame_vars:
+        frame_vars['applied_deformation_gradient'][...] = (
+            np.eye(dim) + lam * H_macro)
+        frame_vars['lam'][...] = lam
+        frame_vars['min_det_F'][...] = (hist['min_J'][-1]
+                                        if hist['min_J'] else np.nan)
+        frame_vars['converged'][...] = (hist['converged'][-1]
+                                        if hist['converged'] else 0)
     fio.append_frame().write(frame_fields)
     if flush_frames:
         fio.sync()
@@ -574,7 +727,10 @@ for inc in range(1, ninc + 1):
     hist['converged'].append(int(bool(res.success)))
 
     if dump_every > 0 and inc % dump_every == 0:
-        write_frame(inc)
+        write_frame(inc, lam_current)
+        root_print(f'  warp (grid pts): affine {warp_magnitudes["affine"]:8.3f}'
+                   f'   fluctuation {warp_magnitudes["fluct"]:8.3f}'
+                   f'   ratio {warp_magnitudes["fluct"] / max(warp_magnitudes["affine"], 1e-30):6.3f}')
 
     # ---- deformed mesh -----------------------------------------------------
     if serial and plot_every and inc % plot_every == 0:
@@ -599,7 +755,7 @@ nb_not_converged = int(sum(1 for c in hist['converged'] if not c))
 # The final increment always gets a frame: it is the state every final plot
 # describes, and the restart point.
 if not frame_increments or frame_increments[-1] != ninc:
-    write_frame(ninc)
+    write_frame(ninc, lam_current)
 
 
 def _upd(name, value):
@@ -625,6 +781,8 @@ if rank == 0:
              if nb_not_converged else ''))
     print(f'wrote              : {output_path} '
           f'({len(frame_increments)} frame(s))')
+    print('muEye: Dataset panel -> Displacement = u_total, '
+          'then pick phase_field / detF / F_flat / P_flat')
 
 # ============================================================================
 # response curves
