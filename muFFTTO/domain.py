@@ -223,19 +223,12 @@ class Discretization:
             #  rhs=-Dt*A*E
 
     def get_nodal_points_coordinates(self):
-        """
-        Function to calculate  coordinates of nodal points for a domain of general rectangular shape.
-        Function uses muGrid.fft.coords, which returns coordinates of the reference unit cell with size [0,1]**dim,
-        and scales the coordinates to the real domain size.
-
-        Parameters
-        ----------
+        """Calculate spatial coordinates of nodal points scaled to domain size.
 
         Returns
         -------
-         returned field has size [dim, 1, N_x, N_y, N_z]
-         nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
-         nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
+        nodal_points_coordinates_inxyz : muGrid Field
+            Spatial coordinates of discretization nodes [dim, n, x, y, z].
         """
 
         dim = self.domain_dimension
@@ -298,21 +291,12 @@ class Discretization:
         return nodal_points_coordinates_inxyz
 
     def get_nodal_points_coordinates_with_periodic_nodes(self):
-        """
-        Function to calculate coordinates of nodal points for a domain of general rectangular shape
-        including periodic nodes.
-        Function uses muGrid.fft.coords, which returns coordinates of the reference unit cell with size [0,1]**dim,
-        and scales the coordinates to the real domain size.
-        This function uses NumPy array and should be used mainly for plotting/visualization.
-
-        Parameters
-        ----------
+        """Calculate coordinates of nodal points including periodic boundary nodes.
 
         Returns
         -------
-        returned field has size [dim, 1, N_x +1, N_y +1, N_z +1]
-        nodal_points_coordinates_ixyz = spacial coordinates of discretization nodes [i,x,y,z]
-        nodal_points_coordinates_ixyz[0,1,2,3] is [x_0]  coordinate  of points [1,2,3]
+        nodal_points_coordinates_inxyz : ndarray
+            Coordinates of nodal points including periodic boundary nodes [dim, n, Nx+1, Ny+1, (Nz+1)].
         """
         # if self.nb_nodes_per_pixel != 1:
         #     raise ValueError(
@@ -333,15 +317,12 @@ class Discretization:
 
     # @property
     def get_quad_points_coordinates(self):
-        """
-        Function to calculate quadrature points coordinates
-
-        Parameters
-        ----------
+        """Calculate spatial coordinates of quadrature points in physical domain.
 
         Returns
         -------
-         quad_points_coordinates_iqxyz = spatial coordinates of quadrature nodes [i,q,x,y,z]
+        quad_points_coordinates_iqxyz : muGrid Field
+            Spatial coordinates of quadrature points [dim, q, x, y, z].
         """
         dim = self.domain_dimension
         # creates a field with coordinates of all quadrature points
@@ -361,27 +342,24 @@ class Discretization:
         return quad_points_coordinates_iqxyz
 
     def roll(self, fft, u_inxyz, shift, axis):
+        """Circular shift field along specified axes using FFT phase shift.
+
+        Parameters
+        ----------
+        fft : muGrid.FFTEngine
+            FFT engine for the discretization.
+        u_inxyz : ndarray or muGrid Field
+            Input field to be rolled.
+        shift : array_like of int
+            Shift distance along each specified axis.
+        axis : tuple of int
+            Axes along which the shift is performed.
+
+        Returns
+        -------
+        return_field_inxyz : ndarray
+            Rolled (shifted) field.
         """
-         Function equivalent of numpy  roll function. Not the roll function uses mugrid fft for roll.
-
-
-         Parameters
-         ----------
-         fft: object
-             Discretization FFT engine
-         u_inxyz: numpy ndarray to be rolled
-
-         shift:  numpy ndarray with shape(d,)
-             Indices of roll. How manny and which direction is u_inxyz shifted
-                [1,2,3] means that array u_inxyz[i,n,x,y,z] we be shifted into u_inxyz[i,n,x+1,y+2,z+3]
-         axis: tuple to indicates which axis should be rolled
-            axis=(0, 1) means last two axis (use for 2d arrays-- 0 is y, 1 i x)
-            axis=(0, 1, 2 ) means last three axis (use for 3d arrays -- 0 is z, 1 i y, 2 i x)
-         Returns
-         -------
-         u_inxyz :  numpy ndarray that is rolled (shifted)
-
-         """
         phase = -2 * np.pi * sum(s * fft.fftfreq[a] for s, a in zip(shift, axis))
         f_field_inqrs = self.ffield_collection.complex_field(
             name='f_field_phase_roll_temp',  # name of the field
@@ -397,21 +375,18 @@ class Discretization:
         return return_field_inxyz.s * fft.normalisation
 
     def apply_gradient_operator_mugrid(self, u_inxyz, grad_u_ijqxyz):
-        """
-        Function that computes gradient of function u, using mugrid:ConvolutionOperator.
-        Depending on the discretization stencil.
+        """Compute gradient of field u using muGrid convolution operator.
 
         Parameters
         ----------
-        u_inxyz: numpy ndarray of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+        u_inxyz : muGrid Field
+            Nodal field [i, n, x, y, z].
+        grad_u_ijqxyz : muGrid Field
+            Output gradient field at quadrature points [i, j, q, x, y, z] (modified in-place).
 
         Returns
         -------
-        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
-                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
-                - q is quadrature point index
+        None
         """
 
         if self.nb_nodes_per_pixel > 1:
@@ -426,21 +401,18 @@ class Discretization:
                                quadrature_point_field=grad_u_ijqxyz)
 
     def apply_gradient_operator_symmetrized_mugrid(self, u_inxyz, grad_u_ijqxyz):
-        """
-        Function that computes symmetrized gradient of function u.
-        Depending on the discretization stencil.
+        """Compute symmetrized gradient (strain) of vector field u.
 
         Parameters
         ----------
-        u_inxyz: numpy ndarray of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+        u_inxyz : muGrid Field
+            Nodal displacement field [i, n, x, y, z].
+        grad_u_ijqxyz : muGrid Field
+            Output symmetrized gradient field at quadrature points [i, j, q, x, y, z] (modified in-place).
 
         Returns
         -------
-        grad_u_ijqxyz: numpy ndarray shape [i,j,q,x,y,z]
-                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
-                - q is quadrature point index
+        None
         """
         # computes symmetrized gradient (small-strain)
 
@@ -455,24 +427,21 @@ class Discretization:
                                                   gradient_field_ijqxyz,
                                                   div_u_fnxyz,
                                                   apply_weights=True):
-        """
-           Function that computes "Divergence"  of stress/flux field : gradient_of_u_fdqxyz.
-           Depending on the discretization stencil B.
-           Notation comes from the fact that system matrix  K= B^t:C:B
+        """Compute divergence (B^T operator) from flux or stress field at quadrature points.
 
-           Parameters
-           ----------
-           gradient_of_u_fdqxyz: numpy ndarray of discretized  stress/flux field [i,j,q,x,y,z]
-                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j index indicates direction of derivative j=0 is partial derivative with respect to x coordinate
-                - q is quadrature point index
-           Returns
-           -------
-           div_u_fnxyz: numpy ndarray of divergence of function u
-                -div_u_fnxyz shape [i,n,x,y,z]
-                - i index indicates u component: (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - n is a nodal point index
-           """
+        Parameters
+        ----------
+        gradient_field_ijqxyz : muGrid Field
+            Stress or flux field at quadrature points [i, j, q, x, y, z].
+        div_u_fnxyz : muGrid Field
+            Output divergence field at nodal points [i, n, x, y, z] (modified in-place).
+        apply_weights : bool, optional
+            Whether to apply quadrature weights during integration (default is True).
+
+        Returns
+        -------
+        None
+        """
         # if the input is ndArray, create muGrid field out of it
 
         if isinstance(gradient_field_ijqxyz, np.ndarray):
@@ -497,29 +466,18 @@ class Discretization:
         self.fft.communicate_ghosts(field=div_u_fnxyz)
 
     def apply_hessian_operator_to_scalar_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
-        """
-        Function that computes the Hessian (second derivatives) of function u,
-        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
-
-        muGrid's convolution operator carries a single component axis per
-        quadrature point, so the two derivative indices (j,k) of the Hessian
-        stencil are flattened into one axis J = j*dim + k. The operator is
-        applied in that flat layout and the result is unflattened here.
+        """Compute Hessian (second derivatives) of scalar field u at quadrature points.
 
         Parameters
         ----------
-        u_inxyz: mugrid field of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - n is a nodal point index
+        u_inxyz : muGrid Field
+            Nodal scalar field [1, n, x, y, z].
+        hess_u_ijkqxyz : muGrid Field
+            Output Hessian field at quadrature points [1, j, k, q, x, y, z] (modified in-place).
 
         Returns
         -------
-        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
-                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j,k indices indicate directions of the two derivatives,
-                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
-                - q is quadrature point index
-                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        None
         """
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
@@ -547,28 +505,18 @@ class Discretization:
         self.fft.communicate_ghosts(field=hess_u_ijkqxyz)
 
     def apply_hessian_operator_to_vector_field_mugrid(self, u_inxyz, hess_u_ijkqxyz):
-        """
-        Function that computes the Hessian (second derivatives) of function u,
-        using mugrid:ConvolutionOperator. Depending on the discretization stencil.
-
-        muGrid's convolution operator carries a single component axis per
-        quadrature point, so the two derivative indices (j,k) of the Hessian
-        stencil are flattened into one axis J = j*dim + k. The operator is
-        applied in that flat layout and the result is unflattened here.
+        """Compute Hessian (second derivatives) of vector field u at quadrature points.
 
         Parameters
         ----------
-        u_inxyz: mugrid field of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - n is a nodal point index
+        u_inxyz : muGrid Field
+            Nodal vector field [i, n, x, y, z].
+        hess_u_ijkqxyz : muGrid Field
+            Output Hessian field at quadrature points [i, j, k, q, x, y, z] (modified in-place).
+
         Returns
         -------
-        hess_u_ijkqxyz: mugrid field shape [i,j,k,q,x,y,z] - written in place
-                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
-                - j,k indices indicate directions of the two derivatives,
-                  e.g. (j,k) = (0,1) is the mixed partial derivative d^2 u / dx dy
-                - q is quadrature point index
-                - symmetric in (j,k), i.e. H[i,j,k] = H[i,k,j]
+        None
         """
         # if self.nb_nodes_per_pixel > 1:
         #     warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
@@ -697,8 +645,21 @@ class Discretization:
                                       nodal_field_fnxyz,
                                       quad_field_fqnxyz=None,
                                       quad_points_coords_iq=None):
-        """
-        Function that evaluates nodal field at quad points.
+        """Evaluate nodal field at quadrature points via interpolation operator N.
+
+        Parameters
+        ----------
+        nodal_field_fnxyz : muGrid Field
+            Input field at nodal points [f, n, x, y, z].
+        quad_field_fqnxyz : muGrid Field, optional
+            Output field at quadrature points [f, q, x, y, z].
+        quad_points_coords_iq : ndarray, optional
+            Parametric coordinates of quadrature points.
+
+        Returns
+        -------
+        quad_field_fqnxyz : muGrid Field
+            Interpolated field at quadrature points [f, q, x, y, z].
         """
         # if the input is ndArray, create muGrid field out of it
         if isinstance(nodal_field_fnxyz, np.ndarray):
@@ -712,21 +673,18 @@ class Discretization:
         return quad_field_fqnxyz
 
     def apply_N_operator_mugrid(self, nodal_field_inxyz, quad_field_ijqnxyz):
-        """
-        Function that interpolate nodal function u at quadrature points, using mugrid:ConvolutionOperator.
-        In FEM notation, this matrix is denoted a N
-        Depending on the discretization stencil.
+        """Interpolate nodal field to quadrature points using convolution operator N.
 
         Parameters
         ----------
-        u_inxyz: numpy ndarray of discretized function u
-                u_inxyz shape [i,n,x,y,z] (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity
+        nodal_field_inxyz : muGrid Field
+            Nodal field [i, n, x, y, z].
+        quad_field_ijqnxyz : muGrid Field
+            Output field at quadrature points [i, q, x, y, z] (modified in-place).
 
         Returns
         -------
-        u_iqnxyz: numpy ndarray shape [i,q,n,x,y,z]
-                - i index indicates u component : (i = 0) for scalar problems, and i = 0,...,d-1. for elasticity s
-                - q is quadrature point index
+        None
         """
 
         if self.nb_nodes_per_pixel > 1:
@@ -745,6 +703,21 @@ class Discretization:
                                            quad_field_ijqxyz,
                                            nodal_field_inxyz,
                                            apply_weights=True):
+        """Apply transposed interpolation operator N^T from quadrature to nodal points.
+
+        Parameters
+        ----------
+        quad_field_ijqxyz : muGrid Field
+            Field at quadrature points [i, q, x, y, z].
+        nodal_field_inxyz : muGrid Field
+            Output field at nodal points [i, n, x, y, z] (modified in-place).
+        apply_weights : bool, optional
+            Whether to apply quadrature weights (default is True).
+
+        Returns
+        -------
+        None
+        """
 
         if isinstance(quad_field_ijqxyz, np.ndarray):
             raise ("apply_N_transposed_operator_mugrid does not supprot ndarray")

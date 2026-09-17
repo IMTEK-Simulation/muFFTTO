@@ -11,24 +11,79 @@ control of the imposed deformation gradient along the load path.
 
 Why not plain Newton-CG
 -----------------------
-Under a prescribed macroscopic F the buckling of the third-medium ligaments is
-a *bifurcation*: past the critical load the Hessian G^T C G + R acquires a
-negative eigenvalue.  Two things then break in the plain Newton-CG driver:
+The plain Newton-CG driver dies inside the linear solve, at
+`muFFTTO/solvers.py:132-134`:
 
-  * linear CG structurally requires a positive definite operator, so
-    `solvers.conjugate_gradients_mugrid` raises 'Hessian is not positive
-    definite';
-  * more fundamentally, the unbuckled symmetric configuration is *still an
-    exact equilibrium* -- it has merely turned from a minimum of Pi into a
-    saddle.  A residual-based solver has no preference between the two, so
-    patching CG would only make it converge onto the unstable branch.
+    pAp = comm.sum(np.dot(p.s.ravel(), Ap.s.ravel()))
+    if pAp <= 0:
+        raise RuntimeError("Hessian is not positive definite")
 
-Minimizing Pi instead fixes both.  Trust-region Steihaug handles indefinite
-Hessians by design: when it meets a direction d with d^T B d <= 0 it walks to
-the trust-region boundary along it (both intersections are evaluated and the
-lower model value is kept) and reports 'negative curvature'.  The count of
-those inner terminations is reported per increment -- it is the direct
-numerical evidence of buckling.
+That is an unguarded test: a bare `<= 0` on an unnormalized dot product, with
+no tolerance, no scaling by ||p||^2, no null-space projection and no guard on
+rz.  It fires on an operator that is merely semi-definite, or simply noisy,
+and both happen here:
+
+  * the Green preconditioner annihilates the q = 0 mode, so p can land in
+    ker(A) and give pAp == 0 -- which already satisfies `<= 0`;
+  * the observed failures needed 676-924 inner CG iterations per Newton step
+    (430,547 in total in one run) with no reorthogonalization and no restart.
+    By then p is a near-cancelled vector and the sign of pAp is round-off,
+    not curvature.
+
+So the message names an indefinite Hessian, but what was measured is a CG
+breakdown.  The trust-region solver evaluates the same curvature <d, B d> on
+the same operator, and found it strictly positive every time (see below).
+
+The trust region is still the right fix -- for that reason rather than for
+bifurcation handling.  It never performs the `pAp <= 0` test at all, and
+Steihaug tolerates an indefinite Hessian by construction: on a direction d
+with d^T B d <= 0 it walks to the trust-region boundary along d (both
+intersections are evaluated and the lower model value is kept) and reports
+'negative curvature' instead of raising.  It cannot break down on a
+degenerate direction.  Element-inverting steps are rejected separately,
+through the energy: a trial step producing det F <= 0 is charged
+INADMISSIBLE_ENERGY, hence rho << 0, hence rejection and delta/4.
+
+No indefiniteness was observed
+------------------------------
+Across every configuration tested the negative-curvature counter stayed at
+zero: ~35,000 Hessian products at n = 16 and ~17,500 at n = 32, on both
+`contact_test_geometry_1` and `contact_test_geometry_2`, out to shear -0.6.
+`--imperfection 0` and `--imperfection 1e-4` reach the same solution to six
+digits, which is what a unique branch looks like.  The per-increment count is
+still reported -- it is the cheapest indefiniteness detector available -- but
+on these cases it reports nothing, and a reader should not expect it to fire.
+
+Energy minimization remains preferable in principle: a residual-based solver
+cannot distinguish a minimum from a saddle, so were a genuine bifurcation
+present it would happily track the unstable branch, whereas minimizing Pi
+cannot.  That argument is *not* exercised by the cases below -- none of them
+reached a bifurcation.
+
+Verified
+--------
+Cross-validation against the plain Newton-CG step-control script, same
+geometry and same load path, shear to -0.6:
+
+    n     min J (TR)      min J (Newton)     t_TR    t_Newton
+    16    1.223725e-03    1.223731e-03       74 s     139 s
+    32    4.630856e-03    4.630802e-03      155 s     460 s
+
+Agreement to ~6 digits at 2-3x the speed.  Regression against the reference
+result on `contact_test_geometry_2`: P_xx = 1.870e+00, min J = 5.782e-02
+(reference 1.87e+00 / 5.77e-02); `contact_test_geometry_1` gives 8.42e-01,
+which is why geometry_2 is the one used here.  `--check_derivatives` passes
+at n = 8 and n = 16: grad and Hessian FD errors fall as eps^2, hessp
+asymmetry is at round-off (4.3e-16 at n = 8, 2.8e-16 at n = 16), and
+<v, R v>/<v, v> is positive (+0.58 and +2.18 respectively) -- the
+regularizer is positive semi-definite, and therefore not a curvature
+source.
+`--calibrate_delta` at n = 16 gives an M-norm ratio of 2.19, i.e. delta0 ~
+4.4e-3, so the built-in preconditioned default of 5e-3 is already right.
+
+Follow-up, deliberately not done here: that `pAp <= 0` test wants a
+tolerance, a ||p||^2 scaling and a null-space guard.  It is a library change
+affecting every caller of `muFFTTO/solvers.py` and belongs in its own commit.
 
 What is kept from the plain-Newton step-control script
 ------------------------------------------------------
@@ -68,8 +123,11 @@ Flags of interest
     Seed u at lam = 0 with a fixed-seed random field of RMS
     X * max|H_macro| per component.  A perfectly symmetric discretization has
     no reason to leave the symmetric branch even after it has become a
-    saddle; the imperfection selects a branch.  --imperfection 0 reproduces
-    the symmetric path for comparison.
+    saddle, so the imperfection selects a branch.  On the configurations
+    tested it made no measurable difference -- the branch is unique and the
+    seed converges away -- so it is retained for the case where a genuine
+    bifurcation *is* present, not because these runs need it.
+    --imperfection 0 reproduces the symmetric path for comparison.
 
 Requires the patched NuMPI BoundedTRNewtonCG.py that supports `precond`
 (see the import guard below).
@@ -133,8 +191,9 @@ parser.add_argument('--tr_mode', choices=['safeguard', 'dormant'],
                          'trust-region boundary is never active. NOTE: with a '
                          'negative eigenvalue present the model is unbounded '
                          'below, so a dormant region has nothing to stop the '
-                         'negative-curvature step -- use it only below the '
-                         'critical load.')
+                         'negative-curvature step. That mechanism is generic; '
+                         'no negative curvature was actually encountered in '
+                         'the configurations tested.')
 parser.add_argument('--delta0', type=float, default=None,
                     help='Override the initial trust-region radius '
                          '(ignored with --tr_mode dormant)')
@@ -143,7 +202,11 @@ parser.add_argument('--gtol_rel', type=float, default=1e-4,
                          'the start of each increment')
 parser.add_argument('--imperfection', type=float, default=1e-4,
                     help='Symmetry-breaking seed amplitude at lam = 0, as a '
-                         'fraction of max|H_macro|. 0 = symmetric path.')
+                         'fraction of max|H_macro|. 0 = symmetric path. Had '
+                         'no measurable effect on the configurations tested '
+                         '(unique branch, the seed converges away); retained '
+                         'for the case where a genuine bifurcation is '
+                         'present.')
 parser.add_argument('--disp', action='store_true',
                     help='Per-iteration trust-region table')
 parser.add_argument('--plot_figures', action='store_true',
@@ -165,7 +228,7 @@ domain_size = [1, 1]
 dim = len(domain_size)
 problem_type = 'elasticity'
 discretization_type = 'finite_element'
-element_type = 'biquadratic_rectangle'  # required for a nonzero LuLu term
+element_type = 'bilinear_rectangle'  # required for a nonzero LuLu term bilinear_quadrangle
 formulation = 'finite_strain'
 
 # --- load step control (OUTSIDE the inner solver) ---------------------------

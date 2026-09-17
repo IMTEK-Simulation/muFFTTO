@@ -70,11 +70,11 @@ def get_geometry(nb_voxels,
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.85, coordinates[1] < 0.85),
                                        np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.15))] = 0
             # left lower stick
-            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.65, coordinates[1] < 0.45),
+            phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.52, coordinates[1] < 0.45),
                                        np.logical_and(coordinates[0] >= 0.15, coordinates[1] >= 0.35))] = 1
             # right upper stick
             phase_field[np.logical_and(np.logical_and(coordinates[0] < 0.95, coordinates[1] < 0.65),
-                                       np.logical_and(coordinates[0] >= 0.35, coordinates[1] >= 0.55))] = 1
+                                       np.logical_and(coordinates[0] >= 0.47, coordinates[1] >= 0.55))] = 1
         case 'contact_test_geometry_3':
             phase_field = np.ones(nb_voxels)
             # frame
