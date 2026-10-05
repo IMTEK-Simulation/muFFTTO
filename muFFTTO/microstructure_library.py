@@ -38,28 +38,40 @@ def get_geometry(nb_voxels,
             phase_field = np.random.rand(*nb_voxels)
 
         case 'geometry_stefanus':
+            if len(nb_voxels) != 2:
+                raise NotImplementedError('geometry_stefanus is implemented only in 2D')
+
+            vol_frac = kwargs.get('vol_frac', 0.45)
+            nb_circles_per_cell = 4
+            vol_frac_max = nb_circles_per_cell * np.pi * 0.25 ** 2  # = pi/4
+
+            if not (0.0 < vol_frac < vol_frac_max):
+                raise ValueError(
+                    f'geometry_stefanus: vol_frac must be in (0, {vol_frac_max:.4f}) so that '
+                    f'circles do not overlap, got {vol_frac}')
+
+            radius = np.sqrt(vol_frac / (nb_circles_per_cell * np.pi))
+
+            circle_centers_soft = [(0.00, 0.00),
+                                   (0.25, 0.50),
+                                   (0.75, 0.50)]
+            circle_centers_stiff = [(0.50, 0.00)]
+
+            def periodic_circle_mask(cx, cy, r):
+                # minimum-image distance in a unit-periodic cell
+                dx = coordinates[0] - cx
+                dy = coordinates[1] - cy
+                dx = dx - np.round(dx)
+                dy = dy - np.round(dy)
+                return dx ** 2 + dy ** 2 <= r ** 2
+
             phase_field = np.zeros(nb_voxels)
-            if len(nb_voxels) == 2:
-                x_lim = coordinates[0][-1, -1]
-                y_lim = coordinates[1][-1, -1]
-                # Define circle parameters (center coordinates and radius)
-                circles_solf = [
-                    (3 * x_lim / 6, 4 * y_lim / 6, y_lim / 10),  # Circle 2
-                    (5 * x_lim / 6, 3 * y_lim / 4, y_lim / 10),
-                ]
-                # Apply circle masks
-                for cx, cy, r in circles_solf:
-                    mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
-                    phase_field[mask] = 1  # Set pixels inside the circle to 1
+            for cx, cy in circle_centers_soft:
+                phase_field[periodic_circle_mask(cx, cy, radius)] = 1
+            for cx, cy in circle_centers_stiff:
+                phase_field[periodic_circle_mask(cx, cy, radius)] = 2
 
-                circles_stiff = [
-                    (x_lim / 3, 1 * y_lim / 4, y_lim / 10), ]
-                # Apply circle masks
-                for cx, cy, r in circles_stiff:
-                    mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
-                    phase_field[mask] = 2
-
-                return phase_field
+            return phase_field
 
         case 'square_inclusion':
 
