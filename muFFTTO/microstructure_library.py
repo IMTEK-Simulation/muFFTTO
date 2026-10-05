@@ -24,7 +24,7 @@ def get_geometry(nb_voxels,
                                    'geometry_I_5_3D',
                                    'geometry_II_0_3D', 'geometry_II_1_3D', 'geometry_II_3_3D', 'geometry_II_4_3D',
                                    'geometry_III_1_3D', 'geometry_III_2_3D', 'geometry_III_3_3D', 'geometry_III_4_3D',
-                                   'geometry_III_5_3D'
+                                   'geometry_III_5_3D', 'geometry_stefanus'
                                    ]:
         raise ValueError('Unrecognised microstructure_name {}'.format(microstructure_name))
     # if not nb_voxels[0] > 19 and nb_voxels[1] > 19 and nb_voxels[2] > 19 and nb_voxels[0]//5!=0 and nb_voxels[1]//5!=0 and nb_voxels[2]//5!=0:
@@ -36,6 +36,30 @@ def get_geometry(nb_voxels,
                 np.random.seed(kwargs['seed'])
 
             phase_field = np.random.rand(*nb_voxels)
+
+        case 'geometry_stefanus':
+            phase_field = np.zeros(nb_voxels)
+            if len(nb_voxels) == 2:
+                x_lim = coordinates[0][-1, -1]
+                y_lim = coordinates[1][-1, -1]
+                # Define circle parameters (center coordinates and radius)
+                circles_solf = [
+                    (3 * x_lim / 6, 4 * y_lim / 6, y_lim / 10),  # Circle 2
+                    (5 * x_lim / 6, 3 * y_lim / 4, y_lim / 10),
+                ]
+                # Apply circle masks
+                for cx, cy, r in circles_solf:
+                    mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
+                    phase_field[mask] = 1  # Set pixels inside the circle to 1
+
+                circles_stiff = [
+                    (x_lim / 3, 1 * y_lim / 4, y_lim / 10), ]
+                # Apply circle masks
+                for cx, cy, r in circles_stiff:
+                    mask = (coordinates[0] - cx) ** 2 + (coordinates[1] - cy) ** 2 <= r ** 2
+                    phase_field[mask] = 2
+
+                return phase_field
 
         case 'square_inclusion':
 

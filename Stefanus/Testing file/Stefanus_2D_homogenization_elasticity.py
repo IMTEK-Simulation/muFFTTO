@@ -1,5 +1,8 @@
 import sys
 import os
+
+from matplotlib import pyplot as plt
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 import numpy as np
@@ -34,45 +37,64 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 
 
 # material distribution
-geometry_ID = 'square_inclusion'
+geometry_ID = 'geometry_stefanus'
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                           microstructure_name=geometry_ID,
                                                           coordinates=discretization.fft.coords)
-matrix_mask = phase_field.s[0, 0] > 0
-inc_mask = phase_field.s[0, 0] == 0
+
+plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1], phase_field.s[0, 0])
+
+plt.show()
+
+# ORIGINAL Setup
+# matrix_mask = phase_field.s[0, 0] > 0
+# inc_mask = phase_field.s[0, 0] == 0
+matrix_mask = phase_field.s[0, 0] == 0
+inc_soft_mask = phase_field.s[0, 0] == 1
+inc_stiff_mask = phase_field.s[0, 0] == 2
+
 
 # initialize material data
 
-mat_contrast = 1
-mat_contrast_2 = 1e2
-
 K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=1, poisson=0.2)
-lam, mu = material_models.get_lame_parameters_from_bulk_and_shear(K_0,
-                                                                  G_0,dim=discretization.domain_dimension)
+K_1, G_1 = material_models.get_bulk_and_shear_modulus(E=0.001, poisson=0.2)
+K_2, G_2 = material_models.get_bulk_and_shear_modulus(E=10, poisson=0.2)
 
+lam_0, mu_0 = material_models.get_lame_parameters_from_bulk_and_shear(K_0,
+                                                                      G_0,
+                                                                      dim=discretization.domain_dimension)
+lam_1, mu_1 = material_models.get_lame_parameters_from_bulk_and_shear(K_1,
+                                                                      G_1,
+                                                                      dim=discretization.domain_dimension)
+lam_2, mu_2 = material_models.get_lame_parameters_from_bulk_and_shear(K_2,
+                                                                      G_2,
+                                                                      dim=discretization.domain_dimension)
 
 lam_11qxyz = discretization.get_quad_field_scalar(name='lam_first_lame')
 mu_11qxyz = discretization.get_quad_field_scalar(name='mu_second_lame')
 
 # apply material distribution
-lam_11qxyz.s[...,matrix_mask] =  mat_contrast_2 * lam
-lam_11qxyz.s[...,inc_mask] =  mat_contrast * lam
+lam_11qxyz.s[..., matrix_mask] = lam_0
+lam_11qxyz.s[..., inc_soft_mask] = lam_1
+lam_11qxyz.s[..., inc_stiff_mask] = lam_2
 
-mu_11qxyz.s[...,matrix_mask] =  mat_contrast_2 * mu
-mu_11qxyz.s[...,inc_mask] =  mat_contrast * mu
+mu_11qxyz.s[..., matrix_mask] = mu_0
+mu_11qxyz.s[..., inc_soft_mask] = mu_1
+mu_11qxyz.s[..., inc_stiff_mask] = mu_2
 
 material = material_models.LinearElastic(discretization=discretization,
                                          lam_1qxyz=lam_11qxyz,
                                          mu_1qxyz=mu_11qxyz,
                                          name='linear_isotropic_elasticity')
+
 material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
 
 # populate the field with C_0 material
-strain_ijqxyz = discretization.get_strain_sized_field( name='macro_gradient_field')
+total_strain_ijqxyz = discretization.get_strain_sized_field(name='total_strain_field')
 
-material.get_algorithmic_tangent(strain_ijqxyz, material_data_field_C_0)
+material.get_algorithmic_tangent(total_strain_ijqxyz, material_data_field_C_0)
 
 
 
@@ -106,7 +128,7 @@ def M_fun(x, Px):
 # Allocate fields
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
-solution_field = discretization.get_unknown_size_field(name='solution')
+displacement_fluctuation_field = discretization.get_unknown_size_field(name='solution')
 
 
 def callback(iteration, fields):
@@ -119,54 +141,97 @@ def callback(iteration, fields):
 
 dim = discretization.domain_dimension
 homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
-# compute whole homogenized elastic tangent
-for i in range(dim):
-    for j in range(dim):
-        # set macroscopic gradient
-        macro_gradient_ij = np.zeros([dim, dim])
-        macro_gradient_ij[i, j] = 1
-        # Set up right hand side
-        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
-                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
-        # Solve mechanical equilibrium constrain
-        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                      macro_gradient_field_ijqxyz=macro_gradient_field,
-                                      rhs_inxyz=rhs_field)
 
-        Solvers.conjugate_gradients(
-            comm=discretization.communicator,
-            fc=discretization.field_collection,
-            hessp=K_fun,  # linear operator
-            b=rhs_field,  # right-hand side
-            x=solution_field,
-            prec=M_fun,
-            tol=1e-6,
-            maxiter=2000,
-            callback=callback)
+# set macroscopic gradient
+macro_gradient_ij = np.zeros([dim, dim])
+macro_gradient_ij[0, 0] = 0.1
 
+# Set up right hand side
+discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+                                               macro_gradient_field_ijqxyz=macro_gradient_field)
+# Solve mechanical equilibrium constrain
+discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                              macro_gradient_field_ijqxyz=macro_gradient_field,
+                              rhs_inxyz=rhs_field)
 
-        if discretization.communicator.size == 1:
-            # Plot the first two components of the solution field
-            try:
-                x_plot_ixyz=visualization_utils.get_deformed_grid_coords_two_dim(discretization,
-                                                 macro_gradient_ij=macro_gradient_ij,
-                                                 displacement_fluctuation=solution_field)
+Solvers.conjugate_gradients(
+    comm=discretization.communicator,
+    fc=discretization.field_collection,
+    hessp=K_fun,  # linear operator
+    b=rhs_field,  # right-hand side
+    x=displacement_fluctuation_field,
+    prec=M_fun,
+    tol=1e-6,
+    maxiter=2000,
+    callback=callback)
 
-                visualization_utils.plot_field_on_grid(
-                    coordinates_for_plot=x_plot_ixyz,
-                    field_to_plot=solution_field.s[0, 0],
-                    name = fr'$\tilde{{u}}_{{x}}$   ')
-                visualization_utils.plot_field_on_grid(
-                    coordinates_for_plot=x_plot_ixyz,
-                    field_to_plot=solution_field.s[1, 0],
-                    name=fr'$\tilde{{u}}_{{y}}$   ')
-            except:
-                print(f"Plotting failed:  ")
+# strain from displacement increment
+strain_fluc_field = discretization.get_strain_sized_field(name='strain_fluc_field')
+discretization.apply_gradient_operator_symmetrized_mugrid(
+    u_inxyz=displacement_fluctuation_field,
+    grad_u_ijqxyz=strain_fluc_field,
+)
+
+# update total strain and displacement
+total_strain_ijqxyz.s[...] = macro_gradient_field.s[...] + strain_fluc_field.s[...]
+
+# re-evaluate constitutive response
+total_stress_field = discretization.get_strain_sized_field(name='total_stress_field')
+
+material.get_stress(total_strain_ijqxyz, total_stress_field)
+
+Von_Mises_1nxyz = discretization.get_scalar_field(name='Von_Mises')
+
+s = total_stress_field.s  # (2, 2, 4, 16, 32)
+nu = 0.3  # Poisson's ratio
+
+sxx = s[0, 0]
+syy = s[1, 1]
+sxy = s[0, 1]
+
+szz = nu * (sxx + syy)  # out-of-plane stress in plane strain
+
+vm = np.sqrt(
+    0.5 * ((sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2)
+    + 3.0 * sxy ** 2
+)
+
+#  I want to plot the field/ Von Mises stress. I have four quad points , but matplotlib plots only one number per pixel # shape: (4, 16, 32)
+Von_Mises_1nxyz.s[...] = np.mean(vm, axis=0)
+
+if discretization.communicator.size == 1:
+    # Plot the first two components of the solution field
+    try:
+        x_plot_ixyz = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+                                                                           macro_gradient_ij=macro_gradient_ij,
+                                                                           displacement_fluctuation=displacement_fluctuation_field)
+
+        visualization_utils.plot_field_on_grid(
+            coordinates_for_plot=x_plot_ixyz,
+            field_to_plot=Von_Mises_1nxyz.s[0, 0],
+            name=fr'$\tilde{{u}}_{{x}}$   ',
+            plot_grid=False)
+    except:
+        print(f"Plotting failed:  ")
+
+        plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1], Von_Mises_1nxyz.s[0, 0])
+        plt.title(fr'Von_Mises_1nxyz   ')
+        plt.show()
+
+        plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1],
+                       total_strain_ijqxyz.s[0, 0].mean(axis=0))
+        plt.title(fr'Total strain x,x    ')
+        plt.show()
+        plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1],
+                       total_strain_ijqxyz.s[0, 1].mean(axis=0))
+        plt.title(fr'Total strain x,y    ')
+        plt.show()
+
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+        homogenized_C_ijkl[0, 0] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0,
-            displacement_field_inxyz=solution_field,
+            displacement_field_inxyz=displacement_fluctuation_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
 
