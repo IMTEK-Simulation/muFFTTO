@@ -2,6 +2,7 @@ import sys
 import os
 
 from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
@@ -22,7 +23,7 @@ element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (16,16)
+number_of_pixels = (64,64)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -39,18 +40,42 @@ print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.
 # material distribution
 geometry_ID = 'geometry_stefanus'
 
+inclusion_vol_frac = 0.45  # total volume fraction of soft + stiff circles (target) =========== NEW Param ==========
+
 phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                           microstructure_name=geometry_ID,
-                                                          coordinates=discretization.fft.coords)
+                                                          coordinates=discretization.fft.coords,
+                                                          vol_frac=inclusion_vol_frac) #add inclusion_vol_frac
 
-plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1], phase_field.s[0, 0])
+# volume fraction actually resolved on the pixel grid (differs from target on coarse grids)
+nb_px_global = np.prod(discretization.nb_of_pixels_global)
+vf_soft = discretization.mpi_reduction.sum(phase_field.s[0, 0] == 1) / nb_px_global
+vf_stiff = discretization.mpi_reduction.sum(phase_field.s[0, 0] == 2) / nb_px_global
+if MPI.COMM_WORLD.rank == 0:
+    print(f'target inclusion vol. frac = {inclusion_vol_frac:.4f} | '
+          f'resolved: soft = {vf_soft:.4f}, stiff = {vf_stiff:.4f}, total = {vf_soft + vf_stiff:.4f}')
 
+# one fixed colour per phase: 0 = matrix, 1 = soft, 2 = stiff
+phase_cmap = ListedColormap(['#5aa85a',   # matrix -> green
+                             'white',     # soft   -> white
+                             '#0040b0'])  # stiff  -> blue
+phase_norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], phase_cmap.N)
+
+fig, ax = plt.subplots(figsize=(5, 5))
+pcm = ax.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1], phase_field.s[0, 0],
+                    cmap=phase_cmap, norm=phase_norm, edgecolors='lightgray', linewidth=0.3)
+cbar = fig.colorbar(pcm, ax=ax, ticks=[0, 1, 2])
+cbar.ax.set_yticklabels(['matrix', 'soft', 'stiff'])
+ax.set_aspect('equal')
+# ax.set_title(geometry_ID)
 plt.show()
 
-# ORIGINAL Setup
-# matrix_mask = phase_field.s[0, 0] > 0
-# inc_mask = phase_field.s[0, 0] == 0
+# Previous Plotting
+# plt.pcolormesh(discretization.fft.coords[0], discretization.fft.coords[1], phase_field.s[0, 0])
+#
+# plt.show()
+
 matrix_mask = phase_field.s[0, 0] == 0
 inc_soft_mask = phase_field.s[0, 0] == 1
 inc_stiff_mask = phase_field.s[0, 0] == 2
