@@ -306,6 +306,7 @@ def run_grid_adaptation_workflow(
     relax_omega: float = 0.35,
     relax_b: float = 0.5,
     verbose: bool = True,
+    fix_boundary: bool = True,
 ) -> dict[str, np.ndarray]:
     """Run the complete image-to-deformed-grid workflow.
 
