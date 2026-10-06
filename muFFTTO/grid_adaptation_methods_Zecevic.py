@@ -323,20 +323,24 @@ def adapt_grid_to_circle(
         b: float = 0.5,
         k0: float = 0.25,
         kmin: float = 0.0,
+        is_projection : bool = True,
 ):
     # 定義網格 geometry: inside cells
     inside = cell_labels(ref_grid_coords_ixyz,center,radius)
-    # 定義網格 interface nodes
-    interface = interface_node_mask(inside)
+    if is_projection:
+        # 定義網格 interface nodes
+        interface = interface_node_mask(inside)
 
-    P = ref_grid_coords_ixyz.copy()
-    idx = np.argwhere(interface)
-    if idx.size:
-        pts = P[:, idx[:, 0], idx[:, 1]]
-        P[:, idx[:, 0], idx[:, 1]] = project_points_to_circle(pts,center=center,R=radius,)
-    dist = manhattan_distance_to_interface(interface)
-    k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)
-    fixed = interface.copy()
-    P1 = spring_relax_weighted(P, fixed_mask=fixed, k_node=k_node, iters=iters, omega=omega)
+        P = ref_grid_coords_ixyz.copy()
+        idx = np.argwhere(interface)
+        if idx.size:
+            pts = P[:, idx[:, 0], idx[:, 1]]
+            P[:, idx[:, 0], idx[:, 1]] = project_points_to_circle(pts,center=center,R=radius,)
+        dist = manhattan_distance_to_interface(interface)
+        k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)
+        fixed = interface.copy()
+        P1 = spring_relax_weighted(P, fixed_mask=fixed, k_node=k_node, iters=iters, omega=omega)
 
-    return P1, inside
+        return P1, inside
+    else:
+        return inside
