@@ -121,9 +121,6 @@ total_strain_ijqxyz = discretization.get_strain_sized_field(name='total_strain_f
 
 material.get_algorithmic_tangent(total_strain_ijqxyz, material_data_field_C_0)
 
-
-
-
 def K_fun(x, Ax):
 
     discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
@@ -169,7 +166,8 @@ homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
 
 # set macroscopic gradient
 macro_gradient_ij = np.zeros([dim, dim])
-macro_gradient_ij[0, 0] = 0.1
+macro_gradient_ij = np.array([[0.1, 0.0],
+                              [0.0, 0.2]])
 
 # Set up right hand side
 discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
@@ -186,7 +184,7 @@ Solvers.conjugate_gradients(
     b=rhs_field,  # right-hand side
     x=displacement_fluctuation_field,
     prec=M_fun,
-    tol=1e-6,
+    tol=1e-3,
     maxiter=2000,
     callback=callback)
 
@@ -254,7 +252,7 @@ if discretization.communicator.size == 1:
 
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[0, 0] = discretization.get_homogenized_stress_mugrid(
+        homogenized_stress = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0,
             displacement_field_inxyz=displacement_fluctuation_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
@@ -262,9 +260,23 @@ if discretization.communicator.size == 1:
 
 if MPI.COMM_WORLD.rank == 0:
     print(
-        "Homogenized elastic tangent =\n" +
-        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
+        "Homogenized stress Voigt =\n" +
+        np.array2string(material_models.compute_Voigt_notation(homogenized_stress), formatter={'float_kind': lambda x: f"{x:0.8f}"})
     )
+    print(
+        "Homogenized stress =\n" +
+        np.array2string(homogenized_stress, formatter={'float_kind': lambda x: f"{x:0.8f}"})
+    )
+
+    x_plot_ixyz = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+                                                                       macro_gradient_ij=macro_gradient_ij,
+                                                                       displacement_fluctuation=displacement_fluctuation_field)
+
+    visualization_utils.plot_field_on_grid(
+        coordinates_for_plot=x_plot_ixyz,
+        field_to_plot=total_stress_field.s[0, 0, 0, ],
+        name=fr'${{\sigma}}_{{x}}$')
+
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
