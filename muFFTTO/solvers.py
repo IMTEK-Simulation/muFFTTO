@@ -180,18 +180,17 @@ def conjugate_gradients_mugrid_experimental(
         maxiter: int = 1000,
         callback: callable = None,
         rtol: bool = False,
-
         norm_metric: callable = None,
+        lambda_min: float = None,
+        stop_crit_norm: str = "rr",
         **kwargs
 ):
     """
-    - this version has error estimates implemented
-    #
     Conjugate gradient method for matrix-free solution of the linear problem
     Ax = b, where A is represented by the function hessp (which computes the
     product of A with a vector). The method iteratively refines the solution x
-    until the residual ||Ax- b|| is less than tol or until maxiter iterations
-    are reached.
+    until the quantity selected by stop_crit_norm is less than tol**2, or until
+    maxiter iterations are reached.
 
     Parameters
     ----------
@@ -214,13 +213,75 @@ def conjugate_gradients_mugrid_experimental(
     callback : callable, optional
         Function to call after each iteration with the current solution, residual,
         and search direction.
+    lambda_min : float, optional
+        mu_min of the Gauss-Radau upper bound. Must satisfy mu_min <= lambda_min
+        of the preconditioned operator; pass 0.9 * eigen_LB to be safe. None
+        disables the bound.
+    stop_crit_norm : str, optional
+        Which quantity the stopping test compares against tol**2:
+
+          'rr'                 Euclidean residual  (r, r)          [default]
+          'rz'                 preconditioned residual  (r, z)
+          'custom'             (r, norm_metric(r)); needs norm_metric
+          'energy_lower_estim' Meurant-Papez-Tichy delayed lower bound
+                               on ||e_k||_K^2
+          'energy_upper_estim' that lower bound divided by (1 - tau); needs
+                               0 <= tau < 1. Computed on the fly, not stored
+          'energy_upper_bound' Gauss-Radau upper bound; needs lambda_min
+          'all'                iterate until EVERY applicable criterion above
+                               is satisfied, i.e. until the slowest one is
+
+        The three energy criteria are not available at every iteration: the
+        estimator appends only when its delay condition is met, and the
+        Gauss-Radau recursion stops after a breakdown. While the selected
+        quantity is unavailable the loop simply does not stop, so an
+        unsatisfiable criterion runs to maxiter rather than failing silently.
+
+        NOTE: tol means a different thing in each mode. 'rr' and 'rz' are
+        residual norms, the three energy criteria are squared energy errors.
+        Comparing iteration counts across modes is only meaningful once the
+        tolerances are chosen to target the same achieved ||e_k||_K^2.
 
     Returns
     -------
     x : array_like
         Approximate solution to the systems Ax = b. (Same as input field x.)
+    norms : dict
+        'energy_lower_estim' and 'energy_upper_bound' series, as before, plus
+        'stop_iteration': {criterion -> first iteration at which it fell below
+        tol_sq, or None}. This is filled in EVERY mode, not just 'all', since
+        all the values are computed anyway: one run yields the whole
+        stopping-criterion comparison table.
+
+        Neither stored series runs to the last iteration. 'energy_lower_estim'
+        lags by the current delay, and 'energy_upper_bound' stops at a
+        Gauss-Radau breakdown. Entry i of both corresponds to iteration i, so
+        they may be plotted against their array index; they simply end early.
+        'energy_upper_estim' is not stored at all - derive it from
+        'energy_lower_estim' / (1 - tau) if a plot needs it.
     """
     tol_sq = tol * tol
+
+    # tau is needed by the validation below, so it is read here rather than
+    # just before the iteration loop
+    tau = kwargs.get("tau", 0.25)
+
+    # ---- stopping-criterion selection -------------------------------------
+    _VALID_STOP = ("rr", "rz", "custom",
+                   "energy_lower_estim", "energy_upper_estim",
+                   "energy_upper_bound",
+                   "all")
+    if stop_crit_norm not in _VALID_STOP:
+        raise ValueError(f"stop_crit_norm must be one of {_VALID_STOP}, "
+                         f"got {stop_crit_norm!r}")
+    if stop_crit_norm == "custom" and norm_metric is None:
+        raise ValueError("stop_crit_norm='custom' requires norm_metric")
+    if stop_crit_norm == "energy_upper_bound" and lambda_min is None:
+        raise ValueError("stop_crit_norm='energy_upper_bound' requires lambda_min")
+    if stop_crit_norm in ("energy_upper_estim", "all") and not (0.0 <= tau < 1.0):
+        raise ValueError(f"stop_crit_norm={stop_crit_norm!r} requires "
+                         f"0 <= tau < 1, got {tau}")
+
     p = fc.real_field(
         name="cg-search-direction",  # name of the field
         components=(*x.components_shape,),  # shape of components
@@ -252,9 +313,6 @@ def conjugate_gradients_mugrid_experimental(
     rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
     rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
 
-
-
-
     if norm_metric is not None:
         Pr = fc.real_field(
             name="cg-custom_metric_residual",  # name of the field
@@ -268,13 +326,12 @@ def conjugate_gradients_mugrid_experimental(
         stop_crit = rr
 
     if stop_crit < tol_sq:
-        return x
+        return x, norms
 
     if rtol:
         tol_sq = tol_sq * stop_crit
 
     if callback:
-        # callback(0, x.s, r.s, p.s, z.s, stop_crit)
         callback(0, x.s, r.s, p.s, z.s, stop_crit)
 
     #  % in the paper this is denoted as k
@@ -283,13 +340,55 @@ def conjugate_gradients_mugrid_experimental(
     Delta = []
     curve = []
     estim = []
-    norms['energy_lower_bound']= []
+    norms['energy_lower_estim'] = []
+    norms['energy_upper_bound'] = []
+    compute_upper_bound = lambda_min is not None
+    if compute_upper_bound:
+        mu_gr = 1.0 / lambda_min
+        norms['energy_upper_bound'].append(mu_gr * rz)
     delay = []
-    if "tau" in kwargs:
-        tau = kwargs['tau']
-    else:
-        tau = 0.25
 
+    # Criteria whose prerequisites are met in this call. 'all' waits for every
+    # one of them; every mode records when each first crosses tol_sq.
+    _applicable = ["rr", "rz"]
+    if norm_metric is not None:
+        _applicable.append("custom")
+    _applicable.append("energy_lower_estim")
+    if 0.0 <= tau < 1.0:
+        _applicable.append("energy_upper_estim")
+    if lambda_min is not None:
+        _applicable.append("energy_upper_bound")
+    norms['stop_iteration'] = {c: None for c in _applicable}
+
+    def _all_stop_values(rr_, rz_, custom_):
+        """
+        Every applicable criterion's current value. None means 'not usable at
+        this iteration', which never counts as satisfied.
+        """
+        values = {}
+        lo = norms["energy_lower_estim"]
+        ub = norms["energy_upper_bound"]
+        for c in _applicable:
+            if c == "rr":
+                values[c] = rr_
+            elif c == "rz":
+                values[c] = rz_
+            elif c == "custom":
+                values[c] = custom_
+            elif c == "energy_lower_estim":
+                values[c] = lo[-1] if lo else None
+            elif c == "energy_upper_estim":
+                # tau-dependent upper estimate, computed on the fly from the
+                # latest lower bound rather than stored
+                values[c] = lo[-1] / (1.0 - tau) if lo else None
+            else:
+                # Gauss-Radau: trust it only while the recursion is alive and
+                # positive. After a breakdown the stored value is stale, and a
+                # lambda_min above the true minimum can make it negative,
+                # which a naive '< tol_sq' test reads as instant convergence.
+                values[c] = (ub[-1] if (compute_upper_bound and ub and ub[-1] > 0.0)
+                             else None)
+        return values
 
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -319,13 +418,25 @@ def conjugate_gradients_mugrid_experimental(
         if callback:
             callback(iteration + 1, x.s, r.s, p.s, z.s, stop_crit)
 
-
-
-
         # Update search direction
         # beta = next_rr / rr
         beta = next_rz / rz
         p.s[...] = z.s + beta * p.s
+
+        # Energy - error upper bound (Gauss-Radau)
+        if compute_upper_bound:
+            gr_t = mu_gr - alpha
+            gr_den = lambda_min * gr_t + beta
+            if gr_t <= 0.0 or gr_den <= 0.0:
+                if comm.rank == 0:
+                    warnings.warn(
+                        f"Gauss-Radau recursion broke down at iteration {iteration + 1}; "
+                        f"lambda_min = {lambda_min:g} is probably not below the smallest "
+                        f"eigenvalue. Upper bound not computed further.", RuntimeWarning)
+                compute_upper_bound = False
+            else:
+                mu_gr = gr_t / gr_den
+                norms['energy_upper_bound'].append(mu_gr * next_rz)
 
         # Energy - error estimator
         Delta.append(alpha * rz)
@@ -338,9 +449,9 @@ def conjugate_gradients_mugrid_experimental(
 
             num = S * Delta[-1]
             den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
-            while (d >= 0) and (num / den <= tau):
+            while (d >= 0) and (den > 0) and (num / den <= tau):
                 delay.append(d)
-                norms['energy_lower_bound'].append(den + Delta[-1])
+                norms['energy_lower_estim'].append(den + Delta[-1])
                 l = l + 1
                 d = d - 1
                 den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
@@ -350,16 +461,42 @@ def conjugate_gradients_mugrid_experimental(
         rz = next_rz
         # p.s *= beta
         # p.s += z.s
-        if stop_crit < tol_sq:
-            return x, norms
+
+        # Stopping test. Placed here, after the energy estimator and the
+        # Gauss-Radau update, so that the energy criteria see this iteration's
+        # values. A None means the selected quantity is not available yet.
+        stop_values = _all_stop_values(next_rr, next_rz, stop_crit)
+
+        # Record the first crossing of every criterion, whichever one is
+        # driving the loop. Free: all the values are already computed.
+        for _name, _val in stop_values.items():
+            if (norms['stop_iteration'][_name] is None
+                    and _val is not None and _val < tol_sq):
+                norms['stop_iteration'][_name] = iteration + 1
+
+        if stop_crit_norm == "all":
+            if all(v is not None and v < tol_sq for v in stop_values.values()):
+                return x, norms
+        else:
+            stop_value = stop_values[stop_crit_norm]
+            if stop_value is not None and stop_value < tol_sq:
+                return x, norms
 
     if comm.rank == 0:
-        warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
+        _never = [c for c, k in norms.get('stop_iteration', {}).items() if k is None]
+        if stop_crit_norm == "all" and _never:
+            warnings.warn(
+                f"Reached maxiter in stop_crit_norm='all': {_never} never "
+                f"satisfied the tolerance, so the run could not finish even "
+                f"though the other criteria did. Check lambda_min (a "
+                f"Gauss-Radau breakdown freezes the upper bound) and tau.",
+                RuntimeWarning)
+        else:
+            warnings.warn("Conjugate gradient algorithm did not converge", RuntimeWarning)
 
     return x, norms
 
-
-def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False,
+def ___PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=False,
         lambda_min=None, norm_type='rz',
         callback=None, **kwargs):
     # print('I am in PCG')
@@ -452,12 +589,17 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
         z_0 = P(r_0)
 
         r_1z_1 = scalar_product_mpi(r_0, z_0)
+
+        beta = r_1z_1 / r_0z_0
+
         if "exact_solution" in kwargs:
             error = x_k - kwargs['exact_solution']
             norms['energy_iter_error'].append(scalar_product_mpi(error, Afun(error)))
 
         if norm_energy_upper_bound:
-            norms['energy_upper_bound'].append(gamma_mu * r_0z_0)
+            # updade upper bound on energy error estim parameter
+            gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
+            norms['energy_upper_bound'].append(gamma_mu * r_1z_1)
 
         norms['residual_rr'].append(scalar_product_mpi(r_0, r_0))
         norms['residual_rz'].append(r_1z_1)
@@ -490,7 +632,6 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
             if norms['data_scaled_rr'][-1] < toler:  # TODO[Solver] check out stopping criteria
                 break
 
-        beta = r_1z_1 / r_0z_0
         p_0 = z_0 + beta * p_0
 
         # Energy - error estimator
@@ -514,15 +655,11 @@ def PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=Fals
             d = d + 1
 
         r_0z_0 = r_1z_1
-        if norm_energy_upper_bound:
-            # updade upper bound on energy error estim parameter
-            gamma_mu = (gamma_mu - alpha) / (lambda_min * (gamma_mu - alpha) + beta)
 
         if "energy_lower_bound" in kwargs:
             norms['energy_lower_bound'] = estim
 
     return x_k, norms
-
 
 def Richardson(Afun, B, x0, omega, P=None, steps=int(500), toler=1e-6):
     """

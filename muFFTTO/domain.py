@@ -952,6 +952,78 @@ class Discretization:
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         return homogenized_stress_ij / self.cell.domain_volume
 
+    def get_homogenized_energy_mugrid(self,
+                                      material_data_field_ijklqxyz,
+                                      displacement_field_inxyz,
+                                      macro_gradient_field_ijqxyz,
+                                      formulation=None):
+        """
+         Function that computes the homogenized energy  E : A_eff : E
+
+         Unlike get_homogenized_stress_mugrid, which is LINEAR in the displacement,
+         this evaluation is QUADRATIC.  The two agree only when the discrete weak
+         form holds, i.e. at the exact discrete solution or at a PCG iterate
+         obtained with a zero initial guess.  For a nonzero initial guess they
+         differ by  -u.r  (see get_homogenized_energy_from_stress below).
+
+         Parameters
+         ----------
+         material_data_field_ijklqxyz: numpy ndarray of discretized material data tangent field
+            - quadrature point field - q is a quadrature point index
+            - elasticity shape   [i,j,k,l,q,x,y,z] and i,j,k,l = 0,...,d-1.
+            - conductivity shape     [i,j,q,x,y,z] and i,j  = 0,...,d-1.
+
+         displacement_field_inxyz:
+            - nodal point field - displacement or temperature field
+
+         macro_gradient_field_ijqxyz:
+            - quadrature point field of macroscopic gradient [i,j,q,x,y,z]
+
+         formulation: small strain or finite strain -'small_strain'
+
+         Returns
+         -------
+         homogenized_energy: float
+                    - int (macro_grad + micro_grad) : C : (macro_grad + micro_grad) dx / | domain |
+         """
+        self.fft.communicate_ghosts(field=displacement_field_inxyz)
+
+        gradient_field_ijqxyz = self.get_gradient_size_field(name='strain_temp_energy')
+
+        if formulation == 'small_strain':
+            self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_inxyz,
+                                                            grad_u_ijqxyz=gradient_field_ijqxyz)
+        else:
+            self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
+                                                grad_u_ijqxyz=gradient_field_ijqxyz)
+
+        # total gradient  eps = E + grad u
+        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+
+        # second copy: apply_material_data_mugrid overwrites in place, but the
+        # energy needs the UNWEIGHTED total gradient as the left factor
+        flux_field_ijqxyz = self.get_gradient_size_field(name='flux_temp_energy')
+        flux_field_ijqxyz.s[...] = gradient_field_ijqxyz.s[...]
+
+        mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
+        if isinstance(material_data_field_ijklqxyz, np.ndarray):
+            raise NotImplementedError("NOT YET does not support ndarray")
+        else:
+            mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
+
+        # flux <- C : (E + grad u)
+        self.apply_material_data_mugrid(material_data=mat_data_temp,
+                                        gradient_field=flux_field_ijqxyz)
+
+        # flux <- w_q * C : (E + grad u)   -- weights on ONE factor only
+        self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=flux_field_ijqxyz)
+
+        # (E + grad u) : w_q C : (E + grad u),  reduced over q and space
+        contracted_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s * flux_field_ijqxyz.s,
+                                               axis=tuple(range(-self.domain_dimension - 1, 0)))
+
+        return np.sum(contracted_ij) / self.cell.domain_volume
+
     def get_homogenized_stress_mugrid_explicit_stress(self,
                                                       constitutive: callable,
                                                       displacement_field_inxyz,

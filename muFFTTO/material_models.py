@@ -83,7 +83,7 @@ class LinearElastic(MaterialModelElasticity):
         self.lam = lam_1qxyz          # quadrature field of first Lamé modulus
         self.mu  = mu_1qxyz           # quadrature field of shear modulus
         self.discretization = discretization
-
+    #TODO[MARTIN/STEFANUS] implement energy for linear elasti material model
 
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
         """

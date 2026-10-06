@@ -6,7 +6,8 @@ import numpy as np
 def plot_field_on_grid(
         coordinates_for_plot: np.ndarray,
         field_to_plot: np.ndarray,
-        name='field'):
+        name='field',
+        plot_grid: bool = True):
     """
     Function that generates 2D plot with grid lines. Pixel wise constant data
     works with numpy files
@@ -16,9 +17,13 @@ def plot_field_on_grid(
 
     # plot def_F in grid
     fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    if plot_grid:
+        grid_lines_width=0.3
+    else:
+        grid_lines_width=0
     pcm = ax.pcolormesh(coordinates_for_plot[0], coordinates_for_plot[1],
                         field_to_plot, shading='flat', edgecolors='k',
-                        cmap='coolwarm', lw=0.3)
+                        cmap='coolwarm', lw=grid_lines_width)
     plt.colorbar(pcm, ax=ax)
     plt.xlabel('x  / L')
     plt.ylabel('y  / L')
@@ -54,7 +59,7 @@ def get_deformed_grid_coords_two_dim(discretization,
     # add deformation  # x_p = x̃_p + ũ_Φ(x̃_p)
     if grid_nodes_displacement_inxyz is not None:
         x_plot_inxyz[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
-    x_plot_ixyz = x_plot_inxyz[:,0,...]
+    x_plot_ixyz = x_plot_inxyz[:, 0, ...]
     # macroscopic displacement of a deformed grid Ex_p = E * x_p
     macro_disp_of_a_deformed_grid = np.einsum('ij...,j...->i...', macro_gradient_ij, x_plot_ixyz)
     # add macroscopic displacement
