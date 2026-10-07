@@ -177,7 +177,7 @@ fields with literature.
 ### 2.2 Small-strain (linearized) elasticity
 
 * Unknown: displacement fluctuation $\tilde u_i$; macroscopic strain $E_{ij}$.
-* Kinematics: $\varepsilon = \operatorname{sym}(\nabla u) = \tfrac12(\nabla u + \nabla u^T)$.
+* Kinematics: $\varepsilon = \mathrm{sym}(\nabla u) = \tfrac12(\nabla u + \nabla u^T)$.
   In code, `Discretization.apply_gradient_operator_symmetrized_mugrid` first
   calls the gradient operator and then sets `g <- (g + g^T)/2`. Any routine
   that takes `formulation='small_strain'` uses this symmetrized gradient. Any
@@ -474,9 +474,9 @@ $$
 \boxed{\;K\,\tilde u = f,\qquad K = B^T W \mathbb C B,\qquad f = -B^T W \mathbb C\,E\;}
 $$
 
-For small strain, replace $B$ by $\operatorname{sym}\circ B$. Since $\mathbb C$
-has minor symmetry, $\mathbb C\,\operatorname{sym}(g) = \mathbb C g$ and
-$B^T$ acting on a symmetric $\sigma$ equals $(\operatorname{sym}B)^T\sigma$.
+For small strain, replace $B$ by $\mathrm{sym}\circ B$. Since $\mathbb C$
+has minor symmetry, $\mathbb C\,\mathrm{sym}(g) = \mathbb C g$ and
+$B^T$ acting on a symmetric $\sigma$ equals $(\mathrm{sym}B)^T\sigma$.
 
 | quantity | code |
 |---|---|
@@ -601,7 +601,7 @@ The code:
 
 * `get_preconditioner_Jacobi_mugrid(material_data_field_ijklqxyz, formulation=None)`
   returns the field `'jacobi_diagonal_inxyz'` holding $D^{-1/2}$, where
-  $D = \operatorname{diag}(K)$. It never assembles $K$. Instead it applies
+  $D = \mathrm{diag}(K)$. It never assembles $K$. Instead it applies
   $K$ to **Dirac combs**: ones on every second pixel in each direction, for
   one component at a time. Linear-element stencils reach only one pixel
   away, so the response at the comb points equals $K_{ii}$. This takes
@@ -729,7 +729,7 @@ $C^{\rm eff}_{klij} = C^{\rm eff}_{ijkl}$. The same holds for conductivity:
 transpose, which equals $A^{\rm eff}$ because it is symmetric.
 
 The non-symmetric load case $e_0\otimes e_1$ needs no symmetrization, because
-$\mathbb C:E = \mathbb C:\operatorname{sym}E$. A $d=2$ elasticity cell
+$\mathbb C:E = \mathbb C:\mathrm{sym}E$. A $d=2$ elasticity cell
 therefore takes 4 solves, or 3 if you exploit symmetry; the TO examples use
 the 3 loads $e_0\otimes e_0$, $e_1\otimes e_1$ and
 $\tfrac12(e_0\otimes e_1+e_1\otimes e_0)$.
@@ -904,10 +904,10 @@ $\nabla_x v = \nabla_X v\cdot F^{-1}$ and $dx = \det F\,dX$, turn the weak
 form on the deformed grid into one on the regular grid:
 
 $$
-\int_{Y}\big(\nabla_X v\,F^{-1}\big) : \mathbb C : \operatorname{sym}\big((E+\nabla_X\tilde u)F^{-1}\big)\,\det F\,dX = 0 .
+\int_{Y}\big(\nabla_X v\,F^{-1}\big) : \mathbb C : \mathrm{sym}\big((E+\nabla_X\tilde u)F^{-1}\big)\,\det F\,dX = 0 .
 $$
 
-So $K u = B^TW\big[\det F\;\big(\mathbb C : \operatorname{sym}(Bu\,F^{-1})\big)\,F^{-T}\big]$.
+So $K u = B^TW\big[\det F\;\big(\mathbb C : \mathrm{sym}(Bu\,F^{-1})\big)\,F^{-T}\big]$.
 It uses the same regular-grid operators $B$, $B^TW$ and a spatially varying
 "effective material". That is why the Green preconditioner of the undeformed
 problem still works, with the distortion of $F$ entering the spectral bounds
@@ -915,7 +915,7 @@ like extra material contrast.
 
 | code (`muFFTTO/domain.py`) | formula |
 |---|---|
-| `apply_system_matrix_mugrid_deformed_grid(material_data_field, input_field_inxyz, output_field_inxyz, det_of_deformation_gradient, inv_of_deformation_gradient, formulation)` | $B^TW[\det F\,(\mathbb C:\operatorname{sym}(Bu\,F^{-1}))F^{-T}]$ |
+| `apply_system_matrix_mugrid_deformed_grid(material_data_field, input_field_inxyz, output_field_inxyz, det_of_deformation_gradient, inv_of_deformation_gradient, formulation)` | $B^TW[\det F\,(\mathbb C:\mathrm{sym}(Bu\,F^{-1}))F^{-T}]$ |
 | `get_rhs_mugrid_deformed_grid(...)` | $-B^TW[\det F\,(\mathbb C:(E F^{-1}))F^{-T}]$ |
 | `get_homogenized_stress_mugrid_deformed_grid(material_data_field_ijklqxyz, temperature_field_inxyz, macro_gradient_field_ijqxyz, det_of_deformation_gradient, inv_of_deformation_gradient, formulation)` | $\lvert Y\rvert^{-1}\sum w_q\det F\,\mathbb C:((E+B\tilde u)F^{-1})$ |
 
@@ -1020,7 +1020,7 @@ Variable names carry their array layout as a suffix. For example,
 | $K = B^TW\mathbb CB$ | system matrix (stiffness/conductance), applied matrix-free |
 | reference material $\mathbb C^{\rm ref}$ | homogeneous material defining the Green preconditioner |
 | Green preconditioner | $\mathcal F^{-1}[\hat K^{\rm ref}(\xi)]^{-1}\mathcal F$ |
-| Jacobi | diagonal scaling $\operatorname{diag}(K)^{-1}$ (stored as $D^{-1/2}$) |
+| Jacobi | diagonal scaling $\mathrm{diag}(K)^{-1}$ (stored as $D^{-1/2}$) |
 | ghost layer | halo of one pixel, filled by `communicate_ghosts` |
 | `.s` / `.sg` | muGrid views without / with ghost layers |
 | SIMP | $\mathbb C(\rho) = (\mathbb C_1-\mathbb C_0)\rho^p+\mathbb C_0$ |
