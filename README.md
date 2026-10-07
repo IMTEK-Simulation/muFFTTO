@@ -68,6 +68,15 @@ pip install git+https://github.com/muSpectre/muGrid.git
 | `tensor_operations.py` | Utility functions for tensor operations and indexing |
 | `visualization_utils.py` | Visualization and post-processing utilities |
 
+## Documentation
+
+The [`docs/`](docs/README.md) folder explains the mathematics behind the code
+and how each example works:
+
+- [Theory and numerics](docs/theory.md): the periodic cell problem, FE discretization on a pixel grid, the FFT-preconditioned CG solver, effective properties, adjoint topology optimization and grid adaptation
+- Example walkthroughs in [`docs/examples/`](docs/examples/), one page per example folder
+- [Known issues](docs/known_issues.md): suspected bugs found while documenting the code
+
 ## Examples
 
 The `examples/` directory contains working examples organized by topic:

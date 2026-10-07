@@ -1,3 +1,53 @@
+"""Periodic unit cell and its (FEM / Fourier) discretization.
+
+This module is the core of muFFTTO. It defines
+
+* :class:`PeriodicUnitCell` -- the physical problem: dimension, size of the
+  periodic cell and the type of physics ('conductivity' = scalar unknown,
+  'elasticity' = vector unknown), which fixes the tensor shapes of the
+  unknown, its gradient and the material tangent.
+* :class:`Discretization` -- a regular (pixel/voxel) grid on the cell,
+  distributed over MPI ranks by a ``muGrid.FFTEngine``. It owns the
+  element-level operators (shape-function gradients ``B``, interpolation
+  ``N``, Hessian ``H``, Laplacian ``L``; filled in by
+  :mod:`muFFTTO.discretization_library`) wrapped as muGrid
+  ``GenericLinearOperator`` stencils, and implements the matrix-free
+  building blocks of the FFT-accelerated FEM homogenization solver:
+
+  - gradient ``B u`` and divergence ``B^T w sigma`` operators,
+  - action of the system matrix ``K u = B^T w C B u`` (also on deformed
+    grids and with an explicit, possibly nonlinear, constitutive law),
+  - right-hand side ``f = -B^T w C E`` for a prescribed macroscopic
+    gradient ``E``,
+  - homogenized (volume averaged) stress/flux and energy,
+  - Green (reference-material, Fourier-diagonal) and Jacobi preconditioners,
+  - factory helpers that allocate correctly shaped muGrid fields.
+* A few free functions for integrating quadrature-point fields and a table of
+  Gauss quadrature rules for triangles.
+
+Index / array-layout conventions
+--------------------------------
+Variable names carry their index layout as a suffix, e.g. ``u_inxyz``:
+
+* ``i, j, k, l`` (also ``f, d``) -- tensor components (size ``d`` = spatial
+  dimension, or 1 for a scalar unknown),
+* ``n`` -- nodal sub-point within a pixel (``nb_nodes_per_pixel``),
+* ``q`` -- quadrature sub-point within a pixel (``nb_quad_points_per_pixel``),
+* ``x, y, z`` -- pixel (grid) indices in real space,
+* ``q, k, s`` *after* the components in Fourier fields (e.g. ``..._fnfnqks``)
+  -- wave-vector indices in Fourier space (not quadrature points!).
+
+Fields are muGrid ``Field`` objects. ``field.s`` is the numpy view of the
+locally owned part (without ghost layers), ``field.sg`` the view including
+the ghost buffers. Before a stencil (convolution) operator reads a field,
+its ghost layers must be filled by ``self.fft.communicate_ghosts(field)``
+(MPI halo exchange + periodic wrap-around).
+
+The global (MPI-reduced) sums are done with ``NuMPI.Tools.Reduction``.
+The quadrature weights ``self.quadrature_weights`` are *physical* weights
+(they already contain the pixel area/volume), so
+``sum_{q, pixels} w_q f_q`` approximates ``\\int_\\Omega f dx``.
+"""
 import warnings
 
 import numpy as np
@@ -14,17 +64,48 @@ from muFFTTO import discretization_library, tensor_operations
 
 
 class PeriodicUnitCell:
+    """Physical description of a periodic unit cell (representative volume).
+
+    Stores the geometry (dimension, size, volume) and the physics type, which
+    determines the tensor shapes used by :class:`Discretization`:
+
+    ============== ============== ============== ======================
+    problem_type   unknown_shape  gradient_shape material_data_shape
+    ============== ============== ============== ======================
+    conductivity   [1]            [1, d]         [d, d]
+    elasticity     [d]            [d, d]         [d, d, d, d]
+    ============== ============== ============== ======================
+
+    Attributes
+    ----------
+    name : str
+    domain_dimension : int
+        Spatial dimension ``d`` (= ``len(domain_size)``).
+    domain_size : ndarray of float, shape (d,)
+        Edge lengths of the (rectangular) cell.
+    domain_volume : float
+        ``prod(domain_size)``, used to turn integrals into volume averages.
+    problem_type : str
+    unknown_shape, gradient_shape, material_data_shape : ndarray of int
+        Component shapes, see table above.
+    displacement_shape, temperature_shape, scalar_shape : ndarray of int
+        Convenience shapes ``[d]``, ``[1]``, ``[1]``.
+    """
+
     def __init__(self, name='my_unit_cell', domain_size=None, problem_type='conductivity'):
         """Initialize a periodic unit cell.
 
         Parameters
         ----------
-        name : str
-            Name identifier for the unit cell
-        domain_size : array-like
-            Physical size of domain in each dimension
-        problem_type : str
-            Type of physics problem: 'conductivity' or 'elasticity'
+        name : str, optional
+            Name identifier for the unit cell (default ``'my_unit_cell'``).
+        domain_size : array-like of float, shape (d,)
+            Physical size of the domain in each dimension. Its length defines
+            the spatial dimension ``d``. Must be given (``None`` fails).
+        problem_type : str, optional
+            Type of physics problem: ``'conductivity'`` (scalar unknown,
+            e.g. temperature) or ``'elasticity'`` (vector unknown,
+            displacement). Default ``'conductivity'``.
 
         Raises
         ------
@@ -51,8 +132,8 @@ class PeriodicUnitCell:
                                                 dtype=int)  # mat. data matrix a  of dxd components
 
         elif problem_type == 'elasticity':
+            # displacement is a vector of d components
             self.unknown_shape = np.array([self.domain_dimension], dtype=int)
-            # displacement. gradient is a vector of d components
             self.gradient_shape = np.array([self.domain_dimension, self.domain_dimension],
                                            dtype=int)  # gradient  matrix of d x d components
             self.material_data_shape = np.array(
@@ -69,6 +150,53 @@ class Discretization:
 
     Stores discretization parameters including grid dimensions, element types,
     quadrature points, and provides FEM operators for gradient and interpolation.
+
+    The cell is split into a regular grid of ``nb_of_pixels_global`` pixels
+    (voxels in 3D). Every pixel carries the same reference element
+    (``element_type``) with ``nb_nodes_per_pixel`` nodes owned by the pixel
+    (shared nodes of neighbouring pixels belong to the neighbour, periodicity
+    closes the grid) and ``nb_quad_points_per_pixel`` quadrature points.
+    Because all pixels are identical, global FEM operators are translation
+    invariant stencils (convolutions), which are applied matrix-free through
+    muGrid ``GenericLinearOperator`` objects and are diagonalised (per
+    wave vector) by the FFT -- the basis of the Green preconditioner.
+
+    Discrete linear homogenization problem (small strain / conductivity)::
+
+        find u (periodic fluctuation):   B^T W C B u = -B^T W C E
+        K u = f,   K = B^T W C B,   f = -B^T W C E
+
+    with ``B`` the gradient operator (nodes -> quadrature points), ``W`` the
+    diagonal matrix of quadrature weights, ``C`` the material tangent at the
+    quadrature points and ``E`` the prescribed macroscopic gradient.
+
+    Main attributes (set in ``__init__`` or by
+    :func:`muFFTTO.discretization_library.get_shape_function_gradient_matrix`)
+    ----------------------------------------------------------------------
+    cell : PeriodicUnitCell
+    fft : muGrid.FFTEngine
+        Parallel FFT engine; owns the real/Fourier field collections and the
+        MPI domain decomposition (with one ghost layer on each side).
+    nb_of_pixels_global : tuple of int
+        Global grid size.
+    nb_of_pixels : ndarray of int
+        Grid size of the local MPI subdomain.
+    pixel_size : ndarray of float, shape (d,)
+    field_collection, ffield_collection
+        muGrid real- and Fourier-space field collections with the sub-point
+        types ``'quad_points'`` and ``'nodal_points'`` registered.
+    quadrature_weights : ndarray, shape (q,)
+        Physical quadrature weights (include the pixel measure).
+    B_grad_at_pixel_dqnijk : ndarray
+        Shape function gradients ``dN_n/dx_d`` at quadrature point ``q`` for
+        node ``n`` of the pixel with offset ``(i, j, k)`` -- the gradient
+        stencil.
+    N_at_quad_points_dqnijk, H_hess_at_pixel_deqnijk, L_laplace_at_pixel_eqnijk
+        Interpolation, Hessian and Laplacian stencils (same layout idea).
+    gradient_op, interpolation_op, hessian_op, laplacian
+        muGrid ``GenericLinearOperator`` wrappers of the stencils above.
+    mpi_reduction : NuMPI.Tools.Reduction
+        Helper for global (all-rank) sums/min/max.
     """
 
     def __init__(self, cell,
@@ -83,18 +211,28 @@ class Discretization:
         cell : PeriodicUnitCell
             Unit cell definition
         nb_of_pixels_global : tuple of int
-            Number of elements in each dimension
-        discretization_type : str
-            'finite_element' or 'Fourier'
-        element_type : str
-            Element family, e.g. 'linear_triangles'
-        communicator : muGrid.Communicator
-            MPI communicator for parallel computation
+            Number of pixels (elements) in each dimension of the global grid.
+        discretization_type : str, optional
+            'finite_element' (default) or 'Fourier'
+        element_type : str, optional
+            Element family, e.g. 'linear_triangles' (default). Passed to
+            :func:`muFFTTO.discretization_library.get_shape_function_gradient_matrix`,
+            which defines quadrature, Jacobian and the operator stencils.
+        communicator : muGrid.Communicator, optional
+            MPI communicator for parallel computation. Note: the default is
+            evaluated once at import time (``MPI.COMM_WORLD``).
 
         Raises
         ------
         ValueError
             If discretization_type is not 'finite_element' or 'Fourier'
+
+        Notes
+        -----
+        Side effects: creates the ``muGrid.FFTEngine`` (collective MPI call)
+        and the field collections; all fields of this discretization are
+        later allocated from these collections by name (requesting a field
+        with an already existing name returns the existing field).
         """
 
         self.cell = cell
@@ -108,8 +246,12 @@ class Discretization:
         self.nodal_points_coordinates = None
         self.nb_vertices_per_pixel = 2 ** self.domain_dimension
 
+        # fills element data (quadrature, Jacobian, B/N/H/L stencils, nb_nodes_per_pixel, ...)
+        # into `self`; needed already here because nb_nodes_per_pixel etc. are used below
         self.get_discretization_info(element_type)
 
+        # One ghost layer on each side is enough for stencils that reach only the
+        # nearest neighbouring pixel (e.g. linear elements).
         # number of ghost buffers -> # TODO[Martin]: have to be changed base on the stencil
         left_ghosts = [1, ] * self.domain_dimension
         right_ghosts = [1, ] * self.domain_dimension
@@ -127,11 +269,13 @@ class Discretization:
                                        dtype=np.intp)
         if MPI.COMM_WORLD.size > 1:
             # adjust the number of points
+            # NOTE: currently a no-op (the "- 2" correction is commented out)
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
             # adjust subdomain location to not take into account buffers
             sub_dom_locations = np.asarray(self.fft.subdomain_locations)
             sub_dom_locations += left_ghosts
             self.subdomain_locations_no_buffers = tuple(sub_dom_locations)
+            # (second shift has no effect on stored attributes: the tuple above is already copied)
             sub_dom_locations += left_ghosts
             # compute max nb_max_subdomain_grid_pts for save npy TODO: THIS IS QUICK FIX considering pencil decompositon
             max_size_of_subdomain = self.mpi_reduction.max(np.asarray(self.fft.nb_subdomain_grid_pts[-1])) - 2
@@ -160,11 +304,16 @@ class Discretization:
 
             self.get_discretization_info(element_type)
 
+            # full (local) array shapes:
+            #   unknown       [f, n, x, y, z]
+            #   gradient      [f, d, q, x, y, z]
+            #   material data [d, d, q, x, y, z]  or  [d, d, d, d, q, x, y, z]
             self.unknown_size = [*self.cell.unknown_shape, self.nb_nodes_per_pixel, *self.nb_of_pixels]
             self.gradient_size = [*self.cell.gradient_shape, self.nb_quad_points_per_pixel, *self.nb_of_pixels]
             self.material_data_size = [*self.cell.material_data_shape, self.nb_quad_points_per_pixel,
                                        *self.nb_of_pixels]
 
+            # register the sub-point types: every pixel carries q quadrature points and n nodes
             self.field_collection = self.fft.real_space_collection
             self.ffield_collection = self.fft.fourier_space_collection
             self.field_collection.set_nb_sub_pts('quad_points', self.nb_quad_points_per_pixel)
@@ -173,6 +322,14 @@ class Discretization:
             self.ffield_collection.set_nb_sub_pts('nodal_points', self.nb_nodes_per_pixel)
             point_of_origin = self.domain_dimension * [0, ]  # TODO This has to be a discretization stencil dependant
 
+            # Wrap the element stencils as muGrid convolution operators. Each
+            # operator maps a nodal field [c, n, x, y, z] to a quadrature field
+            # [c, o, q, x, y, z] (apply) and back (transpose, with weights):
+            #   gradient_op:      o = d (spatial derivative direction)
+            #   hessian_op:       o = d*d (flattened pair (j,k))
+            #   interpolation_op: o = 1
+            #   laplacian:        o = 1
+            # Missing stencils (not provided by the element) are skipped with a message.
             try:
                 self.gradient_op = GenericLinearOperator(point_of_origin, self.B_grad_at_pixel_dqnijk)
             except:
@@ -203,6 +360,8 @@ class Discretization:
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
         if discretization_type == 'Fourier':
+            # NOTE: in the Fourier branch no field collections or muGrid operators are set up;
+            # only the array sizes are defined.
             # finite element properties
             self.element_type = element_type
             self.nb_quad_points_per_pixel = None
@@ -228,7 +387,19 @@ class Discretization:
         Returns
         -------
         nodal_points_coordinates_inxyz : muGrid Field
-            Spatial coordinates of discretization nodes [dim, n, x, y, z].
+            Spatial coordinates of discretization nodes [dim, n, x, y, z]
+            (local MPI subdomain only), stored in the field named
+            ``"nodal_points_coordinates_inxyz"``.
+
+        Notes
+        -----
+        The first node of every pixel is its lower-left(-front) corner. For
+        sheared pixels (non-diagonal ``jacobian_of_pixel``) the coordinates
+        are mapped with the column-normalised Jacobian, see below.
+        For ``nb_nodes_per_pixel == 4`` the extra nodes are placed at half
+        pixel offsets (mid-edge / centre nodes); for any other number of
+        nodes only a warning is issued and the field is returned without
+        being filled.
         """
 
         dim = self.domain_dimension
@@ -243,6 +414,8 @@ class Discretization:
         # x= x*J^T
         # transformed_coordinates_ixyz = np.einsum('ij,jxy->ixy', self.jacobian_of_pixel, self.fft.coords)
 
+        # fft.coords are fractional coordinates in [0,1) of the local grid points, shape [dim, x, y, z];
+        # scale component-wise by the cell size -> physical coordinates of the pixel origins
         nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
         # Coordinates above are already in physical units, so each column of the pixel Jacobian
         # is normalised by its own diagonal entry: that yields a unit diagonal regardless of the
@@ -250,6 +423,7 @@ class Discretization:
         # off-diagonal shear per unit physical length instead of per unit parametric length.
         adjusted_jacobian = self.jacobian_of_pixel / np.diag(self.jacobian_of_pixel)[np.newaxis, :]
 
+        # x_j = sum_i J_adj[j, i] * x_i   (apply the adjusted Jacobian to every grid point)
         nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
         if self.nb_nodes_per_pixel == 1:
             nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
@@ -297,6 +471,13 @@ class Discretization:
         -------
         nodal_points_coordinates_inxyz : ndarray
             Coordinates of nodal points including periodic boundary nodes [dim, n, Nx+1, Ny+1, (Nz+1)].
+
+        Notes
+        -----
+        Works on the *global* grid (not MPI-distributed) and returns plain
+        numpy data, useful for plotting. Coordinates are *normalised* to
+        ``[0, 1]`` (not scaled by ``domain_size``) and only node ``n = 0`` is
+        filled; further nodes per pixel remain zero.
         """
         # if self.nb_nodes_per_pixel != 1:
         #     raise ValueError(
@@ -323,6 +504,16 @@ class Discretization:
         -------
         quad_points_coordinates_iqxyz : muGrid Field
             Spatial coordinates of quadrature points [dim, q, x, y, z].
+
+        Notes
+        -----
+        For each quadrature point ``q`` a regular grid with spacing
+        ``pixel_size`` is built, offset by ``self.quad_points_coord[:, q]``
+        (the physical offset of the quadrature point within a pixel). The
+        upper bound ``domain_size + 0.9*offset`` only guards ``np.arange``
+        against floating-point overshoot. The grid is the *global* one, so
+        this assumes a single MPI rank (shapes would not match the local
+        field otherwise).
         """
         dim = self.domain_dimension
         # creates a field with coordinates of all quadrature points
@@ -359,7 +550,19 @@ class Discretization:
         -------
         return_field_inxyz : ndarray
             Rolled (shifted) field.
+
+        Notes
+        -----
+        Uses the Fourier shift theorem: ``u(x - s)`` <-> ``exp(-2 pi i k.s) u_hat(k)``,
+        i.e. equivalent to ``np.roll(u, shift, axis)`` for integer shifts but
+        MPI-parallel. ``fft.fftfreq[a]`` holds the normalised frequencies
+        (cycles per grid point) along axis ``a``. Uses temporary fields named
+        ``'f_field_phase_roll_temp'`` / ``'field_phase_roll_temp'``; the
+        returned array is a view of the latter (it is overwritten by the
+        next call). ``fft.normalisation`` (= 1/N) undoes the unnormalised
+        forward+inverse FFT pair.
         """
+        # phase(k) = -2 pi sum_a s_a k_a
         phase = -2 * np.pi * sum(s * fft.fftfreq[a] for s, a in zip(shift, axis))
         f_field_inqrs = self.ffield_collection.complex_field(
             name='f_field_phase_roll_temp',  # name of the field
@@ -387,6 +590,22 @@ class Discretization:
         Returns
         -------
         None
+
+        Raises
+        ------
+        TypeError
+            If ``u_inxyz`` is a plain ndarray (see Notes).
+
+        Notes
+        -----
+        Computes ``(grad u)_{ij}(x_q) = sum_{n, offsets} u_i^n * dN^n/dx_j (x_q)``
+        -- the discrete gradient ``B u``. The stencil
+        ``B_grad_at_pixel_dqnijk`` gathers nodal values of the pixel itself
+        and of its neighbours (offsets ``ijk``), hence the ghost layers of
+        ``u_inxyz`` are refreshed first (MPI halo exchange; collective).
+        The ``raise ("...")`` statements in this module raise a string, which
+        Python turns into ``TypeError: exceptions must derive from
+        BaseException``; the message is therefore not shown.
         """
 
         if self.nb_nodes_per_pixel > 1:
@@ -413,6 +632,10 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        ``eps_ij = (du_i/dx_j + du_j/dx_i) / 2`` (small-strain tensor).
         """
         # computes symmetrized gradient (small-strain)
 
@@ -441,6 +664,16 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        Computes the discrete (weak) divergence
+        ``f_i^n = sum_{q, pixels} w_q * dN^n/dx_j (x_q) * sigma_ij(x_q)``,
+        i.e. ``B^T W sigma`` -- the internal force vector for a stress
+        field ``sigma``. With ``apply_weights=False`` it is the pure
+        transpose ``B^T sigma``. Contributions scattered by the stencil to
+        neighbouring pixels are accumulated by muGrid; the ghost layers are
+        refreshed before and after (collective MPI communication).
         """
         # if the input is ndArray, create muGrid field out of it
 
@@ -478,6 +711,16 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        ``H_jk = d^2 u / dx_j dx_k`` evaluated with the Hessian stencil
+        ``H_hess_at_pixel_deqnijk``. muGrid operators only support a single
+        output component axis, so the operator works on a flattened
+        ``[1, d*d, q, ...]`` scratch field (``'Hessian_u_flat'``) which is
+        reshaped into ``[1, d, d, q, ...]`` afterwards. Note that the
+        Hessian of standard linear elements vanishes inside an element;
+        the result depends entirely on the stencil provided by the element.
         """
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
@@ -517,6 +760,13 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        Component-wise version of
+        :meth:`apply_hessian_operator_to_scalar_field_mugrid`:
+        ``H_ijk = d^2 u_i / dx_j dx_k``, computed via the flattened
+        ``[d, d*d, q, ...]`` scratch field ``'Hessian_u_flat'``.
         """
         # if self.nb_nodes_per_pixel > 1:
         #     warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
@@ -560,6 +810,13 @@ class Discretization:
         -------
         None
             Modifies nodal_field_inxyz in-place
+
+        Notes
+        -----
+        Computes ``H^T W h`` (or ``H^T h`` without weights), i.e.
+        ``f^n = sum_q w_q d^2N^n/dx_j dx_k (x_q) h_jk(x_q)`` -- the adjoint of
+        :meth:`apply_hessian_operator_to_scalar_field_mugrid`, used e.g. in
+        gradients of objectives that depend on second derivatives.
         """
         if self.nb_nodes_per_pixel > 1:
             warnings.warn('Hessian operator is not tested for multiple nodal points per pixel.')
@@ -582,9 +839,8 @@ class Discretization:
         else:
             weights = np.ones(self.quadrature_weights.shape)
 
-        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
-        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
-        # .s is a strided window into the ghosted buffer
+        # (the flattening (j,k) -> J was already done above; here we only refresh
+        #  the ghost layers of the flat field before the transposed stencil reads it)
 
         self.fft.communicate_ghosts(field=hess_u_iJqxyz)
         # apply H^transposed via the convolution operator
@@ -611,6 +867,12 @@ class Discretization:
         -------
         None
             Modifies nodal_field_inxyz in-place
+
+        Notes
+        -----
+        Vector version of
+        :meth:`apply_hessian_operator_transposed_to_scalar_field_mugrid`:
+        ``f_i^n = sum_q w_q d^2N^n/dx_j dx_k (x_q) h_ijk(x_q)``.
         """
         if isinstance(nodal_field_inxyz, np.ndarray):
             raise ("apply_hessian_operator_mugrid does not supprot ndarray")
@@ -629,9 +891,8 @@ class Discretization:
         else:
             weights = np.ones(self.quadrature_weights.shape)
 
-        # put it back to Hessian_ijkqxyz from Hessina_iJqxyz
-        # splitting axis 1 (J) into (j,k) is a pure view, no copy, even though
-        # .s is a strided window into the ghosted buffer
+        # (the flattening (j,k) -> J was already done above; here we only refresh
+        #  the ghost layers of the flat field before the transposed stencil reads it)
 
         self.fft.communicate_ghosts(field=hess_u_iJqxyz)
         # apply H^transposed via the convolution operator
@@ -660,6 +921,15 @@ class Discretization:
         -------
         quad_field_fqnxyz : muGrid Field
             Interpolated field at quadrature points [f, q, x, y, z].
+            Same object as the input ``quad_field_fqnxyz`` (filled in-place);
+            it must therefore be provided despite the ``None`` default.
+
+        Notes
+        -----
+        ``u_f(x_q) = sum_n N^n(x_q) u_f^n``. ``quad_points_coords_iq`` is
+        currently unused: the quadrature points baked into the element's
+        interpolation stencil are always used. Functionally identical to
+        :meth:`apply_N_operator_mugrid`.
         """
         # if the input is ndArray, create muGrid field out of it
         if isinstance(nodal_field_fnxyz, np.ndarray):
@@ -685,6 +955,13 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        Applies the interpolation matrix ``N``:
+        ``u_i(x_q) = sum_n N^n(x_q) u_i^n`` (including nodes of neighbouring
+        pixels, hence the ghost exchange). Typical use: evaluating a nodal
+        design/phase field at the quadrature points to build material data.
         """
 
         if self.nb_nodes_per_pixel > 1:
@@ -717,6 +994,13 @@ class Discretization:
         Returns
         -------
         None
+
+        Notes
+        -----
+        ``f_i^n = sum_q w_q N^n(x_q) g_i(x_q)`` = ``N^T W g`` -- the adjoint of
+        :meth:`apply_N_operator_mugrid`. Used e.g. to pull sensitivities
+        computed at quadrature points back to nodal design variables
+        (chain rule through the interpolation).
         """
 
         if isinstance(quad_field_ijqxyz, np.ndarray):
@@ -732,7 +1016,7 @@ class Discretization:
             weights = np.ones(self.quadrature_weights.shape)
 
         self.fft.communicate_ghosts(field=quad_field_ijqxyz)
-        # apply B^transposed via the convolution operator
+        # apply N^transposed via the convolution operator
         self.interpolation_op.transpose(quadrature_point_field=quad_field_ijqxyz,
                                         nodal_field=nodal_field_inxyz,
                                         weights=weights)
@@ -757,10 +1041,21 @@ class Discretization:
             - shape [i,j,q,x,y,z]
             - q is quadrature point index
 
+        rhs_inxyz : muGrid Field [i, n, x, y, z]
+            Output; overwritten in-place with the right-hand side.
+
         Returns
         -------
-        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+        None
+            (the rhs is written into ``rhs_inxyz``)
 
+        Notes
+        -----
+        Despite the "numpy ndarray" wording above, both inputs must be muGrid
+        fields (``.s`` is accessed). The weak form
+        ``int grad(v) : C : (E + grad(u)) dx = 0`` for all periodic ``v``
+        gives ``K u = -B^T W C E``. The macro gradient is copied into the
+        scratch field ``'stress_temporary_rhs'`` so the input is not modified.
         """
 
         # macro_gradient_field    [f,d,q,x,y,z]
@@ -772,12 +1067,15 @@ class Discretization:
         gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
 
+        # sigma = C : E   (in place in the scratch field)
         self.apply_material_data_mugrid(material_data_field_ijklqxyz, gradient_ijqxyz)
 
+        # rhs = B^T W sigma
         self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
                                                        div_u_fnxyz=rhs_inxyz,
                                                        apply_weights=True)
 
+        # rhs = - B^T W C E
         rhs_inxyz.s[...] *= -1
 
         self.fft.communicate_ghosts(field=rhs_inxyz)
@@ -803,10 +1101,30 @@ class Discretization:
             - shape [i,j,q,x,y,z]
             - q is quadrature point index
 
+        rhs_inxyz : muGrid Field [i, n, x, y, z]
+            Output; overwritten in-place.
+        det_of_deformation_gradient : muGrid Field [q, x, y, z] (scalar per quadrature point)
+            ``det(F_q)`` of the map from the regular reference grid to the
+            deformed (physical) grid.
+        inv_of_deformation_gradient : muGrid Field [d, d, q, x, y, z]
+            ``F_q^{-1}``.
+
         Returns
         -------
-        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+        None
+            (the rhs is written into ``rhs_inxyz``)
 
+        Notes
+        -----
+        Pull-back of the weak form from the deformed grid to the regular
+        reference grid ``X`` (x = phi(X), F = dphi/dX)::
+
+            grad_x v = grad_X v . F^{-1},   dx = det(F) dX
+            rhs = - B^T W [ det(F) (C : (E . F^{-1})) . F^{-T} ]
+
+        Mirrors :meth:`apply_system_matrix_mugrid_deformed_grid`. Note that,
+        as implemented, the macroscopic gradient ``E`` is also multiplied by
+        ``F^{-1}`` and no symmetrisation is applied.
         """
 
         # aliasing
@@ -846,15 +1164,26 @@ class Discretization:
 
         Parameters
         ----------
-
-        macro_gradient_field_ijqxyz:  array of discretized  macroscopic gradient E - constant part of gradient
-            - shape [i,j,q,x,y,z]
-            - q is quadrature point index
+        stress_function : callable
+            ``stress_function(gradient_field, stress_field)`` -- evaluates the
+            (possibly nonlinear) constitutive law and writes the stress/flux
+            into the second argument (a muGrid field [i, j, q, x, y, z]).
+        gradient_field_ijqxyz : muGrid Field [i, j, q, x, y, z]
+            Total gradient at which the stress is evaluated, typically
+            ``E + grad(u)`` (only ``E`` for the first Newton step).
+        rhs_inxyz : muGrid Field [i, n, x, y, z]
+            Output; overwritten in-place with ``-B^T W sigma(gradient)``.
+        **kwargs
+            Ignored.
 
         Returns
         -------
-        rhs_fnxyz: rhs nodal point field [i,n, x,y,z] with interpolated field nodal_field_inxyz
+        None
 
+        Notes
+        -----
+        This is the negative residual (internal force) used in Newton
+        iterations for nonlinear materials.
         """
 
         # macro_gradient_field    [f,d,q,x,y,z]
@@ -883,12 +1212,16 @@ class Discretization:
         Parameters
         ----------
         macro_gradient_ij: numpy ndarray of macro gradient [i,j ]
+        macro_gradient_field_ijqxyz : muGrid Field [i, j, q, x, y, z]
+            Output field, filled in-place.
 
         Returns
         -------
         macro_gradient_field_ijqxyz:  quadrature point field of macroscopic gradient [i,j,q, x,y,z]
+            The same object as the input field.
         """
 
+        # broadcast E_ij to every quadrature point and pixel: append (ndim-2) singleton axes
         macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
         return macro_gradient_field_ijqxyz
@@ -920,6 +1253,15 @@ class Discretization:
          -------
          homogenized_stress_ij: nd array of homogenized stress of flux field
                     - int (C * (macro_grad + micro_grad))  dx / | domain |
+
+         Notes
+         -----
+         ``<sigma> = 1/|Omega| sum_{q, pixels} w_q C_q : (E + grad u)_q``,
+         reduced over all MPI ranks (collective). For a unit macro gradient
+         ``E = e_k (x) e_l`` the result is the column ``A_eff[:, :, k, l]``
+         of the effective (homogenized) tangent. The material data is
+         copied into the scratch field ``'weighted_data_field_temporary'``
+         and must be a muGrid field.
          """
         self.fft.communicate_ghosts(field=displacement_field_inxyz)
 
@@ -948,6 +1290,7 @@ class Discretization:
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
 
+        # sum over the last (d + 1) axes = quadrature points q and pixels x, y(, z); global MPI sum
         homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
                                                        axis=tuple(range(-self.domain_dimension - 1, 0)))  #
         return homogenized_stress_ij / self.cell.domain_volume
@@ -964,7 +1307,8 @@ class Discretization:
          this evaluation is QUADRATIC.  The two agree only when the discrete weak
          form holds, i.e. at the exact discrete solution or at a PCG iterate
          obtained with a zero initial guess.  For a nonzero initial guess they
-         differ by  -u.r  (see get_homogenized_energy_from_stress below).
+         differ by  -u.r  (note: the referenced helper
+         ``get_homogenized_energy_from_stress`` does not exist in this module).
 
          Parameters
          ----------
@@ -1035,6 +1379,9 @@ class Discretization:
          Parameters
          ----------
          constitutive: callable fucntion strain ---> stress
+            Called as ``constitutive(gradient_field, stress_field)``; here
+            both arguments are the same field, so it must support in-place
+            evaluation (output overwrites input).
 
          displacement_field_inxyz:
             - nodal point field - displacement or temperature field
@@ -1083,13 +1430,29 @@ class Discretization:
         Function computes homogenized material heat conductivity matrix (or flux)
         from the solution on deformed grid
 
-        :param material_data_field_ijklqxyz:
-        :param temperature_field_inxyz:
-        :param macro_gradient_field_ijqxyz:
-        :param det_of_deformation_gradient:
-        :param inv_of_deformation_gradient:
-        :param formulation:
-        :return:
+        Parameters
+        ----------
+        material_data_field_ijklqxyz : muGrid Field
+            Material tangent at quadrature points ([d,d,q,...] for
+            conductivity, [d,d,d,d,q,...] for elasticity).
+        temperature_field_inxyz : muGrid Field [i, n, x, y, z]
+            Solution (fluctuation) on the reference grid; despite the name it
+            may also be a displacement field.
+        macro_gradient_field_ijqxyz : muGrid Field [i, j, q, x, y, z]
+            Macroscopic gradient ``E``.
+        det_of_deformation_gradient : muGrid Field
+            ``det(F_q)`` per quadrature point.
+        inv_of_deformation_gradient : muGrid Field [d, d, q, x, y, z]
+            ``F_q^{-1}``.
+        formulation : str, optional
+            ``'small_strain'`` symmetrises the transformed gradient.
+
+        Returns
+        -------
+        ndarray [i, j]
+            ``1/|Omega_ref| sum_q w_q det(F_q) C_q : ((E + grad_X u) . F_q^{-1})``,
+            MPI-reduced. Note: divided by ``cell.domain_volume`` (the
+            reference cell volume).
         '''
 
         # aliasing
@@ -1148,11 +1511,18 @@ class Discretization:
 
          formulation: small strain or finite strain -'small_strain'
 
+         output_stress_field_ijqxyz : muGrid Field [i, j, q, x, y, z]
+            Output; first used as scratch for the strain, then overwritten
+            with the stress.
+
          Returns
          -------
-         stress_ij: nd array of stress of flux field
-                    - stress= C * (macro_grad + micro_grad))
-                    :param output_field_ijqxyz:
+         None
+            The stress ``sigma_ij = C_ijkl : (E + grad u)_lk`` (per
+            quadrature point, unweighted) is written into
+            ``output_stress_field_ijqxyz``. Note the einsum below contracts
+            ``ijkl`` with ``lk`` (equals ``kl`` for symmetric tensors) and
+            assumes elasticity-shaped material data.
          """
 
         if formulation == 'small_strain':
@@ -1189,13 +1559,22 @@ class Discretization:
          macro_gradient_field_ijqxyz:
             - quadrature point field of macroscopic gradient [i,j,q, x,y,z]
 
-         formulation: small strain or finite strain -'small_strain'
+         output_flux_field_ijqxyz : muGrid Field [1, d, q, x, y, z]
+            Output; overwritten in-place with the flux.
 
          Returns
          -------
-         stress_field_ijqxyz: mugrid flux field
-                    - stress= C * (macro_grad + micro_grad))
-                    :param stress_field_ijqxyz:
+         None
+            Result is written into ``output_flux_field_ijqxyz``.
+
+         Notes
+         -----
+         Intended: ``q_i = A_ij (E + grad T)_j``. As implemented, the einsum
+         ``'ij...,uj...->uj...'`` keeps index ``j`` and sums over ``i``,
+         i.e. it computes ``q_j = (sum_i A_ij) g_j`` (column sums of A times
+         the gradient component-wise), which coincides with ``A g`` only for
+         diagonal ``A``. Compare with
+         :meth:`apply_material_data_conductivity_mugrid` (``'->ui...'``).
          """
 
         # output_field_ijqxyz is strain field
@@ -1242,7 +1621,11 @@ class Discretization:
             - q is a quadrature point index
         Returns
         -------
-        weighted_material_data_ijqxyz:
+        weighted_material_data_ijqxyz: ndarray
+            ``w_q * A_ij(x_q)``, a new numpy array. Note: uses ``.sg``, i.e.
+            the returned array *includes* the ghost layers (unlike the
+            elasticity variant, which uses ``.s``). Input must be a muGrid
+            field.
         """
         weighted_material_data_ijqxyz = np.einsum('ijq...,q->ijq...', material_data_ijqxyz.sg, self.quadrature_weights)
         return weighted_material_data_ijqxyz
@@ -1258,7 +1641,9 @@ class Discretization:
             - q is a quadrature point index
         Returns
         -------
-        weighted_material_data_ijklqxyz:
+        weighted_material_data_ijklqxyz: ndarray
+            ``w_q * C_ijkl(x_q)`` as a new numpy array (input not modified).
+            Accepts ndarray or muGrid field (then ``.s`` without ghosts).
         """
         if isinstance(material_data_ijklqxyz, np.ndarray):
             weighted_material_data_ijklqxyz = np.einsum('ijklq...,q->ijklq...', material_data_ijklqxyz,
@@ -1270,16 +1655,59 @@ class Discretization:
         return weighted_material_data_ijklqxyz
 
     def apply_quadrature_weights_on_gradient_field(self, grad_field):
+        """Multiply a gradient-shaped numpy array by the quadrature weights.
+
+        Parameters
+        ----------
+        grad_field : ndarray [i, j, q, x, y, z]
+
+        Returns
+        -------
+        ndarray [i, j, q, x, y, z]
+            New array ``w_q * grad_field[i, j, q, ...]``.
+        """
         # apply quadrature weights without material data
         grad_field = np.einsum('ijq...,q->ijq...', grad_field, self.quadrature_weights)
 
         return grad_field
 
     def apply_quadrature_weights_on_gradient_field_mugrid(self, grad_field):
+        """Multiply a gradient-shaped muGrid field by the quadrature weights, in place.
+
+        Parameters
+        ----------
+        grad_field : muGrid Field [i, j, q, x, y, z]
+            Overwritten with ``w_q * grad_field``. Summing the result over
+            ``q`` and pixels yields the integral over the cell.
+
+        Returns
+        -------
+        None
+        """
         # apply quadrature weights without material data
         grad_field.s[...] = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
 
     def apply_material_data(self, material_data, gradient_field):
+        """Legacy (numpy-returning) constitutive map, dispatched on problem type.
+
+        Parameters
+        ----------
+        material_data : ndarray or muGrid Field
+            Material tangent, see :meth:`apply_material_data_conductivity` /
+            :meth:`apply_material_data_elasticity`.
+        gradient_field : muGrid Field
+            Gradient at quadrature points [i, j, q, x, y, z].
+
+        Returns
+        -------
+        ndarray
+            Flux / stress (a new array, input unchanged).
+
+        Raises
+        ------
+        ValueError
+            For an unknown ``cell.problem_type``.
+        """
         if self.cell.problem_type == 'conductivity':
             return self.apply_material_data_conductivity(material_data, gradient_field)
         elif self.cell.problem_type == 'elasticity':
@@ -1290,6 +1718,33 @@ class Discretization:
                 ' : conductivity, elasticity '.format(self.cell.problem_type))
 
     def evaluate_material_model(self, material_data, gradient_field, **kwargs):
+        """Evaluate a simple nonlinear material model.
+
+        Parameters
+        ----------
+        material_data : muGrid Field [d, d, d, d, q, x, y, z]
+            Stiffness-like tensor ``C``.
+        gradient_field : muGrid Field [d, d, q, x, y, z]
+            Strain ``eps``.
+        **kwargs
+            Must contain ``mat_model`` (str). Only models whose name contains
+            ``'power_law_elasticity'`` are supported.
+
+        Returns
+        -------
+        ndarray [d, d, q, x, y, z]
+            ``sigma_ij = C_ijkl : (eps_lk)^n`` with ``n = 0.3`` applied
+            element-wise to the strain components.
+
+        Raises
+        ------
+        ValueError
+            For an unknown material model.
+
+        Notes
+        -----
+        ``np.power`` of negative strain components with ``n = 0.3`` gives NaN.
+        """
         if "power_law_elasticity" in kwargs['mat_model']:
             n = 0.3  # strain-hardening exponent
             stress = np.einsum('ijkl...,lk...->ij...', material_data.s, np.power(gradient_field.s, n))
@@ -1301,6 +1756,20 @@ class Discretization:
         return stress
 
     def apply_material_data_elasticity(self, material_data, gradient_field):
+        """Compute ``sigma_ij = C_ijkl eps_lk`` and return it as a new array.
+
+        Parameters
+        ----------
+        material_data : ndarray or muGrid Field
+            Either a single (reference) tensor [d, d, d, d] applied
+            everywhere, or a full field [d, d, d, d, q, x, y, z].
+        gradient_field : muGrid Field [d, d, q, x, y, z]
+
+        Returns
+        -------
+        ndarray [d, d, q, x, y, z]
+            Stress (without ghost layers).
+        """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
             # for the case of ref material, we need only one single material tensor
@@ -1314,6 +1783,22 @@ class Discretization:
         return stress
 
     def apply_material_data_conductivity(self, material_data, gradient_field):
+        """Compute the flux ``q_ui = A_ij g_uj`` and return it as a new array.
+
+        Parameters
+        ----------
+        material_data : ndarray or muGrid Field
+            Single conductivity matrix [d, d] or full field [d, d, q, x, y, z].
+        gradient_field : muGrid Field [1, d, q, x, y, z]
+            Temperature gradient; the leading size-1 axis ``u`` is kept.
+
+        Returns
+        -------
+        ndarray [1, d, q, x, y, z]
+            Flux, *including* ghost layers (``.sg`` is used here). With
+            ndarray full-field material data its shape must therefore match
+            the ghosted layout.
+        """
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
             # for the case of ref material, we need only one single material tensor
@@ -1332,6 +1817,29 @@ class Discretization:
         return flux_ijnxyz
 
     def apply_material_data_mugrid(self, material_data, gradient_field):
+        """Apply the material tangent in place: ``gradient_field <- C : gradient_field``.
+
+        Dispatches to :meth:`apply_material_data_conductivity_mugrid` or
+        :meth:`apply_material_data_elasticity_mugrid` according to
+        ``cell.problem_type``.
+
+        Parameters
+        ----------
+        material_data : muGrid Field or ndarray
+            Full material field at quadrature points, or a single reference
+            tensor ([d, d] / [d, d, d, d]) used in every quadrature point.
+        gradient_field : muGrid Field [i, j, q, x, y, z]
+            Input gradient; **overwritten** with the flux/stress.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            For an unknown ``cell.problem_type``.
+        """
         if self.cell.problem_type == 'conductivity':
             self.apply_material_data_conductivity_mugrid(material_data, gradient_field)
         elif self.cell.problem_type == 'elasticity':
@@ -1342,6 +1850,20 @@ class Discretization:
                 ' : conductivity, elasticity '.format(self.cell.problem_type))
 
     def apply_material_data_conductivity_mugrid(self, material_data, gradient_field):
+        """In-place flux evaluation ``g_ui <- A_ij g_uj`` (``u`` = size-1 axis).
+
+        Parameters
+        ----------
+        material_data : muGrid Field [d, d, q, x, y, z] or ndarray [d, d]
+            Conductivity field, or a single (reference) conductivity matrix.
+            A full ndarray field is not supported.
+        gradient_field : muGrid Field [1, d, q, x, y, z]
+            Temperature gradient; overwritten with the flux.
+
+        Returns
+        -------
+        None
+        """
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
@@ -1358,6 +1880,27 @@ class Discretization:
                                               gradient_field.s)  # 'u' just to keep the size of array consistent
 
     def apply_material_data_elasticity_mugrid(self, material_data, gradient_field):
+        """In-place stress evaluation ``eps_ij <- C_ijkl eps_lk``.
+
+        Parameters
+        ----------
+        material_data : muGrid Field [d, d, d, d, q, x, y, z] or ndarray [d, d, d, d]
+            Stiffness field, or a single (reference) stiffness tensor.
+            A full ndarray field is not supported.
+        gradient_field : muGrid Field [d, d, q, x, y, z]
+            Strain / displacement gradient; overwritten with the stress.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        The contraction is ``C_ijkl eps_lk`` (indices ``l, k`` swapped);
+        identical to ``C_ijkl eps_kl`` for symmetric strain or for ``C`` with
+        minor symmetry. For an ndarray with ndim > 4 a TypeError is raised
+        (string raise); an ndarray with ndim < 4 is silently ignored.
+        """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
             # for the case of ref material, we need only one single material tensor
@@ -1391,6 +1934,13 @@ class Discretization:
                       K_10   K_11   K_12,
                       K_20   K_21   K_22]
 
+        Notes
+        -----
+        Legacy implementation: relies on :meth:`apply_system_matrix`, which
+        calls non-``_mugrid`` operator methods that are not defined in this
+        class. Row ``i`` of the result is ``K e_i`` (equal to column ``i``
+        since ``K`` is symmetric). Dense ``O(N^2)`` memory -- only for tiny
+        grids / debugging.
         """
         unit_impulse = self.get_unknown_size_field(name='unit_impulse')
         K_impulse = self.get_unknown_size_field(name='K_impulse')
@@ -1428,6 +1978,17 @@ class Discretization:
                       K_10   K_11   K_12,
                       K_20   K_21   K_22]
 
+        formulation : str, optional
+            Passed to :meth:`apply_system_matrix_mugrid` (``'small_strain'``
+            uses the symmetrised gradient).
+
+        Notes
+        -----
+        The dof ordering is that of ``np.ndindex`` over the local array
+        ``[f, n, x, y, z]`` (C order). Row ``i`` stores ``K e_i``, i.e. the
+        ``i``-th column (``K`` is symmetric). Dense ``O(N^2)`` memory; meant
+        for small grids, tests and debugging, and only meaningful on a single
+        MPI rank.
         """
 
         unit_impulse = self.get_unknown_size_field(name='unit_impulse')
@@ -1449,6 +2010,37 @@ class Discretization:
 
     def get_preconditioner_Green_fast(self, reference_material_data_ijkl,
                                       formulation=None):
+        """Assemble the Green (reference-material) preconditioner -- older variant.
+
+        Parameters
+        ----------
+        reference_material_data_ijkl : ndarray or muGrid Field
+            Homogeneous reference material ([d, d] or [d, d, d, d]) or a
+            reference material field.
+        formulation : str, optional
+            Passed to :meth:`apply_system_matrix_mugrid`.
+
+        Returns
+        -------
+        muGrid complex Field [f, n, f, n, k...]
+            Field ``'Greens_diagonal_fast'`` with the inverse of the
+            Fourier-space block diagonal of the reference stiffness matrix
+            (zero-frequency block left uninverted).
+
+        Raises
+        ------
+        ValueError
+            If ``nb_nodes_per_pixel != 1``.
+
+        Notes
+        -----
+        Same idea as :meth:`get_preconditioner_Green_mugrid` (see there),
+        but all impulse responses are collected in real space first and
+        Fourier transformed together. Uses ``.shape`` of muGrid fields and
+        a Fourier field without ``sub_pt`` and always skips index 0 of the
+        flattened frequencies, which is the zero mode only on the rank that
+        owns it -- prefer :meth:`get_preconditioner_Green_mugrid`.
+        """
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1540,6 +2132,52 @@ class Discretization:
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
                                         formulation=None,
                                         operator=None):
+        """Assemble the Fourier-space Green preconditioner ``(K_ref)^{-1}``.
+
+        Parameters
+        ----------
+        reference_material_data_ijkl : ndarray or muGrid Field
+            Homogeneous reference material: a single tensor ([d, d] for
+            conductivity, [d, d, d, d] for elasticity) or a constant field.
+        formulation : str, optional
+            Passed to :meth:`apply_system_matrix_mugrid`
+            (``'small_strain'`` -> symmetrised gradient).
+        operator : callable, optional
+            Custom linear operator ``operator(input_field_inxyz=...,
+            output_field_inxyz=...)`` to use instead of the reference
+            stiffness ``K_ref``. Must be translation invariant (same stencil
+            in every pixel) for the construction to be valid.
+
+        Returns
+        -------
+        preconditioner_diagonals_ininqks : muGrid complex Field [f, n, f, n, k_x, k_y, (k_z)]
+            Field ``'Greens_diagonal_fast'``: for every wave vector ``k`` the
+            inverse of the (``f*n`` x ``f*n``) block ``K_ref_hat(k)``.
+
+        Notes
+        -----
+        For a homogeneous material ``K_ref = B^T W C_ref B`` is a
+        block-circulant matrix (the same stencil in every pixel), so the FFT
+        block-diagonalises it: ``K_ref_hat(k)`` is a small dense matrix
+        coupling the ``f*n`` dofs of one pixel. Its columns are obtained as
+        the FFT of the response ``K_ref e_{f,n}`` to a unit impulse placed at
+        dof ``(f, n)`` of the pixel at the origin. Inverting every block
+        gives the preconditioner ``M^{-1} = F^{-1} [K_ref_hat]^{-1} F``,
+        applied by :meth:`apply_preconditioner_mugrid`.
+
+        The zero-frequency block ``k = 0`` is singular (rigid body
+        translations / constant temperature are in the null space of a
+        periodic problem). For one node per pixel it is left as is (not
+        inverted; it is (numerically) zero because the stencil of ``K_ref``
+        sums to zero, so the preconditioner annihilates the mean); for
+        several nodes per pixel its pseudo-inverse is used.
+        ``np.any(np.all(icoords == 0, axis=0))`` checks whether the local MPI
+        rank owns the pixel/frequency at the origin -- only that rank places
+        the impulse and treats index 0 specially. The impulse response
+        computation is collective (ghost exchange, FFT).
+
+        One-node branch prints debug messages on the rank owning the origin.
+        """
         # return diagonals of preconditioned matrix in Fourier space
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1583,20 +2221,24 @@ class Discretization:
                 self.fft.communicate_ghosts(unit_impulse_response_inxyz)
                 # print(f"unit_impulse_response_inxyz {unit_impulse_response_inxyz.s[...]}")
 
+                # FFT of the impulse response = column (f, n) of the block K_hat(k) for all k
                 self.fft.fft(unit_impulse_response_inxyz, unit_impulse_response_inqks)
                 # print(f"unit_impulse_response_inqks {unit_impulse_response_inqks.s[...]}")
 
+                # store as K_hat[f, n, :, :, k]   (first index pair = impulse dof)
                 preconditioner_diagonals_ininqks.s[impulse_position] = np.copy(unit_impulse_response_inqks.s[...])
 
             # THE SIZE OF DIAGONAL IS [nb_unit_dofs,nb_unit_dofs,nb_unit_dofs,nb_unit_dofs, xyz]
             # compute inverse of diagonals
             original_shape_ininqks = preconditioner_diagonals_ininqks.s.shape
+            # n = 1: drop the two node axes -> [f, f, k...]
             prec_diagonals_ijqks = np.squeeze(preconditioner_diagonals_ininqks.s, axis=(1, 3))
 
             # Reshape the array to (n_u_dofs, n_u_dofs, ndof) for easier processing
             reshaped_matrices = prec_diagonals_ijqks.reshape(nb_dofs_per_voxel, nb_dofs_per_voxel, -1)
             # Transpose to shape (N, d, d) for batch inversion
             G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
+            # (transpose returns a view, so the in-place inversion below also updates reshaped_matrices)
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not inverte zero mode
@@ -1609,6 +2251,8 @@ class Discretization:
 
             preconditioner_diagonals_ininqks.s[...] = G_diag_ijxy.reshape(original_shape_ininqks)[...]
         else:
+            # General case: several nodes per pixel -> blocks of size (f*n) x (f*n).
+            # (the two comment lines below are copied from the one-node branch)
             # for one node per pixel, we can simplify the algorithm
             # for more nodes per pixel, we can add it later
             unit_impulse_inxyz = self.get_unknown_size_field(name='unit_impulse')
@@ -1674,6 +2318,8 @@ class Discretization:
             G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
+                # with several nodes per pixel K_hat(0) is singular but not zero
+                # (relative motion of the sub-nodes is resisted) -> pseudo-inverse
                 G_batch[0, ...] = np.linalg.pinv(G_batch[0, ...],
                                                  rcond=1e-8)  # shape: (N, d, d) # do not invert zero mode
 
@@ -1690,6 +2336,24 @@ class Discretization:
 
     def get_preconditioner_Jacoby(self, material_data_field_ijklqxyz,
                                   formulation=None):
+        """Legacy Jacobi preconditioner from the dense system matrix.
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz : material data field
+        formulation : str, optional
+            Unused.
+
+        Returns
+        -------
+        ndarray, shape ``unknown_size`` [f, n, x, y, z]
+            ``diag(K)^{-1/2}`` (symmetric scaling ``D^{-1/2} K D^{-1/2}``).
+
+        Notes
+        -----
+        Builds the full dense matrix via :meth:`get_system_matrix` (legacy,
+        see there) -- only for tiny problems.
+        """
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1704,6 +2368,41 @@ class Discretization:
                                          constitutive: callable = None,
                                          formulation=None,
                                          **kwargs):
+        """Matrix-free Jacobi preconditioner ``diag(K)^{-1/2}`` via Dirac combs.
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz : muGrid Field, optional
+            Material tangent; if given, ``K`` is the linear system matrix
+            (:meth:`apply_system_matrix_mugrid`).
+        constitutive : callable, optional
+            Used (2D only) when no material data is given; ``K`` is then the
+            operator of :meth:`apply_system_matrix_mugrid_explicit_stress`.
+        formulation : str, optional
+            Passed to the system-matrix routine.
+        **kwargs
+            ``zero_threshold`` (float, default 1.0): value stored where the
+            diagonal entry is exactly zero (e.g. void pixels).
+
+        Returns
+        -------
+        diagonal_inxyz : muGrid Field [f, n, x, y, z]
+            Field ``'jacobi_diagonal_inxyz'`` containing ``1/sqrt(K_ii)``,
+            to be used as a symmetric (split) scaling ``D^{-1/2} K D^{-1/2}``.
+
+        Notes
+        -----
+        The stencil of ``K`` for nearest-neighbour elements couples a node
+        only with nodes at distance <= 1 pixel. Hence a "Dirac comb" with ones
+        on every second pixel in each direction (one colour of a
+        ``2^d``-colouring) and on one component ``f`` returns, at the comb
+        points, exactly the diagonal entries ``K_ii``: all other impulses are
+        >= 2 pixels away. ``f * 2^d`` operator applications give the full
+        diagonal. Requires even grid sizes for the colouring to be periodic,
+        and assumes one node per pixel (only ``n = 0`` is filled). The 3D
+        branch always uses ``material_data_field_ijklqxyz`` (``constitutive``
+        is ignored).
+        """
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1735,6 +2434,8 @@ class Discretization:
                                                                             formulation=formulation
                                                                             )
 
+                        # at the comb points the response equals K_ii -> store 1/sqrt(K_ii)
+                        # (np.where evaluates both branches: zero entries may emit a divide warning)
                         diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
                             dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
                             1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2]),
@@ -1767,6 +2468,39 @@ class Discretization:
                                        formulation=None,
                                        prec_type=None,
                                        ):
+        """Legacy element-wise assembly of the Jacobi preconditioner.
+
+        Parameters
+        ----------
+        material_data_field_ijklqxyz : ndarray
+            Material data ([d,d,q,x,y(,z)] conductivity /
+            [d,d,d,d,q,x,y(,z)] elasticity); quadrature weights are applied
+            internally.
+        gradient_of_u : ndarray, optional
+            Scratch array of ``gradient_size`` (allocated if None, zeroed).
+        formulation : str, optional
+            Unused.
+        prec_type : str, optional
+            ``'full'`` additionally assembles per-pixel ``(f*n)x(f*n)``
+            blocks and returns their inverse square roots ``M^{-1/2}``
+            (via eigen-decomposition); otherwise only the diagonal.
+
+        Returns
+        -------
+        ndarray
+            ``diag(K)^{-1/2}`` [f, n, x, y, z] (entries < 1e-16 set to 0), or
+            the block field [f, n, f, n, x, y, z] for ``prec_type='full'``.
+
+        Notes
+        -----
+        For every corner node ``a`` of the pixel the diagonal contribution
+        ``sum_q B_a(x_q)^T w_q C(x_q) B_a(x_q)`` is computed in every pixel and
+        then rolled (FFT phase shift, :meth:`roll`) by the corner offset to
+        the global node it belongs to. Works on plain numpy arrays and is
+        marked as untested in 3D; :meth:`get_preconditioner_Jacobi_mugrid`
+        is the current implementation. The ``'full'`` block assembly only
+        fills ``[d, 0]`` entries.
+        """
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
         # for every type of degree of freedom DOF, there is one diagonal of preconditioner matrix
@@ -1893,6 +2627,14 @@ class Discretization:
         -------
         ndarray
             Preconditioned field [f,n,x,y,z]
+
+        Notes
+        -----
+        ``z = F^{-1}[ G_hat(k) . F[r](k) ]`` with the block product
+        ``z_hat_ab = G_hat_abcd r_hat_cd``. Legacy: uses ``.sg`` (ghosted
+        arrays) throughout and a Fourier field without the ``nodal_points``
+        sub-point; returns a view of the internal scratch field
+        ``'temp_output_field_in_apply_preconditioner_fnxyz'``.
         """
 
         # allocate field
@@ -1939,6 +2681,16 @@ class Discretization:
         -------
         None
             Modifies output_nodal_field_fnxyz in-place
+
+        Notes
+        -----
+        Applies ``M^{-1} r = F^{-1}[ G_hat(k) r_hat(k) ]`` where ``G_hat`` is
+        the output of :meth:`get_preconditioner_Green_mugrid`. That routine
+        stores the response to impulse dof ``(c, d)`` in ``G[c, d, a, b]``,
+        hence the contraction ``'cdab...,cd...->ab...'``
+        (``z_hat_ab = sum_cd G_cdab r_hat_cd``). The FFT pair is
+        unnormalised, so the result is multiplied by ``fft.normalisation``
+        (= 1/N_total). Collective MPI operation (parallel FFT).
         """
 
         ffield_fnqks = self.ffield_collection.complex_field(
@@ -1979,7 +2731,15 @@ class Discretization:
         -------
         ndarray
             Preconditioned field [f,n,x,y,z]
+
+        Notes
+        -----
+        Computes ``J^{1/2} G J^{1/2} r`` with ``J^{1/2}`` the per-pixel block
+        Jacobi scaling (e.g. from :meth:`get_preconditioner_Jacoby_fast` with
+        ``prec_type='full'``) and ``G`` the Green preconditioner applied by
+        :meth:`apply_preconditioner_NEW` (legacy numpy interface).
         """
+        # apply Jacobi 1/2 --- multiplication with a left diagonal blocks of preconditioner
         nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
 
         # apply Green preconditioner using FFT
@@ -1994,6 +2754,31 @@ class Discretization:
     def apply_system_matrix(self, material_data_field,
                             displacement_field, output_field_inxyz=None, formulation=None,
                             **kwargs):
+        """Legacy numpy-interface action of the system matrix ``K u = B^T W C B u``.
+
+        Parameters
+        ----------
+        material_data_field : ndarray or muGrid Field
+        displacement_field : ndarray or muGrid Field [f, n, x, y, z]
+        output_field_inxyz : muGrid Field, optional
+        formulation : str, optional
+        **kwargs
+            Ignored.
+
+        Returns
+        -------
+        ndarray
+            ``K u`` including ghost layers (``.sg``).
+
+        Notes
+        -----
+        Legacy: calls ``apply_gradient_operator``,
+        ``apply_gradient_operator_symmetrized`` and
+        ``apply_gradient_transposed_operator``, which are not defined in this
+        class (only their ``_mugrid`` counterparts are), so this method
+        raises ``AttributeError`` as is. Use
+        :meth:`apply_system_matrix_mugrid`.
+        """
         # the ouput array is numpy array for compatibility with solvers
 
         # check if the field is numpy. If yes, make a muGrid array of it
@@ -2035,6 +2820,37 @@ class Discretization:
                                    output_field_inxyz,
                                    formulation=None,
                                    **kwargs):
+        """Matrix-free action of the (linear) system matrix ``K u = B^T W C B u``.
+
+        This is the operator passed to the (preconditioned) conjugate
+        gradient solver.
+
+        Parameters
+        ----------
+        material_data_field : muGrid Field or ndarray
+            Material tangent ``C`` at quadrature points ([d,d,q,...] or
+            [d,d,d,d,q,...]) or a single reference tensor ([d,d] /
+            [d,d,d,d]), see :meth:`apply_material_data_mugrid`.
+        input_field_inxyz : muGrid Field [f, n, x, y, z]
+            Vector ``u`` (its ghost layers are refreshed).
+        output_field_inxyz : muGrid Field [f, n, x, y, z]
+            Result ``K u``, written in-place.
+        formulation : str, optional
+            ``'small_strain'`` uses the symmetrised gradient
+            ``eps = sym(grad u)``; otherwise the full gradient is used.
+        **kwargs
+            Ignored.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Steps: ``g = B u`` (gradient at quadrature points) ->
+        ``sigma = C : g`` -> ``f = B^T W sigma``. Uses the scratch field
+        ``'grad_field_temporary'``. Collective MPI operation (ghost exchange).
+        """
 
         if isinstance(input_field_inxyz, np.ndarray):
             raise ("apply_system_matrix_mugrid does not supprot ndarray")
@@ -2043,6 +2859,7 @@ class Discretization:
         # allocate temporary fields
         gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
 
+        # g = B u   (or sym(B u))
         if np.all(formulation == 'small_strain'):
             self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
                                                             grad_u_ijqxyz=gradient_ijqxyz)
@@ -2068,17 +2885,41 @@ class Discretization:
                                                  inv_of_deformation_gradient,
                                                  formulation=None,
                                                  **kwargs):
-        '''
+        '''System-matrix action on a deformed (mapped) grid.
 
+        Parameters
+        ----------
+        material_data_field : muGrid Field or ndarray
+            Material tangent at quadrature points (see
+            :meth:`apply_material_data_mugrid`).
+        input_field_inxyz : muGrid Field [f, n, x, y, z]
+            Vector ``u`` defined on the regular reference grid.
+        output_field_inxyz : muGrid Field [f, n, x, y, z]
+            Result, written in-place.
+        det_of_deformation_gradient : muGrid Field
+            ``det(F_q)`` per quadrature point (``.s`` shape [q, x, y, z]).
+        inv_of_deformation_gradient : muGrid Field [d, d, q, x, y, z]
+            ``F_q^{-1}``.
+        formulation : str, optional
+            ``'small_strain'`` symmetrises the transformed gradient.
+        **kwargs
+            Ignored.
 
-        :param material_data_field:
-        :param input_field_inxyz:
-        :param output_field_inxyz:
-        :param det_of_deformation_gradient:
-        :param inv_of_deformation_gradient:
-        :param formulation:
-        :param kwargs:
-        :return:
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        The physical grid is the image ``x = phi(X)`` of the regular grid
+        ``X``, with deformation gradient ``F = dphi/dX``. Pulling the weak
+        form back to ``X`` (``grad_x = grad_X . F^{-1}``, ``dx = det F dX``)::
+
+            K u = B^T W [ det(F) * (C : sym(B u . F^{-1})) . F^{-T} ]
+
+        i.e. the standard regular-grid operators with a modified, spatially
+        varying "material" -- this is what enables FFT preconditioning on
+        deformed (e.g. boundary-fitted) grids.
         '''
         # aliasing
         det_F = det_of_deformation_gradient
@@ -2118,6 +2959,27 @@ class Discretization:
                                                    output_field_inxyz: Field,
                                                    formulation=None,
                                                    **kwargs):
+        """Operator ``u -> B^T W sigma(B u)`` with an explicit constitutive law.
+
+        Parameters
+        ----------
+        constitutive : callable
+            ``constitutive(gradient_field, stress_field)``; called here
+            in-place (same field for both arguments). For a nonlinear
+            problem this should be the *tangent* applied to an increment,
+            so that the operator is linear (e.g. inside Newton/CG).
+        input_field_inxyz : muGrid Field [f, n, x, y, z]
+        output_field_inxyz : muGrid Field [f, n, x, y, z]
+            Result, written in-place.
+        formulation : str, optional
+            ``'small_strain'`` -> symmetrised gradient.
+        **kwargs
+            Ignored.
+
+        Returns
+        -------
+        None
+        """
         if isinstance(input_field_inxyz, np.ndarray):
             raise ("apply_system_matrix_mugrid does not supprot ndarray")
 
@@ -2146,6 +3008,29 @@ class Discretization:
                                             displacement_field,
                                             formulation=None,
                                             **kwargs):
+        """Legacy numpy-interface version of
+        :meth:`apply_system_matrix_mugrid_explicit_stress`.
+
+        Parameters
+        ----------
+        stress_function : callable
+            ``stress, _ = stress_function(gradient_field)`` (returns a tuple).
+        displacement_field : ndarray or muGrid Field [f, n, x, y, z]
+        formulation : str, optional
+        **kwargs
+            Ignored.
+
+        Returns
+        -------
+        ndarray
+            ``B^T W sigma(B u)``.
+
+        Notes
+        -----
+        Legacy: relies on non-``_mugrid`` operator methods that do not exist
+        in this class (raises ``AttributeError``) and assigns to the ``.s``
+        attribute of a muGrid field.
+        """
         # the ouput array is numpy array for compatibility with solvers
 
         if isinstance(displacement_field, np.ndarray):
@@ -2178,6 +3063,18 @@ class Discretization:
         return div_stress_inxyz.s
 
     def integrate_over_cell(self, stress_field):
+        """Integrate a gradient-shaped numpy array over the (global) cell.
+
+        Parameters
+        ----------
+        stress_field : ndarray [i, j, q, x, y, z]
+
+        Returns
+        -------
+        ndarray [i, j]
+            ``sum_{q, pixels} w_q sigma_ij`` reduced over all MPI ranks
+            (not divided by the cell volume).
+        """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
         stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
@@ -2186,6 +3083,19 @@ class Discretization:
         return integral
 
     def integrate_over_cell_mugrid(self, stress_field):
+        """Integrate a gradient-shaped muGrid field over the (global) cell.
+
+        Parameters
+        ----------
+        stress_field : muGrid Field [i, j, q, x, y, z]
+            **Modified in place**: multiplied by the quadrature weights.
+
+        Returns
+        -------
+        ndarray [i, j]
+            ``sum_{q, pixels} w_q sigma_ij`` reduced over all MPI ranks
+            (not divided by the cell volume).
+        """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
         stress_field.s[...] = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
@@ -2205,6 +3115,16 @@ class Discretization:
         -------
         muGrid Field
             Zero field with shape matching problem unknowns [f,n,x,y,z]
+
+        Notes
+        -----
+        Fields are registered by ``name`` in ``self.field_collection``. The
+        code throughout this module relies on repeated requests with the
+        same name returning the *same* (already existing) field -- e.g. the
+        scratch fields ``'grad_field_temporary'``. Such a field is only zero
+        on first creation and keeps its old content afterwards, and two
+        callers using the same name share memory. The same holds for all
+        ``get_*_field`` factories below.
         """
         u_inxyz = self.field_collection.real_field(
             name=name,  # name of the field
@@ -2522,7 +3442,8 @@ class Discretization:
         Returns
         -------
         ndarray
-            Zero field [d,d,q,x,y,z]
+            Zero field [d,d,q,x,y,z] -- a plain numpy array (not a muGrid
+            field), local subdomain size, no ghost layers.
         """
         if not self.cell.problem_type == 'conductivity':
             warnings.warn(
@@ -2686,6 +3607,14 @@ class Discretization:
         ----------
         element_type : str
             Element family identifier
+
+        Notes
+        -----
+        Side effect only: sets attributes on ``self`` (quadrature points and
+        weights, ``nb_nodes_per_pixel``, ``nb_quad_points_per_pixel``,
+        ``jacobian_of_pixel`` and the stencils ``B_grad_at_pixel_dqnijk``,
+        ``N_at_quad_points_dqnijk``, ``H_hess_at_pixel_deqnijk``,
+        ``L_laplace_at_pixel_eqnijk``).
         """
         discretization_library.get_shape_function_gradient_matrix(self, element_type)
 
@@ -2700,6 +3629,11 @@ class Discretization:
             Minimum value after scaling
         max_val : float
             Maximum value after scaling
+
+        Notes
+        -----
+        Affine map ``f <- min_val + (max_val - min_val) (f - f_min) / (f_max - f_min)``
+        with global (MPI-reduced) extrema; divides by zero for a constant field.
         """
         field_min = self.mpi_reduction.min(field.s)
         field_max = self.mpi_reduction.max(field.s)
@@ -2741,6 +3675,11 @@ def integrate_field(stress_field, quadrature_weights):
     -------
     ndarray
         Integrated field [i,j,...]
+
+    Notes
+    -----
+    Local (no MPI reduction). The einsum ``'fdqxy...->fd...'`` sums over
+    ``q, x, y`` only; axes beyond ``y`` (e.g. ``z`` in 3D) are kept.
     """
     stress_field = np.einsum('ijq...,q->ijq...', stress_field, quadrature_weights)
     integral = np.einsum('fdqxy...->fd...', stress_field)
@@ -2761,6 +3700,10 @@ def integrate_flux_field(flux_field, quadrature_weights):
     -------
     ndarray
         Integrated flux [i,j]
+
+    Notes
+    -----
+    Local sum over all quadrature points and pixels (no MPI reduction).
     """
     stress_field = np.einsum('ijq...,q->ijq...', flux_field, quadrature_weights)
     integral = np.einsum('fdqxy...->fd', stress_field)
@@ -2787,7 +3730,20 @@ def get_gauss_points_and_weights(element_type, nb_quad_points_per_pixel):
     Raises
     ------
     ValueError
-        If element_type or nb_quad_points_per_pixel is not supported
+        If element_type is not supported. (An unsupported
+        ``nb_quad_points_per_pixel`` actually ends in an
+        ``UnboundLocalError`` at the ``return``.)
+
+    Notes
+    -----
+    Rules for a unit square pixel split into two triangles; coordinates are
+    in reference units ``[0, 1]^2`` and the weights sum to 1 (the reference
+    pixel area), i.e. they are *not* scaled to the physical pixel size.
+
+    * 2 points: one centroid per triangle (1/3, 1/3) and (2/3, 2/3).
+    * 6 points: 3-point interior rule per triangle.
+    * 8 / 18 points: higher-order (collapsed / Duffy-type Gauss) rules,
+      4 resp. 9 points per triangle.
     """
     if element_type != 'linear_triangles' and element_type != 'linear_triangles_tilled':
         raise ValueError('Quadrature weights for Element_type {} is not implemented'.format(element_type))

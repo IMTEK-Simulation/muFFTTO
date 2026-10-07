@@ -8,6 +8,39 @@ Achieving geometric accuracy in FFT-based micromechanical models
 using conformal grid. Mechanics of Materials, 212, 105512.
 https://doi.org/10.1016/j.mechmat.2025.105512
 
+Overview
+--------
+Despite the first line above, the active code of this module does not store
+anything into muGrid fields (that experiment survives only in the
+commented-out block at the end of the file; ``muGrid`` is imported but unused
+by the active functions). What the module actually provides is a
+*non-periodic* reference implementation of the conformal-grid adaptation of
+Zecevic et al. for a single circular inclusion in the square [-L, L]^2:
+
+1. ``make_grid_nodes`` -- regular (N+1) x (N+1) node grid (both boundaries
+   included, no periodicity).
+2. ``cell_labels`` -- inside/outside label per cell from its cell center.
+3. ``interface_node_mask`` -- nodes adjacent to cells of both labels.
+4. ``project_points_to_circle`` -- radial snap of interface nodes onto the
+   circle.
+5. ``manhattan_distance_to_interface`` / ``stiffness_from_distance`` -- nodal
+   spring stiffness ``k = max(k0 / (d + a)**b, kmin)`` decaying with the
+   graph distance ``d`` to the interface.
+6. ``spring_relax_weighted`` -- Gauss-Seidel spring (weighted Laplacian)
+   smoothing of all free nodes; interface nodes and the outer boundary
+   (``outer_boundary_mask``) are kept fixed (Dirichlet-type).
+7. ``adapt_grid_to_circle`` -- driver returning all intermediate fields.
+
+For the periodic variant operating on muFFTTO coordinate arrays of layout
+``[xy, nx, ny]`` see ``muFFTTO/grid_adaptation_methods_Zecevic.py``.
+
+Array conventions
+-----------------
+In *this* module nodal coordinates are stored node-major, ``P[i, j, xy]``
+(shape ``(N+1, N+1, 2)``), with ``i`` the x-index and ``j`` the y-index
+(``meshgrid(..., indexing="ij")``). Cell ``(i, j)`` is spanned by nodes
+``(i, j), (i+1, j), (i, j+1), (i+1, j+1)``; cell arrays have shape
+``(N, N)``. A square grid is assumed throughout.
 '''
 
 import numpy as np
@@ -32,14 +65,19 @@ def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarra
     -------
     [i,x,y] (x,y),nx,ny
     P : numpy ndarray
-        Array of nodal coordinates with shape [xy, nx, ny].
-        - nx = N is the number of nodes in x-direction.
-        - ny = N is the number of nodes in y-direction.
+        Array of nodal coordinates with shape [nx, ny, xy] = (N+1, N+1, 2).
+        - nx = N + 1 is the number of nodes in x-direction.
+        - ny = N + 1 is the number of nodes in y-direction.
         - the last index 'xy' holds (x, y) coordinates at each node.
     x : numpy ndarray
         One-dimensional array of x-coordinates with shape [nx].
     y : numpy ndarray
         One-dimensional array of y-coordinates with shape [ny].
+
+    Notes
+    -----
+    Both boundaries x = -L and x = +L are included as separate nodes, i.e. the
+    grid is not periodic; the node spacing is 2 L / N.
     """
 
     x = np.linspace(-L, L, N+1)
@@ -47,6 +85,8 @@ def make_grid_nodes(N: int = 64, L: float = 25.0) -> tuple[np.ndarray, np.ndarra
     X, Y = np.meshgrid(x, y, indexing="ij")
     P = np.stack([X, Y], axis=-1)
    
+    # Legacy/alternative implementation kept for reference: periodic grid on
+    # [0, L) with N nodes per direction in muFFTTO layout [xy, nx, ny].
     '''
     # (0,L)
     x = np.linspace(0, L, N, endpoint=False )
@@ -121,6 +161,9 @@ def interface_node_mask(cell_inside: np.ndarray) -> np.ndarray:
 
     for i in range(N + 1):
         for j in range(N + 1):
+            # Collect labels of the (up to four) cells sharing node (i, j):
+            # (i-1, j-1), (i, j-1), (i-1, j), (i, j). Boundary nodes have only
+            # one or two adjacent cells (no periodic wrap in this module).
             values = []
             if i > 0 and j > 0:
                 values.append(cell_inside[i - 1, j - 1])
@@ -195,9 +238,10 @@ def project_points_to_circle(
         - all returned points satisfy the distance ||Pproj - center|| = R within numerical tolerance.
     """
     c = np.asarray(center, dtype=float)
+    # Radial vector from the center; rescale it to length R.
     V = Ppts - c[None, :]
     r = np.linalg.norm(V, axis=1, keepdims=True)
-    r = np.maximum(r, 1e-12)
+    r = np.maximum(r, 1e-12)  # guard against division by zero at the center
     return c[None, :] + (R / r) * V
 
 
@@ -222,6 +266,9 @@ def manhattan_distance_to_interface(interface_mask: np.ndarray) -> np.ndarray:
         - dist[i, j] = 0 for interface nodes.
         - dist[i, j] is the minimum number of grid steps from node (i, j) to the interface.
     """
+    # Multi-source BFS from all interface nodes on the (non-periodic)
+    # 4-neighbour node graph; unit edge weights => exact graph distance.
+    # Nodes not reachable (only if there is no interface at all) stay at inf.
     N = interface_mask.shape[0] - 1
     dist = np.full((N + 1, N + 1), np.inf, dtype=float)
     queue = deque()
@@ -318,6 +365,14 @@ def spring_relax_weighted(
         Nodal coordinates after relaxation with shape [nx, ny, xy].
         - fixed nodes remain unchanged.
         - free nodes are updated to a spring-equilibrium configuration.
+
+    Notes
+    -----
+    Update of a free node ``p_ij`` with neighbours ``n`` (left/right/down/up):
+    ``p_ij <- (1 - omega) p_ij + omega * sum_n w_n p_n / sum_n w_n`` with edge
+    weight ``w_n = (k_ij + k_n) / 2``. Only interior nodes
+    (``1 <= i, j <= N-1``) are visited, so the outer boundary nodes are never
+    moved regardless of ``fixed_mask``.
     """
     P_new = P.copy()
     N = P.shape[0] - 1
@@ -337,6 +392,8 @@ def spring_relax_weighted(
                     w[idx] = 0.5 * (kij + k_node[ii, jj])
                     pts[idx] = P_new[ii, jj]
 
+                # Spring equilibrium position (weighted neighbour average),
+                # blended with the old position by the relaxation factor omega.
                 target = (w[:, None] * pts).sum(axis=0) / (w.sum() + 1e-15)
                 P_new[i, j] = (1.0 - omega) * P_new[i, j] + omega * target
 
@@ -396,12 +453,15 @@ def adapt_grid_to_circle(
         - 'k_node' : nodal stiffness values [nx, ny]
         - 'params' : dictionary of scalar parameters used in the run.
     """
+    # Reference regular grid and its phase/interface classification
     P0, _, _ = make_grid_nodes(N=N, L=L)
     inside = cell_labels(P0, center=center, R=R)
     interface = interface_node_mask(inside)
     outer = outer_boundary_mask(N)
+    # Nodes that are not moved by the relaxation: interface + outer boundary
     fixed = outer | interface
 
+    # Snap the staircase interface nodes onto the exact circle
     P1 = P0.copy()
     idx = np.argwhere(interface)
     if idx.size:
@@ -412,6 +472,8 @@ def adapt_grid_to_circle(
             R=R,
         )
 
+    # Stiff springs near the interface, soft far away -> distortion is spread
+    # mainly into the region away from the inclusion boundary
     dist = manhattan_distance_to_interface(interface)
     k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)
     P2 = spring_relax_weighted(P1, fixed_mask=fixed, k_node=k_node, iters=iters, omega=omega)
@@ -440,6 +502,8 @@ def adapt_grid_to_circle(
 
 
 
+# Legacy/experimental code kept for reference: test of storing grid data in a
+# muGrid CartesianDecomposition real_field (not executed).
 '''
 from muGrid import Communicator, CartesianDecomposition 
 import numpy as np
