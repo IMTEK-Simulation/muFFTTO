@@ -61,7 +61,8 @@ pip install git+https://github.com/muSpectre/muGrid.git
 | `solvers_nonlinear.py` | Nonlinear solver implementations for advanced optimization |
 | `discretization_library.py` | Shape function gradient matrices for various element types (linear triangles, bilinear rectangles, trilinear hexahedra) |
 | `material_models.py` | Abstract base classes and implementations for material constitutive models |
-| `microstructure_library.py` | Parametric geometry definitions for generating periodic microstructures |
+| `geometry.py` | Periodic microstructure geometries: composable shapes, phase fields and named geometries (MPI-parallel) |
+| `microstructure_library.py` | Backward-compatible `get_geometry` wrapper used by the examples |
 | `grid_adaptation_methods.py` | Methods for adaptive mesh refinement and grid adaptation |
 | `grid_adaptation_arbitrary.py` | Arbitrary grid adaptation strategies |
 | `analytical_grid_adaptation.py` | Analytical solutions for grid adaptation |

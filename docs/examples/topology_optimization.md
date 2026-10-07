@@ -243,7 +243,7 @@ slices in 3D) shown with `plt.show()`. Nothing is saved to `figures/`.
 * `:95-104`: the isotropic target tensor with $\nu_t = 0$ and $G_t = \tfrac{3}{20}E_0$.
 * `:113-114`: the target stress for each load case:
   ```python
-  target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
+  target_stresses[load_case] = np.einsum('ijkl,kl->ij', elastic_C_target, macro_gradients[load_case])
   ```
 
 **Allocations.** `:121-122` allocate the persistent state and adjoint fields, one per

@@ -83,9 +83,8 @@ def findS(curve, Delta, l):
 
     Notes
     -----
-    The final ``max`` is an MPI reduction over ``MPI.COMM_WORLD``. The inputs
-    are already global scalars (identical on every rank), so the reduction
-    does not change the value; it only adds a synchronisation.
+    The inputs are global scalars (identical on every rank), so no MPI
+    reduction is needed.
     """
     # function to compute safety factor S
     curve = np.array(curve)
@@ -97,7 +96,7 @@ def findS(curve, Delta, l):
     if last_index is None:
         last_index = 0
     # S = max_j  curve[j] / Delta[j]  over the relevant window (last entry excluded)
-    S = Reduction(MPI.COMM_WORLD).max(curve[last_index:-1] / Delta[last_index: -1])
+    S = np.max(curve[last_index:-1] / np.asarray(Delta)[last_index:-1])
 
     return S
 
@@ -207,8 +206,8 @@ def conjugate_gradients_mugrid(
 
     The residual is updated recursively (not recomputed as ``b - A x``).
     Each iteration costs one ``hessp``, one ``P`` and two or three global
-    reductions (``comm.sum``). The initial-convergence test uses the absolute
-    ``tol**2`` even when ``rtol`` is True.
+    reductions (``comm.sum``). With ``rtol=True`` the initial guess is only
+    accepted as converged if its residual is exactly zero.
     """
 
     # all stopping tests compare squared norms, hence tol**2
@@ -260,8 +259,9 @@ def conjugate_gradients_mugrid(
     elif norm_metric is None:
         stop_crit = rr
 
-    # initial guess already good enough (absolute test, before rtol scaling)
-    if stop_crit < tol_sq:
+    # initial guess already good enough: absolute test, or (for rtol) an
+    # exactly zero residual -- a relative test against itself is meaningless
+    if stop_crit == 0 or (not rtol and stop_crit < tol_sq):
         return x
 
     # relative tolerance: scale by the initial (squared) stopping quantity
@@ -541,8 +541,9 @@ def conjugate_gradients_mugrid_experimental(
     elif norm_metric is None:
         stop_crit = rr
 
-    # initial guess already good enough (absolute test); norms is still empty
-    if stop_crit < tol_sq:
+    # initial guess already good enough: absolute test, or (for rtol) an
+    # exactly zero residual; norms is still empty
+    if stop_crit == 0 or (not rtol and stop_crit < tol_sq):
         return x, norms
 
     # relative tolerance: scaled by the initial (r, r) or (r, G r), whatever
@@ -688,17 +689,16 @@ def conjugate_gradients_mugrid_experimental(
             # of ||x - x_l||_A^2 = sum_{j=l}^{k} Delta_j as soon as the newest
             # contribution is relatively small, S Delta_k / sum_{j=l}^{k-1} Delta_j <= tau.
             # Several l may be accepted in one iteration (delay d decreases).
-            # NOTE: Delta entries are already global scalars; the MPI sum
-            # below therefore multiplies by the number of ranks when run in
-            # parallel (possible issue under MPI; code left unchanged).
+            # Delta entries are already global scalars (identical on every
+            # rank), so a plain sum is used -- no MPI reduction.
             num = S * Delta[-1]
-            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
+            den = float(np.sum(Delta[l:-1]))
             while (d >= 0) and (den > 0) and (num / den <= tau):
                 delay.append(d)
                 norms['energy_lower_estim'].append(den + Delta[-1])
                 l = l + 1
                 d = d - 1
-                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
+                den = float(np.sum(Delta[l:-1]))
 
             d = d + 1
 
@@ -944,24 +944,22 @@ def ___PCG(Afun, B, x0, P, steps=int(500), toler=1e-6, norm_energy_upper_bound=F
 
         # Energy - error estimator
         # Delta_k = alpha_k (r_k, z_k); curve[j] = sum_{i=j}^{k} Delta_i
-        # NOTE: `curve` is a Python list here, so `curve + Delta[-1]` raises
-        # TypeError (the experimental mugrid version wraps it in np.asarray).
         Delta.append(alpha * r_0z_0)
         curve.append(0)
-        curve = (curve + Delta[-1]).tolist()
+        curve = (np.asarray(curve) + Delta[-1]).tolist()
 
         if k > 1:
             # safety factor
             S = findS(curve, Delta, l)
 
             num = S * Delta[-1]
-            den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
-            while (d >= 0) and (num / den <= tau):
+            den = float(np.sum(Delta[l:-1]))
+            while (d >= 0) and (den > 0) and (num / den <= tau):
                 delay.append(d)
                 estim.append(den + Delta[-1])
                 l = l + 1
                 d = d - 1
-                den = Reduction(MPI.COMM_WORLD).sum(Delta[l:-1])
+                den = float(np.sum(Delta[l:-1]))
 
             d = d + 1
 
@@ -1249,7 +1247,7 @@ def dr_pbcg_mugrid(
 
     norms = {'residual_frobenius': [R0_norm_sq]}
 
-    if R0_norm_sq < tol_sq:
+    if R0_norm_sq == 0 or R0_norm_sq < tol_sq:
         return x_list, norms
     # Alternative QR variants kept for reference (Householder/CholeskyQR)
     #np.qr(R, mode='reduced')
@@ -1449,10 +1447,9 @@ def adam(f, df, x0,
     -----
     The gradient criterion uses the gradient evaluated at the point *before*
     the last update. Norms are reduced over ``MPI.COMM_WORLD``. Progress is
-    printed on every rank. Because ``phi_old`` is overwritten before the
-    ftol test, ``|phi_old|`` equals ``|phi|`` there; and since a negative
-    ``phi_change`` (objective increase) also satisfies the test, an uphill
-    step terminates the iteration as "converged".
+    printed on rank 0 only. The function-tolerance test uses the magnitude of
+    the change, ``|phi_old - phi| <= ftol * max(1, |phi|, |phi_old|)``, so an
+    uphill step does not count as convergence unless it is also tiny.
     """
     # phi=[]
     # phi_change=[]
@@ -1481,24 +1478,28 @@ def adam(f, df, x0,
         # decrease of the objective in this step (positive = improvement)
         phi_change = phi_old - phi
 
-        phi_old = phi
-
         # global gradient norms: max-norm and Euclidean norm over all ranks
 
         max_grad = Reduction(MPI.COMM_WORLD).max(np.abs(grad))
         # abs_grad = np.linalg.norm(grad)
         abs_grad = np.sqrt(Reduction(MPI.COMM_WORLD).sum(grad ** 2))
         norms__ = [phi, phi_change, max_grad, abs_grad, x, t]
-        callback(norms__)
+        if callback is not None:
+            callback(norms__)
+        is_root = MPI.COMM_WORLD.rank == 0
         # Report progress
-        print('-------------- >>%d = %.5f' % (t, phi))
+        if is_root:
+            print('-------------- >>%d = %.5f' % (t, phi))
 
         if (max_grad < gtol):
-            print("CONVERGED because gradient tolerance was reached")
+            if is_root:
+                print("CONVERGED because gradient tolerance was reached")
             return [x, phi, t]
-        if (phi_change <= ftol * max((1, abs(phi), abs(phi_old)))):
-            print("CONVERGED because function tolerance was reached")
+        if (abs(phi_change) <= ftol * max((1, abs(phi), abs(phi_old)))):
+            if is_root:
+                print("CONVERGED because function tolerance was reached")
             return [x, phi, t]
+        phi_old = phi
 
     return [x, phi, t]
 

@@ -3,9 +3,9 @@ tensor_operations.py
 ===============
 Tensor field utilities for muGrid fields with layout [i, j, q, x, y, z].
 
-All operators follow the contraction convention C_ij = A_ijkl B_lk
-(innermost indices contracted first), consistent with standard
-continuum mechanics notation.
+All operators use the standard continuum-mechanics double contraction
+C_ij = A_ijkl B_kl (last index pair of A with the index pair of B, in order);
+see docs/theory.md, Section 2.3.
 
 All functions write their result IN-PLACE into the output field,
 following the same convention as get_stress and get_algorithmic_tangent.
@@ -13,8 +13,8 @@ following the same convention as get_stress and get_algorithmic_tangent.
 Operators
 ---------
 trans2   : A_ji   = A_ij                          (transpose)
-ddot42   : C_ij   = A_ijkl B_lk                   (4th-2nd double contraction)
-ddot44   : C_ijmn = A_ijkl B_lkmn                 (4th-4th double contraction)
+ddot42   : C_ij   = A_ijkl B_kl                   (4th-2nd double contraction)
+ddot44   : C_ijmn = A_ijkl B_klmn                 (4th-4th double contraction)
 dot22    : C_ik   = A_ij B_jk                     (2nd-2nd single contraction)
 dot24    : C_ikmn = A_ij B_jkmn                   (2nd-4th single contraction)
 dot42    : C_ijkm = A_ijkl B_lm                   (4th-2nd single contraction)
@@ -43,9 +43,10 @@ quadrature-point (sub-point) axis ``q`` and the spatial grid axes
   therefore accessed as ``.s[0, 0]`` to obtain the ``(nq, nx, ny[, nz])`` array.
 
 Because the result is assigned with ``C.s[...] = ...``, the output field must be
-pre-allocated with the correct number of components. Avoid passing the same
-field as input and output: e.g. ``einsum('ij...->ji...')`` in ``trans2``
-returns a *view*, so an in-place transpose would read already-overwritten data.
+pre-allocated with the correct number of components. Passing the same field
+as input and output works in practice, because numpy evaluates the right-hand
+side (or detects the overlap) before assigning, but it is clearer to use
+separate fields.
 """
 
 import numpy as np
@@ -77,11 +78,10 @@ def trans2(A2, C2):
 def ddot42(A4, B2, C2):
     """
     Double contraction of a 4th-order with a 2nd-order tensor field,
-    C_ij = A_ijkl B_lk.
+    C_ij = A_ijkl B_kl.
 
-    Typical use: stress = C : strain (for symmetric strain the ordering ``lk``
-    vs. ``kl`` makes no difference; for non-symmetric 2nd-order tensors such as
-    the deformation gradient it does).
+    Typical use: stress = C : strain, or dP = A : dF with the finite-strain
+    tangent A_ijkl = dP_ij/dF_kl.
 
     Parameters
     ----------
@@ -96,11 +96,11 @@ def ddot42(A4, B2, C2):
     -------
     None
     """
-    C2.s[...] = np.einsum('ijkl...,lk...->ij...', A4.s, B2.s)
+    C2.s[...] = np.einsum('ijkl...,kl...->ij...', A4.s, B2.s)
 
 def ddot44(A4, B4, C4):
     """
-    Double contraction of two 4th-order tensor fields, C_ijmn = A_ijkl B_lkmn.
+    Double contraction of two 4th-order tensor fields, C_ijmn = A_ijkl B_klmn.
 
     Parameters
     ----------
@@ -113,7 +113,7 @@ def ddot44(A4, B4, C4):
     -------
     None
     """
-    C4.s[...] = np.einsum('ijkl...,lkmn...->ijmn...', A4.s, B4.s)
+    C4.s[...] = np.einsum('ijkl...,klmn...->ijmn...', A4.s, B4.s)
 
 def dot22(A2, B2, C2):
     """

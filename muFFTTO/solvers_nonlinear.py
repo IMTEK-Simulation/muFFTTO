@@ -18,6 +18,7 @@ def solve_finite_strain_newton_cg(
         macro_gradient_ij,
         ninc=1,
         newton_tol=1e-8,
+        newton_atol=1e-12,
         newton_max_iter=50,
         cg_tol=1e-6,
         cg_max_iter=10000,
@@ -36,7 +37,9 @@ def solve_finite_strain_newton_cg(
     The outer loop is Newton's method.
     The inner loop is a preconditioned conjugate gradient (CG) solver
     that solves the linearized system at each Newton step:
-        K(u) * du = - R(u)
+        K(u) * du = R(u),   R(u) = -B^T W P(F(u))
+    i.e. R is the out-of-balance force (the negative internal force; since
+    B^T W is the discrete -div, R is the discrete +div P).
 
     Parameters
     ----------
@@ -48,8 +51,8 @@ def solve_finite_strain_newton_cg(
         Must provide ``get_stress(grad_field, stress_field)`` and
         ``get_algorithmic_tangent(grad_field, tangent_field)``, both writing
         into the output fields in place. The input is the accumulated
-        ``total_strain_field`` (macroscopic + fluctuation gradient,
-        starting from zero).
+        ``total_strain_field``, i.e. the deformation gradient
+        ``F = I + H + grad(u_fluc)``, reset to ``I`` at the start.
     macro_gradient_ij : np.ndarray, shape (dim, dim)
         Prescribed macroscopic (displacement) gradient applied over all
         increments.
@@ -60,6 +63,12 @@ def solve_finite_strain_newton_cg(
         Newton convergence tolerance on ``||R|| / ||R_0||`` (Euclidean norm
         of the nodal residual, relative to its value at the start of the
         increment). Default 1e-8.
+    newton_atol : float, optional
+        Absolute floor on ``||R||``: if the residual is already below it,
+        the state is accepted without a linear solve. This handles cells
+        that are (numerically) in equilibrium, e.g. a homogeneous material,
+        where ``R`` is pure round-off and a relative CG solve on it would be
+        meaningless. Default 1e-12.
     newton_max_iter : int, optional
         Maximum Newton iterations per increment. Default 50.
     cg_tol : float, optional
@@ -209,15 +218,18 @@ def solve_finite_strain_newton_cg(
         discretization.fft.communicate_ghosts(Ax)
 
     # ------------------------------------------------------------------
-    # helper: compute residual R = -div(P)  from current total strain
+    # helper: compute residual R = -B^T W P  (discrete div P) from current total strain
     # ------------------------------------------------------------------
     def compute_residual():
         # Evaluates stress and algorithmic tangent at the current total
         # gradient (the tangent is thus updated as a side effect), then
-        # rhs = -B^T P (weighted transposed gradient = discrete -div P).
-        # rhs is the right-hand side of the Newton system K du = rhs.
+        # rhs = -B^T W P. B^T W is the discrete -div, so rhs is the discrete
+        # +div P (out-of-balance force); it is the right-hand side of K du = rhs.
         material.get_stress(total_strain_field, stress_field)
         material.get_algorithmic_tangent(total_strain_field, tangent_field)
+        # CG needs a symmetric K, i.e. a tangent with major symmetry A_ijkl = A_klij
+        # (true for hyperelastic materials); one pass over the data per Newton step
+        discretization.assert_material_symmetry(tangent_field, name='algorithmic tangent')
         discretization.fft.communicate_ghosts(stress_field)
         discretization.apply_gradient_transposed_operator_mugrid(
             gradient_field_ijqxyz=stress_field,
@@ -252,6 +264,16 @@ def solve_finite_strain_newton_cg(
     }
 
     # ------------------------------------------------------------------
+    # initial state: undeformed configuration F = I, u_fluc = 0
+    # ------------------------------------------------------------------
+    # The fields are looked up by name in the field collection, so they may
+    # still hold values from an earlier call; reset them explicitly.
+    displacement_fluctuation_field.s[...] = 0.0
+    total_strain_field.s[...] = 0.0
+    for d in range(dim):
+        total_strain_field.s[d, d] = 1.0
+
+    # ------------------------------------------------------------------
     # incremental loading loop
     # ------------------------------------------------------------------
     for inc in range(ninc):
@@ -276,7 +298,14 @@ def solve_finite_strain_newton_cg(
         # --------------------------------------------------------------
         for iiter in range(newton_max_iter):
 
-            # solve linearised system:  K * du = R
+            # already in equilibrium (up to round-off): nothing to solve
+            if newton_residuals[-1] <= newton_atol:
+                if verbose and discretization.communicator.rank == 0:
+                    print(f'  Newton converged in {iiter} iterations '
+                          f'(||R|| <= newton_atol).')
+                break
+
+            # solve linearised system:  K * du = R   (R = rhs_field = -B^T W P)
             # (zero initial guess; CG tolerance relative to ||R||)
             displacement_increment_field.s.fill(0.0)
 

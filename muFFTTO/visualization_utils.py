@@ -1,5 +1,5 @@
 """
-Plotting helpers for two-dimensional muFFTTO results.
+Plotting helpers for muFFTTO results.
 
 Functions
 ---------
@@ -10,6 +10,8 @@ get_deformed_grid_coords_two_dim
     Compute the node coordinates of a deformed 2D periodic grid (including the
     periodic boundary nodes) from a macroscopic gradient, a displacement
     fluctuation and an optional grid-adaptation displacement.
+visualize_voxels
+    3D voxel plot of a phase field.
 """
 import matplotlib.pyplot as plt
 
@@ -121,6 +123,12 @@ def get_deformed_grid_coords_two_dim(discretization,
     -----
     Serial only: the periodic-node copies are taken from local index 0 of the
     fluctuation field, which assumes the whole grid is on one MPI rank.
+
+    Units: the reference coordinates are normalised by the cell size (in
+    ``[0, 1]``), while the fluctuation and the grid displacement are in
+    physical units, so the result is only consistent for a unit cell
+    (``domain_size = [1, 1]``). The periodic copy nodes (last row/column) do
+    not receive the grid displacement.
     """
 
     # Reference coordinates with periodic extension for plotting
@@ -152,3 +160,52 @@ def get_deformed_grid_coords_two_dim(discretization,
     x_plot_ixyz[1, -1, -1] += displacement_fluctuation.s[1, 0, 0, 0]
 
     return x_plot_ixyz
+
+
+def visualize_voxels(phase_field_xyz, figure=None, ax=None):
+    """
+    Plot a 3D phase field as coloured, semi-transparent voxels.
+
+    Voxels with ``|value| / max|value| >= 0.1`` are drawn. Positive values
+    are blue, negative values red, and the opacity of each voxel is
+    ``|value| / max|value|``.
+
+    Parameters
+    ----------
+    phase_field_xyz : np.ndarray, shape (Nx, Ny, Nz)
+        Field to plot (e.g. the output of :func:`muFFTTO.geometry.get`).
+    figure : matplotlib.figure.Figure, optional
+        Existing figure. If None, a new figure is created.
+    ax : mpl_toolkits.mplot3d.axes3d.Axes3D, optional
+        Existing 3D axes. If None, a 3D subplot is added to the figure.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    ax : mpl_toolkits.mplot3d.axes3d.Axes3D
+
+    Notes
+    -----
+    If ``ax`` is given, its figure is used and ``figure`` is ignored.
+    """
+    magnitude = np.abs(phase_field_xyz) / np.abs(phase_field_xyz).max()
+    # draw only voxels with at least 10 % of the maximal magnitude
+    visible = magnitude >= 0.1
+
+    # RGBA colour per voxel (last axis): blue for positive, red for negative,
+    # opacity proportional to the magnitude
+    face_colors = np.zeros(list(phase_field_xyz.shape) + [4], dtype=np.float32)
+    face_colors[phase_field_xyz > 0] = [0, 0, 1, 0]
+    face_colors[phase_field_xyz < 0] = [1, 0, 0, 0]
+    face_colors[..., -1] = magnitude
+
+    if ax is not None:
+        fig = ax.figure
+    else:
+        fig = plt.figure() if figure is None else figure
+        ax = fig.add_subplot(projection='3d')
+    ax.voxels(visible, facecolors=face_colors, edgecolor='k', linewidth=0.01)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    return fig, ax

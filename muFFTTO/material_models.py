@@ -35,11 +35,9 @@ Fields are muGrid fields whose ``.s`` view has the layout
 
 where ``i, j, k, l`` are spatial indices, ``q`` the quadrature point within a
 pixel and ``x, y, z`` the (local, MPI-distributed) pixel indices. Tensor
-contractions follow the project convention of ``tensor_operations.py``:
-``sigma_ij = C_ijkl eps_lk`` (innermost indices contracted). Material tangents
-are therefore stored such that this reversed contraction yields the stress
-increment; for tensors with minor symmetry this is identical to the usual
-``C_ijkl eps_kl``.
+contractions follow the standard convention of ``tensor_operations.py``:
+``sigma_ij = C_ijkl eps_kl``. Material tangents are stored in the same
+standard order, ``A_ijkl = dP_ij / dF_kl``.
 
 Full 4th-order tensors (``(dim,)*4`` arrays) are used everywhere except in
 :func:`get_elastic_tangent` and the explicit Voigt conversion helpers.
@@ -120,7 +118,7 @@ class MaterialModelElasticity(ABC):
         ...
 
     def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
-        """C_ij = tangent_ijkl · strain_lk (project contraction convention, see tensor_operations.py).
+        """C_ij = tangent_ijkl · strain_kl (standard contraction, see tensor_operations.py).
 
         Applies a (previously computed) tangent to a strain(-increment) field,
         e.g. to evaluate the linearised stress increment in Newton/CG iterations.
@@ -212,9 +210,8 @@ class LinearElastic(MaterialModelElasticity):
 
         Notes
         -----
-        C has both minor symmetries (δ_ik δ_jl + δ_il δ_jk is symmetric in k<->l),
-        so it is identical in the standard (C_ijkl ε_kl) and the project's
-        reversed (C_ijkl ε_lk) contraction convention.
+        C has major and both minor symmetries (δ_ik δ_jl + δ_il δ_jk is
+        symmetric in k<->l and in i<->j).
         """
         dim = strain_ijqxyz.s.shape[0]
         I   = np.eye(dim)
@@ -337,24 +334,23 @@ class NeoHookean(MaterialModelElasticity):
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
-        Stored tangent, already expressed in this project's reversed contraction
-        convention  P_ij = A_ijkl F_lk  (see tensor_operations.py module docstring),
-        i.e. with the last two indices of the standard dP_ij/dF_kl swapped:
+        Algorithmic tangent in the standard order A_ijkl = ∂P_ij/∂F_kl, so that
+        dP_ij = A_ijkl dF_kl (``tensor_operations.ddot42``):
 
-          A_ijkl = λ FinvT_ij FinvT_lk
-                 + (μ - λ ln J) FinvT_ik FinvT_lj
-                 + μ δ_il δ_jk
+          A_ijkl = λ FinvT_ij FinvT_kl
+                 + (μ - λ ln J) FinvT_il FinvT_kj
+                 + μ δ_ik δ_jl
 
         Three contributions:
-          term1 : λ          FinvT_ij FinvT_lk   (volumetric)
-          term2 : (μ-λ ln J)  FinvT_ik FinvT_lj   (distortional coupling)
-          term3 :     μ       δ_il δ_jk           (distortional identity)
+          term1 : λ          FinvT_ij FinvT_kl   (volumetric)
+          term2 : (μ-λ ln J)  FinvT_il FinvT_kj   (distortional coupling)
+          term3 :     μ       δ_ik δ_jl           (distortional identity)
 
-        Derivation (standard ordering, ∂P_ij/∂F_kl):
+        Derivation:
           ∂(ln J)/∂F_kl   = F^{-T}_kl
           ∂F^{-T}_ij/∂F_kl = -F^{-T}_il F^{-T}_kj
-        so ∂P_ij/∂F_kl = λ F^{-T}_ij F^{-T}_kl + (μ - λ ln J) F^{-T}_il F^{-T}_kj
-        + μ δ_ik δ_jl; swapping k <-> l gives A_ijkl above.
+          ∂F_ij/∂F_kl      = δ_ik δ_jl
+        The tangent has major symmetry A_ijkl = A_klij (hyperelastic material).
 
         Parameters
         ----------
@@ -392,25 +388,16 @@ class NeoHookean(MaterialModelElasticity):
         n_extra = lnJ.ndim
         index_extender = (...,) + (np.newaxis,) * n_extra
 
-        # Legacy implementation in standard (non-reversed) index order, kept for reference:
         # term1: λ FinvT_ij FinvT_kl
-        #dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
-        #term1_ijklqxyz.s[...] *= lam
-        # term1: lam FinvT_ij FinvT_lk        ('kl' -> 'lk')
-        term1_ijklqxyz.s[...] = lam * np.einsum('ij...,lk...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
+        term1_ijklqxyz.s[...] = lam * np.einsum('ij...,kl...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
 
-        # Legacy/alternative implementation kept for reference:
-        # term2: (μ - λ lnJ) FinvT_il FinvT_jk
-        # term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,jk...->ijkl...',
-        #                                           FinvT_ijqxyz.s,
-        #                                           FinvT_ijqxyz.s)
-        # term2: (mu - lam lnJ) FinvT_ik FinvT_lj    ('il,jk' -> 'ik,lj')
-        term2_ijklqxyz.s[...] = coef2 * np.einsum('ik...,lj...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
+        # term2: (μ - λ lnJ) FinvT_il FinvT_kj
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,kj...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
 
 
-        # term3:  μ δ_il δ_jk
+        # term3:  μ δ_ik δ_jl
         I = np.eye(dim)
-        IsI = np.einsum('il,jk->ijkl', I, I)
+        IsI = np.einsum('ik,jl->ijkl', I, I)
         term3_ijklqxyz.s[...] = IsI[index_extender] * mu
 
         tangent_ijklqxyz.s[...] = (term1_ijklqxyz.s
@@ -446,8 +433,12 @@ def compute_Voigt_notation_4order(C_ijkl):
     Pure index re-mapping: no factors of 2 or sqrt(2) are applied to shear
     entries (i.e. not Mandel notation). For a minor-symmetric stiffness this
     is the standard Voigt stiffness matrix acting on engineering shear strains
-    (gamma = 2 eps_ij). For dim not in {2, 3} the function fails because
-    ``C_voigt_kl`` is never assigned.
+    (gamma = 2 eps_ij).
+
+    Raises
+    ------
+    ValueError
+        If ``dim`` is not 2 or 3.
     """
     # function return Voigt notation of elastic tensor
     if len(C_ijkl) == 2:
@@ -463,6 +454,8 @@ def compute_Voigt_notation_4order(C_ijkl):
         for i in np.arange(len(C_voigt_kl[0])):
             for j in np.arange(len(C_voigt_kl[1])):
                 C_voigt_kl[i, j] = C_ijkl[ij_ind[i] + ij_ind[j]]
+    else:
+        raise ValueError(f'Voigt notation is implemented for dim 2 and 3, got dim={len(C_ijkl)}')
     return C_voigt_kl
 
 
@@ -739,8 +732,8 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
     size-1 component axes of ``lam``/``mu`` against the (dim, dim) tensor axes.
     """
     strain = strain_ijqxyz.s[...]  # (dim, dim, q, *xyz)
-    lam = lam_1qxyz.s[...]  # (1, q, *xyz)
-    mu = mu_1qxyz.s[...]  # (1, q, *xyz)
+    lam = lam_1qxyz.s[...]  # (1, 1, q, *xyz)
+    mu = mu_1qxyz.s[...]  # (1, 1, q, *xyz)
 
     # Disabled alternative kept for reference:
     # symmetrize: handles full-gradient input the same way C_ijkl minor symmetry does
@@ -823,9 +816,8 @@ def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
         C11 = E1/(1 - nu12 nu21), C12 = nu12 E2/(1 - nu12 nu21) are the
         reduced (plane-STRESS) orthotropic stiffnesses, despite the function name.
     """
-    # Compute nu21 from symmetry condition: nu21 / E2 = nu12 / E1
-    # NOTE: that condition gives nu21 = nu12 * E2 / E1; the line below computes nu12 * E1 / E2.
-    nu21 = (nu12 * E1) / E2
+    # Compute nu21 from the symmetry condition nu21 / E2 = nu12 / E1
+    nu21 = (nu12 * E2) / E1
 
     # Stiffness matrix components
     factor = 1 / (1 - nu12 * nu21)

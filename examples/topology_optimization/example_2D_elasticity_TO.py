@@ -111,8 +111,8 @@ target_stresses = np.zeros([nb_load_cases, dim, dim])
 target_energy = np.zeros([nb_load_cases])
 
 for load_case in range(nb_load_cases):
-    target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
-    target_energy[load_case] = np.einsum('ij,ijkl,lk->', left_macro_gradients[load_case], elastic_C_target,
+    target_stresses[load_case] = np.einsum('ijkl,kl->ij', elastic_C_target, macro_gradients[load_case])
+    target_energy[load_case] = np.einsum('ij,ijkl,kl->', left_macro_gradients[load_case], elastic_C_target,
                                          macro_gradients[load_case])
     if MPI.COMM_WORLD.rank == 0:
         print(f'Load case {load_case}: target stress = {target_stresses[load_case].tolist()}')
@@ -529,7 +529,7 @@ if __name__ == '__main__':
                 maxiter=10000,
             )
 
-            homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+            homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
                 displacement_field_inxyz=displacement_field,
                 macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,

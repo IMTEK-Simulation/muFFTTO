@@ -21,7 +21,7 @@ element_type = 'linear_triangles'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (16,16)
+number_of_pixels = (64,64)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -314,6 +314,7 @@ if __name__ == '__main__':
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
     random_init = True
+    show_plots = False  # plot the phase field at every iteration
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)
@@ -369,7 +370,7 @@ if __name__ == '__main__':
         """Callback to visualize progress during optimization."""
         global iterat
         iterat += 1
-        if MPI.COMM_WORLD.size == 1:
+        if show_plots and MPI.COMM_WORLD.size == 1:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
             plt.figure()
@@ -414,6 +415,19 @@ if __name__ == '__main__':
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
+
+    # Round the optimized phase field to the discrete set {0, 0.1, ..., 1}
+    nb_phase_levels = 10  # None to keep the continuous phase field
+    if nb_phase_levels is not None:
+        save_npy(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weights[0]}' + f'_smooth.npy',
+                 solution_phase.s[0].mean(axis=0),
+                 tuple(discretization.fft.subdomain_locations),
+                 tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
+        solution_phase.s[...] = np.round(solution_phase.s * nb_phase_levels) / nb_phase_levels
+        discretization.fft.communicate_ghosts(solution_phase)
+        if MPI.COMM_WORLD.rank == 0:
+            print(f'Phase field rounded to {nb_phase_levels + 1} levels: '
+                  f'{np.unique(solution_phase.s[0, 0]).tolist()}')
 
     _info = {}
     if MPI.COMM_WORLD.rank == 0:
@@ -524,7 +538,7 @@ if __name__ == '__main__':
             maxiter=10000,
         )
 
-        homogenized_C_ijkl[i ] = discretization.get_homogenized_stress_mugrid(
+        homogenized_C_ijkl[:, i] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
             displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz )

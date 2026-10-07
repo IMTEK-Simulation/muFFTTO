@@ -143,7 +143,7 @@ for i in range(dim):
 
     # ----------------------------------------------------------------------
     # compute homogenized flux
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
+    homogenized_A_ij[:, i] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -212,7 +212,7 @@ if discretization.communicator.rank == 0:
     print(f"{len(norms):1} norm of residual = {', '.join(f'{v}' for v in norms)}")
 
 for i in range(dim):
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
+    homogenized_A_ij[:, i] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=list_of_solution_field[i],
         macro_gradient_field_ijqxyz=list_of_macro_gradient_field[i])

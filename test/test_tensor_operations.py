@@ -42,7 +42,7 @@ def test_ddot42(fc_setup):
     
     tensor_operations.ddot42(A4, B2, C2)
     
-    expected = np.einsum('ijkl...,lk...->ij...', A4.s, B2.s)
+    expected = np.einsum('ijkl...,kl...->ij...', A4.s, B2.s)
     np.testing.assert_allclose(C2.s, expected)
 
 def test_ddot44(fc_setup):
@@ -55,7 +55,7 @@ def test_ddot44(fc_setup):
     
     tensor_operations.ddot44(A4, B4, C4)
     
-    expected = np.einsum('ijkl...,lkmn...->ijmn...', A4.s, B4.s)
+    expected = np.einsum('ijkl...,klmn...->ijmn...', A4.s, B4.s)
     np.testing.assert_allclose(C4.s, expected)
 
 def test_dot22(fc_setup):

@@ -155,7 +155,8 @@ def adjoint_potential(discretization,
     # apply B^transposed via the convolution operator "div (flux)"
     force_field_inxyz = discretization.get_scalar_field(
         name='temporary_field_inxyz_in_adjoint_potential_temporary')
-    discretization.fft.communicate_ghosts(force_field_inxyz)
+    # B^T reads the flux of neighbouring pixels -> refresh its ghost layers
+    discretization.fft.communicate_ghosts(flux_field_ijqxyz)
 
     discretization.gradient_op.transpose(quadrature_point_field=flux_field_ijqxyz,
                                      nodal_field=force_field_inxyz,
@@ -297,6 +298,11 @@ def sensitivity_flux_and_adjoint(discretization,
     # quad axis (q) + spatial axes (x, y[, z]) -> dim + 1 trailing axes
     expand = (...,) + (np.newaxis,) * (dim + 1)
 
+    # K_base and K_void must be symmetric (K = K^T for CG and the adjoint);
+    # K(rho) then is symmetric as well.
+    discretization.assert_material_symmetry(base_material_data_ijkl, name='base conductivity')
+    discretization.assert_material_symmetry(void_material_data_ijkl, name='void conductivity')
+
     # K(rho) = rho^p (K_base - K_void) + K_void at every quadrature point;
     # (d, d) material tensors are broadcast against the (q, x, y[, z]) field
     material_data_field_rho_ijklqxyz.s[...] = \
@@ -322,24 +328,23 @@ def sensitivity_flux_and_adjoint(discretization,
     # stress_difference_ij = target_stress_ij - actual_stress_ij
     flux_difference_ij = target_flux_ij - actual_flux_ij
 
-    # df_sigma/du = -2/(|Omega| ||q_t||^2) B^T W K(rho) (q_t - q_h):
-    # the constant flux difference is spread to all quadrature points and
-    # used in place of the macro gradient in the standard RHS routine
+    # With q_h = 1/|Omega| sum_q w_q A : (E + B u) and Delta = q_t - q_h:
+    #   df_sigma/du = -2/(|Omega| ||q_t||^2) B^T W (A^T Delta),
+    #   (A^T Delta)_ui = Delta_uj A_ji   (transpose: contract the FIRST index)
     flux_difference_ijqxyz = discretization.get_gradient_size_field(
         name='flux_field_in_sensitivity_flux_and_adjoint')
-    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=flux_difference_ij,
-                                                   macro_gradient_field_ijqxyz=flux_difference_ijqxyz
-                                                   )
+    flux_difference_ijqxyz.s[...] = np.einsum('uj,ji...->ui...', flux_difference_ij,
+                                              material_data_field_rho_ijklqxyz.s)
     # minus sign is already there
     df_du_field = discretization.get_unknown_size_field(
         name='adjoint_problem_rhs_in_sensitivity_flux_and_adjoint')
-    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
-                                  macro_gradient_field_ijqxyz=flux_difference_ijqxyz,
-                                  rhs_inxyz=df_du_field)
-    # minus sign is already there
-    # (get_rhs_mugrid returns -B^T W K dq, so after multiplying by -2/|Omega| the
-    #  field equals +2/|Omega| B^T W K dq = -df_sigma/du * ||q_t||^2, i.e. the
-    #  adjoint RHS -df/du up to the normalization below)
+    # df_du_field = -B^T W (A^T Delta); after multiplying by -2/|Omega| it is
+    # +2/|Omega| B^T W (A^T Delta) = -df_sigma/du * ||q_t||^2, i.e. the
+    # adjoint RHS -df/du up to the normalization below
+    discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=flux_difference_ijqxyz,
+                                                             div_u_fnxyz=df_du_field,
+                                                             apply_weights=True)
+    df_du_field.s[...] *= -1
     df_du_field.s[...] = -2 * df_du_field.s / discretization.cell.domain_volume
     # Normalization
     df_du_field.s[...] = weight * df_du_field.s / np.sum(target_flux_ij ** 2)
@@ -360,6 +365,8 @@ def sensitivity_flux_and_adjoint(discretization,
             norms_cg_adjoint['residual_rz'].append(norm_of_rz)
 
     # solve A lambda = -w df/du (A symmetric -> same operator as the forward problem)
+    # adjoint equation K^T lambda = -df/du; K^T = K because A(rho) is symmetric
+    # (checked above), so the state operator is reused
     solvers.conjugate_gradients_mugrid(
         comm=discretization.communicator,
         fc=discretization.field_collection,

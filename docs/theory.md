@@ -208,17 +208,37 @@ Material helpers in `muFFTTO/material_models.py`:
 
 ### 2.3 The index convention of the contraction
 
-`muFFTTO/tensor_operations.py` contracts the *inner* indices:
+All contractions in muFFTTO use the standard double contraction, the last
+index pair of the 4th-order tensor with the index pair of the 2nd-order one:
 
 $$
-\texttt{ddot42}:\quad \sigma_{ij} = C_{ijkl}\,\varepsilon_{lk} .
+\texttt{ddot42}:\quad \sigma_{ij} = C_{ijkl}\,\varepsilon_{kl},
+\qquad q_i = A_{ij}\,g_j .
 $$
 
-`Discretization.apply_material_data_elasticity_mugrid` follows the same rule.
-For tensors with minor symmetry this is the usual $C_{ijkl}\varepsilon_{kl}$.
-It matters for non-symmetric tangents such as the finite-strain
-$\partial P/\partial F$ (Section 3), which the code stores with the last two
-indices swapped.
+`Discretization.apply_material_data_*_mugrid`, `tensor_operations` and the
+material models all follow this rule, and the finite-strain tangent is stored
+as $A_{ijkl} = \partial P_{ij}/\partial F_{kl}$ (Section 3). Where a formula
+needs a transpose, the code writes it explicitly:
+$(\mathbb C^T)_{ijkl} = C_{klij}$, i.e. $(\mathbb C^T\!:\tau)_{kl} = \tau_{ij}C_{ijkl}$
+(contract the *first* index pair), and $(A^T\tau)_i = \tau_j A_{ji}$.
+
+**Required symmetries.** The methods built on these contractions need:
+
+* **major symmetry** $C_{ijkl} = C_{klij}$ (conductivity: $A_{ij} = A_{ji}$).
+  Then $K = B^TW\mathbb CB$ is symmetric, which conjugate gradients
+  requires, and the adjoint operator $K^T$ equals $K$ (Section 7.3);
+* **minor symmetry** $C_{ijkl} = C_{jikl}$ for small strain. Then the stress
+  is symmetric, and $B^TW\sigma$ equals the symmetric-gradient form
+  $(\mathrm{sym}\circ B)^TW\sigma$ of the weak form (Section 5.1).
+
+These are not silent assumptions: `Discretization.assert_material_symmetry`
+checks them wherever material data enters a solve (right-hand side,
+homogenized stress and energy, Green reference material, the base and void
+tensors of topology optimization, and the Newton tangent). It raises a
+`ValueError` on all MPI ranks if a symmetry is violated. The check costs one
+pass over the data per solve, not per CG iteration, and can be switched off
+with `discretization.check_material_symmetry = False`.
 
 ### 2.4 Material data layout per quadrature point
 
@@ -278,8 +298,8 @@ $$
   $\lambda,\mu$ are scalar quadrature fields (`get_quad_field_scalar`).
 * The tangent is the consistent linearization
   $\partial P_{ij}/\partial F_{kl} = \lambda F^{-T}_{ij}F^{-T}_{kl} + (\mu - \lambda\ln J)F^{-T}_{il}F^{-T}_{kj} + \mu\,\delta_{ik}\delta_{jl}$,
-  stored with $k \leftrightarrow l$ swapped to match the contraction
-  convention of Section 2.3.
+  stored in this standard order, $A_{ijkl} = \partial P_{ij}/\partial F_{kl}$
+  (Section 2.3). It has major symmetry $A_{ijkl} = A_{klij}$.
 * For $F \to I$ the model linearizes to `LinearElastic` with the same
   $\lambda,\mu$.
 
@@ -289,9 +309,11 @@ $$
 implements an incremental, inexact Newton–Krylov method:
 
 ```
-for each load increment:  H_tot += macro_gradient_ij / ninc
+F = I ;  u~ = 0                           # undeformed start
+for each load increment:  F += macro_gradient_ij / ninc
     R = -B^T W P(F)                       # compute_residual(): also refreshes the tangent A(F)
     repeat (Newton):
+        if ||R|| <= newton_atol: stop     # already in equilibrium (e.g. homogeneous cell)
         solve  K(F) du = R  with PCG       # K(F) = B^T W A(F) B, relative tol cg_tol
         u~ += du ;  F += B du              # full step, no line search
         R  = -B^T W P(F)
@@ -308,16 +330,8 @@ for each load increment:  H_tot += macro_gradient_ij / ninc
 
 The finite-strain example scripts in
 `examples/homogenization/finite_strain_elasticity/` write out the same loop by
-hand. They start from `total_strain_field = I` and add the increment of $H$,
-so the field holds $F$ itself.
-
-> **Note (code vs. theory).** `solve_finite_strain_newton_cg` gets its
-> `total_strain_field` from the field collection and only adds the macro
-> increments. It does not add the identity. On a fresh field this gives
-> $F = H + \nabla\tilde u$ instead of $I + H + \nabla\tilde u$, and
-> `NeoHookean` then takes $\ln\det F$ of a nearly singular tensor. Either
-> pre-fill the field named `'total_strain_field'` with $I$, as the examples
-> do, or include $I$ in the load path.
+hand. Like the solver, they start from `total_strain_field = I` and add the
+increment of $H$, so the field holds $F$ itself.
 
 ---
 
@@ -474,9 +488,11 @@ $$
 \boxed{\;K\,\tilde u = f,\qquad K = B^T W \mathbb C B,\qquad f = -B^T W \mathbb C\,E\;}
 $$
 
-For small strain, replace $B$ by $\mathrm{sym}\circ B$. Since $\mathbb C$
-has minor symmetry, $\mathbb C\,\mathrm{sym}(g) = \mathbb C g$ and
-$B^T$ acting on a symmetric $\sigma$ equals $(\mathrm{sym}B)^T\sigma$.
+For small strain the strain is $\mathrm{sym}(B\tilde u)$. The weak form tests
+with $\mathrm{sym}(\nabla v)$, and since
+$\mathrm{sym}(\nabla v):\sigma = \nabla v:\mathrm{sym}(\sigma)$, the code's
+$B^TW\sigma$ is exact when $\sigma$ is symmetric. That holds for $\mathbb C$
+with minor symmetry, which is checked (Section 2.3).
 
 | quantity | code |
 |---|---|
@@ -522,7 +538,8 @@ There are two implementations, and the examples use both:
   * `hessp(x, Ax)` and `P(r, z)` are in-place callables on muGrid fields.
   * **Stopping test.** By default it uses the *squared Euclidean* residual,
     $(r,r) < \texttt{tol}^2$, which is **absolute** unless `rtol=True`. With
-    `rtol=True` the test becomes $(r,r) < \texttt{tol}^2\,(r_0,r_0)$. It is
+    `rtol=True` the test becomes $(r,r) < \texttt{tol}^2\,(r_0,r_0)$, and
+    the initial guess is accepted only if its residual is exactly zero. It is
     *not* the preconditioned norm $(r,z)$ that many FFT papers use. You can
     pass `norm_metric(r, Gr)` to stop on $(r, Gr)$ instead, for example
     $G=M^{-1}$.
@@ -626,7 +643,7 @@ the code:
 
 ```python
 import numpy as np
-from muFFTTO import domain, material_models, solvers, microstructure_library
+from muFFTTO import domain, material_models, solvers, geometry
 
 # 1. cell + discretization
 cell = domain.PeriodicUnitCell(domain_size=[1, 1], problem_type='elasticity')
@@ -638,9 +655,7 @@ dim = disc.domain_dimension
 # 2. material field C(x_q), shape [d,d,d,d,q,x,y]
 K, G = material_models.get_bulk_and_shear_modulus(E=1.0, poisson=0.2)
 C_1 = material_models.get_elastic_material_tensor(dim=dim, K=K, mu=G)
-geom = microstructure_library.get_geometry(nb_voxels=disc.nb_of_pixels,
-                                           microstructure_name='square_inclusion',
-                                           coordinates=disc.fft.coords)
+geom = geometry.get('square_inclusion', disc.fft.coords)  # local pixels only (MPI)
 C = disc.get_material_data_size_field_mugrid(name='C')
 C.s[...] = C_1[..., np.newaxis, np.newaxis, np.newaxis]
 C.s[..., geom > 0] *= 100.0                       # stiff matrix, soft inclusion
@@ -720,13 +735,12 @@ Comparing them is a cheap sanity check on solver accuracy.
 
 ### 6.3 Assembling $\mathbb C^{\rm eff}$ from load cases
 
-For each unit load $E = e_k\otimes e_l$ the examples store
-`homogenized_C_ijkl[k, l] = Σ`. With the contraction convention of
-Section 2.3 this array is
-$\Sigma_{ij} = C^{\rm eff}_{ijlk}$, which by major and minor symmetry equals
-$C^{\rm eff}_{klij} = C^{\rm eff}_{ijkl}$. The same holds for conductivity:
-`homogenized_A_ij[k, :] = Σ` stores $A^{\rm eff}_{ik}$ in row $k$, i.e. the
-transpose, which equals $A^{\rm eff}$ because it is symmetric.
+For each unit load $E = e_k\otimes e_l$ the homogenized stress is
+$\Sigma_{ij} = C^{\rm eff}_{ijkl}$, i.e. the column
+`C_eff[:, :, k, l]`. The examples store exactly that,
+`homogenized_C_ijkl[:, :, k, l] = Σ`, and for conductivity
+`homogenized_A_ij[:, k] = Σ` (the flux for $E = e_k$ is the column
+$A^{\rm eff}_{ik}$).
 
 The non-symmetric load case $e_0\otimes e_1$ needs no symmetrization, because
 $\mathbb C:E = \mathbb C:\mathrm{sym}E$. A $d=2$ elasticity cell
@@ -816,12 +830,15 @@ With the Lagrangian $\mathcal L = f + \lambda^Tg$, requiring stationarity in
 $\tilde u$ gives the **adjoint problem**
 
 $$
-K(\rho)\,\lambda = -\frac{\partial f}{\partial\tilde u},\qquad
--\frac{\partial f_\sigma}{\partial \tilde u} = \frac{2}{\lvert Y\rvert\,\lVert\Sigma_t\rVert^2}\,B^TW\,\mathbb C(\rho):(\Sigma_t-\Sigma_h).
+K(\rho)^T\,\lambda = -\frac{\partial f}{\partial\tilde u},\qquad
+-\frac{\partial f_\sigma}{\partial \tilde u} = \frac{2}{\lvert Y\rvert\,\lVert\Sigma_t\rVert^2}\,B^TW\,\big(\mathbb C(\rho)^T:(\Sigma_t-\Sigma_h)\big),
 $$
 
-$K$ is symmetric, so this is the same operator, preconditioner and PCG as the
-state problem. Each load case needs one extra solve, and the previous
+with $(\mathbb C^T:\Delta)_{kl} = \Delta_{ij}C_{ijkl}$; the code evaluates
+exactly this (`np.einsum('ij,ijkl...->kl...')`, and $\Delta_j A_{ji}$ for
+conductivity). Because $\mathbb C_1$ and $\mathbb C_0$ are checked for major
+symmetry, $\mathbb C(\rho)$ and $K$ are symmetric, so $K^T = K$ and the adjoint
+reuses the operator, preconditioner and PCG of the state problem. Each load case needs one extra solve, and the previous
 $\lambda$ is a warm start. The total derivative is
 
 $$
@@ -844,8 +861,7 @@ $$
 
 The `sensitivity_*` functions take `preconditioner_fun` and
 `system_matrix_fun`, the same `M_fun`/`K_fun` used for the state, plus
-`cg_tol` and `r_tol` keyword arguments. Functions suffixed `_pixel`,
-`_FE_weights` or `_FE_testing` are legacy.
+`cg_tol` and `r_tol` keyword arguments.
 
 ### 7.4 Optimizer
 

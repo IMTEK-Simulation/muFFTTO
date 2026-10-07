@@ -89,7 +89,6 @@ $$
 |---|---|---|---|---|---|---|---|---|
 | `small_strain_elasticity/example_2D_homogenization_elasticity.py` | 2D | linear elastic, small strain | `bilinear_rectangle` (2×2 Gauss) | 32×32 | `LinearElastic` → tangent field $\mathbb{C}_q$ | `muGrid.Solvers.conjugate_gradients`, `tol=1e-6` | Green, $\mathbb{C}_{\mathrm{ref}}(K_0,G_0)$ | $3\times3$ Voigt $\mathbb{C}^{\mathrm{eff}}$, plots of $\tilde u_x,\tilde u_y$ on the deformed grid |
 | `small_strain_elasticity/example_2D_homogenization_elasticity_no_data_field.py` | 2D | linear elastic, small strain | `linear_triangles` | 32×32 | explicit stress function $\boldsymbol\sigma(\boldsymbol\varepsilon)$ from $\lambda_q,\mu_q$ (no $\mathbb{C}$ field) | same | Green, $\mathbb{C}(\lambda_0,\mu_0)$ | $3\times3$ Voigt $\mathbb{C}^{\mathrm{eff}}$, plots of $\tilde u_0,\tilde u_1$ |
-| `small_strain_elasticity/example_2D_homogenization_elasticity_Stefanus.py` | 2D | linear elastic, 3 phases | `bilinear_rectangle` | 256×256 | `LinearElastic` | same | Green, $\mathbb{C}_{\mathrm{ref}}(K_0,G_0)$ | single load $E_{xx}=0.1$: von Mises and strain plots, average stress (see Known issues; currently fails) |
 | `small_strain_elasticity/example_3D_homogenization_elasticity.py` | 3D | linear elastic, small strain | `trilinear_hexahedron` (2×2×2 Gauss) | 17³, cell $4\times3\times5$ | constant $\mathbb{C}$ field scaled by masks | same | Green, $\mathbb{C}(K_0,G_0)$ | $6\times6$ Voigt $\mathbb{C}^{\mathrm{eff}}$, mid-plane plots of $\tilde u_{0,1,2}$ |
 | `finite_strain_elasticity/example_2D_homogenization_finite_strain_elasticity_NeoHookean.py` | 2D | Neo-Hookean, finite strain | `bilinear_rectangle` | 64×64 (`-n`) | `NeoHookean` (stress + tangent + energy) | Newton + muFFTTO `solvers.conjugate_gradients_mugrid`, absolute `tol=1e-5` | Green, small-strain $\mathbb{C}(\lambda_m,\mu_m)$ | Newton/CG iteration log, `.npy` fields per Newton iteration, `info_log_final.npz` |
 | `finite_strain_elasticity/example_3D_homogenization_finite_strain_elasticity_NeoHookean.py` | 3D | — | — | — | — | — | — | **The file is empty (0 bytes).** |
@@ -195,7 +194,7 @@ if discretization.communicator.size == 1:
                     macro_gradient_ij=macro_gradient_ij, displacement_fluctuation=solution_field)  # :151
     visualization_utils.plot_field_on_grid(coordinates_for_plot=x_plot_ixyz,
                                            field_to_plot=solution_field.s[0, 0], ...)               # :155
-homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
     material_data_field_ijklqxyz=material_data_field_C_0, displacement_field_inxyz=solution_field,
     macro_gradient_field_ijqxyz=macro_gradient_field, formulation='small_strain')                   # :167
 print(... material_models.compute_Voigt_notation_4order(homogenized_C_ijkl) ...)                    # :176
@@ -278,38 +277,6 @@ Other differences from the main example:
 - The plots are plain `pcolormesh` with a fixed colour range $[-0.2,0.2]$ (`:141-166`).
 
 This variant does **not** give the same $\mathbb{C}^{\mathrm{eff}}$ as the main example. See Known issues.
-
-### `example_2D_homogenization_elasticity_Stefanus.py`: three-phase cell, single load, stress post-processing
-
-This is a modified copy (uncommitted local changes) aimed at local stress fields rather than the full tangent.
-
-**Setup.**
-
-- Grid `(256, 256)` (`:25`).
-- Microstructure `geometry_ID = 'geometry_stefanus'` (`:39`) with three phases:
-
-  | Phase value | Mask | Material |
-  |---|---|---|
-  | 0 | `matrix_mask` | matrix, $E=1$ |
-  | 1 | `inc_soft_mask` | soft inclusion, $E=10^{-3}$ |
-  | 2 | `inc_stiff_mask` | stiff inclusion, $E=10$ |
-
-  All phases use $\nu=0.2$ (`:50-80`).
-- The phase field is plotted right after creation (`:46-48`).
-
-**Solve.** Only **one** load case is solved: $E_{xx}=0.1$ (`:143-163`).
-
-**Post-processing.**
-
-1. The total strain $\boldsymbol\varepsilon=\mathbf{E}+\nabla^s\tilde{\mathbf{u}}$ is built with
-   `apply_gradient_operator_symmetrized_mugrid` (`:166-173`). The stress comes from
-   `material.get_stress` (`:178`).
-2. A plane-strain von Mises stress is computed per quadrature point (`:182-194`), with
-   $\sigma_{zz}=\nu(\sigma_{xx}+\sigma_{yy})$. It is then averaged over the 4 quadrature points of each pixel (`:197`).
-3. The von Mises stress is plotted on the deformed grid (`:199-213`). It is plotted again as
-   `pcolormesh`, together with $\varepsilon_{xx}$ and $\varepsilon_{xy}$ (`:215-224`).
-4. `get_homogenized_stress_mugrid` (`:228`) stores the average stress $\langle\boldsymbol\sigma\rangle$ for
-   this load in `homogenized_C_ijkl[0, 0]`. The script prints it in Voigt layout.
 
 ### `example_3D_homogenization_elasticity.py`: 3D, trilinear hexahedra
 
@@ -417,13 +384,6 @@ The file is empty (0 bytes). There is no 3D finite-strain example yet. The direc
 
 ## Known issues
 
-- **`example_2D_homogenization_elasticity_Stefanus.py` fails at startup.** `'geometry_stefanus'` (`:39`) is not a
-  recognised name in `microstructure_library.get_geometry`, so the call at `:42` raises
-  `ValueError: Unrecognised microstructure_name geometry_stefanus`. Even with a valid geometry:
-  - the von Mises formula uses `nu = 0.3` (`:183`), while the material has $\nu=0.2$;
-  - `homogenized_C_ijkl[0, 0]` holds the average stress for $E_{xx}=0.1$. It is not a column of the
-    tangent, but it is printed as "Homogenized elastic tangent";
-  - the `pcolormesh` plots at `:215-224` are outside the serial guard. Under MPI each rank would plot its own subdomain.
 - **`example_2D_homogenization_elasticity_no_data_field.py` disagrees with the tensor-field version.**
   Two separate effects:
   1. `get_lame_parameters` (`:36`) gives $\lambda\approx0.278$, the 3D/plane-strain value. The main example

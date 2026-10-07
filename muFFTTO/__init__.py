@@ -52,8 +52,12 @@ material_models
 tensor_operations
     Pointwise tensor algebra (contractions, inverse, determinant, trace) on
     muGrid fields with layout ``[i, j, q, x, y, z]``.
+geometry
+    Periodic microstructure geometries: composable shapes (box, ball, set
+    operations), phase fields from shapes, and a registry of named geometries.
+    Works point-wise on local pixel coordinates, so it is MPI-parallel.
 microstructure_library
-    Library of parametrized test geometries / phase distributions.
+    Backward-compatible ``get_geometry`` wrapper around :mod:`geometry`.
 topology_optimization
     Objectives, phase-field (double-well + gradient) regularization and
     adjoint sensitivities for elasticity topology optimization.

@@ -70,7 +70,7 @@ def _unflatten_node_axis_to_stencil(values_q_n_and_leading, node_layout, n_leadi
        as the stencil_shape of an FFT-convolution kernel, where axis k has size node_layout[k]
        and represents a pixel offset of 0..node_layout[k]-1 in direction k.
 
-    2. Hand-written code in domain.py (evaluate_field_at_quad_points, get_preconditioner_Jacoby_fast)
+    2. Hand-written code in domain.py (e.g. evaluate_field_at_quad_points)
        iterates `for pixel_node in np.ndindex(*node_layout)` and uses the SAME tuple both to
        index these tensors' trailing axes AND as a literal shift vector for FFT rolling.
        A node at multi-index (1,0) must mean "+1 pixel in direction 0, +0 elsewhere".
