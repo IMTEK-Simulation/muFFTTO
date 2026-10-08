@@ -185,11 +185,11 @@ def majority_downsample_phase_labels(
     """
     fine_phase_labels = np.asarray(fine_phase_labels)
 
-    if fine_phase_labels.ndim != 2:
-        raise ValueError(
-            "fine_phase_labels must be a 2-D array, "
-            f"but got shape {fine_phase_labels.shape}."
-        )
+    # if fine_phase_labels.ndim != 2:
+    #     raise ValueError(
+    #         "fine_phase_labels must be a 2-D array, "
+    #         f"but got shape {fine_phase_labels.shape}."
+    #     )
 
     ny, nx = fine_phase_labels.shape
 
@@ -247,6 +247,7 @@ def majority_downsample_phase_labels(
             )
 
     return coarse_phase_label, coarse_phase_confidence
+
 def build_periodic_plot_coordinates(
     stored_deformed_coordinates: np.ndarray,
     Lx: float,
@@ -341,32 +342,32 @@ def run_grid_adaptation_workflow(
     """
     input_path = Path(input_path)
 
-    if not input_path.is_file():
-        raise FileNotFoundError(
-            f"Input file does not exist: {input_path}"
-        )
-
-    if coarse_Nx < 1 or coarse_Ny < 1:
-        raise ValueError(
-            "coarse_Nx and coarse_Ny must be positive integers."
-        )
-
-    if Lx <= 0 or Ly <= 0:
-        raise ValueError("Lx and Ly must be positive.")
-
-    if relax_iters < 0:
-        raise ValueError("relax_iters must be non-negative.")
-
-    data = np.load(input_path).astype(np.float32)
-
-    if data.ndim != 2:
-        raise ValueError(
-            "Expected a 2-D input image, "
-            f"but got shape {data.shape}."
-        )
-
-    if verbose:
-        print(f"Loaded data successfully: {input_path}")
+    # if not input_path.is_file():
+    #     raise FileNotFoundError(
+    #         f"Input file does not exist: {input_path}"
+    #     )
+    #
+    # if coarse_Nx < 1 or coarse_Ny < 1:
+    #     raise ValueError(
+    #         "coarse_Nx and coarse_Ny must be positive integers."
+    #     )
+    #
+    # if Lx <= 0 or Ly <= 0:
+    #     raise ValueError("Lx and Ly must be positive.")
+    #
+    # if relax_iters < 0:
+    #     raise ValueError("relax_iters must be non-negative.")
+    #
+    # data = np.load(input_path).astype(np.float32)
+    #
+    # if data.ndim != 2:
+    #     raise ValueError(
+    #         "Expected a 2-D input image, "
+    #         f"but got shape {data.shape}."
+    #     )
+    #
+    # if verbose:
+    #     print(f"Loaded data successfully: {input_path}")
 
     # ------------------------------------------------------------------
     # Fine-grid Otsu detection
@@ -379,21 +380,21 @@ def run_grid_adaptation_workflow(
     phase_mask_binary = results["phase_mask_binary"]
     phase_mask_label = results["phase_mask_label"]
 
-    if verbose:
-        print(f"Otsu processing time: {elapsed_time:.4f} s")
-        print(f"Data shape: {data.shape}")
-        print(f"Edge-mask shape: {edge_mask.shape}")
-        print(f"Phase-label shape: {phase_mask_label.shape}")
-        print(
-            "Fine phase labels:",
-            np.unique(phase_mask_label),
-        )
-
-        if "number_of_phase_regions" in results:
-            print(
-                "Number of phase regions:",
-                results["number_of_phase_regions"],
-            )
+    # if verbose:
+    #     print(f"Otsu processing time: {elapsed_time:.4f} s")
+    #     print(f"Data shape: {data.shape}")
+    #     print(f"Edge-mask shape: {edge_mask.shape}")
+    #     print(f"Phase-label shape: {phase_mask_label.shape}")
+    #     print(
+    #         "Fine phase labels:",
+    #         np.unique(phase_mask_label),
+    #     )
+    #
+    #     if "number_of_phase_regions" in results:
+    #         print(
+    #             "Number of phase regions:",
+    #             results["number_of_phase_regions"],
+    #         )
 
     ny, nx = data.shape
     edge_binary = (edge_mask > 0).astype(np.uint8)
@@ -410,14 +411,15 @@ def run_grid_adaptation_workflow(
         (edge_pts_x, edge_pts_y)
     )
 
-    if fine_edge_points.shape[0] == 0:
-        raise ValueError(
-            "No fine edge points were found in edge_mask."
-        )
+    # if fine_edge_points.shape[0] == 0:
+    #     raise ValueError(
+    #         "No fine edge points were found in edge_mask."
+    #     )
 
     # ------------------------------------------------------------------
     # Regular coarse grid
     # ------------------------------------------------------------------
+    # TODO: get discretization.coords
     P0_coarse, Xn, Yn = build_regular_coarse_grid(
         coarse_Nx,
         coarse_Ny,
