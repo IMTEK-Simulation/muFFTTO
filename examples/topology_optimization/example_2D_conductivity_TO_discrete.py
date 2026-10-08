@@ -17,6 +17,7 @@ import numpy as np
 from mpi4py import MPI
 
 import example_2D_conductivity_TO as base
+from muFFTTO import io_utils
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 
@@ -37,10 +38,14 @@ data_folder_path = os.path.join(file_folder_path, 'data', script_name) + '/'
 os.makedirs(data_folder_path, exist_ok=True)
 
 file_tag = f'{base.preconditioner_type}_eta_{base.eta}_w_{base.weights[0]}'
-smooth = np.load(base_data_path + file_tag + '_smooth.npy')
 run_tag = '_flux_only' if flux_only else ''
 
 disc = base.discretization
+
+# smooth optimum (before rounding) stored by example_2D_conductivity_TO.py
+smooth_field = disc.get_scalar_field(name='phase_field_smooth')
+io_utils.load_fields(base_data_path + file_tag + '_final.nc', [smooth_field])
+smooth = np.copy(smooth_field.s[0, 0])
 
 
 def homogenized_conductivity(phase):
@@ -180,8 +185,14 @@ for name, f_val in [('smooth', f_smooth), ('rounded', f_rounded), ('re-optimized
           f'{100 * (C[0, 0] - target[0, 0]) / target[0, 0]:7.2f}% '
           f'{100 * (C[1, 1] - target[1, 1]) / target[1, 1]:7.2f}%')
 
-np.save(data_folder_path + file_tag + f'_levels_{nb_phase_levels}{run_tag}_discrete.npy', discrete)
-np.savez(data_folder_path + file_tag + f'_levels_{nb_phase_levels}{run_tag}_log.npz',
-         history=np.array(history), objective_smooth=f_smooth, objective_rounded=f_rounded,
-         objective_discrete=f_final, **{f'C_{k}': v for k, v in results.items()}, target=target)
-print('saved to', data_folder_path)
+rounded_field = disc.get_scalar_field(name='phase_field_rounded')
+discrete_field = disc.get_scalar_field(name='phase_field_discrete')
+rounded_field.s[0, 0] = rounded
+discrete_field.s[0, 0] = discrete
+output_file = data_folder_path + file_tag + f'_levels_{nb_phase_levels}{run_tag}.nc'
+io_utils.save_fields(output_file, [smooth_field, rounded_field, discrete_field], attributes={
+    'nb_phase_levels': nb_phase_levels, 'flux_only': flux_only, 'history': history,
+    'objective_smooth': f_smooth, 'objective_rounded': f_rounded, 'objective_discrete': f_final,
+    'C_smooth': results['smooth'], 'C_rounded': results['rounded'], 'C_discrete': results['re-optimized'],
+    'target_C_ij': target})
+print('saved to', output_file)

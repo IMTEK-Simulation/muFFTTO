@@ -197,21 +197,33 @@ reduces dot products over `comm`. Inside the objective:
 * ghost layers are refreshed (`communicate_ghosts`) before stencil operations and at the
   end of the sensitivity computation.
 
-Results are written collectively with `NuMPI.IO.save_npy`, which places each rank's block
-at `subdomain_locations` in one global array. The `.npz` log is written by rank 0.
+Results are written collectively with `muFFTTO.io_utils` (NetCDF through muGrid, see
+[Saving and loading fields](../io.md)). Each rank writes its subdomain and the files hold
+the global fields, so they can be read with any number of ranks.
 
 ### Outputs
 
 Each script creates `examples/topology_optimization/data/<script_name>/` and
 `figures/<script_name>/`. Only `data/` is written to.
 
-* `<preconditioner>_eta_<eta>_w_<weight>_final.npy` holds the optimized global phase field.
-* `<preconditioner>_eta_<eta>_w_<weight>_log.npz` holds CG iteration counts
-  (`num_iteration_mech`, `num_iteration_adjoint`), the objective history
-  (`norms_sigma`, `norms_pf`, `norms_adjoint_energy`), `nb_iterations`, target and
+* `<preconditioner>_eta_<eta>_w_<weight>_history.nc` holds the phase field of every
+  L-BFGS iteration (field `phase_field_iterate`, one frame per iteration) and the run
+  parameters as attributes. Set `save_history = False` to switch it off.
+* `<preconditioner>_eta_<eta>_w_<weight>_final.nc` holds the optimized phase field
+  (`phase_field_solution`). Its attributes hold the run parameters, `nb_iterations`, the
+  CG iteration counts (`num_iteration_mech`, `num_iteration_adjoint`), the objective
+  history per evaluation (`norms_sigma`, `norms_pf`, `norms_adjoint_energy`), target and
   achieved homogenized stress or flux per load case, and the full homogenized tensor next
-  to the target (`homogenized_C_ijkl`/`target_C_ijkl` in Voigt notation for elasticity,
-  `homogenized_C_ij`/`target_C_ij` for conductivity).
+  to the target (`homogenized_C_voigt`/`target_C_voigt` for elasticity,
+  `homogenized_C_ij`/`target_C_ij` for conductivity). Arrays are stored flattened.
+
+Read them back in numpy with `io_utils.read_file`, e.g.
+
+```python
+from muFFTTO import io_utils
+run = io_utils.read_file('data/example_2D_elasticity_TO/Green_Jacobi_eta_0.015625_w_5.0_history.nc')
+rho = run.fields['phase_field_iterate'][:, 0, 0]   # [iteration, x, y]
+```
 
 Plotting happens only in the optimizer callback, as a `pcolormesh` of $\rho$ (or pyvista
 slices in 3D) shown with `plt.show()`. Nothing is saved to `figures/`.
@@ -280,22 +292,22 @@ load case. `:124` sets $p = 2$ and `:139` sets $w = \texttt{weight}/L$.
 8. `:323-327` refreshes the ghost layers of the sensitivity and returns `(F, grad)` as a
    flat local array.
 
-**Driver** (`if __name__ == '__main__'`, `:330-551`).
+**Driver** (`if __name__ == '__main__'`, `:330-550`).
 
-* `:357-365` builds the initial guess. `random_init = False` gives
+* `:366-374` builds the initial guess. `random_init = False` gives
   $\rho_0 = \tfrac14(\sin 4\pi x + \sin 4\pi y + 2) + 0.5\,\mathcal U[0,1)$, with the RNG
   seeded by MPI rank. This lies in $[0, 1.5)$ and is projected onto $[0,1]$ by the optimizer.
-  `apply_filter` (`:343-354`) is defined but not used.
-* `:370-385` defines `my_callback`, which counts iterations and, in serial runs only,
-  opens a blocking matplotlib window of $\rho$ at **every** iteration.
-* `:395-413` runs L-BFGS-B (`gtol=1e-3`, `xtol=1e-3`, `maxiter=500`, `maxcor=20`).
-* `:417-436` saves the optimum to `..._final.npy` with `save_npy`.
-* `:442-502` post-processes the optimum. It rebuilds $\mathbb C(\rho^\*)$, re-solves the
+  `apply_filter` (`:352-363`) is defined but not used.
+* `:376-400` defines `my_callback`, which counts iterations, appends the iterate to the
+  `_history.nc` file and, in serial runs only, opens a blocking matplotlib window of
+  $\rho$ at **every** iteration.
+* `:410-428` runs L-BFGS-B (`gtol=1e-3`, `xtol=1e-3`, `maxiter=500`, `maxcor=20`).
+* `:435-492` post-processes the optimum. It rebuilds $\mathbb C(\rho^\*)$, re-solves the
   three load cases with the plain Green preconditioner and `tol=1e-5`, and prints the
   target and achieved $\boldsymbol\Sigma_h$.
-* `:504-546` computes the full homogenized tangent column by column with unit strains
+* `:494-536` computes the full homogenized tangent column by column with unit strains
   $\mathbf e_i\otimes\mathbf e_j$, and prints it next to $\mathbb C_t$ in Voigt notation.
-* `:549-551` writes the `_log.npz`.
+* `:538-550` writes `_final.nc` with the optimum and the log.
 
 ---
 
@@ -315,15 +327,16 @@ load case. `:124` sets $p = 2$ and `:139` sets $w = \texttt{weight}/L$.
   weight `weights[l] = 5` (`:32, 210, 289`). The adjoint term is **not** added
   (`:290` is commented out). Sensitivity: `sensitivity_flux_and_adjoint` (`:268-285`).
 * **Solver**: `cg_tol = 1e-6` (`:33`).
-* **Initial guess** (`:316, 340-359`): `random_init = True` draws uniform $[0,1)$ values
+* **Initial guess** (`:316, 346-372`): `random_init = True` draws uniform $[0,1)$ values
   from `default_rng(42)`. Each rank skips ahead by the row-major offset of its subdomain,
   so the field does not depend on the number of ranks for slab decompositions.
-* **Plotting** is off by default (`show_plots = False`, `:317, 373`).
-* **Optimizer** (`:394-412`): `l_bfgs_bounded` with `gtol=1e-4` and `xtol=1e-4`; the other
+* **Plotting** is off by default (`show_plots = False`, `:317, 387`).
+* **Optimizer** (`:408-426`): `l_bfgs_bounded` with `gtol=1e-4` and `xtol=1e-4`; the other
   settings match 2D elasticity.
-* **Rounding** (`:419-430`): with `nb_phase_levels = 10`, the continuous optimum is first
-  saved as `..._smooth.npy`, then rounded to $\{0, 0.1, \dots, 1\}$. The `_final.npy`
-  file and the post-processing therefore describe the **rounded** design. Set
+* **Rounding** (`:435-444`): with `nb_phase_levels = 10`, the continuous optimum is first
+  kept as `phase_field_smooth`, then rounded to $\{0, 0.1, \dots, 1\}$. The
+  `phase_field_solution` in `_final.nc` and the post-processing therefore describe the
+  **rounded** design; `_final.nc` stores `phase_field_smooth` as well. Set
   `nb_phase_levels = None` to keep the continuous field.
 * **Post-processing** (`:514-554`) computes the $2\times2$ effective conductivity row by
   row with unit gradients. The printout still says "elastic tangent".
@@ -336,7 +349,9 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
 
 * `:19` imports `example_2D_conductivity_TO as base`. That runs the module-level setup of
   the base script (discretization, targets, objective) but not its optimizer.
-* `:39-40` load `data/example_2D_conductivity_TO/<prec>_eta_<eta>_w_<w0>_smooth.npy`.
+* `:45-48` load `phase_field_smooth` from
+  `data/example_2D_conductivity_TO/<prec>_eta_<eta>_w_<w0>_final.nc` with
+  `io_utils.load_fields`.
   **Run the base script first** with the same `number_of_pixels`, `eta`,
   `preconditioner_type` and `weights`.
 * `:25-28` read the command line: `[n_levels]` (default 20) and `--flux-only`. With
@@ -356,8 +371,10 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
 * `:46-77` (`homogenized_conductivity`) recomputes the effective tensor (CG `tol=1e-8`)
   for the smooth, rounded and re-optimized fields. `:176-181` print the objective,
   $C_{11}$, $C_{22}$, $C_{12}$ and the relative errors against the target.
-* `:183-186` save `..._levels_<n>[_flux_only]_discrete.npy` and `..._log.npz` to
-  `data/example_2D_conductivity_TO_discrete/`.
+* `:189-198` save `..._levels_<n>[_flux_only].nc` to
+  `data/example_2D_conductivity_TO_discrete/`: the fields `phase_field_smooth`,
+  `phase_field_rounded` and `phase_field_discrete`, and as attributes the objective
+  history, the three objectives and tensors, and the target.
 
 ### `example_2D_elasticity_TO_tilled_grid.py`
 
@@ -368,12 +385,11 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
 * **Target** (`:95`): $\nu_t = -0.5$ (auxetic). **Solver** (`:34`): `cg_tol = 1e-6`.
 * **Initial guess**: same as 2D elasticity, but `np.random.seed` is removed, so it is not
   reproducible.
-* **Optimizer** (`:391-401`): **unconstrained** `Optimization.l_bfgs` with `gtol=1e-3`,
+* **Optimizer** (`:406-416`): **unconstrained** `Optimization.l_bfgs` with `gtol=1e-3`,
   `ftol=1e-5`, `maxiter=1000` and `maxcor=20`. The bounds $[0,1]$ are **not** enforced;
   only the double-well term keeps $\rho$ near $\{0,1\}$.
-* **Plotting** (`:367-388`): the pixel coordinates are sheared for display. The callback
+* **Plotting** (`:379-403`): the pixel coordinates are sheared for display. The callback
   plots on rank 0 at every iteration (blocking `plt.show()`), even under MPI.
-* `save_npy` uses `discretization.subdomain_locations_no_buffers` (`:421`).
 
 ### `example_3D_elasticity_TO.py`
 
@@ -381,7 +397,7 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
   Gauss point) on a 15x15x15 grid of the unit cube, giving $\eta = 1/15$. The one-point
   rule is rank deficient (hourglass modes); see `discretization_library.py`.
 * **Material**: contrast $10^{-3}$ (`:31`). The SIMP broadcast has one extra `np.newaxis`
-  for $z$ (`:159-161`, `:490-495`).
+  for $z$ (`:159-161`, `:483-489`).
 * **Load cases** (`:79-81`): only the three uniaxial strains
   $\mathbf e_i\otimes\mathbf e_i$. There are **no shear load cases**, so the shear part of
   $\mathbb C_t$ is not targeted. **Target**: $\nu_t = -0.3$ (`:96`).
@@ -389,12 +405,12 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
 * **Solver** (`:35, 259`): `cg_setup = {'cg_tol': 1e-6, 'r_tol': False}`, so both the state
   and adjoint solves use an absolute tolerance.
 * **Initial guess**: as in 2D. The sinusoid depends only on $x$ and $y$, and noise is added.
-* **Optimizer** (`:436-454`): `l_bfgs_bounded` with `gtol=1e-5` and `xtol=1e-3`.
-* **Plotting** (`:379-413`): in serial runs, every 10th iteration renders three
+* **Optimizer** (`:451-469`): `l_bfgs_bounded` with `gtol=1e-5` and `xtol=1e-3`.
+* **Plotting** (`:384-428`): in serial runs, every 10th iteration renders three
   orthogonal pyvista slices off-screen and shows them with matplotlib. This needs
   `pyvista`.
 * **Post-processing** builds the full $3\times3\times3\times3$ homogenized tangent
-  (`:554-555`, `range(dim)`).
+  (`:547-548`, `range(dim)`).
 
 ---
 
@@ -432,7 +448,7 @@ mpirun -n 4 python examples/topology_optimization/example_2D_conductivity_TO.py
 python examples/topology_optimization/example_3D_elasticity_TO.py               # or with mpirun
 python examples/topology_optimization/example_2D_elasticity_TO_tilled_grid.py
 
-# serial only; needs the *_smooth.npy written by example_2D_conductivity_TO.py
+# serial only; needs the *_final.nc written by example_2D_conductivity_TO.py
 python examples/topology_optimization/example_2D_conductivity_TO_discrete.py 20
 python examples/topology_optimization/example_2D_conductivity_TO_discrete.py 20 --flux-only
 ```
@@ -458,15 +474,14 @@ matplotlib backend (`MPLBACKEND=Agg`).
   switch; the other scripts do not.
 * **3D load cases.** The 3D example uses only normal-strain load cases, so the shear
   modulus of the result is not controlled.
-* **Rounded conductivity output.** The conductivity `_final.npy` and its post-processed
-  tensor refer to the design rounded to 11 levels, not to the L-BFGS optimum. The optimum
-  is in `_smooth.npy`.
+* **Rounded conductivity output.** The conductivity `phase_field_solution` and its
+  post-processed tensor refer to the design rounded to 11 levels, not to the L-BFGS
+  optimum. The optimum is `phase_field_smooth` in the same file.
 * **Dead code.**
   * `apply_filter` is unused.
   * `left_macro_gradients` and `target_energy` are unused.
   * The `LinearConstraint` in 2D elasticity is never passed to the optimizer.
   * `info_mech['num_iteration_adjoint']` actually stores the **state** CG iteration counts.
-  * The "Data saved to" message omits the preconditioner prefix of the real file name.
 * **Discrete script dependency.** The discrete script imports the base script, so any
-  edit to the base parameters changes the expected `_smooth.npy` name. Every objective
+  edit to the base parameters changes the expected `_final.nc` name. Every objective
   evaluation also prints the CG iteration counts of the base objective.

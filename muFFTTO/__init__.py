@@ -73,6 +73,9 @@ otsu
     obtain phase indicators for grid adaptation.
 visualization_utils
     Matplotlib helpers for plotting fields on (deformed) 2D grids.
+io_utils
+    Save and load muGrid fields (MPI-parallel NetCDF via muGrid.FileIONetCDF):
+    snapshots, time series with per-frame values, and a numpy reader.
 """
 
 __version__ = '0.0.1'

@@ -1973,7 +1973,8 @@ class Discretization:
 
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
                                         formulation=None,
-                                        operator=None):
+                                        operator=None,
+                                        invert_zero_mode=False):
         """Assemble the Fourier-space Green preconditioner ``(K_ref)^{-1}``.
 
         Parameters
@@ -1989,6 +1990,12 @@ class Discretization:
             output_field_inxyz=...)`` to use instead of the reference
             stiffness ``K_ref``. Must be translation invariant (same stencil
             in every pixel) for the construction to be valid.
+        invert_zero_mode : bool, optional
+            Also invert the zero-frequency block ``K_ref_hat(0)`` (one node
+            per pixel). Use it when the reference operator is regular, e.g.
+            ``K_ref = B^T W B + c N^T W N`` with a mass (reaction) term
+            ``c > 0``. Default ``False``: ``K_ref_hat(0)`` is singular for a
+            pure stiffness operator and is left as is.
 
         Returns
         -------
@@ -2082,8 +2089,9 @@ class Discretization:
             G_batch = reshaped_matrices.transpose(2, 0, 1)  # shape: (N, d, d)
             # (transpose returns a view, so the in-place inversion below also updates reshaped_matrices)
             # Invert each matrix using np.linalg.inv (vectorized)
-            if np.any(np.all(self.fft.icoords == 0, axis=0)):  # check if the core has zero mode
-                G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d) # do not inverte zero mode
+            if np.any(np.all(self.fft.icoords == 0, axis=0)) and not invert_zero_mode:
+                # this core has the zero mode: K_hat(0) is singular -> do not invert it
+                G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d)
             else:
                 G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
 
@@ -2179,6 +2187,7 @@ class Discretization:
     def get_preconditioner_Jacobi_mugrid(self, material_data_field_ijklqxyz: Field = None,
                                          constitutive: callable = None,
                                          formulation=None,
+                                         operator: callable = None,
                                          **kwargs):
         """Matrix-free Jacobi preconditioner ``diag(K)^{-1/2}`` via Dirac combs.
 
@@ -2192,6 +2201,11 @@ class Discretization:
             operator of :meth:`apply_system_matrix_mugrid_explicit_stress`.
         formulation : str, optional
             Passed to the system-matrix routine.
+        operator : callable, optional
+            Custom linear operator ``operator(input_field_inxyz=...,
+            output_field_inxyz=...)`` whose diagonal is computed instead
+            (takes precedence over the two arguments above). Its stencil must
+            couple only nearest-neighbour pixels.
         **kwargs
             ``zero_threshold`` (float, default 1.0): value stored where the
             diagonal entry is exactly zero (e.g. void pixels).
@@ -2210,10 +2224,13 @@ class Discretization:
         ``2^d``-colouring) and on one component ``f`` returns, at the comb
         points, exactly the diagonal entries ``K_ii``: all other impulses are
         >= 2 pixels away. ``f * 2^d`` operator applications give the full
-        diagonal. Requires even grid sizes for the colouring to be periodic,
-        and assumes one node per pixel (only ``n = 0`` is filled). The 3D
-        branch always uses ``material_data_field_ijklqxyz`` (``constitutive``
-        is ignored).
+        diagonal. With several nodes per pixel (e.g. Q2) this is repeated for
+        every nodal sub-point ``n``: two nodes are coupled only if they share an
+        element, i.e. if their pixels are at most one pixel apart, so the same
+        colouring isolates the diagonal (``f * n * 2^d`` applications).
+        Requires even grid sizes for the colouring to be periodic. The 3D
+        branch uses ``operator`` or ``material_data_field_ijklqxyz``
+        (``constitutive`` is ignored).
         """
         # return diagonals of system matrix
         # unit_impulse [f,n,x,y,z]
@@ -2228,50 +2245,59 @@ class Discretization:
 
         if self.domain_dimension == 2:
             for d_i in range(self.cell.unknown_shape[0]):
-                for x_i in range(2):
-                    for y_i in range(2):
-                        dirac_comb_inxyz.s.fill(0)
-                        dirac_comb_inxyz.s[d_i, 0, x_i::2, y_i::2] = 1.0
-                        # compute response of diract comb
-                        if material_data_field_ijklqxyz is not None:
-                            self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
-                                                            input_field_inxyz=dirac_comb_inxyz,
-                                                            output_field_inxyz=dirac_comb_response_inxyz,
-                                                            formulation=formulation
-                                                            )
-                        elif constitutive is not None:
-                            self.apply_system_matrix_mugrid_explicit_stress(constitutive=constitutive,
-                                                                            input_field_inxyz=dirac_comb_inxyz,
-                                                                            output_field_inxyz=dirac_comb_response_inxyz,
-                                                                            formulation=formulation
-                                                                            )
+                for n_i in range(self.nb_nodes_per_pixel):
+                    for x_i in range(2):
+                        for y_i in range(2):
+                            dirac_comb_inxyz.s.fill(0)
+                            dirac_comb_inxyz.s[d_i, n_i, x_i::2, y_i::2] = 1.0
+                            # compute response of diract comb
+                            if operator is not None:
+                                operator(input_field_inxyz=dirac_comb_inxyz,
+                                         output_field_inxyz=dirac_comb_response_inxyz)
+                            elif material_data_field_ijklqxyz is not None:
+                                self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
+                                                                input_field_inxyz=dirac_comb_inxyz,
+                                                                output_field_inxyz=dirac_comb_response_inxyz,
+                                                                formulation=formulation
+                                                                )
+                            elif constitutive is not None:
+                                self.apply_system_matrix_mugrid_explicit_stress(constitutive=constitutive,
+                                                                                input_field_inxyz=dirac_comb_inxyz,
+                                                                                output_field_inxyz=dirac_comb_response_inxyz,
+                                                                                formulation=formulation
+                                                                                )
 
-                        # at the comb points the response equals K_ii -> store 1/sqrt(K_ii)
-                        # (np.where evaluates both branches: zero entries may emit a divide warning)
-                        diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2] = np.where(
-                            dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2] != 0.,
-                            1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2]),
-                            threshold
-                        )
+                            # at the comb points the response equals K_ii -> store 1/sqrt(K_ii)
+                            # (np.where evaluates both branches: zero entries may emit a divide warning)
+                            diagonal_inxyz.s[d_i, n_i, x_i::2, y_i::2] = np.where(
+                                dirac_comb_response_inxyz.s[d_i, n_i, x_i::2, y_i::2] != 0.,
+                                1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, n_i, x_i::2, y_i::2]),
+                                threshold
+                            )
 
         elif self.domain_dimension == 3:
             for d_i in range(self.cell.unknown_shape[0]):
-                for x_i in range(2):
-                    for y_i in range(2):
-                        for z_i in range(2):
-                            dirac_comb_inxyz.s.fill(0)
-                            dirac_comb_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = 1.0
-                            # compute response of diract comb
-                            self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
-                                                            input_field_inxyz=dirac_comb_inxyz,
-                                                            output_field_inxyz=dirac_comb_response_inxyz,
-                                                            formulation=formulation)
+                for n_i in range(self.nb_nodes_per_pixel):
+                    for x_i in range(2):
+                        for y_i in range(2):
+                            for z_i in range(2):
+                                dirac_comb_inxyz.s.fill(0)
+                                dirac_comb_inxyz.s[d_i, n_i, x_i::2, y_i::2, z_i::2] = 1.0
+                                # compute response of diract comb
+                                if operator is not None:
+                                    operator(input_field_inxyz=dirac_comb_inxyz,
+                                             output_field_inxyz=dirac_comb_response_inxyz)
+                                else:
+                                    self.apply_system_matrix_mugrid(material_data_field=material_data_field_ijklqxyz,
+                                                                    input_field_inxyz=dirac_comb_inxyz,
+                                                                    output_field_inxyz=dirac_comb_response_inxyz,
+                                                                    formulation=formulation)
 
-                            diagonal_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] = np.where(
-                                dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2] != 0.,
-                                1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, 0, x_i::2, y_i::2, z_i::2]),
-                                threshold
-                            )
+                                diagonal_inxyz.s[d_i, n_i, x_i::2, y_i::2, z_i::2] = np.where(
+                                    dirac_comb_response_inxyz.s[d_i, n_i, x_i::2, y_i::2, z_i::2] != 0.,
+                                    1 / np.sqrt(dirac_comb_response_inxyz.s[d_i, n_i, x_i::2, y_i::2, z_i::2]),
+                                    threshold
+                                )
 
         return diagonal_inxyz
 

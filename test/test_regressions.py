@@ -57,6 +57,55 @@ def test_flux_field_uses_full_conductivity_matrix():
     np.testing.assert_allclose(flux.s, expected, rtol=1e-12, atol=1e-12)
 
 
+def test_green_preconditioner_inverts_regular_operator_with_zero_mode():
+    """With a mass term K = B^T W B + c N^T W N is regular; invert_zero_mode=True
+    must give its exact inverse, including the mean (k = 0) mode."""
+    disc = _make_discretization('conductivity', nb_pixels=(6, 5), element_type='bilinear_rectangle')
+    grad = disc.get_gradient_size_field(name='grad_regular_op')
+    temp_q = disc.get_quad_field_scalar(name='temp_q_regular_op')
+    temp_n = disc.get_unknown_size_field(name='temp_n_regular_op')
+
+    def operator(input_field_inxyz, output_field_inxyz):
+        disc.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz, grad_u_ijqxyz=grad)
+        disc.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=grad,
+                                                       div_u_fnxyz=output_field_inxyz)
+        disc.apply_N_operator_mugrid(input_field_inxyz, temp_q)
+        temp_q.s[...] *= 3.0
+        disc.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=temp_q, nodal_field_inxyz=temp_n)
+        output_field_inxyz.s[...] += temp_n.s
+
+    green = disc.get_preconditioner_Green_mugrid(reference_material_data_ijkl=None,
+                                                 operator=operator, invert_zero_mode=True)
+    x = disc.get_unknown_size_field(name='x_regular_op')
+    Kx = disc.get_unknown_size_field(name='Kx_regular_op')
+    MKx = disc.get_unknown_size_field(name='MKx_regular_op')
+    x.s[...] = np.random.default_rng(1).random(x.s.shape) + 2.0  # nonzero mean
+    operator(x, Kx)
+    disc.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green,
+                                     input_nodal_field_fnxyz=Kx, output_nodal_field_fnxyz=MKx)
+    np.testing.assert_allclose(MKx.s, x.s, rtol=1e-10, atol=1e-12)
+
+
+def test_jacobi_diagonal_from_custom_operator_matches_material_data():
+    """get_preconditioner_Jacobi_mugrid(operator=K) gives the same diag(K)^-1/2
+    as the material-data path when K is the same system matrix."""
+    disc = _make_discretization('elasticity', nb_pixels=(6, 4), element_type='bilinear_rectangle')
+    material = disc.get_material_data_size_field_mugrid(name='C_jacobi_operator')
+    C = material_models.get_elastic_material_tensor(dim=2, K=1.0, mu=0.5, kind='linear')
+    scale = 1.0 + np.random.default_rng(2).random(material.s.shape[4:])  # heterogeneous
+    material.s[...] = C[..., np.newaxis, np.newaxis, np.newaxis] * scale
+
+    from_material = np.copy(disc.get_preconditioner_Jacobi_mugrid(
+        material_data_field_ijklqxyz=material, formulation='small_strain').s)
+
+    def operator(input_field_inxyz, output_field_inxyz):
+        disc.apply_system_matrix_mugrid(material_data_field=material, input_field_inxyz=input_field_inxyz,
+                                        output_field_inxyz=output_field_inxyz, formulation='small_strain')
+
+    from_operator = disc.get_preconditioner_Jacobi_mugrid(operator=operator).s
+    np.testing.assert_allclose(from_operator, from_material, rtol=1e-12)
+
+
 def test_operators_reject_ndarray_with_type_error():
     """Passing a NumPy array instead of a muGrid field gives a clear TypeError."""
     disc = _make_discretization('conductivity')
@@ -214,3 +263,32 @@ def test_visualize_voxels_with_given_figure():
     fig, ax = visualization_utils.visualize_voxels(np.ones((2, 2, 2)), figure=figure)
     assert fig is figure
     plt.close(fig)
+
+
+@pytest.mark.parametrize('problem_type', ['conductivity', 'elasticity'])
+def test_jacobi_diagonal_covers_all_nodes_of_q2(problem_type):
+    """Q2 has 4 nodes per pixel: every node type gets its own diagonal entry
+    (previously only node 0 was filled and the other three were zero)."""
+    disc = domain.Discretization(cell=domain.PeriodicUnitCell(domain_size=[1.0, 1.0], problem_type=problem_type),
+                                 nb_of_pixels_global=[6, 4], discretization_type='finite_element',
+                                 element_type='biquadratic_rectangle')
+    dim = 2
+    if problem_type == 'conductivity':
+        material = np.eye(dim)
+    else:
+        material = material_models.get_elastic_material_tensor(dim=dim, K=1.0, mu=0.5, kind='linear')
+    material_field = disc.get_material_data_size_field_mugrid(name='q2_jacobi_material')
+    material_field.s[...] = np.broadcast_to(material[(...,) + (np.newaxis,) * 3], material_field.s.shape)
+    material_field.s[..., 1, 2] *= 5.0      # heterogeneous
+    jacobi = disc.get_preconditioner_Jacobi_mugrid(material_data_field_ijklqxyz=material_field)
+
+    unit = disc.get_unknown_size_field(name='q2_jacobi_unit')
+    response = disc.get_unknown_size_field(name='q2_jacobi_response')
+    for index in np.ndindex(*unit.s.shape):
+        if index[2:] not in ((0, 0), (1, 2), (5, 3)):
+            continue
+        unit.s[...] = 0.0
+        unit.s[index] = 1.0
+        disc.apply_system_matrix_mugrid(material_data_field=material_field, input_field_inxyz=unit,
+                                        output_field_inxyz=response)
+        assert jacobi.s[index] == pytest.approx(response.s[index] ** -0.5, rel=1e-12), index

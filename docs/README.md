@@ -30,8 +30,12 @@ adjoint-based topology optimization built on top of it.
 | [Grid adaptation](examples/grid_adaptation.md) | `examples/grid_adaptation/` | Homogenization on deformed (mapped) grids |
 | [Analytical solutions](examples/analytical_solutions.md) | `examples/analytical_solutions/` | Hashin coated inclusion: verification against a closed-form solution |
 | [Internal contact](examples/internal_contact.md) | `examples/internal_contact/` | Third-medium contact at finite strain with a trust-region Newton solver |
+| [Phase-field fracture](examples/phase_field_fracture.md) | `examples/phase_field_fracture/` | AT2 brittle fracture of a periodic cell: staggered elasticity / damage solves, both FFT-preconditioned CG |
+| [Phase-field fracture with contact](examples/phase_field_fracture_contact.md) | `examples/phase_field_fracture/` | AT2 fracture + third-medium contact at finite strain: split neo-Hookean, trust-region Newton-CG, staggered damage, adaptive load steps |
 
-3. **[Known issues](known_issues.md)**: suspected bugs and inconsistencies
+3. **[Saving and loading fields](io.md)**: `io_utils`, MPI-parallel NetCDF
+   output and restart through muGrid.
+4. **[Known issues](known_issues.md)**: suspected bugs and inconsistencies
    found while writing the documentation. None of them has been fixed yet.
 
 ## Reading the code

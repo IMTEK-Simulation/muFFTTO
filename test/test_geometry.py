@@ -42,6 +42,9 @@ def test_named_geometries_match_former_implementation(name, nb_pixels, expected)
     ('square_inclusion', (24, 18)),
     ('circle_inclusion', (20, 20, 12)),
     ('contact_test_geometry_1', (40, 30)),
+    ('contact_fracture_s_gap', (48, 40)),
+    ('reentrant_honeycomb', (40, 40)),
+    ('sinusoidal_ligaments', (36, 36)),
     ('random_distribution', (16, 12, 8)),
 ])
 def test_subdomains_give_the_same_field(name, nb_pixels):
@@ -140,3 +143,37 @@ def test_register_custom_geometry():
             geometry.register(name)(two_disks)
     finally:
         geometry._REGISTRY.pop(name)
+
+
+def test_reentrant_honeycomb():
+    """Square cell by default, mirror-symmetric in x, solid grows with the wall thickness,
+    and one whole bow-tie void sits in the centre."""
+    from scipy import ndimage
+    Lx, Ly = geometry.reentrant_honeycomb_cell_size(theta=30.0)
+    assert Lx == pytest.approx(Ly)
+    n = 64
+    coords = grid_coords((n, n)) + 0.5 / n          # pixel centres: symmetric about x = 0.5
+    thin = geometry.get('reentrant_honeycomb', coords, thickness=0.1)
+    thick = geometry.get('reentrant_honeycomb', coords, thickness=0.2)
+    np.testing.assert_array_equal(thin, thin[::-1])
+    assert 0.1 < thin.mean() < thick.mean() < 0.6
+    labels, _ = ndimage.label(thin == 0)
+    centre = labels == labels[n // 2, n // 2]
+    assert thin[n // 2, n // 2] == 0
+    assert not (centre[0].any() or centre[-1].any() or centre[:, 0].any() or centre[:, -1].any())
+    with pytest.raises(ValueError):
+        geometry.get('reentrant_honeycomb', coords, theta=30.0, h_over_l=0.4)
+
+
+def test_sinusoidal_ligaments_symmetry_and_gaps():
+    """Mirror symmetric in x and y; the gap between the horizontal ligaments at the
+    cell edge is open, and it closes for gap = 0."""
+    n = 64
+    coords = grid_coords((n, n)) + 0.5 / n          # pixel centres
+    phase = geometry.get('sinusoidal_ligaments', coords)
+    np.testing.assert_array_equal(phase, phase[::-1])
+    np.testing.assert_array_equal(phase, phase[:, ::-1])
+    edge = (np.abs(coords[0]) < 1.0 / n) & (np.abs(coords[1] - 0.5) < 0.05)   # inside the edge gap
+    assert np.all(phase[edge] == 0)
+    closed = geometry.get('sinusoidal_ligaments', coords, gap=0.0)
+    assert np.all(closed[edge] == 1)

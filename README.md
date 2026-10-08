@@ -68,6 +68,7 @@ pip install git+https://github.com/muSpectre/muGrid.git
 | `analytical_grid_adaptation.py` | Analytical solutions for grid adaptation |
 | `tensor_operations.py` | Utility functions for tensor operations and indexing |
 | `visualization_utils.py` | Visualization and post-processing utilities |
+| `io_utils.py` | Save/load fields to NetCDF (MPI-parallel, muGrid `FileIONetCDF`): snapshots, time series, numpy reader |
 
 ## Documentation
 
@@ -98,6 +99,9 @@ The `examples/` directory contains working examples organized by topic:
 
 **Internal Contact** (`examples/internal_contact/`)
 - Contact mechanics and third-medium interaction problems
+
+**Phase-Field Fracture** (`examples/phase_field_fracture/`)
+- AT2 brittle fracture of a periodic porous cell under macroscopic strain (staggered scheme, history field)
 
  
 

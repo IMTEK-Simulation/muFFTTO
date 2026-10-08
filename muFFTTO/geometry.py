@@ -40,7 +40,7 @@ New geometries are added with the :func:`register` decorator::
 import numpy as np
 
 __all__ = ['Shape', 'box', 'ball', 'everywhere', 'periodic_distance_sq', 'indicator', 'pixel_average',
-           'random_field', 'register', 'get', 'available']
+           'random_field', 'register', 'get', 'available', 'reentrant_honeycomb_cell_size']
 
 
 # ---------------------------------------------------------------------------
@@ -335,3 +335,157 @@ def contact_test_geometry_2(coords):
              | box([0.15, 0.35], [0.52, 0.45])
              | box([0.47, 0.55], [0.95, 0.65]))
     return indicator(solid, coords)
+
+
+@register('contact_fracture_s_gap')
+def contact_fracture_s_gap(coords, corner=(0.42, 0.57), gap=0.05, overlap=0.12,
+                           upper_radii=(0.26, 0.28), lower_radius_x=0.31, lower_bottom=0.18,
+                           notch_length=0.0, notch_angle=-90.0, notch_width=0.035):
+    """2D solid (1) with an S-shaped cavity (0) between two interlocking teeth.
+
+    The cavity is the union of
+
+    * a channel ``[cx, cx + overlap) x [cy, cy + gap)`` between the top face of
+      the right tooth (corner ``(cx, cy)``) and the bottom face of the
+      upper-left tooth (corner ``(cx + overlap, cy + gap)``);
+    * an upper lobe: the quarter ellipse with centre ``(cx + overlap, cy)`` and
+      radii ``upper_radii`` that opens up and to the right;
+    * a lower lobe: the quarter ellipse with centre ``(cx, lower_bottom)``,
+      radii ``(lower_radius_x, cy + gap - lower_bottom)``, that opens up and
+      to the left.
+
+    Under shear the channel closes and the teeth come into contact; the
+    defaults were fitted to a sketch of the contact-fracture example. The
+    cavity must lie inside the cell (no wrapping).
+
+    Optionally a straight notch (slit) of ``notch_length`` and ``notch_width``
+    starts at the bottom-right corner of the lower lobe, ``(cx, lower_bottom)``
+    -- the re-entrant corner where the crack initiates under shear -- in the
+    direction ``notch_angle`` (degrees from the x axis; -90 = straight down
+    into the bottom ligament). ``notch_length = 0`` (default): no notch.
+    """
+    cx, cy = corner
+    c = np.asarray(coords)
+    x, y = c[0], c[1]
+
+    def quarter_ellipse(center, radii, sx, sy):
+        u = (x - center[0]) / radii[0]
+        v = (y - center[1]) / radii[1]
+        return (sx * u >= 0) & (sy * v >= 0) & (u ** 2 + v ** 2 <= 1)
+
+    channel = (x >= cx) & (x < cx + overlap) & (y >= cy) & (y < cy + gap)
+    upper = quarter_ellipse((cx + overlap, cy), upper_radii, +1, +1)
+    lower = quarter_ellipse((cx, lower_bottom), (lower_radius_x, cy + gap - lower_bottom), -1, +1)
+    cavity = channel | upper | lower
+    if notch_length > 0:
+        # points within notch_width / 2 of the segment from the corner, along notch_angle
+        direction = np.array([np.cos(np.radians(notch_angle)), np.sin(np.radians(notch_angle))])
+        rx, ry = x - cx, y - lower_bottom
+        along = rx * direction[0] + ry * direction[1]
+        across = -rx * direction[1] + ry * direction[0]
+        cavity |= (along >= 0) & (along <= notch_length) & (np.abs(across) <= notch_width / 2)
+    return np.where(cavity, 0.0, 1.0)
+
+
+def reentrant_honeycomb_cell_size(theta=30.0, h_over_l=None):
+    """Size ``(Lx, Ly)`` of the periodic cell of :func:`reentrant_honeycomb`, for ``l = 1``.
+
+    ``Lx = 2 cos(theta)``, ``Ly = 2 (h/l - sin(theta))``. Use a ``domain_size``
+    proportional to it for an undistorted lattice. ``h_over_l = None`` gives
+    the square cell, ``h/l = cos(theta) + sin(theta)``.
+    """
+    t = np.radians(theta)
+    if h_over_l is None:
+        h_over_l = np.cos(t) + np.sin(t)
+    return 2.0 * np.cos(t), 2.0 * (h_over_l - np.sin(t))
+
+
+def _distance_to_segment(px, py, a, b):
+    """Euclidean distance of the points (px, py) to the segment a-b."""
+    d = np.subtract(b, a)
+    s = np.clip(((px - a[0]) * d[0] + (py - a[1]) * d[1]) / (d[0] ** 2 + d[1] ** 2), 0.0, 1.0)
+    return np.hypot(px - a[0] - s * d[0], py - a[1] - s * d[1])
+
+
+@register('reentrant_honeycomb')
+def reentrant_honeycomb(coords, theta=30.0, h_over_l=None, thickness=0.1):
+    """2D re-entrant (bow-tie) auxetic honeycomb: solid walls (1), bow-tie voids (0).
+
+    Walls of the classic re-entrant lattice (Gibson & Ashby; Masters & Evans):
+    vertical walls of length ``h`` and inclined walls of length ``l = 1``,
+    tilted inwards by the re-entrant angle ``theta`` (degrees), with wall
+    thickness ``thickness`` (in units of ``l``). A point is solid if it is
+    closer than ``thickness / 2`` to a wall centreline (periodic images
+    included).
+
+    The periodic cell is ``Lx x Ly`` = :func:`reentrant_honeycomb_cell_size`
+    and holds one whole bow-tie void plus two halves. ``coords`` (fractional,
+    ``[0, 1)``) are mapped onto it, so ``domain_size`` should be proportional
+    to ``(Lx, Ly)``; the default ``h_over_l = None`` gives a square cell. A
+    whole void sits in the cell centre. Requires ``h > l sin(theta)``.
+    """
+    t = np.radians(theta)
+    if h_over_l is None:
+        h_over_l = np.cos(t) + np.sin(t)
+    if not h_over_l > np.sin(t):
+        raise ValueError('reentrant_honeycomb needs h_over_l > sin(theta)')
+    Lx, Ly = reentrant_honeycomb_cell_size(theta, h_over_l)
+    h, cx, sy = h_over_l, np.cos(t), np.sin(t)
+    # wall centrelines (nodes A, B, C, D of one cell; see the docs)
+    A, B = (0.0, 0.0), (0.0, h)
+    C, D = (cx, h - sy), (cx, 2 * h - sy)
+    walls = [(A, B), (C, D), (B, C), (B, (C[0] - Lx, C[1])), (D, (0.0, Ly)), (D, (Lx, Ly))]
+    c = np.asarray(coords)
+    # map the cell centre (0.5, 0.5) onto the centre (0, (h + Ly) / 2) of a whole bow-tie void
+    px = (c[0] + 0.5) % 1.0 * Lx
+    py = (c[1] + 0.5 * h / Ly) % 1.0 * Ly
+    distance = np.full(c.shape[1:], np.inf)
+    for shift_x in (-Lx, 0.0, Lx):
+        for shift_y in (-Ly, 0.0, Ly):
+            for a, b in walls:
+                distance = np.minimum(distance, _distance_to_segment(px - shift_x, py - shift_y, a, b))
+    return np.where(distance < thickness / 2.0, 1.0, 0.0)
+
+
+def _distance_to_polyline(px, py, points):
+    """Distance of the points (px, py) to the polyline through ``points`` (shape (m, 2))."""
+    distance = np.full(np.shape(px), np.inf)
+    for a, b in zip(points[:-1], points[1:]):
+        distance = np.minimum(distance, _distance_to_segment(px, py, a, b))
+    return distance
+
+
+@register('sinusoidal_ligaments')
+def sinusoidal_ligaments(coords, amplitude=0.11, thickness=0.14, gap=0.14, vertical_amplitude=0.11,
+                         vertical_gap=0.2, nb_samples=64):
+    """2D auxetic lattice of curved (sinusoidal) ligaments of constant thickness: solid (1), voids (0).
+
+    Lengths in units of the wavelength = cell size (square cell, ``[0, 1)^2``).
+
+    * Two horizontal ligaments, one wavelength long, in opposite phase:
+      centrelines ``y = 1/2 +- ((gap + thickness)/2 + amplitude (1 - cos 2 pi x))``.
+      They are closest at the cell edges ``x = 0`` (gap ``gap`` between their
+      surfaces) and ``4 amplitude`` further apart at ``x = 1/2``.
+    * Two vertical ligaments, bowed towards each other:
+      ``x = 1/2 -+ ((vertical_gap + thickness)/2 + vertical_amplitude (1 - cos 2 pi y'))``
+      with ``y' = y - 1/2``; closest (gap ``vertical_gap``) at mid-height.
+
+    ``thickness`` is measured normal to the centrelines. The ligaments cross
+    each other, enclosing a central void; the narrow gaps between the
+    ligaments of neighbouring cells close under compression (self-contact).
+    """
+    c = np.asarray(coords)
+    x, y = c[0] % 1.0, c[1] % 1.0
+    s = np.linspace(0.0, 1.0, nb_samples + 1)
+    bump = 1.0 - np.cos(2 * np.pi * s)                             # 0 at the ends, 2 in the middle
+    curves = []
+    for sign in (+1.0, -1.0):
+        curves.append(np.c_[s, 0.5 + sign * ((gap + thickness) / 2 + amplitude * bump)])
+        offset_x = (vertical_gap + thickness) / 2 + vertical_amplitude * (1.0 - np.cos(2 * np.pi * (s - 0.5)))
+        curves.append(np.c_[0.5 - sign * offset_x, s])
+    distance = np.full(c.shape[1:], np.inf)
+    for shift_x in (-1.0, 0.0, 1.0):
+        for shift_y in (-1.0, 0.0, 1.0):
+            for curve in curves:
+                distance = np.minimum(distance, _distance_to_polyline(x - shift_x, y - shift_y, curve))
+    return np.where(distance < thickness / 2.0, 1.0, 0.0)

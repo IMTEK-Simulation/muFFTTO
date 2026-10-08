@@ -8,7 +8,7 @@ Examples: [`examples/internal_contact/`](../../examples/internal_contact/)
 | `Example_2d_third_medium_contact_tr_minimal_step_lenght_control.py` | adds per-pixel load throttling |
 | `Example_2d_third_medium_contact_tr_minimal_step_lenght_control_retract.py` | throttling plus an arbitrary load path (load, then retract) |
 | `Example_2d_third_medium_contact_tr_minimal_net_cdf.py` | main example plus NetCDF output for muEye |
-| `read_tmc.py` | reader and summary/plot tool for the NetCDF output |
+| `read_tmc.py` | reader and summary/plot tool for the NetCDF output of all four scripts |
 
 Background: [cell problem](../theory.md#1-periodic-homogenization-the-cell-problem),
 [finite-strain elasticity](../theory.md#3-finite-strain-elasticity),
@@ -64,28 +64,28 @@ $\bar P=\langle P\rangle$.
 
 ## Walkthrough: `Example_2d_third_medium_contact_tr_minimal.py`
 
-**0. Dependency check** (`:28-36`). `NuMPI.Optimization.tr_newton_bounded` must
+**0. Dependency check** (`:30-38`). `NuMPI.Optimization.tr_newton_bounded` must
 accept a `precond` argument. That exists only in a hand-patched NuMPI
 `BoundedTRNewtonCG.py`, and the script raises `RuntimeError` otherwise.
 
-**1. Discretization** (`:48-69`). 32×32 pixels, `'bilinear_rectangle'` elements,
+**1. Discretization** (`:51-78`). 32×32 pixels, `'bilinear_rectangle'` elements,
 `formulation='finite_strain'`, `ninc = 100` load increments.
 
-**2. Materials** (`:84-107`). Matrix and third-medium Lamé constants,
+**2. Materials** (`:93-116`). Matrix and third-medium Lamé constants,
 $k_r$, and the reference tensor `ref_mat` $=\lambda I\otimes I+2\mu\,\mathbb I^s$ of the matrix
 for the preconditioner.
 
-**3. Geometry and material fields** (`:112-140`). `'contact_test_geometry_2'`:
+**3. Geometry and material fields** (`:121-149`). `'contact_test_geometry_2'`:
 a solid frame (border width 0.15) around a cavity, with a lower-left stick
 ($x\in[0.15,0.52),\ y\in[0.35,0.45)$) and an upper-right stick
 ($x\in[0.47,0.95),\ y\in[0.55,0.65)$) that overlap in $x$ and are separated by a gap
 of 0.1 in $y$. Phase $>0$ is solid and phase $=0$ is the third medium. $\lambda_L,\mu$ are
 stored per quadrature point and passed to `NeoHookean`.
 
-**4. Deformation gradient** (`:207-214`). `set_F` rebuilds $F=I+\lambda H+G\tilde u$ from
+**4. Deformation gradient** (`:221-228`). `set_F` rebuilds $F=I+\lambda H+G\tilde u$ from
 scratch at every evaluation.
 
-**5. Regularization $R\tilde u$** (`:220-234`). Uses the Hessian operator and its
+**5. Regularization $R\tilde u$** (`:234-248`). Uses the Hessian operator and its
 transpose, plus the Laplacian and its transpose:
 
 ```python
@@ -96,7 +96,7 @@ discretization.laplacian.transpose(..., nodal_field=LtL_field, weights=discretiz
 out.s[...] += scale * k_r * (HtH_field.s - inv_tr_I * LtL_field.s)
 ```
 
-**6. Green preconditioner** (`:244-269`).
+**6. Green preconditioner** (`:258-283`).
 `get_preconditioner_Green_mugrid(reference_material_data_ijkl=ref_mat, operator=operator_for_preconditioner)`
 inverts, in Fourier space, the constant-coefficient operator
 $M=G^TW\,C_{\mathrm{ref}}\,G+R$, so the regularization is part of the preconditioner. $M$
@@ -104,19 +104,19 @@ is built once and never updated. The trust region is measured in the $M$-norm, a
 changing $M$ during the run would change what the radius means. `precond(v)`
 returns $M^{-1}v$.
 
-**7. Objective, gradient, Hessian-vector product** (`:278-333`).
+**7. Objective, gradient, Hessian-vector product** (`:292-347`).
 
 - `fun_grad(x)` sets $F$, checks $\min J$, and returns
   $\Pi=\sum_q w_qW+\tfrac12\langle\tilde u,R\tilde u\rangle$ and $\nabla\Pi=G^TWP+R\tilde u$.
   If any $J\le0$ (or $\Pi$ is not finite), it returns the finite penalty
   `INADMISSIBLE_ENERGY = 1e30`. The trust-region step is then rejected and the
-  radius shrinks; `np.inf` would give `nan` ratios (`:280-283`).
+  radius shrinks; `np.inf` would give `nan` ratios (`:294-297`).
 - `hessp(x, v)` evaluates the algorithmic tangent $\mathbb C(F(x))$ and returns
   $(G^TW\mathbb C G+R)v$ via `apply_system_matrix_mugrid(material_data_field=tangent_field, formulation='finite_strain')`.
 
-All dot products and sums are MPI-reduced (`global_sum`, `dot_global`, `:183-196`).
+All dot products and sums are MPI-reduced (`global_sum`, `dot_global`, `:192-205`).
 
-**8. Load stepping and Newton solve** (`:339-415`). $\lambda=k/n_{inc}$, $k=1..100$. Each
+**8. Load stepping and Newton solve** (`:353-458`). $\lambda=k/n_{inc}$, $k=1..100$. Each
 increment is one call, warm-started from the previous $\tilde u$:
 
 ```python
@@ -131,7 +131,7 @@ products, $\|\nabla\Pi\|_\infty$, $\Pi$, $\min J$ and the mean $P_{xx}$, $P_{yx}
 `plot_every = 10` increments (serial only), the phase is drawn on the deformed grid
 $x=X+\lambda H X+\tilde u$.
 
-**9. Response curves** (`:423-446`). $\bar P_{10}$ and $\bar P_{xx}$ against
+**9. Response curves** (`:470-493`). $\bar P_{10}$ and $\bar P_{xx}$ against
 $\bar F_{10}=\lambda H_{10}$, $\min\det F$ (log scale) and $\Pi$ against $\lambda$. Contact
 shows up as a stiffening in $\bar P_{10}(\bar F_{10})$, together with $\min\det F$
 dropping by orders of magnitude in the third medium.
@@ -141,15 +141,15 @@ dropping by orders of magnitude in the third medium.
 This variant does not add trust-region step-length control. It limits how much
 macroscopic load each quadrature point receives. The imposed deformation becomes
 an accumulated field $H_{\mathrm{imp}}(q,x)$ (`imposed_field`), and
-$F=I+H_{\mathrm{imp}}+\nabla\tilde u$ (`set_F`, `:234-245`). Before each solve, starting from the
+$F=I+H_{\mathrm{imp}}+\nabla\tilde u$ (`set_F`, `:243-254`). Before each solve, starting from the
 converged $F$:
 
-- `admissible_scale_field` (`:248-285`) computes, per point, the largest $s>0$ with
+- `admissible_scale_field` (`:257-294`) computes, per point, the largest $s>0$ with
   $\det(F+sH)>0$. In 2D this is exact, because $\det(F+sH)=\det F+s\,b+s^2\det H$ is quadratic in
   $s$. It uses the linear root when $\det H=0$, as for pure shear $H_{10}$.
-- `apply_throttled_load` (`:288-310`) adds
+- `apply_throttled_load` (`:297-319`) adds
   $\theta\,\Delta\lambda\,H$ with $\theta=\min\big(1,\ \texttt{PIXEL\_SAFETY}\cdot s/\Delta\lambda\big)$,
-  `PIXEL_SAFETY = 0.5` (`:73`).
+  `PIXEL_SAFETY = 0.5` (`:82`).
 
 As a consequence, $H_{\mathrm{imp}}$ is no longer uniform, so $\langle F\rangle$ drifts from
 $I+\lambda H$, and the imposed part is in general not a compatible gradient. The script
@@ -163,13 +163,13 @@ deformed-mesh plot uses the mean imposed gradient and is only indicative.
 Same throttling as above, plus:
 
 - **Geometry and load**: `'contact_test_geometry_1'` (sticks offset in $y$ with a
-  horizontal gap) under compression $H_{00}=-0.3$ (`:133`, `:439`). The
-  reported component is chosen automatically as the largest $|H_{ij}|$ (`:445-449`).
-- **Load path**: `waypoints = [0.0, 1.0, 0.0]` and `per_leg = ninc` (`:466-485`)
+  horizontal gap) under compression $H_{00}=-0.3$ (`:142`, `:448`). The
+  reported component is chosen automatically as the largest $|H_{ij}|$ (`:454-458`).
+- **Load path**: `waypoints = [0.0, 1.0, 0.0]` and `per_leg = ninc` (`:475-494`)
   build a schedule of signed $\Delta\lambda$ (load to 1, then back to 0). Other paths
   such as `[0, 1, 0.3, 1]` work as well, but the path must start at 0.
 - **Signed throttling**: the admissible scale is measured along
-  $\mathrm{sign}(\Delta\lambda)H$ and $\theta$ scales $|\Delta\lambda|$ (`:291-317`).
+  $\mathrm{sign}(\Delta\lambda)H$ and $\theta$ scales $|\Delta\lambda|$ (`:300-326`).
 - **Return check**: if the path ends at $\lambda=0$, it prints the residual imposed
   $F$, $\Pi$, $\bar P$ and $\|\tilde u\|_\infty$, all of which should be 0. Because throttling
   is one-way, $H_{\mathrm{imp}}$ need not return to zero.
@@ -187,54 +187,70 @@ examples/internal_contact/exp_data/Example_2d_third_medium_contact_tr_minimal_ne
                                                                                          /response.png
 ```
 
-using `muGrid.FileIONetCDF` (`:522`):
+using `muFFTTO.io_utils.FieldWriter` (`:519`, see [Saving and loading fields](../io.md)):
 
-- **Per-frame fields** (pixel-level, one component axis, `_pixel_field`, `:421`).
+- **Per-frame fields** (pixel-level, one component axis, `_pixel_field`, `:430`).
   `u_total` $=(\lambda H\cdot X+\tilde u)/h$ in grid-point units, so the muEye warp scale 1 is
   the physical deformation. Also written: `u_fluc_only`, `phase_field`, `detF`, and
   `F_flat` / `P_flat` with component $c=i\,d+j$. $F$ and $P$ are **averaged over quadrature
-  points**, which smooths out a single collapsing point (`update_view_fields`, `:473`).
-- **Frame variables**: `applied_deformation_gradient` $=I+\lambda H$, `lam`,
-  `min_det_F`, `converged`.
+  points**, which smooths out a single collapsing point (`update_view_fields`, `:470`).
+  The raw fluctuation `u_fluc` (physical units) is stored as well, so a frame can be
+  loaded back into the discretization with `io_utils.load_fields`.
+- **Frame variables** (the increment history, one value per frame): `increment`, `lam`,
+  `applied_deformation_gradient` $=I+\lambda H$, `F10`, `P10`, `Pxx`, `min_det_F`, `energy`,
+  `nb_outer`, `nb_hessp`, `nb_precond`, `grad_inf`, `converged` (0: the increment did
+  not reach `gtol` and is not an equilibrium) and `elapsed_time`.
 - **Global attributes**: run parameters (`k_v`, `alpha`, `k_r`, `H_macro`, tolerances,
   `command_line`, ...), the phase legend, and `deformation_gradient = I`. muEye reads
   the cell shape from that attribute once, so the macro deformation is folded into
-  `u_total` instead. Also written: per-increment histories `hist_*` (`lam`, `F10`, `P10`,
-  `Pxx`, `min_J`, `energy`, `nb_outer`, `nb_hessp`, `nb_precond`, `grad_inf`,
-  `converged`), `frame_increments`, `converged`, `nb_not_converged`, `elapsed_time`
-  and `final_message`. They are written as placeholders up front and overwritten at
-  the end, so a killed run still leaves a readable file.
-- All fields of a frame are written in one `append_frame().write(...)` call
-  (`write_frame`, `:650`), and frames are written every `dump_every = 1` increments.
-  The last increment is always written.
+  `u_total` instead.
+- A frame is written every `dump_every = 1` increments (`write_frame`, `:574`) and
+  synced to disk, so a killed run leaves a complete file up to its last frame. The last
+  increment is always written. With `dump_every > 1` the history is stored only for
+  the written increments.
+
+### Output of the other three scripts
+
+With `output_name = 'tmc_run.nc'` (`None` switches it off), the minimal and the two
+throttling scripts write `exp_data/<script>/Nx=<nnn>Ny=<nnn>/tmc_run.nc` with one frame
+per increment: the fields `phase_field` and `u_fluc` (plus `H_imposed`, the throttled
+imposed gradient, in the throttling variants) and the same frame variables as above
+(without `applied_deformation_gradient` and `nb_precond`). The throttling script adds
+`F10_nominal` and `throttled_points`. The retract script stores the driven component
+as `F_driven`, `F_driven_nominal`, `P_driven`, plus `mean_P`, `branch` and `leg`.
 
 ### `read_tmc.py`
 
 ```python
 from read_tmc import load
 r = load('tmc_run.nc')
-r.hist['min_J']; r.attrs['k_v']; r.frames; r.phase; r.bad_increments
+r.hist['min_det_F']; r.attrs['k_v']; r.frames; r.phase; r.detF(-1); r.bad_increments
+r.field('u_fluc', -1)        # [2, 1, x, y] at the last stored frame
 ```
 
-`TMCRun` (`:27`) reads the global attributes and trims the padded `hist_*`
-arrays to the true length (last non-zero `hist_lam`). It lists stored frames and
-increments that did not converge (those are not equilibria), and gives the static
-phase field. From the command line:
+`TMCRun` reads the file with `io_utils.read_file`: `hist` are the frame variables,
+`frames` the increment of each stored frame, and `field(name, frame)` any stored field
+on the global grid. It lists increments that did not converge (those are not
+equilibria) and gives the static phase field. It reads the files of all four scripts.
+From the command line:
 
 ```bash
 python examples/internal_contact/read_tmc.py path/to/tmc_run.nc          # summary
 python examples/internal_contact/read_tmc.py path/to/tmc_run.nc --plot   # response curves
 ```
 
+Files written by the earlier version of the `_net_cdf` script (direct `FileIONetCDF`,
+histories as `hist_*` attributes) are not read by the new `read_tmc.py`.
+
 ## Summary
 
 | File | Dim | Physics | Key method | Outputs |
 |---|---|---|---|---|
-| `..._tr_minimal.py` | 2D | finite-strain neo-Hookean + TMC, HuHu-LuLu | energy minimization, `tr_newton_bounded` + Green-preconditioned Steihaug CG, uniform $\Delta\lambda$ | console log, deformed-mesh plots, response curves |
+| `..._tr_minimal.py` | 2D | finite-strain neo-Hookean + TMC, HuHu-LuLu | energy minimization, `tr_newton_bounded` + Green-preconditioned Steihaug CG, uniform $\Delta\lambda$ | console log, deformed-mesh plots, response curves, `tmc_run.nc` |
 | `..._step_lenght_control.py` | 2D | same | + per-point load throttling ($\det F>0$ admissible scale) | + drift / throttled-count plots |
 | `..._step_lenght_control_retract.py` | 2D | same, compression, geometry 1 | + signed waypoint load path (load/unload) | + return-to-origin report, per-leg curves |
-| `..._net_cdf.py` | 2D | same as minimal (128², $H_{10}=-0.3$) | + `muGrid.FileIONetCDF` frames | `exp_data/.../tmc_run.nc`, `response.png` |
-| `read_tmc.py` | – | post-processing | `netCDF4` reader | summary, response plots |
+| `..._net_cdf.py` | 2D | same as minimal (128², $H_{10}=-0.3$) | + muEye view fields via `io_utils.FieldWriter` | `exp_data/.../tmc_run.nc`, `response.png` |
+| `read_tmc.py` | – | post-processing | `io_utils.read_file` | summary, response plots |
 
 ## Key tunable parameters
 
@@ -249,7 +265,7 @@ python examples/internal_contact/read_tmc.py path/to/tmc_run.nc --plot   # respo
 | `gtol`, `maxiter`, `inner_tol` | trust-region Newton tolerances |
 | `PIXEL_SAFETY` | throttling fraction of the admissible scale (throttling variants) |
 | `waypoints`, `per_leg` | load path (retract variant) |
-| `plot_every`, `dump_every`, `output_name`, `no_flush` | plotting and output |
+| `plot_every`, `dump_every`, `output_name` | plotting and output (`dump_every`: `_net_cdf` only) |
 
 ## How to run
 
@@ -261,23 +277,13 @@ mpirun -n 4 python examples/internal_contact/Example_2d_third_medium_contact_tr_
 All scripts reduce energies, dot products and $\min J$ over `MPI.COMM_WORLD` and
 pass `comm` to the optimizer, so `mpirun` is supported for the solve. The
 deformed-mesh plots run only in serial. Requirements: the patched NuMPI (see
-step 0); `muGrid` with NetCDF support for the `_net_cdf` variant; and `netCDF4`
-for `read_tmc.py`.
+step 0); `muGrid` with NetCDF support for the output; and `netCDF4` for
+`read_tmc.py`.
 
 ## Known issues
 
 - **Patched NuMPI required.** Stock NuMPI 0.15.1 lacks `precond` in
   `tr_newton_bounded`, and all four solvers abort at import.
-- **`read_tmc.py` does not match the written field names.** `TMCRun.detF()` and
-  the docstring use `r.field('F', ...)`, but the NetCDF variant writes `F_flat`
-  (and already writes `detF`), so `r.detF()` raises `KeyError`. Use
-  `r.field('detF', -1)` or `r.field('F_flat', -1)` instead. `_true_length` assumes
-  that the real `hist_lam` entries are non-zero. That holds for the monotonic
-  NetCDF script but would break for a load path that returns to $\lambda=0$.
-- **Mean stresses are rank-local** in the minimal, step-length-control and NetCDF
-  scripts: `stress_field.s[...].mean()` is not MPI-reduced, so the printed or
-  stored $\bar P$ (and `hist_P10`, `hist_Pxx`) are wrong under `mpirun`. The
-  retract variant uses `global_mean`.
 - The variant name "step_lenght_control" is misspelled and describes load
   throttling, not trust-region step control.
 - `sys.path.append` (not `insert`) means an installed `muFFTTO` takes precedence
