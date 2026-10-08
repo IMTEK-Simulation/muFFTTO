@@ -190,8 +190,8 @@ def M_fun_Green(x, Px):
 # macroscopic loading
 # ============================================================================
 macro_gradient_inc        = np.zeros((dim, dim))
-macro_gradient_inc[0, 1] += 0.8/ float(ninc)
-macro_gradient_inc[1, 1] += 0.3 / float(ninc)
+macro_gradient_inc[0, 1] += 0.03/ float(ninc)
+macro_gradient_inc[1, 1] += 0.02 / float(ninc)
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,

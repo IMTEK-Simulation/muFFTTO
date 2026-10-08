@@ -41,16 +41,20 @@ def get_geometry(nb_voxels,
             if len(nb_voxels) != 2:
                 raise NotImplementedError('geometry_stefanus is implemented only in 2D')
 
-            vol_frac = kwargs.get('vol_frac', 0.45)
+            vol_frac = kwargs.get('vol_frac', 0.75)
+            Lx, Ly = kwargs.get('domain_size', [2.0, np.sqrt(3.0)])
+            if not np.isclose(Lx / Ly, 2.0 / np.sqrt(3.0)):
+                warnings.warn(f'geometry_stefanus: Lx/Ly = {Lx / Ly:.4f} != 2/sqrt(3) = 1.1547 '
+                              f'-> lattice is NOT triangular (paper Fig. 1a)')
+
             nb_circles_per_cell = 4
-            vol_frac_max = nb_circles_per_cell * np.pi * 0.25 ** 2  # = pi/4
+            radius = np.sqrt(vol_frac * Lx * Ly / (nb_circles_per_cell * np.pi))  # physical units
 
-            if not (0.0 < vol_frac < vol_frac_max):
-                raise ValueError(
-                    f'geometry_stefanus: vol_frac must be in (0, {vol_frac_max:.4f}) so that '
-                    f'circles do not overlap, got {vol_frac}')
-
-            radius = np.sqrt(vol_frac / (nb_circles_per_cell * np.pi))
+            # overlap check against the nearest-neighbour distance (= a on the triangular lattice)
+            d_min = min(0.5 * Lx, np.hypot(0.25 * Lx, 0.5 * Ly))
+            if not (0.0 < vol_frac and 2 * radius < d_min):
+                raise ValueError(f'geometry_stefanus: circles overlap (2r = {2 * radius:.4f} >= '
+                                 f'{d_min:.4f}); reduce vol_frac = {vol_frac}')
 
             circle_centers_soft = [(0.00, 0.00),
                                    (0.25, 0.50),
@@ -58,11 +62,11 @@ def get_geometry(nb_voxels,
             circle_centers_stiff = [(0.50, 0.00)]
 
             def periodic_circle_mask(cx, cy, r):
-                # minimum-image distance in a unit-periodic cell
+                # minimum image in fractional coordinates, distance in physical units
                 dx = coordinates[0] - cx
                 dy = coordinates[1] - cy
-                dx = dx - np.round(dx)
-                dy = dy - np.round(dy)
+                dx = (dx - np.round(dx)) * Lx
+                dy = (dy - np.round(dy)) * Ly
                 return dx ** 2 + dy ** 2 <= r ** 2
 
             phase_field = np.zeros(nb_voxels)
