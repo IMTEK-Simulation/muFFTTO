@@ -8,12 +8,12 @@ import numpy as np
 import time
 
 from NuMPI import Optimization
-from NuMPI.IO import save_npy
 from mpi4py import MPI
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 from muFFTTO import material_models
+from muFFTTO import io_utils
 
 # Problem Configuration
 problem_type = 'elasticity'
@@ -112,8 +112,8 @@ target_stresses = np.zeros([nb_load_cases, dim, dim])
 target_energy = np.zeros([nb_load_cases])
 
 for load_case in range(nb_load_cases):
-    target_stresses[load_case] = np.einsum('ijkl,lk->ij', elastic_C_target, macro_gradients[load_case])
-    target_energy[load_case] = np.einsum('ij,ijkl,lk->', left_macro_gradients[load_case], elastic_C_target,
+    target_stresses[load_case] = np.einsum('ijkl,kl->ij', elastic_C_target, macro_gradients[load_case])
+    target_energy[load_case] = np.einsum('ij,ijkl,kl->', left_macro_gradients[load_case], elastic_C_target,
                                          macro_gradients[load_case])
     if MPI.COMM_WORLD.rank == 0:
         print(f'Load case {load_case}: target stress = {target_stresses[load_case].tolist()}')
@@ -336,10 +336,19 @@ if __name__ == '__main__':
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
     random_init = False
+    save_history = True  # store the phase field of every iteration in <output_name>_history.nc
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)
         os.makedirs(figure_folder_path, exist_ok=True)
+    MPI.COMM_WORLD.Barrier()
+
+    # Output files (NetCDF, see docs/io.md): <output_name>_history.nc and <output_name>_final.nc
+    output_name = data_folder_path + f'{preconditioner_type}_eta_{eta}_w_{weight}'
+    parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
+                  'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
+                  'soft_phase': soft_phase,
+                  'target_C_voigt': material_models.compute_Voigt_notation_4order(elastic_C_target)}
 
 
     def apply_filter(phase):
@@ -367,12 +376,18 @@ if __name__ == '__main__':
         phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
 
     iterat = 0
+    phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
+    history_writer = io_utils.FieldWriter(output_name + '_history.nc', [phase_field_iterate],
+                                          attributes=parameters) if save_history else None
 
 
     def my_callback(x_current):
-        """Callback to visualize progress during optimization."""
+        """Callback to store and visualize progress during optimization."""
         global iterat
         iterat += 1
+        if history_writer is not None:
+            phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
+            history_writer.write()
         if MPI.COMM_WORLD.size == 1:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
@@ -452,30 +467,11 @@ if __name__ == '__main__':
         callback=my_callback,
         disp=True,
     )
+    if history_writer is not None:
+        history_writer.close()
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
-
-    _info = {}
-    if MPI.COMM_WORLD.rank == 0:
-        _info["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
-        _info["num_iteration_adjoint"] = np.array(info_adjoint["num_iteration_adjoint"], dtype=object)
-
-    _info['nb_of_pixels'] = discretization.nb_of_pixels_global
-    _info['norms_sigma'] = norms_sigma
-    _info['norms_pf'] = norms_pf
-    _info['norms_adjoint_energy'] = norms_adjoint_energy
-    _info['nb_iterations'] = iterat
-
-    # Save optimized phase field
-    file_data_name = f'_eta_{eta}' + f'_w_{weight}' + f'_final'
-    save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
-             solution_phase.s[0].mean(axis=0),
-             tuple(discretization.fft.subdomain_locations),
-             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-    if MPI.COMM_WORLD.rank == 0:
-        print(f"Data saved to: {data_folder_path}{file_data_name}.npy")
 
     ######## Postprocess for FE linear solver with NuMPI ########
     solution_phase_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -539,9 +535,6 @@ if __name__ == '__main__':
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             formulation='small_strain')
 
-        _info['target_stress' + f'{load_case}'] = target_stresses[load_case]
-        _info['homogenized_stresses' + f'{load_case}'] = homogenized_stresses[load_case]
-
         if MPI.COMM_WORLD.rank == 0:
             print(f'target_stresses[load_case {load_case}] = {target_stresses[load_case]}')
             print(f'homogenized_stresses[load_case {load_case}]= {homogenized_stresses[load_case]}')
@@ -574,7 +567,7 @@ if __name__ == '__main__':
                 maxiter=10000,
             )
 
-            homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+            homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
                 displacement_field_inxyz=displacement_field,
                 macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
@@ -587,10 +580,18 @@ if __name__ == '__main__':
               np.array2string(material_models.compute_Voigt_notation_4order(elastic_C_target),
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
-    _info['homogenized_C_ijkl'] = material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)
-    _info['target_C_ijkl'] = material_models.compute_Voigt_notation_4order(elastic_C_target)
-
-    # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
+    # Save the optimized phase field with the run parameters and the optimization log
+    # (attributes are stored flattened; the per-evaluation lists have one entry per objective call)
+    io_utils.save_fields(output_name + '_final.nc', [solution_phase], attributes={
+        **parameters,
+        'nb_iterations': iterat,
+        'homogenized_C_voigt': material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
+        'target_stresses': target_stresses,
+        'homogenized_stresses': homogenized_stresses,
+        'norms_sigma': norms_sigma,
+        'norms_pf': norms_pf,
+        'norms_adjoint_energy': norms_adjoint_energy,
+        'num_iteration_mech': MPI.COMM_WORLD.bcast(info_mech['num_iteration_adjoint']),  # filled on rank 0
+        'num_iteration_adjoint': MPI.COMM_WORLD.bcast(info_adjoint['num_iteration_adjoint'])})
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weight}' + f'_log.npz',
-                 **_info)  # + f'_its_{start}_{start + iterat}'
+        print(f'Data saved to: {output_name}_final.nc' + (' and _history.nc' if save_history else ''))

@@ -1,3 +1,29 @@
+"""
+Otsu-threshold based segmentation of 2D grayscale images.
+
+The public function :func:`otsu_edgeDetection_and_phaseIndicator` turns a
+grayscale image (e.g. a micrograph or a phase field) into
+
+- a binary phase indicator (dark regions = 1),
+- a one-pixel-wide mask of the external region boundaries (edges), and
+- optionally a connected-component label field (one integer ID per region).
+
+These masks are used, e.g., by ``muFFTTO.grid_adaptation_arbitrary`` to decide
+where grid nodes should be moved onto material interfaces.
+
+Otsu's method
+-------------
+For a histogram of intensities ``t in {0, ..., 255}`` Otsu's method chooses the
+threshold ``t*`` that splits the pixels into two classes (below / above ``t``)
+with maximal *between-class variance*::
+
+    sigma_B^2(t) = w_0(t) w_1(t) (mu_0(t) - mu_1(t))^2,
+
+where ``w_0, w_1`` are the class probabilities (pixel fractions) and
+``mu_0, mu_1`` the class mean intensities. Maximizing ``sigma_B^2`` is
+equivalent to minimizing the within-class variance. Here the actual
+computation is delegated to OpenCV (``cv2.THRESH_OTSU``).
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -7,7 +33,30 @@ import numpy as np
 
 
 def _normalize_to_u8(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Normalize a 2D image to [0, 1] and uint8 [0, 255]."""
+    """Normalize a 2D image to [0, 1] and uint8 [0, 255].
+
+    Min-max normalization ``(data - min) / (max - min)``; OpenCV's Otsu
+    thresholding requires an 8-bit single-channel image.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Two-dimensional image of shape ``(nx, ny)``, any real dtype.
+
+    Returns
+    -------
+    image_norm : numpy.ndarray
+        float32 array of shape ``(nx, ny)`` with values in ``[0, 1]``. If the
+        image is (numerically) constant, an all-zero array is returned.
+    image_u8 : numpy.ndarray
+        uint8 array of shape ``(nx, ny)``, ``image_norm * 255`` truncated
+        (not rounded) to integers in ``[0, 255]``.
+
+    Raises
+    ------
+    ValueError
+        If ``data`` is not two-dimensional.
+    """
     data = np.asarray(data, dtype=np.float32)
 
     if data.ndim != 2:
@@ -17,6 +66,7 @@ def _normalize_to_u8(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     data_max = float(data.max())
     value_range = data_max - data_min
 
+    # guard against division by zero for constant images
     if value_range <= np.finfo(np.float32).eps:
         image_norm = np.zeros_like(data, dtype=np.float32)
     else:
@@ -27,7 +77,20 @@ def _normalize_to_u8(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _validate_odd_positive(name: str, value: int) -> None:
-    """Validate a positive odd OpenCV kernel size."""
+    """Validate a positive odd OpenCV kernel size.
+
+    Parameters
+    ----------
+    name : str
+        Parameter name, used in the error message.
+    value : int
+        Kernel size to check.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a positive odd integer.
+    """
     if value <= 0 or value % 2 == 0:
         raise ValueError(f"{name} must be a positive odd integer, got {value}.")
 
@@ -208,14 +271,21 @@ def otsu_edgeDetection_and_phaseIndicator(
             f"connectivity must be 4 or 8, got {connectivity}."
         )
 
+    # (1) min-max normalization to [0, 1] and 8-bit [0, 255] (required by OpenCV Otsu)
     image_norm, image_u8 = _normalize_to_u8(data)
 
+    # (2) Gaussian smoothing suppresses pixel noise so that the histogram is
+    #     closer to bimodal and the thresholded mask is less ragged
     image_blur = cv2.GaussianBlur(
         image_u8,
         (blur_ksize, blur_ksize),
         blur_sigma,
     )
 
+    # (3) Otsu thresholding: the passed threshold value 0 is ignored, OpenCV
+    #     selects t* maximizing the between-class variance of the histogram.
+    #     THRESH_BINARY_INV -> pixels with intensity <= t* (dark) become 255,
+    #     brighter pixels become 0.
     otsu_threshold, mask_raw_u8 = cv2.threshold(
         image_blur,
         0,
@@ -223,6 +293,9 @@ def otsu_edgeDetection_and_phaseIndicator(
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
 
+    # (4) morphological cleanup with a square structuring element:
+    #     opening  = erosion followed by dilation -> removes small specks
+    #     closing  = dilation followed by erosion -> fills small holes / gaps
     kernel = np.ones(
         (morph_kernel_size, morph_kernel_size),
         dtype=np.uint8,
@@ -246,6 +319,9 @@ def otsu_edgeDetection_and_phaseIndicator(
     phase_mask_binary = (mask_clean_u8 > 0).astype(np.uint8)
 
     # Detect edges from the binary phase mask.
+    # RETR_EXTERNAL: only outermost contours (holes inside regions are ignored);
+    # CHAIN_APPROX_SIMPLE compresses straight segments, but drawContours below
+    # re-draws them as continuous 1-pixel-wide polylines.
     contours, _ = cv2.findContours(
         (phase_mask_binary * 255).astype(np.uint8),
         cv2.RETR_EXTERNAL,
@@ -265,6 +341,20 @@ def otsu_edgeDetection_and_phaseIndicator(
     # Default behavior: label field is the same as the binary mask.
     phase_mask_label = phase_mask_binary.copy()
 
+    # Legacy/alternative implementation kept for reference (inactive string
+    # literal, never executed). English summary of the plan described below:
+    #   (1) label connected foreground regions with connectedComponentsWithStats
+    #       (unique ID per region, label 0 = background);
+    #   (2) compute the mean gray value of every region from image_norm;
+    #   (3) give regions with sufficiently similar mean gray value the same
+    #       material_label -> separates "geometric regions" from "materials".
+    #   Planned outputs: phase_mask_binary (0/1), phase_mask_label (0..N),
+    #   material_label (0..M), region_mean_gray, region_to_material.
+    #   Inline notes: each material group stores [representative mean gray,
+    #   number of regions]; regions are sorted by mean gray so that the label
+    #   numbering does not influence the grouping; the group mean is updated as
+    #   a running average; a new material class is created if no group is
+    #   within gray_tolerance.
     '''
     (1) connectedComponentsWithStats 對 binary foreground 做連通區域標記，得到每個 region 的唯一 ID。
     (2) 對每個 region，從原始 normalized grayscale image計算平均灰階。
@@ -379,6 +469,10 @@ def otsu_edgeDetection_and_phaseIndicator(
         return material_label, region_mean_gray, region_to_material
     '''
     # Optional: assign one integer label to each connected region.
+    # (non-periodic connectivity, see Notes in the docstring). Returns the
+    # number of labels including background, the int32 label image, the stats
+    # array of shape (number_of_labels, 5) with columns
+    # [x, y, width, height, area] and the centroids of shape (number_of_labels, 2).
     if regions_label:
         number_of_labels, phase_mask_label, phase_region_stats, phase_region_centroids = (
             cv2.connectedComponentsWithStats(

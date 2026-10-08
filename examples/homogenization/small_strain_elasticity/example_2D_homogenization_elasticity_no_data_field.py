@@ -167,7 +167,7 @@ for i in range(dim):
 
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid_explicit_stress(
+        homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid_explicit_stress(
             constitutive=constitutive_model,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,

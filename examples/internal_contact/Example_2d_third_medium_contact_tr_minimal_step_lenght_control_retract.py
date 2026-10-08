@@ -39,6 +39,8 @@ import os
 import sys
 import inspect
 
+import time
+
 import numpy as np
 from mpi4py import MPI
 from matplotlib import pyplot as plt
@@ -59,6 +61,7 @@ from muFFTTO import domain, tensor_operations
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
 from muFFTTO import visualization_utils
+from muFFTTO import io_utils
 
 # ============================================================================
 # problem setup
@@ -69,6 +72,12 @@ ninc = 100
 # plotting: deformed mesh every `plot_every` increments (0 = only the final
 # response curves).  Serial runs only -- the fields are distributed under MPI.
 plot_every = 1
+
+# saving (muFFTTO.io_utils): one frame per increment with the phase field,
+# the displacement fluctuation, the imposed (throttled) gradient field and the
+# increment history, in exp_data/<script>/Nx=..Ny=../tmc_run.nc.  Read it
+# with read_tmc.py.  None = no output.
+output_name = 'tmc_run.nc'
 
 # per-pixel load throttling: fraction of each point's own admissible scale
 PIXEL_SAFETY = 0.5
@@ -501,6 +510,31 @@ hist_branch = []          # +1 loading, -1 retracting
 
 serial = discretization.communicator.size == 1
 
+# ---- output file -------------------------------------------------------------
+writer = None
+if output_name is not None:
+    data_folder_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exp_data',
+                                    os.path.splitext(os.path.basename(__file__))[0], f'Nx={nnn}Ny={nnn}')
+    if rank == 0:
+        os.makedirs(data_folder_path, exist_ok=True)
+    comm.Barrier()
+    output_path = os.path.join(data_folder_path, output_name)
+    writer = io_utils.FieldWriter(
+        output_path, [phase_field, displacement_fluctuation_field, imposed_field],
+        attributes={'geometry': geometry_name, 'element_type': element_type,
+                    'formulation': formulation, 'nb_grid_pts': number_of_pixels,
+                    'domain_size': np.asarray(domain_size, dtype=float), 'H_macro': H_macro,
+                    'E_matrix': E_matrix, 'nu_matrix': nu_matrix, 'k_v': k_v, 'alpha': alpha,
+                    'k_r': k_r,
+                    'PIXEL_SAFETY': PIXEL_SAFETY, 'waypoints': waypoints,
+                    'driven_component': [int(i) for i in load_ij]},
+        frame_variables={'increment': (), 'lam': (), 'F_driven': (), 'F_driven_nominal': (),
+                         'P_driven': (), 'mean_P': (dim, dim),
+                         'throttled_points': (), 'branch': (), 'leg': (), 'P10': (), 'Pxx': (),
+                         'min_det_F': (), 'energy': (), 'nb_outer': (), 'nb_hessp': (),
+                         'grad_inf': (), 'converged': (), 'elapsed_time': ()})
+start_time = time.time()
+
 root_print('=' * 70)
 root_print(f'geometry     : {geometry_name}')
 root_print(f'element_type : {element_type}')
@@ -577,6 +611,15 @@ for inc, dlam in enumerate(schedule, start=1):
     hist_throttled.append(n_throttled)
     hist_branch.append(1 if dlam > 0 else -1)
 
+    if writer is not None:
+        displacement_fluctuation_field.s[...] = u
+        writer.write(increment=inc, lam=lam_nominal, F_driven=F_actual, F_driven_nominal=F_target,
+                     P_driven=P_mean[load_ij], mean_P=P_mean, throttled_points=n_throttled,
+                     branch=1 if dlam > 0 else -1, leg=leg, P10=P_mean[1, 0], Pxx=P_mean[0, 0],
+                     min_det_F=J_min, energy=float(res.fun), nb_outer=int(res.nit),
+                     nb_hessp=int(res.nb_hessp), grad_inf=float(res.max_grad),
+                     converged=int(bool(res.success)), elapsed_time=time.time() - start_time)
+
     # ---- deformed mesh -----------------------------------------------------
     # NOTE: plotted with the MEAN imposed gradient, since there is no single
     # macro gradient any more.  The picture is therefore indicative.
@@ -596,6 +639,10 @@ for inc, dlam in enumerate(schedule, start=1):
 
 root_print('=' * 70)
 root_print(f'final min J : {min_J(total_strain_field):.6e}')
+
+if writer is not None:
+    writer.close()
+    root_print(f'wrote       : {output_path}')
 
 # ---- did it come back? -----------------------------------------------------
 # Only meaningful when the path ends where it started.  The throttle is

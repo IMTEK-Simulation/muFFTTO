@@ -61,12 +61,23 @@ pip install git+https://github.com/muSpectre/muGrid.git
 | `solvers_nonlinear.py` | Nonlinear solver implementations for advanced optimization |
 | `discretization_library.py` | Shape function gradient matrices for various element types (linear triangles, bilinear rectangles, trilinear hexahedra) |
 | `material_models.py` | Abstract base classes and implementations for material constitutive models |
-| `microstructure_library.py` | Parametric geometry definitions for generating periodic microstructures |
+| `geometry.py` | Periodic microstructure geometries: composable shapes, phase fields and named geometries (MPI-parallel) |
+| `microstructure_library.py` | Backward-compatible `get_geometry` wrapper used by the examples |
 | `grid_adaptation_methods.py` | Methods for adaptive mesh refinement and grid adaptation |
 | `grid_adaptation_arbitrary.py` | Arbitrary grid adaptation strategies |
 | `analytical_grid_adaptation.py` | Analytical solutions for grid adaptation |
 | `tensor_operations.py` | Utility functions for tensor operations and indexing |
 | `visualization_utils.py` | Visualization and post-processing utilities |
+| `io_utils.py` | Save/load fields to NetCDF (MPI-parallel, muGrid `FileIONetCDF`): snapshots, time series, numpy reader |
+
+## Documentation
+
+The [`docs/`](docs/README.md) folder explains the mathematics behind the code
+and how each example works:
+
+- [Theory and numerics](docs/theory.md): the periodic cell problem, FE discretization on a pixel grid, the FFT-preconditioned CG solver, effective properties, adjoint topology optimization and grid adaptation
+- Example walkthroughs in [`docs/examples/`](docs/examples/), one page per example folder
+- [Known issues](docs/known_issues.md): suspected bugs found while documenting the code
 
 ## Examples
 
@@ -88,6 +99,9 @@ The `examples/` directory contains working examples organized by topic:
 
 **Internal Contact** (`examples/internal_contact/`)
 - Contact mechanics and third-medium interaction problems
+
+**Phase-Field Fracture** (`examples/phase_field_fracture/`)
+- AT2 brittle fracture of a periodic porous cell under macroscopic strain (staggered scheme, history field)
 
  
 

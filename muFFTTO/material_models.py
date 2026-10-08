@@ -1,3 +1,47 @@
+"""
+Constitutive (material) models and elasticity-tensor utilities.
+
+Contents
+--------
+Field-based material models (operate on muGrid fields at quadrature points):
+
+* :class:`MaterialModelElasticity` -- abstract interface (stress + tangent).
+* :class:`LinearElastic` -- isotropic small-strain linear elasticity
+  (Lamé parameters lambda, mu given per quadrature point).
+* :class:`NeoHookean` -- compressible neo-Hookean (Simo-Pister) hyperelasticity
+  at finite strain, written in terms of the deformation gradient F and the
+  first Piola-Kirchhoff stress P.
+
+Plain-numpy helpers (single material point, no fields):
+
+* Voigt conversions: :func:`compute_Voigt_notation_2order`,
+  :func:`compute_Voigt_notation_4order`, :func:`compute_Voigt_notation`.
+* Parameter conversions: :func:`get_bulk_and_shear_modulus`,
+  :func:`get_lame_parameters`, :func:`get_lame_parameters_from_bulk_and_shear`.
+* Stiffness tensors: :func:`get_elastic_material_tensor`,
+  :func:`get_elastic_tensor_from_lame`,
+  :func:`get_orthotropic_stiffness_tensor_plane_strain`,
+  :func:`get_elastic_tangent` (Voigt matrices).
+* :func:`linear_isotropic_elasticity_stress_from_strain_lame` -- field-based
+  stress evaluation without a material object.
+
+Index / layout conventions
+--------------------------
+Fields are muGrid fields whose ``.s`` view has the layout
+
+* 2nd-order tensor field : ``[i, j, q, x, y, (z)]``
+* 4th-order tensor field : ``[i, j, k, l, q, x, y, (z)]``
+* scalar field           : ``[1, 1, q, x, y, (z)]`` (so ``field.s[0, 0]`` is ``[q, x, y, (z)]``)
+
+where ``i, j, k, l`` are spatial indices, ``q`` the quadrature point within a
+pixel and ``x, y, z`` the (local, MPI-distributed) pixel indices. Tensor
+contractions follow the standard convention of ``tensor_operations.py``:
+``sigma_ij = C_ijkl eps_kl``. Material tangents are stored in the same
+standard order, ``A_ijkl = dP_ij / dF_kl``.
+
+Full 4th-order tensors (``(dim,)*4`` arrays) are used everywhere except in
+:func:`get_elastic_tangent` and the explicit Voigt conversion helpers.
+"""
 import muGrid
 import numpy as np
 from abc import ABC, abstractmethod
@@ -16,7 +60,7 @@ Constitute models and related utilities
 # ============================================================================
 class MaterialModelElasticity(ABC):
     """
-    Abstract base class for material models.                                                 finite-strain hyperelastic
+    Abstract base class for material models (small-strain or finite-strain hyperelastic).
 
     All material models must implement:
       - get_stress(strain_ijqxyz, stress_ijqxyz)
@@ -26,10 +70,23 @@ class MaterialModelElasticity(ABC):
       i, j     : spatial dimensions (0..dim-1)
       q        : quadrature point index
       x, y, z  : grid cell indices
+
+    "strain" is the generic kinematic input: the small-strain tensor eps for
+    small-strain models, or the deformation gradient F for finite-strain models.
+    "stress" is the work-conjugate stress (Cauchy sigma, or 1st Piola-Kirchhoff P).
     """
 
     def __init__(self,
                  discretization, name: str = 'base_material'):
+        """
+        Parameters
+        ----------
+        discretization : muFFTTO.domain.Discretization
+            Discretization providing field allocation; not stored by the base
+            class (subclasses store it themselves).
+        name : str, optional
+            Human-readable identifier, used in ``__repr__``.
+        """
         self.name = name
 
     @abstractmethod
@@ -61,7 +118,20 @@ class MaterialModelElasticity(ABC):
         ...
 
     def apply_algorithmic_tangent(self, strain_ijqxyz, stress_ijqxyz, tangent_ijklqxyz):
-        """C_ij = tangent_ijkl · strain_lk (project contraction convention, see tensor_operations.py)."""
+        """C_ij = tangent_ijkl · strain_kl (standard contraction, see tensor_operations.py).
+
+        Applies a (previously computed) tangent to a strain(-increment) field,
+        e.g. to evaluate the linearised stress increment in Newton/CG iterations.
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Strain (or strain increment / F increment) field.
+        stress_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Output field, overwritten in place with tangent : strain.
+        tangent_ijklqxyz : muGrid field [i, j, k, l, q, x, y, z]
+            Material tangent, e.g. from ``get_algorithmic_tangent``.
+        """
         ddot42(tangent_ijklqxyz, strain_ijqxyz, stress_ijqxyz)
     def __repr__(self):
         return f"{self.__class__.__name__}(name='{self.name}')"
@@ -76,19 +146,45 @@ class LinearElastic(MaterialModelElasticity):
     Isotropic linear elasticity for small strain elasticity.
       σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
       C_ijkl = λ δ_ij δ_kl  +  μ (δ_ik δ_jl + δ_il δ_jk)
+
+    The material is heterogeneous: λ and μ are scalar fields given per
+    quadrature point (e.g. from a phase/density field). The tangent is
+    independent of the strain. In 2D this is plane strain.
     """
 
     def __init__(self, discretization, lam_1qxyz, mu_1qxyz, name: str = 'linear_elastic'):
+        """
+        Parameters
+        ----------
+        discretization : muFFTTO.domain.Discretization
+            Used to allocate temporary quadrature fields.
+        lam_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            First Lamé parameter λ at each quadrature point (stored by reference).
+        mu_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Shear modulus μ at each quadrature point (stored by reference).
+        name : str, optional
+        """
         super().__init__(discretization, name)
         self.lam = lam_1qxyz          # quadrature field of first Lamé modulus
         self.mu  = mu_1qxyz           # quadrature field of shear modulus
         self.discretization = discretization
-
+    #TODO[MARTIN/STEFANUS] implement energy for linear elasti material model
 
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
         """
         σ_ij = λ δ_ij ε_kk  +  2μ ε_ij
              = λ I_ij tr(ε)  +  2μ ε_ij
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Small-strain tensor ε (assumed symmetric; not symmetrised here).
+        stress_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Output Cauchy stress σ, overwritten in place.
+
+        Notes
+        -----
+        Allocates/reuses a temporary scalar quadrature field named 'eps_trace'.
         """
         dim = strain_ijqxyz.s.shape[0]
 
@@ -103,6 +199,19 @@ class LinearElastic(MaterialModelElasticity):
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
         C_ijkl = λ δ_ij δ_kl  +  μ (δ_ik δ_jl  +  δ_il δ_jk)
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Only used to infer the spatial dimension (the tangent of linear
+            elasticity does not depend on the strain).
+        tangent_ijklqxyz : muGrid field [i, j, k, l, q, x, y, z]
+            Output stiffness tensor field, overwritten in place.
+
+        Notes
+        -----
+        C has major and both minor symmetries (δ_ik δ_jl + δ_il δ_jk is
+        symmetric in k<->l and in i<->j).
         """
         dim = strain_ijqxyz.s.shape[0]
         I   = np.eye(dim)
@@ -114,6 +223,8 @@ class LinearElastic(MaterialModelElasticity):
         lam = self.lam.s[0, 0]   # shape [q, x, y, z]
         mu  = self.mu.s[0, 0]    # shape [q, x, y, z]
 
+        # Append one singleton axis per [q, x, y, z] axis to the (dim,)*4 constant tensors,
+        # so they broadcast against the spatially varying λ, μ fields.
         n_extra        = lam.ndim
         index_extender = (...,) + (np.newaxis,) * n_extra
 
@@ -134,15 +245,41 @@ class NeoHookean(MaterialModelElasticity):
 
     strain_ijqxyz stores the deformation gradient F.
     stress_ijqxyz stores the 1st Piola-Kirchhoff stress P.
+
+    Here J = det F, I₁ = tr(FᵀF) = F:F. P = ∂W/∂F follows from
+    ∂J/∂F = J F^{-T} and ∂I₁/∂F = 2F. For F -> I the model linearises to
+    LinearElastic with the same λ, μ. Requires J > 0 (ln J is evaluated).
     """
 
     def __init__(self, discretization, lam_1qxyz, mu_1qxyz, name: str = 'neo_hookean'):
+        """
+        Parameters
+        ----------
+        discretization : muFFTTO.domain.Discretization
+            Used to allocate temporary quadrature fields.
+        lam_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Lamé parameter λ per quadrature point.
+        mu_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Shear modulus μ per quadrature point.
+        name : str, optional
+        """
         super().__init__(discretization, name)
         self.lam = lam_1qxyz
         self.mu  = mu_1qxyz
         self.discretization = discretization
 
     def get_energy_density(self, strain_ijqxyz, energy_1qxyz):
+        """
+        Strain-energy density W(F) = (λ/2) ln(J)²  +  (μ/2)(F:F - dim)  -  μ ln(J).
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F.
+        energy_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Output energy density per quadrature point, overwritten in place
+            (not yet integrated/weighted by quadrature weights).
+        """
         F = strain_ijqxyz
         lam = self.lam.s[0, 0]
         mu = self.mu.s[0, 0]
@@ -154,6 +291,7 @@ class NeoHookean(MaterialModelElasticity):
         log_field(J_1qxyz, lnJ_1qxyz)
 
         lnJ = lnJ_1qxyz.s[0, 0]
+        # I₁ = F_ij F_ij = tr(FᵀF), evaluated pointwise -> [q, x, y, z]
         FF = np.einsum('ij...,ij...->...', F.s, F.s)
 
         energy_1qxyz.s[0, 0] = 0.5 * lam * lnJ ** 2 + 0.5 * mu * (FF - dim) - mu * lnJ
@@ -161,6 +299,17 @@ class NeoHookean(MaterialModelElasticity):
     def get_stress(self, strain_ijqxyz, stress_ijqxyz):
         """
         P = λ ln(J) F^{-T}  +  μ (F - F^{-T})
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F (det F must be positive).
+        stress_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Output 1st Piola-Kirchhoff stress P, overwritten in place.
+
+        Notes
+        -----
+        Uses temporary fields named 'Finv', 'FinvT', 'J', 'lnJ'.
         """
         F    = strain_ijqxyz
         lam  = self.lam.s[0, 0]   # shape [q, x, y, z]
@@ -185,18 +334,34 @@ class NeoHookean(MaterialModelElasticity):
 
     def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
         """
-        Stored tangent, already expressed in this project's reversed contraction
-        convention  P_ij = A_ijkl F_lk  (see tensor_operations.py module docstring),
-        i.e. with the last two indices of the standard dP_ij/dF_kl swapped:
+        Algorithmic tangent in the standard order A_ijkl = ∂P_ij/∂F_kl, so that
+        dP_ij = A_ijkl dF_kl (``tensor_operations.ddot42``):
 
-          A_ijkl = λ FinvT_ij FinvT_lk
-                 + (μ - λ ln J) FinvT_ik FinvT_lj
-                 + μ δ_il δ_jk
+          A_ijkl = λ FinvT_ij FinvT_kl
+                 + (μ - λ ln J) FinvT_il FinvT_kj
+                 + μ δ_ik δ_jl
 
         Three contributions:
-          term1 : λ          FinvT_ij FinvT_lk   (volumetric)
-          term2 : (μ-λ ln J)  FinvT_ik FinvT_lj   (distortional coupling)
-          term3 :     μ       δ_il δ_jk           (distortional identity)
+          term1 : λ          FinvT_ij FinvT_kl   (volumetric)
+          term2 : (μ-λ ln J)  FinvT_il FinvT_kj   (distortional coupling)
+          term3 :     μ       δ_ik δ_jl           (distortional identity)
+
+        Derivation:
+          ∂(ln J)/∂F_kl   = F^{-T}_kl
+          ∂F^{-T}_ij/∂F_kl = -F^{-T}_il F^{-T}_kj
+          ∂F_ij/∂F_kl      = δ_ik δ_jl
+        The tangent has major symmetry A_ijkl = A_klij (hyperelastic material).
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F.
+        tangent_ijklqxyz : muGrid field [i, j, k, l, q, x, y, z]
+            Output tangent A, overwritten in place.
+
+        Notes
+        -----
+        Uses temporary fields 'Finv', 'FinvT', 'J', 'lnJ', 'term1', 'term2', 'term3'.
         """
         F = strain_ijqxyz
         lam = self.lam.s[0, 0]
@@ -224,22 +389,15 @@ class NeoHookean(MaterialModelElasticity):
         index_extender = (...,) + (np.newaxis,) * n_extra
 
         # term1: λ FinvT_ij FinvT_kl
-        #dyad22(FinvT_ijqxyz, FinvT_ijqxyz, term1_ijklqxyz)
-        #term1_ijklqxyz.s[...] *= lam
-        # term1: lam FinvT_ij FinvT_lk        ('kl' -> 'lk')
-        term1_ijklqxyz.s[...] = lam * np.einsum('ij...,lk...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
+        term1_ijklqxyz.s[...] = lam * np.einsum('ij...,kl...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
 
-        # term2: (μ - λ lnJ) FinvT_il FinvT_jk
-        # term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,jk...->ijkl...',
-        #                                           FinvT_ijqxyz.s,
-        #                                           FinvT_ijqxyz.s)
-        # term2: (mu - lam lnJ) FinvT_ik FinvT_lj    ('il,jk' -> 'ik,lj')
-        term2_ijklqxyz.s[...] = coef2 * np.einsum('ik...,lj...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
+        # term2: (μ - λ lnJ) FinvT_il FinvT_kj
+        term2_ijklqxyz.s[...] = coef2 * np.einsum('il...,kj...->ijkl...', FinvT_ijqxyz.s, FinvT_ijqxyz.s)
 
 
-        # term3:  μ δ_il δ_jk
+        # term3:  μ δ_ik δ_jl
         I = np.eye(dim)
-        IsI = np.einsum('il,jk->ijkl', I, I)
+        IsI = np.einsum('ik,jl->ijkl', I, I)
         term3_ijklqxyz.s[...] = IsI[index_extender] * mu
 
         tangent_ijklqxyz.s[...] = (term1_ijklqxyz.s
@@ -249,9 +407,39 @@ class NeoHookean(MaterialModelElasticity):
 # ============================================================================
 # Concrete implementation 3: Third Medium (TMC)
 # ============================================================================
+# NOTE: no Third-Medium model is implemented yet; everything below is a set of
+# stand-alone (single material point) tensor / parameter utility functions.
 
 
 def compute_Voigt_notation_4order(C_ijkl):
+    """
+    Convert a 4th-order tensor (e.g. stiffness) to a Voigt matrix.
+
+    Index pairs are mapped as
+      2D: 0 -> (0,0), 1 -> (1,1), 2 -> (0,1)
+      3D: 0 -> (0,0), 1 -> (1,1), 2 -> (2,2), 3 -> (1,2), 4 -> (0,2), 5 -> (0,1)
+    and ``C_voigt[K, L] = C_ijkl[pair(K) + pair(L)]``.
+
+    Parameters
+    ----------
+    C_ijkl : ndarray, shape (dim, dim, dim, dim), dim in {2, 3}
+
+    Returns
+    -------
+    C_voigt_kl : ndarray, shape (3, 3) for 2D or (6, 6) for 3D
+
+    Notes
+    -----
+    Pure index re-mapping: no factors of 2 or sqrt(2) are applied to shear
+    entries (i.e. not Mandel notation). For a minor-symmetric stiffness this
+    is the standard Voigt stiffness matrix acting on engineering shear strains
+    (gamma = 2 eps_ij).
+
+    Raises
+    ------
+    ValueError
+        If ``dim`` is not 2 or 3.
+    """
     # function return Voigt notation of elastic tensor
     if len(C_ijkl) == 2:
         C_voigt_kl = np.zeros([3, 3])
@@ -266,6 +454,8 @@ def compute_Voigt_notation_4order(C_ijkl):
         for i in np.arange(len(C_voigt_kl[0])):
             for j in np.arange(len(C_voigt_kl[1])):
                 C_voigt_kl[i, j] = C_ijkl[ij_ind[i] + ij_ind[j]]
+    else:
+        raise ValueError(f'Voigt notation is implemented for dim 2 and 3, got dim={len(C_ijkl)}')
     return C_voigt_kl
 
 
@@ -298,6 +488,17 @@ def compute_Voigt_notation_2order(tensor_ij):
     -------
     voigt_vector : ndarray
         Tensor in Voigt vector notation. Shape (3,) for 2D or (6,) for 3D.
+
+    Raises
+    ------
+    ValueError
+        If the tensor is not (2, 2) or (3, 3).
+
+    Notes
+    -----
+    Shear components are copied as-is (tensor shear ε_xy, NOT engineering
+    shear γ_xy = 2 ε_xy). When multiplying a strain vector from this function
+    with a Voigt stiffness matrix, the shear entries must be doubled by the caller.
     """
     if tensor_ij.shape == (2, 2):
         return np.array([
@@ -340,6 +541,11 @@ def compute_Voigt_notation(tensor):
     -------
     voigt_tensor : ndarray
         Tensor in Voigt notation.
+
+    Raises
+    ------
+    ValueError
+        If ``tensor.ndim`` is neither 2 nor 4.
     """
     if tensor.ndim == 2:
         return compute_Voigt_notation_2order(tensor)
@@ -350,6 +556,30 @@ def compute_Voigt_notation(tensor):
 
 
 def get_bulk_and_shear_modulus(E, poisson):
+    """
+    Convert Young's modulus and Poisson's ratio to (3D) bulk and shear moduli.
+
+    K = E / (3 (1 - 2 nu)),   G = E / (2 (1 + nu))
+
+    Parameters
+    ----------
+    E : float
+        Young's modulus.
+    poisson : float
+        Poisson's ratio nu.
+
+    Returns
+    -------
+    K : float
+        Bulk modulus (3D definition).
+    G : float
+        Shear modulus (= Lamé mu).
+
+    Raises
+    ------
+    ValueError
+        If nu is (numerically) 0.5, where K diverges.
+    """
     if abs(1 - 2 * poisson) < 1e-10:
         raise ValueError("Poisson's ratio too close to 0.5 (incompressible limit); K is undefined/infinite.")
     K = E / (3 * (1 - 2 * poisson))
@@ -378,6 +608,11 @@ def get_lame_parameters(E, poisson):
         First Lame parameter (lambda).
     mu : float
         Second Lame parameter (mu), equivalent to the shear modulus G.
+
+    Raises
+    ------
+    ValueError
+        If poisson is (numerically) 0.5.
     """
     if abs(1 - 2 * poisson) < 1e-10:
         raise ValueError("Poisson's ratio too close to 0.5 (incompressible limit); "
@@ -412,6 +647,18 @@ def get_lame_parameters_from_bulk_and_shear(K, G, dim):
         First Lame parameter (lambda).
     mu : float
         Second Lame parameter (mu), equivalent to the shear modulus G.
+
+    Raises
+    ------
+    ValueError
+        If dim is not 2 or 3.
+
+    Notes
+    -----
+    For dim = 2, K is interpreted as the 2D (in-plane) bulk modulus
+    K_2D = lambda + mu, so lambda = K - G. This is NOT the same as using the 3D
+    bulk modulus in plane strain (where lambda = K_3D - 2/3 G); make sure the
+    supplied K matches the intended definition.
     """
     if dim not in (2, 3):
         raise ValueError(f"dim must be 2 or 3, got {dim}")
@@ -422,6 +669,32 @@ def get_lame_parameters_from_bulk_and_shear(K, G, dim):
 
 
 def get_elastic_material_tensor(dim, K=1, mu=0.5, kind='linear'):
+    """
+    Isotropic elastic stiffness tensor in bulk/shear (volumetric-deviatoric) form.
+
+    C_abcd = K δ_ab δ_cd + μ (δ_ac δ_bd + δ_ad δ_bc - 2/3 δ_ab δ_cd)
+
+    i.e. C = 3K I_vol + 2μ I_dev with the 3D projectors; equivalently
+    λ = K - 2/3 μ. The factor 2/3 is the 3D one and is used for dim = 2 as
+    well, so in 2D K should be the 3D bulk modulus (plane strain).
+
+    Parameters
+    ----------
+    dim : int
+        Spatial dimension (2 or 3).
+    K : float, optional
+        Bulk modulus (default 1).
+    mu : float, optional
+        Shear modulus (default 0.5).
+    kind : str, optional
+        Only 'linear' is implemented (default). Note the test is
+        ``kind in 'linear'`` (substring test): substrings such as 'lin' or ''
+        also match, any other value returns a zero tensor.
+
+    Returns
+    -------
+    mat : ndarray, shape (dim, dim, dim, dim)
+    """
     shape = np.array(4 * [dim, ])
     mat = np.zeros(shape)
     kron = lambda a, b: 1 if a == b else 0
@@ -443,19 +716,26 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
 
     Parameters
     ----------
-    strain_ijqxyz : mugrid field, shape (dim, dim, nb_quad_points, *nb_nodes)
-        Input strain field.
-    lam_1qxyz : mugrid field, shape (1, nb_quad_points, *nb_nodes)
+    strain_ijqxyz : mugrid field, shape (dim, dim, nb_quad_points, *nb_pixels)
+        Input strain field (assumed symmetric; not symmetrised).
+    lam_1qxyz : mugrid scalar field (leading component axes of size 1, then q, *nb_pixels)
         First Lame parameter per quad point.
-    mu_1qxyz : mugrid field, shape (1, nb_quad_points, *nb_nodes)
+    mu_1qxyz : mugrid scalar field (leading component axes of size 1, then q, *nb_pixels)
         Second Lame parameter (shear modulus) per quad point.
-    output_stress_ijqxyz : mugrid field, shape (dim, dim, nb_quad_points, *nb_nodes)
+    output_stress_ijqxyz : mugrid field, shape (dim, dim, nb_quad_points, *nb_pixels)
        Output stress field. Written in place.
+
+    Notes
+    -----
+    Functional equivalent of ``LinearElastic.get_stress`` that does not
+    allocate temporary muGrid fields. Relies on numpy broadcasting of the
+    size-1 component axes of ``lam``/``mu`` against the (dim, dim) tensor axes.
     """
     strain = strain_ijqxyz.s[...]  # (dim, dim, q, *xyz)
-    lam = lam_1qxyz.s[...]  # (1, q, *xyz)
-    mu = mu_1qxyz.s[...]  # (1, q, *xyz)
+    lam = lam_1qxyz.s[...]  # (1, 1, q, *xyz)
+    mu = mu_1qxyz.s[...]  # (1, 1, q, *xyz)
 
+    # Disabled alternative kept for reference:
     # symmetrize: handles full-gradient input the same way C_ijkl minor symmetry does
     # strain = (strain + np.swapaxes(strain, 0, 1)) / 2
 
@@ -464,6 +744,7 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
     # trace over the first two (tensor) axes only, keep q,*xyz as-is
     trace_eps_qxyz = np.einsum('ii...->...', strain)  # shape (q, *xyz)
 
+    # identity with singleton axes appended so it broadcasts over [q, x, y, z]
     I = np.eye(dim).reshape((dim, dim) + (1,) * (strain.ndim - 2))
 
     output_stress_ijqxyz.s[...] = lam * trace_eps_qxyz * I + 2.0 * mu * strain
@@ -525,10 +806,18 @@ def get_orthotropic_stiffness_tensor_plane_strain(E1, E2, G12, nu12):
         nu12 (float): Poisson's ratio (strain in y due to stress in x).
 
     Returns:
-        np.ndarray: 3x3 stiffness matrix.
+        np.ndarray: 4th-order stiffness tensor of shape (2, 2, 2, 2)
+        (not a 3x3 Voigt matrix; use compute_Voigt_notation_4order for that).
+
+    Notes:
+        Entries filled: C_1111 = C11, C_2222 = C22, C_1122 = C_2211 = C12 and
+        all four shear permutations C_1212 = C_2121 = C_1221 = C_2112 = G12,
+        so that sigma_12 = 2 G12 eps_12. The expressions
+        C11 = E1/(1 - nu12 nu21), C12 = nu12 E2/(1 - nu12 nu21) are the
+        reduced (plane-STRESS) orthotropic stiffnesses, despite the function name.
     """
-    # Compute nu21 from symmetry condition: nu21 / E2 = nu12 / E1
-    nu21 = (nu12 * E1) / E2
+    # Compute nu21 from the symmetry condition nu21 / E2 = nu12 / E1
+    nu21 = (nu12 * E2) / E1
 
     # Stiffness matrix components
     factor = 1 / (1 - nu12 * nu21)
@@ -569,7 +858,20 @@ def get_elastic_tangent(E, nu, mode="3D"):
     Returns
     -------
     C : ndarray
-        Elastic tangent matrix
+        Elastic tangent matrix in Voigt notation:
+        (6, 6) for "3D" with ordering (xx, yy, zz, yz, xz, xy), or (3, 3) for
+        the 2D modes with ordering (xx, yy, xy).
+
+    Raises
+    ------
+    ValueError
+        If mode is not one of the supported strings (case-insensitive).
+
+    Notes
+    -----
+    The shear diagonal entries are mu (not 2 mu), i.e. the matrix acts on
+    engineering shear strains gamma_ij = 2 eps_ij. Plane stress uses
+    C11 = E / (1 - nu^2), C12 = nu C11, C66 = mu.
     """
 
     # Lame parameters

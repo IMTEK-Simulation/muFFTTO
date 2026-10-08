@@ -38,6 +38,8 @@ import os
 import sys
 import inspect
 
+import time
+
 import numpy as np
 from mpi4py import MPI
 from matplotlib import pyplot as plt
@@ -58,6 +60,7 @@ from muFFTTO import domain, tensor_operations
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
 from muFFTTO import visualization_utils
+from muFFTTO import io_utils
 
 # ============================================================================
 # problem setup
@@ -68,6 +71,12 @@ ninc = 100
 # plotting: deformed mesh every `plot_every` increments (0 = only the final
 # response curves).  Serial runs only -- the fields are distributed under MPI.
 plot_every = 10
+
+# saving (muFFTTO.io_utils): one frame per increment with the phase field,
+# the displacement fluctuation, the imposed (throttled) gradient field and the
+# increment history, in exp_data/<script>/Nx=..Ny=../tmc_run.nc.  Read it
+# with read_tmc.py.  None = no output.
+output_name = 'tmc_run.nc'
 
 # per-pixel load throttling: fraction of each point's own admissible scale
 PIXEL_SAFETY = 0.5
@@ -455,6 +464,29 @@ hist_throttled = []
 
 serial = discretization.communicator.size == 1
 
+# ---- output file -------------------------------------------------------------
+writer = None
+if output_name is not None:
+    data_folder_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exp_data',
+                                    os.path.splitext(os.path.basename(__file__))[0], f'Nx={nnn}Ny={nnn}')
+    if rank == 0:
+        os.makedirs(data_folder_path, exist_ok=True)
+    comm.Barrier()
+    output_path = os.path.join(data_folder_path, output_name)
+    writer = io_utils.FieldWriter(
+        output_path, [phase_field, displacement_fluctuation_field, imposed_field],
+        attributes={'geometry': geometry_name, 'element_type': element_type,
+                    'formulation': formulation, 'nb_grid_pts': number_of_pixels,
+                    'domain_size': np.asarray(domain_size, dtype=float), 'H_macro': H_macro,
+                    'E_matrix': E_matrix, 'nu_matrix': nu_matrix, 'k_v': k_v, 'alpha': alpha,
+                    'k_r': k_r,
+                    'PIXEL_SAFETY': PIXEL_SAFETY},
+        frame_variables={'increment': (), 'lam': (), 'F10': (), 'F10_nominal': (),
+                         'throttled_points': (), 'P10': (), 'Pxx': (),
+                         'min_det_F': (), 'energy': (), 'nb_outer': (), 'nb_hessp': (),
+                         'grad_inf': (), 'converged': (), 'elapsed_time': ()})
+start_time = time.time()
+
 root_print('=' * 70)
 root_print(f'geometry     : {geometry_name}')
 root_print(f'element_type : {element_type}')
@@ -504,17 +536,25 @@ for inc in range(1, ninc + 1):
     root_print(f'  outer its {res.nit:4d} | hessp {res.nb_hessp:6d} '
                f'| |grad|_inf {res.max_grad:10.3e} | Pi {res.fun:12.6e}')
     root_print(f'  min(det F) {J_min:10.3e} | '
-               f'P_xx {stress_field.s[0, 0].mean():10.3e} | '
-               f'P_yx {stress_field.s[1, 0].mean():10.3e}')
+               f'P_xx {global_mean(stress_field.s[0, 0]):10.3e} | '
+               f'P_yx {global_mean(stress_field.s[1, 0]):10.3e}')
 
     hist_lam.append(lam_nominal)
     hist_F10.append(F10_target)
     hist_F10_actual.append(F10_actual)
-    hist_P10.append(float(stress_field.s[1, 0].mean()))
-    hist_Pxx.append(float(stress_field.s[0, 0].mean()))
+    hist_P10.append(float(global_mean(stress_field.s[1, 0])))
+    hist_Pxx.append(float(global_mean(stress_field.s[0, 0])))
     hist_minJ.append(J_min)
     hist_energy.append(float(res.fun))
     hist_throttled.append(n_throttled)
+
+    if writer is not None:
+        displacement_fluctuation_field.s[...] = u
+        writer.write(increment=inc, lam=lam_nominal, F10=F10_actual, F10_nominal=F10_target,
+                     throttled_points=n_throttled, P10=hist_P10[-1], Pxx=hist_Pxx[-1],
+                     min_det_F=J_min, energy=float(res.fun), nb_outer=int(res.nit),
+                     nb_hessp=int(res.nb_hessp), grad_inf=float(res.max_grad),
+                     converged=int(bool(res.success)), elapsed_time=time.time() - start_time)
 
     # ---- deformed mesh -----------------------------------------------------
     # NOTE: plotted with the MEAN imposed gradient, since there is no single
@@ -536,6 +576,10 @@ root_print('=' * 70)
 root_print(f'final min J : {min_J(total_strain_field):.6e}')
 root_print(f'imposed F_10: target {hist_F10[-1]:+.5f}   '
            f'actual (mean) {hist_F10_actual[-1]:+.5f}')
+
+if writer is not None:
+    writer.close()
+    root_print(f'wrote       : {output_path}')
 
 # ============================================================================
 # response curves

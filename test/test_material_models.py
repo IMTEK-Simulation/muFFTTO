@@ -313,14 +313,14 @@ def test_NeoHookean_MaterialModelElasticity_(discretization_fixture):
     """
     Correctness check for NeoHookean tangent contraction convention.
 
-    The project uses the reversed contraction convention P_ij = A_ijkl F_lk,
-    not the direct order P_ij = A_ijkl F_kl. Since NeoHookean's stress P(F)
+    The project uses the standard contraction dP_ij = A_ijkl dF_kl with
+    A_ijkl = dP_ij/dF_kl. Since NeoHookean's stress P(F)
     is nonlinear, C:F ≠ P, so we cannot use the "tangent reproduces stress" check.
     Instead, we verify the directional derivative: A·dF must match dP/dF (dF̂).
 
     The test builds F without symmetrizing to exercise the bug that hides in
     the LinearElastic test (whose tangent is symmetric under k↔l, so direct
-    and reversed orders give identical results for symmetric strains).
+    and swapped index orders give identical results for symmetric strains).
     """
     rng = np.random.default_rng(42)
     dim = discretization_fixture.domain_dimension
@@ -420,7 +420,7 @@ def test_NeoHookean_MaterialModelElasticity_(discretization_fixture):
             "the directional derivative dP computed via finite differences. "
             "This indicates an error in either get_algorithmic_tangent (building the wrong A_ijkl) "
             "or apply_algorithmic_tangent (contracting over wrong indices). "
-            "The project's contraction convention is P_ij = A_ijkl F_lk (see tensor_operations.py). "
+            "The project's contraction convention is dP_ij = A_ijkl dF_kl (see tensor_operations.py). "
             f"Max absolute error: {np.max(np.abs(dP_fd - dP_tangent)):.3e}, "
             f"Max relative error: {np.max(np.abs((dP_fd - dP_tangent) / (np.abs(dP_fd) + 1e-30))):.3e}"
         )
