@@ -1,5 +1,7 @@
 import sys
 import os
+import argparse
+import json
 
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -27,10 +29,10 @@ R_MM         = 3.0              # void & inclusion radius r                     
 MU_M_MPA     = 0.6              # matrix shear modulus mu^(m) (FLX9860)           [MPa]
 MU_I_MPA     = 600.0            # stiff inclusion shear modulus mu^(i) (VeroWhite) [MPa]
 LAM_OVER_MU  = 1e3              # Lambda / mu, matrix and inclusion (Sec. 3, after Eq. 1) [-]
-C_MATRIX     = 0.25             # matrix volume fraction c^(m)                   [-]
+C_MATRIX     = 0.25             # target matrix volume fraction c^(m)                   [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
-MU_V_MPA     = 1e-4 * MU_M_MPA  # void stand-in shear modulus (numerical, NOT in paper) [MPa]
+MU_V_MPA     = 1e-4 * MU_M_MPA  # void stand-in shear modulus (arbitrary) [MPa]
 
 # Reference scales (nondimensionalisation) ====================================================
 L_REF = R_MM        # length scale  [mm]  -> lengths in units of r
@@ -49,12 +51,34 @@ eps_plot = -0.05         # macro compression in X used for the field plot
 cg_tol = 1e-6           # CG tolerance (relative)
 # =============================================================================================
 
+# Mesh resolution: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
+# Value must come from the convergence study (Stefanus_convergence_ligament.py), as the paper's
+# "mesh sensitive analysis" (Sec. 3). Command-line options are used by that driver script.
+parser = argparse.ArgumentParser()
+parser.add_argument('--px_per_ligament', type=int, default=8)   # pixels across ligament a - 2r (numerical choice)
+parser.add_argument('--no_plots', action='store_true')          # batch runs: no figures
+parser.add_argument('--results_json', default=None)             # batch runs: write results here
+args, _ = parser.parse_known_args()
+PX_PER_LIGAMENT = args.px_per_ligament
+MAKE_PLOTS = not args.no_plots
+if not MAKE_PLOTS:                       # keep all plotting code, but make plt.show() a no-op
+    plt.switch_backend('Agg')
+    plt.show = lambda *a, **k: plt.close('all')
+# =============================================================================================
+
 # Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
 a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * inclusion_vol_frac))   # from c_circles = 2 pi r^2 / (sqrt(3) a^2)
-pixels_per_a = 96        # aim for >= 5-8 px across the ligament
+ligament = a - 2 * r                                            # thinnest matrix ligament (void-void)
 
+h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
 domain_size = [2 * a, np.sqrt(3) * a]
-number_of_pixels = (int(round(2 * pixels_per_a)), int(round(np.sqrt(3) * pixels_per_a)))
+number_of_pixels = (int(round(domain_size[0] / h)), int(round(domain_size[1] / h)))
+h_x, h_y = domain_size[0] / number_of_pixels[0], domain_size[1] / number_of_pixels[1]   # actual sizes
+
+if MPI.COMM_WORLD.rank == 0:
+    print(f'a = {a * L_REF:.3f} mm | ligament = {ligament * L_REF:.3f} mm | '
+          f'pixel = {h_x * L_REF:.4f} x {h_y * L_REF:.4f} mm | '
+          f'{ligament / max(h_x, h_y):.1f} px across ligament | grid = {number_of_pixels}')
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -172,6 +196,7 @@ material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(nam
 total_strain_ijqxyz = discretization.get_strain_sized_field(name='total_strain_field')
 
 material.get_algorithmic_tangent(total_strain_ijqxyz, material_data_field_C_0)
+
 
 def K_fun(x, Ax):
 
@@ -352,3 +377,16 @@ if discretization.communicator.size == 1:
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
+
+# results for the convergence study ===========================================================
+if args.results_json is not None and MPI.COMM_WORLD.rank == 0:
+    with open(args.results_json, 'w') as f:
+        json.dump({'px_per_ligament': PX_PER_LIGAMENT,
+                   'nb_pixels': list(number_of_pixels),
+                   'h_mm': max(h_x, h_y) * L_REF,
+                   'element_type': element_type,
+                   'c_matrix_resolved': float(1 - vf_soft - vf_stiff),
+                   'E_X': float(E_X), 'E_Y': float(E_Y),          # units of mu_m
+                   'nu_YX': float(nu_YX), 'nu_XY': float(nu_XY),
+                   'cg_its': [int(v) for v in cg_its.values()],
+                   'time_s': float(elapsed_time)}, f)
