@@ -245,8 +245,9 @@ def sensitivity_flux_and_adjoint(discretization,
         If ``True``, print the number of adjoint CG iterations on rank 0.
     **kwargs
         ``cg_tol`` (float, default ``1e-7``): CG tolerance;
-        ``r_tol`` (bool, default ``True``): passed as ``rtol`` to the CG
-        solver (whether the tolerance is relative).
+        ``r_tol`` (bool, default ``True``): relative stopping criterion
+        ``|r| <= cg_tol |b|`` (relative to the right-hand side, not to the
+        warm-start residual); ``False``: absolute ``|r| <= cg_tol``.
 
     Returns
     -------
@@ -366,20 +367,27 @@ def sensitivity_flux_and_adjoint(discretization,
 
     # solve A lambda = -w df/du (A symmetric -> same operator as the forward problem)
     # adjoint equation K^T lambda = -df/du; K^T = K because A(rho) is symmetric
-    # (checked above), so the state operator is reused
-    solvers.conjugate_gradients_mugrid(
-        comm=discretization.communicator,
-        fc=discretization.field_collection,
-        hessp=system_matrix_fun,  # linear operator
-        b=df_du_field,
-        x=adjoint_field_inxyz,
-        P=preconditioner_fun,
-        tol=cg_tol,
-        rtol=r_tol,
-        maxiter=int(10000),
-        callback=callback_adjoint,
-        # norm_metric=res_norm
-    )
+    # (checked above), so the state operator is reused.
+    # Relative tolerance (r_tol=True) means relative to |b|, not to the residual of the warm start: a warm start
+    # that is already (nearly) the solution has a round-off residual, a criterion relative to it cannot be met and
+    # CG returns a wrong adjoint (see sensitivity_stress_and_adjoint_FE_NEW). |b| = 0 means lambda = 0.
+    b_norm = np.sqrt(discretization.communicator.sum(np.dot(df_du_field.s.ravel(), df_du_field.s.ravel())))
+    if b_norm == 0:
+        adjoint_field_inxyz.s[...] = 0.0
+    else:
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=system_matrix_fun,  # linear operator
+            b=df_du_field,
+            x=adjoint_field_inxyz,
+            P=preconditioner_fun,
+            tol=cg_tol * b_norm if r_tol else cg_tol,
+            rtol=False,
+            maxiter=int(10000),
+            callback=callback_adjoint,
+            # norm_metric=res_norm
+        )
 
     info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:

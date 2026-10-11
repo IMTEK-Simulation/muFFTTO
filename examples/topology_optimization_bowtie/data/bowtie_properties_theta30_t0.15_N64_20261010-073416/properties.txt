@@ -1,0 +1,7 @@
+bow-tie: theta 30 deg, thickness 0.15, 64^2 pixels, solid fraction 0.304
+initial design (bow-tie):
+  C (Voigt, engineering shear) =
+     0.10028  -0.04728   0.00002
+    -0.04728   0.02947  -0.00003
+     0.00002  -0.00003   0.00079
+  E_x 0.02443  E_y 0.00718  G_xy 0.00079  nu_xy -1.6043  nu_yx -0.4715

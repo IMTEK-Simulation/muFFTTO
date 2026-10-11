@@ -17,6 +17,7 @@ adjoint-based topology optimization built on top of it.
    - [5. Assembling and solving the linear system](theory.md#5-assembling-and-solving-the-linear-system)
    - [6. Effective (homogenized) properties](theory.md#6-effective-homogenized-properties)
    - [7. Topology optimization](theory.md#7-topology-optimization)
+     (alternative regularization: [7.5 density filter and projection](theory.md#75-alternative-regularization-density-filter-and-heaviside-projection))
    - [8. Grid adaptation (deformed grids)](theory.md#8-grid-adaptation-deformed-grids)
    - [9. Notation and array conventions](theory.md#9-notation-and-array-conventions)
 2. **Example walkthroughs**: each page maps the code of an example, block by
@@ -27,6 +28,7 @@ adjoint-based topology optimization built on top of it.
 | [Homogenization: conductivity](examples/homogenization_conductivity.md) | `examples/homogenization/conductivity/` | Scalar diffusion cell problem in 2D/3D, linear and quadratic elements, block CG |
 | [Homogenization: elasticity](examples/homogenization_elasticity.md) | `examples/homogenization/small_strain_elasticity/`, `examples/homogenization/finite_strain_elasticity/` | Small-strain linear elasticity in 2D/3D, finite-strain Neo-Hookean with Newton–CG |
 | [Topology optimization](examples/topology_optimization.md) | `examples/topology_optimization/` | Phase-field inverse design of microstructures with prescribed effective conductivity/stiffness (adjoint sensitivities + L-BFGS) |
+| [Topology optimization from a bow-tie](examples/topology_optimization_bowtie.md) | `examples/topology_optimization_bowtie/` | Bow-tie (re-entrant honeycomb) initial design tuned to other Poisson ratios; phase-field or density filter + Heaviside projection |
 | [Grid adaptation](examples/grid_adaptation.md) | `examples/grid_adaptation/` | Homogenization on deformed (mapped) grids |
 | [Analytical solutions](examples/analytical_solutions.md) | `examples/analytical_solutions/` | Hashin coated inclusion: verification against a closed-form solution |
 | [Internal contact](examples/internal_contact.md) | `examples/internal_contact/` | Third-medium contact at finite strain with a trust-region Newton solver |

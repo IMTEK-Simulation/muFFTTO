@@ -1,0 +1,28 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N32_Gc0.1_GJ_EW_elastic_20261008-205829
+inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0002  P10 +3.0626e-04  min J 9.54e-01  max d 0.000  stagger   1  hessp    794  converged
+inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0004  P10 +6.2460e-04  min J 9.10e-01  max d 0.000  stagger   1  hessp    621  converged
+inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0006  P10 +9.5466e-04  min J 8.67e-01  max d 0.000  stagger   1  hessp    568  converged
+inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0008  P10 +1.2966e-03  min J 8.26e-01  max d 0.000  stagger   1  hessp    612  converged
+inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0010  P10 +1.6506e-03  min J 7.87e-01  max d 0.000  stagger   1  hessp    592  converged
+inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0012  P10 +2.0165e-03  min J 7.49e-01  max d 0.000  stagger   1  hessp    590  converged
+inc   7  lam 0.1400 (dlam 0.0200)  F10 +0.0014  P10 +2.3945e-03  min J 7.14e-01  max d 0.000  stagger   1  hessp    595  converged
+inc   8  lam 0.1600 (dlam 0.0200)  F10 +0.0016  P10 +2.7845e-03  min J 6.75e-01  max d 0.000  stagger   1  hessp    679  converged
+inc   9  lam 0.1800 (dlam 0.0200)  F10 +0.0018  P10 +3.1865e-03  min J 6.34e-01  max d 0.000  stagger   1  hessp    610  converged
+inc  10  lam 0.2000 (dlam 0.0200)  F10 +0.0020  P10 +3.6005e-03  min J 5.92e-01  max d 0.000  stagger   1  hessp    620  converged
+inc  11  lam 0.2200 (dlam 0.0200)  F10 +0.0022  P10 +4.0264e-03  min J 5.50e-01  max d 0.000  stagger   1  hessp    629  converged
+inc  12  lam 0.2400 (dlam 0.0200)  F10 +0.0024  P10 +4.4643e-03  min J 5.08e-01  max d 0.000  stagger   1  hessp    630  converged
+inc  13  lam 0.2600 (dlam 0.0200)  F10 +0.0026  P10 +4.9141e-03  min J 4.65e-01  max d 0.000  stagger   1  hessp    622  converged
+inc  14  lam 0.2800 (dlam 0.0200)  F10 +0.0028  P10 +5.3756e-03  min J 4.23e-01  max d 0.000  stagger   1  hessp    615  converged
+inc  15  lam 0.3000 (dlam 0.0200)  F10 +0.0030  P10 +5.8489e-03  min J 3.80e-01  max d 0.000  stagger   1  hessp    611  converged
+inc  16  lam 0.3200 (dlam 0.0200)  F10 +0.0032  P10 +6.3339e-03  min J 3.38e-01  max d 0.000  stagger   1  hessp    602  converged
+inc  17  lam 0.3400 (dlam 0.0200)  F10 +0.0034  P10 +6.8304e-03  min J 2.95e-01  max d 0.000  stagger   1  hessp    607  converged
+inc  18  lam 0.3600 (dlam 0.0200)  F10 +0.0036  P10 +7.3384e-03  min J 2.52e-01  max d 0.000  stagger   1  hessp    606  converged
+inc  19  lam 0.3800 (dlam 0.0200)  F10 +0.0038  P10 +7.8579e-03  min J 2.09e-01  max d 0.000  stagger   1  hessp    605  converged
+inc  20  lam 0.4000 (dlam 0.0200)  F10 +0.0040  P10 +8.3889e-03  min J 1.66e-01  max d 0.000  stagger   1  hessp    594  converged
+inc  21  lam 0.4200 (dlam 0.0200)  F10 +0.0042  P10 +8.9314e-03  min J 1.23e-01  max d 0.000  stagger   1  hessp    593  converged
+inc  22  lam 0.4400 (dlam 0.0200)  F10 +0.0044  P10 +9.4859e-03  min J 8.07e-02  max d 0.000  stagger   1  hessp    557  converged
+inc  23  lam 0.4600 (dlam 0.0200)  F10 +0.0046  P10 +1.0053e-02  min J 4.05e-02  max d 0.000  stagger   1  hessp    713  converged
+inc  24  lam 0.4800 (dlam 0.0200)  F10 +0.0048  P10 +1.0631e-02  min J 1.32e-02  max d 0.000  stagger   1  hessp  19960  converged
+inc  25  lam 0.5000 (dlam 0.0200)  F10 +0.0050  P10 +1.1204e-02  min J 5.83e-03  max d 0.000  stagger   1  hessp   1115  converged
+elapsed 218.9 s, 25 increments, final lam 0.5000
+wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N32_Gc0.1_GJ_EW_elastic_20261008-205829/contact_fracture.nc

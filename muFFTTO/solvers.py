@@ -419,7 +419,23 @@ def conjugate_gradients_mugrid_experimental(
     **kwargs
         ``tau`` (float, default 0.25): tolerance of the adaptive-delay test
         of the Hestenes--Stiefel lower bound; must satisfy ``0 <= tau < 1``
-        for ``'energy_upper_estim'`` / ``'all'``. Other keys are ignored.
+        for ``'energy_upper_estim'`` / ``'all'``.
+        ``d_min`` (int, default 0): minimal delay of the lower bound; the
+        estimate for iteration ``l`` is accepted at iteration ``k`` only if,
+        in addition to the adaptive test, ``k - l >= d_min``. ``d_min = 0``
+        is the plain adaptive delay.
+        ``energy_rtol`` (bool, default False): make the three energy criteria
+        relative, like ``rtol`` makes the residual ones relative: they are
+        compared with ``tol**2`` times the current estimate of the initial
+        energy error ``||x - x_0||_A^2 ~ sum_{j=0}^{k} Delta_j`` (the running
+        sum ``curve[0]``; no extra operator or preconditioner application)
+        instead of ``tol**2`` (or ``tol**2 (r_0, r_0)`` with ``rtol``, which
+        mixes units). The residual criteria are unchanged.
+        ``energy_atol`` (float, default 0): absolute floor for the energy
+        criteria, which are also satisfied below ``energy_atol**2``. Useful
+        with ``energy_rtol`` and a warm start that is already almost exact
+        (a reduction relative to a tiny initial error may be out of reach of
+        round-off). Other keys are ignored.
 
     Returns
     -------
@@ -480,6 +496,10 @@ def conjugate_gradients_mugrid_experimental(
     # tau is needed by the validation below, so it is read here rather than
     # just before the iteration loop
     tau = kwargs.get("tau", 0.25)
+    d_min = kwargs.get("d_min", 0)
+    energy_rtol = kwargs.get("energy_rtol", False)
+    energy_atol = kwargs.get("energy_atol", 0.0)
+    energy_criteria = ("energy_lower_estim", "energy_upper_estim", "energy_upper_bound")
 
     # ---- stopping-criterion selection -------------------------------------
     _VALID_STOP = ("rr", "rz", "custom",
@@ -543,11 +563,13 @@ def conjugate_gradients_mugrid_experimental(
 
     # initial guess already good enough: absolute test, or (for rtol) an
     # exactly zero residual; norms is still empty
-    if stop_crit == 0 or (not rtol and stop_crit < tol_sq):
+    if stop_crit == 0 or (not rtol and stop_crit < tol_sq
+                          and not (energy_rtol and stop_crit_norm in energy_criteria)):
         return x, norms
 
     # relative tolerance: scaled by the initial (r, r) or (r, G r), whatever
     # stop_crit_norm is -- the same tol_sq is then used for all criteria
+    tol_sq_unscaled = tol_sq                   # tol**2, the base of the relative energy test
     if rtol:
         tol_sq = tol_sq * stop_crit
 
@@ -616,6 +638,18 @@ def conjugate_gradients_mugrid_experimental(
                 values[c] = (ub[-1] if (compute_upper_bound and ub and ub[-1] > 0.0)
                              else None)
         return values
+
+    def _threshold(criterion):
+        """
+        Value below which `criterion` is satisfied: tol_sq for the residual
+        criteria; for the energy criteria tol_sq, or with energy_rtol
+        tol**2 times the current estimate of ||x - x_0||_A^2 (curve[0]),
+        and at least energy_atol**2.
+        """
+        if criterion not in energy_criteria:
+            return tol_sq
+        threshold = tol_sq_unscaled * curve[0] if (energy_rtol and curve) else tol_sq
+        return max(threshold, energy_atol ** 2)
 
     for iteration in range(maxiter):
         # Compute Hessian product
@@ -689,11 +723,14 @@ def conjugate_gradients_mugrid_experimental(
             # of ||x - x_l||_A^2 = sum_{j=l}^{k} Delta_j as soon as the newest
             # contribution is relatively small, S Delta_k / sum_{j=l}^{k-1} Delta_j <= tau.
             # Several l may be accepted in one iteration (delay d decreases).
+            # With d_min > 0, the delay k - l must also be at least d_min,
+            # where k = len(Delta) is the index of the newest iterate.
             # Delta entries are already global scalars (identical on every
             # rank), so a plain sum is used -- no MPI reduction.
             num = S * Delta[-1]
             den = float(np.sum(Delta[l:-1]))
-            while (d >= 0) and (den > 0) and (num / den <= tau):
+            while ((d >= 0) and (den > 0) and (num / den <= tau)
+                   and (len(Delta) - l >= d_min)):
                 delay.append(d)
                 norms['energy_lower_estim'].append(den + Delta[-1])
                 l = l + 1
@@ -716,15 +753,15 @@ def conjugate_gradients_mugrid_experimental(
         # driving the loop. Free: all the values are already computed.
         for _name, _val in stop_values.items():
             if (norms['stop_iteration'][_name] is None
-                    and _val is not None and _val < tol_sq):
+                    and _val is not None and _val < _threshold(_name)):
                 norms['stop_iteration'][_name] = iteration + 1
 
         if stop_crit_norm == "all":
-            if all(v is not None and v < tol_sq for v in stop_values.values()):
+            if all(v is not None and v < _threshold(c) for c, v in stop_values.items()):
                 return x, norms
         else:
             stop_value = stop_values[stop_crit_norm]
-            if stop_value is not None and stop_value < tol_sq:
+            if stop_value is not None and stop_value < _threshold(stop_crit_norm):
                 return x, norms
 
     if comm.rank == 0:

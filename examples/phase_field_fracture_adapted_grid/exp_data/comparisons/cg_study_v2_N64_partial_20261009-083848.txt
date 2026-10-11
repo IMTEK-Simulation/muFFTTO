@@ -1,0 +1,13 @@
+common load range: F from 1 down to 0.9892
+case                                        final F  steps | up to common F:   TR it    CG it  CG/TR  dmg CG | whole run:   TR it     CG it  CG/TR   dmg CG   stag
+adapted_contact_Green                        0.9892      2 |                       5    20586 4117.2       0 |                  5     20586 4117.2        0      2
+adapted_damage_Green                         0.8812     22 |                       6      686  114.3     116 |                164     11420   69.6     2874     90
+adapted_damage_contact_Green                 0.9892      2 |                       6    21190 3531.7     116 |                  6     21190 3531.7      116      3
+adapted_elastic_Green                        0.7300     50 |                       5      646  129.2       0 |                101      9573   94.8        0     50
+regular_contact_Green                        0.7948     38 |                       5      762  152.4       0 |                106     16671  157.3        0     38
+regular_damage_contact_Green                 0.9298     13 |                       6      773  128.8      45 |                 50      5791  115.8      404     29
+adapted_contact_Green_Jacobi                 0.9676      6 |                       5     7763 1552.6       0 |                 13     22629 1740.7        0      6
+adapted_damage_Green_Jacobi                  0.9136     16 |                       6     1133  188.8     126 |                 75     14053  187.4     1561     42
+adapted_damage_contact_Green_Jacobi          0.9730      5 |                       6     8731 1455.2     126 |                 16     24904 1556.5      364      9
+adapted_elastic_Green_Jacobi                 0.8380     30 |                       5     1005  201.0       0 |                 61     15399  252.4        0     30
+regular_contact_Green_Jacobi                 0.7664     49 |                       4      253   63.2       0 |                183     15954   87.2        0     49

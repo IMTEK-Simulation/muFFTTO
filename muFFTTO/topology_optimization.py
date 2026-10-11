@@ -1317,8 +1317,9 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         If True, rank 0 prints CG iteration info.
     **kwargs
         ``cg_tol`` (float, default 1e-7): CG tolerance;
-        ``r_tol`` (bool, default True): passed as ``rtol`` to the CG solver
-        (relative vs. absolute stopping criterion).
+        ``r_tol`` (bool, default True): relative stopping criterion
+        ``|r| <= cg_tol |b|`` (relative to the right-hand side, so that the
+        warm start cannot weaken or break it); False: absolute ``|r| <= cg_tol``.
 
     Returns
     -------
@@ -1448,20 +1449,29 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
             norms_cg_adjoint['residual_rz'].append(norm_of_rz)
 
     # adjoint equation K^T lambda = -df/du; K^T = K because C(rho) has major
-    # symmetry (checked above), so the state operator is reused
-    solvers.conjugate_gradients_mugrid(
-        comm=discretization.communicator,
-        fc=discretization.field_collection,
-        hessp=system_matrix_fun,  # linear operator
-        b=df_du_field,
-        x=adjoint_field_inxyz,
-        P=preconditioner_fun,
-        tol=cg_tol,
-        rtol=r_tol,
-        maxiter=int(10000),
-        callback=callback_adjoint,
-        # norm_metric=res_norm
-    )
+    # symmetry (checked above), so the state operator is reused.
+    # Relative tolerance (r_tol=True) means relative to |b|, NOT to the residual of the initial guess: the
+    # adjoint is warm started, and a warm start that is already (nearly) the solution -- e.g. the objective
+    # evaluated twice at the same design or at tiny line-search steps -- has a round-off residual. A criterion
+    # relative to that residual cannot be met; CG then iterates in round-off and returns a wrong adjoint
+    # (gradients off by an order of magnitude were observed). |b| = 0 means lambda = 0.
+    b_norm = np.sqrt(discretization.communicator.sum(np.dot(df_du_field.s.ravel(), df_du_field.s.ravel())))
+    if b_norm == 0:
+        adjoint_field_inxyz.s[...] = 0.0
+    else:
+        solvers.conjugate_gradients_mugrid(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=system_matrix_fun,  # linear operator
+            b=df_du_field,
+            x=adjoint_field_inxyz,
+            P=preconditioner_fun,
+            tol=cg_tol * b_norm if r_tol else cg_tol,
+            rtol=False,
+            maxiter=int(10000),
+            callback=callback_adjoint,
+            # norm_metric=res_norm
+        )
 
     info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:

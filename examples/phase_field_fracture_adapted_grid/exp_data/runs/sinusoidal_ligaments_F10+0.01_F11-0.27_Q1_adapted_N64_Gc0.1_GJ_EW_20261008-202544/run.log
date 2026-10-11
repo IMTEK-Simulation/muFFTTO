@@ -1,0 +1,48 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N64_Gc0.1_GJ_EW_20261008-202544
+inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0002  P10 +2.8686e-04  min J 9.25e-01  max d 0.001  stagger   1  hessp    406  converged
+inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0004  P10 +5.8397e-04  min J 8.51e-01  max d 0.003  stagger   2  hessp    386  converged
+inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0006  P10 +8.9094e-04  min J 7.79e-01  max d 0.007  stagger   2  hessp    379  converged
+inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0008  P10 +1.2066e-03  min J 7.08e-01  max d 0.013  stagger   2  hessp    363  converged
+inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0010  P10 +1.5297e-03  min J 6.39e-01  max d 0.021  stagger   2  hessp    383  converged
+inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0012  P10 +1.8596e-03  min J 5.73e-01  max d 0.030  stagger   2  hessp    592  converged
+inc   7  lam 0.1400 (dlam 0.0200)  F10 +0.0014  P10 +2.1951e-03  min J 5.10e-01  max d 0.040  stagger   2  hessp    562  converged
+inc   8  lam 0.1600 (dlam 0.0200)  F10 +0.0016  P10 +2.5350e-03  min J 4.50e-01  max d 0.052  stagger   2  hessp    534  converged
+inc   9  lam 0.1800 (dlam 0.0200)  F10 +0.0018  P10 +2.8775e-03  min J 3.95e-01  max d 0.066  stagger   3  hessp    581  converged
+inc  10  lam 0.2000 (dlam 0.0200)  F10 +0.0020  P10 +3.2225e-03  min J 3.45e-01  max d 0.082  stagger   3  hessp    531  converged
+inc  11  lam 0.2200 (dlam 0.0200)  F10 +0.0022  P10 +3.5682e-03  min J 2.99e-01  max d 0.099  stagger   3  hessp    515  converged
+inc  12  lam 0.2400 (dlam 0.0200)  F10 +0.0024  P10 +3.9135e-03  min J 2.59e-01  max d 0.119  stagger   3  hessp    492  converged
+inc  13  lam 0.2600 (dlam 0.0200)  F10 +0.0026  P10 +4.2566e-03  min J 2.23e-01  max d 0.140  stagger   3  hessp    729  converged
+inc  14  lam 0.2800 (dlam 0.0200)  F10 +0.0028  P10 +4.5963e-03  min J 1.91e-01  max d 0.163  stagger   4  hessp    821  converged
+inc  15  lam 0.3000 (dlam 0.0200)  F10 +0.0030  P10 +4.9318e-03  min J 1.64e-01  max d 0.189  stagger   4  hessp    802  converged
+inc  16  lam 0.3200 (dlam 0.0200)  F10 +0.0032  P10 +5.2615e-03  min J 1.39e-01  max d 0.217  stagger   4  hessp    792  converged
+inc  17  lam 0.3400 (dlam 0.0200)  F10 +0.0034  P10 +5.5835e-03  min J 1.17e-01  max d 0.248  stagger   5  hessp    867  converged
+inc  18  lam 0.3600 (dlam 0.0200)  F10 +0.0036  P10 +5.8964e-03  min J 9.75e-02  max d 0.283  stagger   5  hessp   1106  converged
+inc  19  lam 0.3800 (dlam 0.0200)  F10 +0.0038  P10 +6.1990e-03  min J 7.88e-02  max d 0.323  stagger   6  hessp   1189  converged
+inc  20  lam 0.4000 (dlam 0.0200)  F10 +0.0040  P10 +6.4888e-03  min J 6.00e-02  max d 0.370  stagger   7  hessp   1532  converged
+inc  21  lam 0.4200 (dlam 0.0200)  F10 +0.0042  P10 +6.7636e-03  min J 3.94e-02  max d 0.427  stagger   9  hessp   2232  converged
+inc  22  lam 0.4400 (dlam 0.0200)  F10 +0.0044  P10 +7.0133e-03  min J 1.70e-02  max d 0.500  stagger  13  hessp   3677  converged
+inc  23  lam 0.4600 (dlam 0.0200)  F10 +0.0046  P10 +7.1069e-03  min J 5.88e-03  max d 0.575  stagger  16  hessp   4800  converged
+inc  24  lam 0.4800 (dlam 0.0200)  F10 +0.0048  P10 +7.0875e-03  min J 3.46e-03  max d 0.688  stagger  31  hessp   8245  converged
+inc  25  lam 0.5000 (dlam 0.0200)  F10 +0.0050  P10 +7.0038e-03  min J 2.45e-03  max d 0.890  stagger  59  hessp  18667  converged
+inc  26  lam 0.5200 (dlam 0.0200)  F10 +0.0052  P10 +7.0864e-03  min J 2.20e-03  max d 0.945  stagger  28  hessp   9872  converged
+inc  27  lam 0.5400 (dlam 0.0200)  F10 +0.0054  P10 +7.1531e-03  min J 2.12e-03  max d 0.965  stagger  23  hessp   6893  converged
+inc  28  lam 0.5600 (dlam 0.0200)  F10 +0.0056  P10 +7.3899e-03  min J 2.02e-03  max d 0.973  stagger  14  hessp   3830  converged
+inc  29  lam 0.5800 (dlam 0.0200)  F10 +0.0058  P10 +7.6942e-03  min J 1.93e-03  max d 0.976  stagger  16  hessp   4369  converged
+inc  30  lam 0.6000 (dlam 0.0200)  F10 +0.0060  P10 +7.9368e-03  min J 1.99e-03  max d 0.976  stagger  53  hessp  14137  converged
+inc  31  lam 0.6200 (dlam 0.0200)  F10 +0.0062  P10 +8.1513e-03  min J 2.03e-03  max d 0.976  stagger  23  hessp   9222  converged
+inc  32  lam 0.6400 (dlam 0.0200)  F10 +0.0064  P10 +8.3322e-03  min J 2.02e-03  max d 0.978  stagger  18  hessp   6450  converged
+inc  33  lam 0.6600 (dlam 0.0200)  F10 +0.0066  P10 +8.8073e-03  min J 2.13e-03  max d 0.987  stagger  87  hessp  31319  converged
+  lam 0.68000: trust region failed in staggered iteration 15: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.67000: trust region failed in staggered iteration 23: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.66500: trust region failed in staggered iteration 35: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.66250: trust region failed in staggered iteration 57: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.66125: trust region failed in staggered iteration 90: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+inc  34  lam 0.6606 (dlam 0.0006)  F10 +0.0066  P10 +9.0327e-03  min J 2.14e-03  max d 0.987  stagger  11  hessp   3352  converged
+  lam 0.66188: trust region failed in staggered iteration 62: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.66125: trust region failed in staggered iteration 82: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+inc  35  lam 0.6609 (dlam 0.0003)  F10 +0.0066  P10 +9.1964e-03  min J 2.14e-03  max d 0.987  stagger   8  hessp   2898  converged
+  lam 0.66156: trust region failed in staggered iteration 65: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+  lam 0.66125: trust region failed in staggered iteration 76: NO CONVERGENCE: MAXITERATIONS REACHED -> halve the step
+step below min_step: stopping
+elapsed 1234.6 s, 35 increments, final lam 0.6609
+wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N64_Gc0.1_GJ_EW_20261008-202544/contact_fracture.nc

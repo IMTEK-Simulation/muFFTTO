@@ -1,0 +1,2 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N256_Gc0.1_prec-Green_Jacobi_inner-EW_restart_20261008-175012
+restart from /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N256_Gc0.1_prec-Green_Jacobi_inner-EW_20261008-150323/contact_fracture.nc: frame 27, increment 28, lam 0.5600

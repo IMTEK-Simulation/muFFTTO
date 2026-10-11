@@ -889,6 +889,82 @@ After optimization the examples re-solve the cell problems with the final
 $\rho$ and print the obtained and target $\mathbb C^{\rm eff}$ in Voigt
 notation.
 
+### 7.5 Alternative regularization: density filter and Heaviside projection
+
+`muFFTTO/density_filter.py` provides the classical density-based alternative
+to the phase-field term of §7.2 (Lazarov & Sigmund 2011; Wang, Lazarov &
+Sigmund 2011). The optimizer works on a nodal **design** field $\rho$. The
+material model sees the **physical** density
+
+$$
+\bar\rho = H_\beta(\tilde\rho),\qquad \tilde\rho = F\rho ,
+$$
+
+and no phase-field term is added to the objective.
+
+* **Helmholtz filter** `HelmholtzFilter(discretization, radius)`: $\tilde\rho$
+  solves $-r^2\Delta\tilde\rho + \tilde\rho = \rho$ on the periodic cell, with
+  $r = R/(2\sqrt3)$ for a filter radius $R$. It is discretized with the
+  periodic second-order finite-difference Laplacian $L$ on the nodes (in 2D
+  the 5-point stencil, the same as the linear-triangle stiffness matrix with
+  lumped mass). $L$ is diagonal in Fourier space, so the filter is applied
+  exactly by FFT:
+  $$
+  \hat{\tilde\rho}(k) = \frac{\hat\rho(k)}{1 + r^2\lambda(k)},\qquad
+  \lambda(k) = \sum_d \frac{4\sin^2(\pi k_d)}{h_d^2}
+  $$
+  ($k_d$ in cycles per grid point). The filter preserves the mean and
+  constants, maps $[0,1]$ into $[0,1]$ (the inverse of an M-matrix with unit
+  row sums), and is symmetric, so $F^T = F$. Features thinner than about $R$
+  are smeared out, which makes $R$ the minimum member size.
+* **Heaviside projection** `heaviside_projection(x, beta, threshold)`:
+  $$
+  H_\beta(x) = \frac{\tanh(\beta\eta) + \tanh(\beta(x-\eta))}{\tanh(\beta\eta) + \tanh(\beta(1-\eta))}.
+  $$
+  It fixes 0 and 1, is monotone, is the identity for $\beta\to0$ (exactly at
+  $\beta = 0$) and a step at $\eta$ for $\beta\to\infty$.
+  `heaviside_projection_derivative` gives $H_\beta'$.
+* **Chain rule** `FilterAndProjection(discretization, radius, beta, threshold)`:
+  `forward(rho)` returns $\bar\rho$, and `backward(df/drho_bar)` returns
+  $$
+  \frac{df}{d\rho} = F^T\Big[H_\beta'(F\rho)\odot\frac{df}{d\bar\rho}\Big],
+  $$
+  where $df/d\bar\rho$ is what the sensitivities of §7.3 compute when they are
+  given $\bar\rho$ as `phase_field_1nxyz`.
+* **Continuation:** $\beta$ is raised in stages (e.g. 1, 2, 4, …, 32). The
+  optimizer is restarted from the previous design at every stage, because the
+  objective changes with $\beta$.
+* **Robust formulation** `RobustFilterAndProjection(discretization, radius, beta, thresholds=(0.75, 0.5, 0.25))`
+  (Wang, Lazarov & Sigmund 2011): the same filtered field is projected with
+  three thresholds, giving an eroded, an intermediate and a dilated design
+  ($\bar\rho_e\le\bar\rho_i\le\bar\rho_d$ pointwise). The objective is
+  evaluated on all three, and `backward(gradients, weights)` returns
+  $F^T\sum_j w_j H'_{\beta,\eta_j}(F\rho)\odot g_j$. A solid member thinner
+  than the length scale set by $R$ and the threshold gap vanishes in the
+  eroded design, and a thin void closes in the dilated one. Requiring all
+  three designs to perform therefore enforces a minimum size of both solid
+  and void features in the intermediate (blueprint) design. The plain filter
+  with projection does not guarantee this at large $\beta$, where one-pixel
+  hinges can reappear.
+* **Grey measure:** `measure_of_non_discreteness` computes
+  $M_{nd} = \tfrac4N\sum\bar\rho(1-\bar\rho)$, which is 0 for a 0/1 design
+  (Sigmund 2007).
+
+All functions work on nodal scalar fields with one node per pixel, in 2D and
+3D. They are MPI-parallel through the distributed FFT of the discretization.
+The tests in `test/test_density_filter.py` cover:
+
+* Fourier modes and a direct sparse solve of $(I + r^2L)\tilde\rho = \rho$;
+* constants, mean, symmetry and bounds;
+* the projection and its derivative;
+* the chain rule, by finite differences, also for the robust formulation;
+* the robust ordering, and the removal of a one-pixel bar by the eroded design;
+* `mpirun -n 1` vs `-n 2`.
+
+The example
+[`examples/topology_optimization_bowtie/`](../examples/topology_optimization_bowtie/)
+switches between the two regularizations with `--regularization`.
+
 ---
 
 ## 8. Grid adaptation (deformed grids)

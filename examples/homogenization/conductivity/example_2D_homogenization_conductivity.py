@@ -31,7 +31,7 @@ discretization = domain.Discretization(cell=my_cell,
 start_time = time.time()
 
 # create material data field
-mat_contrast = 1
+mat_contrast = 0.0001
 mat_contrast_2 = 1e2
 conductivity_C_1 = np.array([[1., 0], [0, 1.0]])
 
@@ -44,6 +44,14 @@ material_data_field_C_0.s[...] = conductivity_C_1[:, :, np.newaxis, np.newaxis, 
 phase_field_geom = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                        microstructure_name=geometry_ID,
                                                        coordinates=discretization.fft.coords)
+
+
+geometry_name = 'sinusoidal_ligaments'    # any name from muFFTTO.geometry.available()
+geometry_parameters = {}                   # passed to the geometry, e.g. {'notch_length': 0.1}
+phase_field_geom = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                  microstructure_name=geometry_name,
+                                                  coordinates=discretization.fft.coords,
+                                                  **geometry_parameters)
 
 phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = phase_field_geom

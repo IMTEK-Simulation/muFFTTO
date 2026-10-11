@@ -1,0 +1,130 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F11-0.3_bilinear_N64_Gc0.1_prec-Green_Jacobi_20261007-230639
+inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0000  P10 -1.0034e-11  min J 9.53e-01  max d 0.001  stagger   1  hessp    545  converged
+inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0000  P10 +7.0479e-13  min J 9.06e-01  max d 0.002  stagger   2  hessp    448  converged
+inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0000  P10 -2.5306e-12  min J 8.59e-01  max d 0.005  stagger   2  hessp    447  converged
+inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0000  P10 +3.0746e-12  min J 8.11e-01  max d 0.009  stagger   2  hessp    445  converged
+inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0000  P10 +4.4552e-12  min J 7.63e-01  max d 0.014  stagger   2  hessp    443  converged
+inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0000  P10 +3.8232e-14  min J 7.15e-01  max d 0.020  stagger   2  hessp    442  converged
+inc   7  lam 0.1400 (dlam 0.0200)  F10 +0.0000  P10 -1.6085e-11  min J 6.66e-01  max d 0.027  stagger   2  hessp    438  converged
+inc   8  lam 0.1600 (dlam 0.0200)  F10 +0.0000  P10 +1.5227e-11  min J 6.18e-01  max d 0.036  stagger   2  hessp    434  converged
+inc   9  lam 0.1800 (dlam 0.0200)  F10 +0.0000  P10 +1.0602e-11  min J 5.69e-01  max d 0.045  stagger   2  hessp    435  converged
+inc  10  lam 0.2000 (dlam 0.0200)  F10 +0.0000  P10 +3.6154e-12  min J 5.19e-01  max d 0.055  stagger   2  hessp    432  converged
+inc  11  lam 0.2200 (dlam 0.0200)  F10 +0.0000  P10 -4.3796e-11  min J 4.70e-01  max d 0.066  stagger   2  hessp    429  converged
+inc  12  lam 0.2400 (dlam 0.0200)  F10 +0.0000  P10 -4.9555e-13  min J 4.20e-01  max d 0.078  stagger   3  hessp    644  converged
+inc  13  lam 0.2600 (dlam 0.0200)  F10 +0.0000  P10 +6.0570e-13  min J 3.70e-01  max d 0.091  stagger   3  hessp    630  converged
+inc  14  lam 0.2800 (dlam 0.0200)  F10 +0.0000  P10 -5.8209e-12  min J 3.20e-01  max d 0.105  stagger   3  hessp    618  converged
+inc  15  lam 0.3000 (dlam 0.0200)  F10 +0.0000  P10 +1.8497e-12  min J 2.69e-01  max d 0.120  stagger   3  hessp    622  converged
+inc  16  lam 0.3200 (dlam 0.0200)  F10 +0.0000  P10 +3.6763e-12  min J 2.18e-01  max d 0.135  stagger   3  hessp    642  converged
+inc  17  lam 0.3400 (dlam 0.0200)  F10 +0.0000  P10 -1.5998e-12  min J 1.67e-01  max d 0.152  stagger   3  hessp    651  converged
+inc  18  lam 0.3600 (dlam 0.0200)  F10 +0.0000  P10 +6.5899e-13  min J 1.17e-01  max d 0.170  stagger   3  hessp    642  converged
+inc  19  lam 0.3800 (dlam 0.0200)  F10 +0.0000  P10 -4.8722e-13  min J 6.76e-02  max d 0.189  stagger   4  hessp    863  converged
+inc  20  lam 0.4000 (dlam 0.0200)  F10 +0.0000  P10 +2.6778e-12  min J 2.73e-02  max d 0.207  stagger   4  hessp   1348  converged
+inc  21  lam 0.4200 (dlam 0.0200)  F10 +0.0000  P10 +7.1297e-13  min J 1.11e-02  max d 0.221  stagger   3  hessp   1618  converged
+inc  22  lam 0.4400 (dlam 0.0200)  F10 +0.0000  P10 -8.0420e-13  min J 7.08e-03  max d 0.234  stagger   4  hessp   1891  converged
+inc  23  lam 0.4600 (dlam 0.0200)  F10 +0.0000  P10 -2.2110e-12  min J 5.66e-03  max d 0.246  stagger   4  hessp   1548  converged
+inc  24  lam 0.4800 (dlam 0.0200)  F10 +0.0000  P10 +5.1010e-12  min J 4.99e-03  max d 0.258  stagger   5  hessp   1624  converged
+inc  25  lam 0.5000 (dlam 0.0200)  F10 +0.0000  P10 -9.8360e-12  min J 4.60e-03  max d 0.286  stagger   5  hessp   1431  converged
+inc  26  lam 0.5200 (dlam 0.0200)  F10 +0.0000  P10 -2.3157e-13  min J 4.34e-03  max d 0.319  stagger   6  hessp   1620  converged
+inc  27  lam 0.5400 (dlam 0.0200)  F10 +0.0000  P10 -1.5760e-12  min J 4.16e-03  max d 0.356  stagger   7  hessp   1856  converged
+inc  28  lam 0.5600 (dlam 0.0200)  F10 +0.0000  P10 +5.2034e-13  min J 4.04e-03  max d 0.399  stagger   9  hessp   2480  converged
+inc  29  lam 0.5800 (dlam 0.0200)  F10 +0.0000  P10 +1.0270e-12  min J 3.97e-03  max d 0.451  stagger  11  hessp   2894  converged
+inc  30  lam 0.6000 (dlam 0.0200)  F10 +0.0000  P10 +5.0396e-12  min J 4.01e-03  max d 0.508  stagger  16  hessp   4518  converged
+inc  31  lam 0.6200 (dlam 0.0200)  F10 +0.0000  P10 +7.4870e-02  min J 2.26e-03  max d 0.997  stagger  67  hessp  51632  converged
+  lam 0.64000: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.63000: warm start not admissible (det F <= 0) -> halve the step
+inc  32  lam 0.6250 (dlam 0.0050)  F10 +0.0000  P10 +7.4660e-02  min J 2.18e-03  max d 0.998  stagger   2  hessp   2537  converged
+inc  33  lam 0.6350 (dlam 0.0100)  F10 +0.0000  P10 +7.5287e-02  min J 2.02e-03  max d 0.997  stagger  10  hessp   8199  converged
+  lam 0.65500: warm start not admissible (det F <= 0) -> halve the step
+inc  34  lam 0.6450 (dlam 0.0100)  F10 +0.0000  P10 +7.6176e-02  min J 1.89e-03  max d 0.997  stagger  12  hessp   9660  converged
+  lam 0.66500: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.65500: warm start not admissible (det F <= 0) -> halve the step
+inc  35  lam 0.6500 (dlam 0.0050)  F10 +0.0000  P10 +7.6636e-02  min J 1.83e-03  max d 0.997  stagger   8  hessp   6994  converged
+  lam 0.66000: warm start not admissible (det F <= 0) -> halve the step
+inc  36  lam 0.6550 (dlam 0.0050)  F10 +0.0000  P10 +7.7261e-02  min J 1.78e-03  max d 0.997  stagger  10  hessp   7832  converged
+inc  37  lam 0.6650 (dlam 0.0100)  F10 +0.0000  P10 +8.0644e-02  min J 1.69e-03  max d 0.997  stagger  41  hessp  40667  converged
+  lam 0.68500: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.67500: warm start not admissible (det F <= 0) -> halve the step
+inc  38  lam 0.6700 (dlam 0.0050)  F10 +0.0000  P10 +8.1947e-02  min J 1.64e-03  max d 0.997  stagger  17  hessp  24563  converged
+  lam 0.68000: warm start not admissible (det F <= 0) -> halve the step
+inc  39  lam 0.6750 (dlam 0.0050)  F10 +0.0000  P10 +8.2794e-02  min J 1.61e-03  max d 0.997  stagger  10  hessp  16730  converged
+  lam 0.68500: warm start not admissible (det F <= 0) -> halve the step
+inc  40  lam 0.6800 (dlam 0.0050)  F10 +0.0000  P10 +8.3420e-02  min J 1.57e-03  max d 0.997  stagger   7  hessp   8769  converged
+inc  41  lam 0.6900 (dlam 0.0100)  F10 +0.0000  P10 +8.4495e-02  min J 1.50e-03  max d 0.997  stagger   8  hessp  10262  converged
+  lam 0.71000: warm start not admissible (det F <= 0) -> halve the step
+inc  42  lam 0.7000 (dlam 0.0100)  F10 +0.0000  P10 +8.5377e-02  min J 1.43e-03  max d 0.997  stagger   6  hessp   8270  converged
+  lam 0.72000: warm start not admissible (det F <= 0) -> halve the step
+inc  43  lam 0.7100 (dlam 0.0100)  F10 +0.0000  P10 +8.6073e-02  min J 1.36e-03  max d 0.997  stagger   5  hessp   8623  converged
+  lam 0.73000: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.72000: warm start not admissible (det F <= 0) -> halve the step
+inc  44  lam 0.7150 (dlam 0.0050)  F10 +0.0000  P10 +8.6258e-02  min J 1.33e-03  max d 0.997  stagger   4  hessp   5789  converged
+inc  45  lam 0.7250 (dlam 0.0100)  F10 +0.0000  P10 +8.6297e-02  min J 1.28e-03  max d 0.997  stagger   5  hessp   8626  converged
+  lam 0.74500: warm start not admissible (det F <= 0) -> halve the step
+inc  46  lam 0.7350 (dlam 0.0100)  F10 +0.0000  P10 +8.6129e-02  min J 1.24e-03  max d 0.998  stagger   6  hessp  10971  converged
+  lam 0.75500: warm start not admissible (det F <= 0) -> halve the step
+inc  47  lam 0.7450 (dlam 0.0100)  F10 +0.0000  P10 +8.5544e-02  min J 1.21e-03  max d 0.998  stagger   6  hessp  10411  converged
+inc  48  lam 0.7650 (dlam 0.0200)  F10 +0.0000  P10 +8.3725e-02  min J 1.16e-03  max d 0.997  stagger  12  hessp  28027  converged
+  lam 0.78500: warm start not admissible (det F <= 0) -> halve the step
+inc  49  lam 0.7750 (dlam 0.0100)  F10 +0.0000  P10 +8.2432e-02  min J 1.14e-03  max d 0.999  stagger  12  hessp  20679  converged
+  lam 0.79500: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.78500: warm start not admissible (det F <= 0) -> halve the step
+inc  50  lam 0.7800 (dlam 0.0050)  F10 +0.0000  P10 +8.1647e-02  min J 1.14e-03  max d 1.000  stagger  10  hessp  15722  converged
+inc  51  lam 0.7900 (dlam 0.0100)  F10 +0.0000  P10 +7.9781e-02  min J 1.13e-03  max d 1.003  stagger  14  hessp  25135  converged
+  lam 0.81000: warm start not admissible (det F <= 0) -> halve the step
+inc  52  lam 0.8000 (dlam 0.0100)  F10 +0.0000  P10 +7.7501e-02  min J 1.12e-03  max d 1.005  stagger  11  hessp  22173  converged
+  lam 0.82000: warm start not admissible (det F <= 0) -> halve the step
+inc  53  lam 0.8100 (dlam 0.0100)  F10 +0.0000  P10 +7.5006e-02  min J 1.11e-03  max d 1.006  stagger   9  hessp  20534  converged
+  lam 0.83000: warm start not admissible (det F <= 0) -> halve the step
+inc  54  lam 0.8200 (dlam 0.0100)  F10 +0.0000  P10 +7.2387e-02  min J 1.10e-03  max d 1.007  stagger   7  hessp  14694  converged
+  lam 0.84000: warm start not admissible (det F <= 0) -> halve the step
+inc  55  lam 0.8300 (dlam 0.0100)  F10 +0.0000  P10 +6.9494e-02  min J 1.10e-03  max d 1.007  stagger   6  hessp  28531  converged
+  lam 0.85000: warm start not admissible (det F <= 0) -> halve the step
+inc  56  lam 0.8400 (dlam 0.0100)  F10 +0.0000  P10 +6.6077e-02  min J 1.09e-03  max d 1.007  stagger   5  hessp  18804  converged
+  lam 0.86000: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.85000: warm start not admissible (det F <= 0) -> halve the step
+inc  57  lam 0.8450 (dlam 0.0050)  F10 +0.0000  P10 +6.4108e-02  min J 1.08e-03  max d 1.007  stagger   4  hessp   8885  converged
+inc  58  lam 0.8550 (dlam 0.0100)  F10 +0.0000  P10 +5.9711e-02  min J 1.07e-03  max d 1.008  stagger   6  hessp  14595  converged
+  lam 0.87500: warm start not admissible (det F <= 0) -> halve the step
+inc  59  lam 0.8650 (dlam 0.0100)  F10 +0.0000  P10 +5.4850e-02  min J 1.06e-03  max d 1.008  stagger   7  hessp  15146  converged
+  lam 0.88500: warm start not admissible (det F <= 0) -> halve the step
+inc  60  lam 0.8750 (dlam 0.0100)  F10 +0.0000  P10 +4.9639e-02  min J 1.06e-03  max d 1.008  stagger   8  hessp  18395  converged
+  lam 0.89500: warm start not admissible (det F <= 0) -> halve the step
+inc  61  lam 0.8850 (dlam 0.0100)  F10 +0.0000  P10 +4.4334e-02  min J 1.05e-03  max d 1.008  stagger  16  hessp  38268  converged
+  lam 0.90500: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.89500: warm start not admissible (det F <= 0) -> halve the step
+inc  62  lam 0.8900 (dlam 0.0050)  F10 +0.0000  P10 +4.7516e-02  min J 1.01e-03  max d 1.007  stagger  37  hessp 120944  converged
+  lam 0.90000: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.89500: warm start not admissible (det F <= 0) -> halve the step
+inc  63  lam 0.8925 (dlam 0.0025)  F10 +0.0000  P10 +4.5974e-02  min J 1.01e-03  max d 1.007  stagger   2  hessp  11358  converged
+inc  64  lam 0.8975 (dlam 0.0050)  F10 +0.0000  P10 +4.2701e-02  min J 1.01e-03  max d 1.007  stagger   3  hessp   9239  converged
+  lam 0.90750: warm start not admissible (det F <= 0) -> halve the step
+inc  65  lam 0.9025 (dlam 0.0050)  F10 +0.0000  P10 +3.9334e-02  min J 1.01e-03  max d 1.007  stagger   4  hessp  11930  converged
+  lam 0.91250: warm start not admissible (det F <= 0) -> halve the step
+inc  66  lam 0.9075 (dlam 0.0050)  F10 +0.0000  P10 +3.6102e-02  min J 1.01e-03  max d 1.007  stagger   7  hessp  18566  converged
+  lam 0.91750: warm start not admissible (det F <= 0) -> halve the step
+inc  67  lam 0.9125 (dlam 0.0050)  F10 +0.0000  P10 +3.2942e-02  min J 1.01e-03  max d 1.007  stagger   8  hessp  25166  converged
+  lam 0.92250: warm start not admissible (det F <= 0) -> halve the step
+inc  68  lam 0.9175 (dlam 0.0050)  F10 +0.0000  P10 +2.9958e-02  min J 1.01e-03  max d 1.007  stagger  11  hessp  34785  converged
+  lam 0.92750: warm start not admissible (det F <= 0) -> halve the step
+inc  69  lam 0.9225 (dlam 0.0050)  F10 +0.0000  P10 +2.7740e-02  min J 1.01e-03  max d 1.007  stagger  26  hessp  69255  converged
+  lam 0.93250: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.92750: warm start not admissible (det F <= 0) -> halve the step
+inc  70  lam 0.9250 (dlam 0.0025)  F10 +0.0000  P10 +5.7361e-02  min J 1.54e-03  max d 1.007  stagger  65  hessp 193366  converged
+inc  71  lam 0.9300 (dlam 0.0050)  F10 +0.0000  P10 +5.7535e-02  min J 1.53e-03  max d 1.007  stagger   6  hessp  33548  converged
+inc  72  lam 0.9400 (dlam 0.0100)  F10 +0.0000  P10 +5.8051e-02  min J 1.49e-03  max d 1.007  stagger   8  hessp  11848  converged
+  lam 0.96000: warm start not admissible (det F <= 0) -> halve the step
+inc  73  lam 0.9500 (dlam 0.0100)  F10 +0.0000  P10 +5.8812e-02  min J 1.46e-03  max d 1.007  stagger  10  hessp  13877  converged
+  lam 0.97000: warm start not admissible (det F <= 0) -> halve the step
+inc  74  lam 0.9600 (dlam 0.0100)  F10 +0.0000  P10 +5.9749e-02  min J 1.43e-03  max d 1.007  stagger  11  hessp  16141  converged
+  lam 0.98000: warm start not admissible (det F <= 0) -> halve the step
+  lam 0.97000: warm start not admissible (det F <= 0) -> halve the step
+inc  75  lam 0.9650 (dlam 0.0050)  F10 +0.0000  P10 +6.0292e-02  min J 1.41e-03  max d 1.007  stagger   7  hessp  11253  converged
+  lam 0.97500: warm start not admissible (det F <= 0) -> halve the step
+inc  76  lam 0.9700 (dlam 0.0050)  F10 +0.0000  P10 +6.0852e-02  min J 1.39e-03  max d 1.007  stagger   7  hessp   9295  converged
+  lam 0.98000: warm start not admissible (det F <= 0) -> halve the step
+inc  77  lam 0.9750 (dlam 0.0050)  F10 +0.0000  P10 +6.1397e-02  min J 1.37e-03  max d 1.007  stagger   7  hessp   9403  converged
+inc  78  lam 0.9850 (dlam 0.0100)  F10 +0.0000  P10 +6.2344e-02  min J 1.34e-03  max d 1.007  stagger  10  hessp  17331  converged
+  lam 1.00000: warm start not admissible (det F <= 0) -> halve the step
+inc  79  lam 0.9925 (dlam 0.0075)  F10 +0.0000  P10 +6.2909e-02  min J 1.32e-03  max d 1.007  stagger   9  hessp  15155  converged
+inc  80  lam 1.0000 (dlam 0.0075)  F10 +0.0000  P10 +6.3273e-02  min J 1.30e-03  max d 1.007  stagger   8  hessp  15009  converged
+elapsed 22116.3 s, 80 increments, final lam 1.0000
+wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F11-0.3_bilinear_N64_Gc0.1_prec-Green_Jacobi_20261007-230639/contact_fracture.nc

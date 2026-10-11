@@ -1,0 +1,21 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N64_Gc0.1_G_EW_cg2-dc_20261009-093255
+inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0002  P10 +2.8679e-04  min J 9.25e-01  max d 0.001  stagger   1  hessp    975  converged
+inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0004  P10 +5.8399e-04  min J 8.51e-01  max d 0.003  stagger   2  hessp   1120  converged
+inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0006  P10 +8.9090e-04  min J 7.79e-01  max d 0.007  stagger   2  hessp   1002  converged
+inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0008  P10 +1.2065e-03  min J 7.08e-01  max d 0.013  stagger   2  hessp   1028  converged
+inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0010  P10 +1.5297e-03  min J 6.39e-01  max d 0.021  stagger   2  hessp   1714  converged
+inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0012  P10 +1.8596e-03  min J 5.73e-01  max d 0.030  stagger   2  hessp   1739  converged
+inc   7  lam 0.1400 (dlam 0.0200)  F10 +0.0014  P10 +2.1951e-03  min J 5.10e-01  max d 0.040  stagger   2  hessp   1602  converged
+inc   8  lam 0.1600 (dlam 0.0200)  F10 +0.0016  P10 +2.5349e-03  min J 4.50e-01  max d 0.052  stagger   2  hessp   1519  converged
+inc   9  lam 0.1800 (dlam 0.0200)  F10 +0.0018  P10 +2.8775e-03  min J 3.95e-01  max d 0.066  stagger   3  hessp   1442  converged
+inc  10  lam 0.2000 (dlam 0.0200)  F10 +0.0020  P10 +3.2225e-03  min J 3.45e-01  max d 0.082  stagger   3  hessp   1292  converged
+inc  11  lam 0.2200 (dlam 0.0200)  F10 +0.0022  P10 +3.5682e-03  min J 2.99e-01  max d 0.099  stagger   3  hessp   1127  converged
+inc  12  lam 0.2400 (dlam 0.0200)  F10 +0.0024  P10 +3.9134e-03  min J 2.59e-01  max d 0.119  stagger   3  hessp   1152  converged
+inc  13  lam 0.2600 (dlam 0.0200)  F10 +0.0026  P10 +4.2566e-03  min J 2.23e-01  max d 0.140  stagger   3  hessp   2123  converged
+inc  14  lam 0.2800 (dlam 0.0200)  F10 +0.0028  P10 +4.5962e-03  min J 1.91e-01  max d 0.163  stagger   4  hessp   1941  converged
+inc  15  lam 0.3000 (dlam 0.0200)  F10 +0.0030  P10 +4.9318e-03  min J 1.64e-01  max d 0.189  stagger   4  hessp   1874  converged
+inc  16  lam 0.3200 (dlam 0.0200)  F10 +0.0032  P10 +5.2616e-03  min J 1.39e-01  max d 0.217  stagger   4  hessp   1724  converged
+inc  17  lam 0.3400 (dlam 0.0200)  F10 +0.0034  P10 +5.5834e-03  min J 1.17e-01  max d 0.248  stagger   5  hessp   2485  converged
+inc  18  lam 0.3600 (dlam 0.0200)  F10 +0.0036  P10 +5.8964e-03  min J 9.75e-02  max d 0.283  stagger   5  hessp   2369  converged
+inc  19  lam 0.3800 (dlam 0.0200)  F10 +0.0038  P10 +6.1989e-03  min J 7.88e-02  max d 0.323  stagger   6  hessp   2304  converged
+inc  20  lam 0.4000 (dlam 0.0200)  F10 +0.0040  P10 +6.4888e-03  min J 6.00e-02  max d 0.370  stagger   7  hessp   5687  converged

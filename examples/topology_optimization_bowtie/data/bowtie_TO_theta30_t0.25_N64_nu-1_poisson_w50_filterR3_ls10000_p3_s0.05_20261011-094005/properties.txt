@@ -1,0 +1,19 @@
+bow-tie: theta 30 deg, thickness 0.25, 64^2 pixels, solid fraction 0.495
+initial design (bow-tie):
+  C (Voigt, engineering shear) =
+     0.21140  -0.07440  -0.00006
+    -0.07440   0.05643  -0.00006
+    -0.00006  -0.00006   0.00483
+  E_x 0.11331  E_y 0.03025  G_xy 0.00483  nu_xy -1.3184  nu_yx -0.3519
+target (stiffness of the bow-tie kept, nu_xy = -1):
+  C (Voigt, engineering shear) =
+     0.21140  -0.05643   0.00000
+    -0.05643   0.05643   0.00000
+     0.00000   0.00000   0.00483
+  E_x 0.15497  E_y 0.04137  G_xy 0.00483  nu_xy -1.0000  nu_yx -0.2670
+optimized design (411 iterations, 3347 s, grey measure M_nd 0.001):
+  C (Voigt, engineering shear) =
+     0.24975  -0.06780   0.00054
+    -0.06780   0.06792   0.00075
+     0.00054   0.00075   0.00758
+  E_x 0.18187  E_y 0.04941  G_xy 0.00756  nu_xy -1.0000  nu_yx -0.2717

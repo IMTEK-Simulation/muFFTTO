@@ -1,0 +1,12 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N128_Gc0.1_prec-Green_Jacobi_inner-EW_20261008-122840
+inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0002  P10 +2.6451e-04  min J 9.59e-01  max d 0.001  stagger   1  hessp    431  converged
+inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0004  P10 +5.3956e-04  min J 9.18e-01  max d 0.003  stagger   2  hessp    381  converged
+inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0006  P10 +8.2450e-04  min J 8.78e-01  max d 0.007  stagger   2  hessp    374  converged
+inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0008  P10 +1.1183e-03  min J 8.38e-01  max d 0.012  stagger   2  hessp    360  converged
+inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0010  P10 +1.4201e-03  min J 7.98e-01  max d 0.018  stagger   2  hessp    361  converged
+inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0012  P10 +1.7294e-03  min J 7.59e-01  max d 0.026  stagger   2  hessp    564  converged
+inc   7  lam 0.1400 (dlam 0.0200)  F10 +0.0014  P10 +2.0447e-03  min J 7.20e-01  max d 0.036  stagger   2  hessp    537  converged
+inc   8  lam 0.1600 (dlam 0.0200)  F10 +0.0016  P10 +2.3652e-03  min J 6.83e-01  max d 0.047  stagger   2  hessp    491  converged
+inc   9  lam 0.1800 (dlam 0.0200)  F10 +0.0018  P10 +2.6900e-03  min J 6.45e-01  max d 0.059  stagger   2  hessp    467  converged
+elapsed 59.7 s, 9 increments, final lam 0.1800
+wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N128_Gc0.1_prec-Green_Jacobi_inner-EW_20261008-122840/contact_fracture.nc

@@ -267,6 +267,7 @@ saves an MP4. The history names match the contact examples, so
 | `Gc`, `length_scale`, `k_residual` | 0.1, $1/32$ of the cell (fixed, not in pixels), $10^{-4}$ | AT2 |
 | `staggered_tol`, `max_staggered_iterations` | $10^{-3}$, 300 | staggered loop |
 | `SOLVER_GTOL`, `SOLVER_MAXITER`, `SOLVER_INNER_TOL` | $3\cdot10^{-6}$, 500, `None` | trust-region Newton–CG on $\Pi / s$, $s = E h^{d-1}$: `SOLVER_GTOL` bounds $\max\|g\| / s$ (a residual stress over $E$, independent of the resolution); `None` = inexact Newton, $\eta_k = \min(0.5, \sqrt{\max\|g_k\| / s})$ |
+| `restart_file` | `None` | `contact_fracture.nc` of an earlier run of the same problem (grid, geometry, element, material, load are checked): continue from its last frame ($\tilde u$, $d$, $\mathcal{H}$, $\lambda$, $\Delta\lambda$, predictor) in a new folder (tag `_restart`); the earlier frames are copied into the new file first. The old file is only read |
 
 ## 6. Limitations
 

@@ -1,0 +1,77 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\title{Inverse homogenization: phase-field vs.\ density-filter regularization}
+\date{}
+\begin{document}
+\maketitle
+
+\section*{Common part}
+Design $\rho:\Omega\to[0,1]$ (nodal values on the periodic grid); the material sees the physical density $\bar\rho$.
+SIMP interpolation
+\begin{equation}
+  \mathbb{C}(\bar\rho) = \mathbb{C}_\mathrm{void} + \bar\rho^{\,p}\,(\mathbb{C}_\mathrm{solid}-\mathbb{C}_\mathrm{void}),
+  \qquad p=3,\quad \mathbb{C}_\mathrm{void}=10^{-5}\,\mathbb{C}_\mathrm{solid}.
+\end{equation}
+For the macroscopic strains $\bs{E}_k$, $k\in\{xx,yy,xy\}$ (amplitude $0.05$), the periodic fluctuation $\bs{u}_k$ solves
+\begin{equation}
+  \int_\Omega \bs{\varepsilon}(\bs{v}) : \mathbb{C}(\bar\rho)\,\big[\bs{E}_k + \bs{\varepsilon}(\bs{u}_k)\big]\,\mathrm{d}x = 0
+  \quad \forall\,\bs{v}\ \text{periodic},
+  \qquad
+  \bs{\Sigma}_{h,k} = \big\langle \mathbb{C}(\bar\rho)\,[\bs{E}_k + \bs{\varepsilon}(\bs{u}_k)] \big\rangle .
+\end{equation}
+Stress mismatch with the target $\bs{\Sigma}_{t,k} = \mathbb{C}_t\bs{E}_k$:
+\begin{equation}
+  f_{\sigma,k}(\bar\rho) = \frac{\|\bs{\Sigma}_{t,k}-\bs{\Sigma}_{h,k}\|^2}{\|\bs{\Sigma}_{t,k}\|^2},
+  \qquad
+  J(\bar\rho) = w \sum_k f_{\sigma,k}(\bar\rho).
+\end{equation}
+The objective $F$ is divided by $F(\rho_0)$ and minimized by bound-constrained L-BFGS; gradients by the adjoint method.
+
+\section*{Phase field}
+$\bar\rho = \rho$ and
+\begin{equation}
+  F(\rho) = J(\rho) + \eta \int_\Omega |\nabla\rho|^2\,\mathrm{d}x
+  + \frac{c_\mathrm{dw}}{\eta}\int_\Omega \rho^2(1-\rho)^2\,\mathrm{d}x .
+\end{equation}
+The interface width $\eta$ sets the length scale only softly: interface energy can be traded against $J$
+(thin hinges are possible). Here $\eta = 1$ px, $c_\mathrm{dw}=10$.
+
+\section*{Density filter and Heaviside projection}
+Helmholtz filter (periodic, solved exactly by FFT) with radius $R$:
+\begin{equation}
+  \tilde\rho = (I - r^2\Delta_h)^{-1}\rho, \qquad r = \frac{R}{2\sqrt{3}},
+  \qquad
+  \hat{\tilde\rho}(\bs{k}) = \frac{\hat\rho(\bs{k})}{1 + r^2\lambda(\bs{k})},
+  \quad \lambda(\bs{k}) = \sum_d \frac{4}{h_d^2}\sin^2\!\frac{\pi k_d}{N_d}.
+\end{equation}
+Heaviside projection with threshold $\theta$:
+\begin{equation}
+  \bar\rho = H_{\beta,\theta}(\tilde\rho)
+  = \frac{\tanh(\beta\theta) + \tanh\big(\beta(\tilde\rho-\theta)\big)}{\tanh(\beta\theta) + \tanh\big(\beta(1-\theta)\big)} .
+\end{equation}
+Objective without any penalty term, and its gradient ($\mathcal{F}_R$ is symmetric):
+\begin{equation}
+  F(\rho) = J\big(H_{\beta,0.5}(\mathcal{F}_R\rho)\big),
+  \qquad
+  \frac{\partial F}{\partial\rho} = \mathcal{F}_R^{\mathsf T}\Big[H'_{\beta,0.5}(\tilde\rho)\odot\frac{\partial J}{\partial\bar\rho}\Big].
+\end{equation}
+Continuation $\beta = 1,2,4,8,16,32$, one L-BFGS run (at most 100 iterations) per stage.
+The filter removes features smaller than $R$ from $\tilde\rho$, but the sharp projection can still
+pinch members: no guaranteed minimum size.
+
+\subsection*{Robust formulation}
+Eroded, intermediate (reported) and dilated designs from the same $\tilde\rho$:
+\begin{equation}
+  \bar\rho_j = H_{\beta,\theta_j}(\tilde\rho),\quad \theta_e = 0.75,\ \theta_i = 0.5,\ \theta_d = 0.25,
+  \qquad
+  F(\rho) = \frac13\sum_{j\in\{e,i,d\}} J(\bar\rho_j),
+\end{equation}
+\begin{equation}
+  \frac{\partial F}{\partial\rho} = \mathcal{F}_R^{\mathsf T}\Big[\frac13\sum_j H'_{\beta,\theta_j}(\tilde\rho)\odot\frac{\partial J}{\partial\bar\rho_j}\Big].
+\end{equation}
+All three designs must meet the target; a thin hinge of $\bar\rho_i$ vanishes in $\bar\rho_e$, which gives a
+minimum solid and void size of the order of $R$. Cost: three state and adjoint solves per load case.
+
+\end{document}

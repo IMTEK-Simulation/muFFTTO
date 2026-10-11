@@ -1,0 +1,14 @@
+run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N32_Gc0.1_prec-Green_Jacobi_inner-EW_restart_20261008-174936
+restart from /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N32_Gc0.1_prec-Green_Jacobi_inner-EW_20261008-174930/contact_fracture.nc: frame 14, increment 15, lam 0.3000
+inc  16  lam 0.3200 (dlam 0.0200)  F10 +0.0032  P10 +4.9571e-03  min J 3.90e-01  max d 0.175  stagger   3  hessp    156  converged
+inc  17  lam 0.3400 (dlam 0.0200)  F10 +0.0034  P10 +5.2870e-03  min J 3.50e-01  max d 0.196  stagger   3  hessp    158  converged
+inc  18  lam 0.3600 (dlam 0.0200)  F10 +0.0036  P10 +5.6111e-03  min J 3.10e-01  max d 0.220  stagger   4  hessp    189  converged
+inc  19  lam 0.3800 (dlam 0.0200)  F10 +0.0038  P10 +5.9325e-03  min J 2.69e-01  max d 0.244  stagger   4  hessp    187  converged
+inc  20  lam 0.4000 (dlam 0.0200)  F10 +0.0040  P10 +6.2478e-03  min J 2.28e-01  max d 0.270  stagger   4  hessp    262  converged
+inc  21  lam 0.4200 (dlam 0.0200)  F10 +0.0042  P10 +6.5565e-03  min J 1.87e-01  max d 0.297  stagger   4  hessp    255  converged
+inc  22  lam 0.4400 (dlam 0.0200)  F10 +0.0044  P10 +6.8569e-03  min J 1.46e-01  max d 0.326  stagger   5  hessp    291  converged
+inc  23  lam 0.4600 (dlam 0.0200)  F10 +0.0046  P10 +7.1511e-03  min J 1.04e-01  max d 0.356  stagger   5  hessp    293  converged
+inc  24  lam 0.4800 (dlam 0.0200)  F10 +0.0048  P10 +7.4362e-03  min J 6.40e-02  max d 0.388  stagger   6  hessp    321  converged
+inc  25  lam 0.5000 (dlam 0.0200)  F10 +0.0050  P10 +7.7180e-03  min J 3.04e-02  max d 0.418  stagger   6  hessp    388  converged
+elapsed 5.6 s, 25 increments, final lam 0.5000
+wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture/exp_data/phase_field_fracture_contact/sinusoidal_ligaments_F10+0.01_F11-0.27_bilinear_N32_Gc0.1_prec-Green_Jacobi_inner-EW_restart_20261008-174936/contact_fracture.nc
