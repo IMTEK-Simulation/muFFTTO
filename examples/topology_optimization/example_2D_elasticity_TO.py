@@ -6,13 +6,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import numpy as np
 import time
 
-from NuMPI import Optimization
 from mpi4py import MPI
 from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 from muFFTTO import material_models
 from muFFTTO import io_utils
+from muFFTTO import solvers_nonlinear
 
 # Problem Configuration
 problem_type = 'elasticity'
@@ -32,6 +32,13 @@ preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacob
 eta = max(1 * pixel_size)  # Filter width
 weight = 5.  # Weight for the stress match term
 cg_setup = {'cg_tol': 1e-3}
+optimizer = 'l_bfgs'  # Options: 'l_bfgs', 'mma', 'tr_newton' (box constraints only), see solvers_nonlinear.minimize
+volume_fraction = None  # None: box constraints only; e.g. 0.6: mean(phase) <= 0.6 (MMA) / = 0.6 (projected L-BFGS)
+fd_step = 1e-3  # tr_newton: Hessian-vector products by central differences of the gradient, step in phase units
+if optimizer == 'tr_newton':
+    if volume_fraction is not None:
+        raise ValueError('tr_newton_bounded supports box constraints only; use l_bfgs or mma for a volume fraction')
+    cg_setup['cg_tol'] = 1e-7  # finite-difference Hessian products need accurate gradients
 
 # Initialize periodic unit cell and discretization
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -342,10 +349,12 @@ if __name__ == '__main__':
     MPI.COMM_WORLD.Barrier()
 
     # Output files (NetCDF, see docs/io.md): <output_name>_history.nc and <output_name>_final.nc
-    output_name = data_folder_path + f'{preconditioner_type}_eta_{eta}_w_{weight}'
+    output_name = data_folder_path + f'{preconditioner_type}_eta_{eta}_w_{weight}_{optimizer}' + (
+        f'_vol_{volume_fraction}' if volume_fraction is not None else '')
     parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
                   'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
-                  'soft_phase': soft_phase,
+                  'soft_phase': soft_phase, 'optimizer': optimizer,
+                  'volume_fraction': volume_fraction if volume_fraction is not None else -1.0,
                   'target_C_voigt': material_models.compute_Voigt_notation_4order(elastic_C_target)}
 
 
@@ -376,7 +385,30 @@ if __name__ == '__main__':
     iterat = 0
     phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
     history_writer = io_utils.FieldWriter(output_name + '_history.nc', [phase_field_iterate],
-                                          attributes=parameters) if save_history else None
+                                          attributes=parameters,
+                                          frame_variables={'objective': (), 'volume_fraction': (), 'nb_evaluations': ()}
+                                          ) if save_history else None
+    evaluations = {'count': 0, 'last_f': np.nan}
+
+
+    def counted_objective(phase_field_flat):
+        """Objective with a counter of evaluations (each one = FE solves of all load cases)."""
+        f, gradient = objective_function_multiple_load_cases(phase_field_flat)
+        evaluations['count'] += 1
+        evaluations['last_f'] = f
+        return f, gradient
+
+
+    def fd_hessian_product(phase_field_flat, direction):
+        """Hessian-vector product by central differences of the adjoint gradient (2 evaluations)."""
+        max_direction = MPI.COMM_WORLD.allreduce(float(np.max(np.abs(direction))), op=MPI.MAX)
+        if max_direction == 0:
+            return np.zeros_like(direction)
+        step = fd_step / max_direction  # largest change of the phase field = fd_step
+        _, gradient_plus = objective_function_multiple_load_cases(phase_field_flat + step * direction)
+        _, gradient_minus = objective_function_multiple_load_cases(phase_field_flat - step * direction)
+        evaluations['count'] += 2
+        return (gradient_plus - gradient_minus) / (2 * step)
 
 
     def my_callback(x_current):
@@ -385,7 +417,11 @@ if __name__ == '__main__':
         iterat += 1
         if history_writer is not None:
             phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
-            history_writer.write()
+            # the optimizers evaluate the accepted iterate last, so last_f is f(x_current)
+            history_writer.write(objective=evaluations['last_f'],
+                                 volume_fraction=MPI.COMM_WORLD.allreduce(np.sum(x_current)) / np.prod(
+                                     number_of_pixels),
+                                 nb_evaluations=evaluations['count'])
         if MPI.COMM_WORLD.size == 1:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
@@ -401,30 +437,25 @@ if __name__ == '__main__':
 
 
     # Run optimization
-    a = discretization.get_scalar_field(name='a_constrain')
-    #if MPI.COMM_WORLD.rank == 0:
-    a.s[0,0,0,0]=1e-8
-    discretization.fft.communicate_ghosts(a)
-    target = 0.0
-    c = Optimization.LinearConstraint(a.s, target)
-    xopt_FE_MPI = Optimization.l_bfgs_bounded(
-        fun=objective_function_multiple_load_cases,
+    # volume weights: <a, phase> = mean(phase) = volume fraction (a is the local slice under MPI)
+    a = np.full(phase_field_0.s.size, 1.0 / np.prod(number_of_pixels))
+    optimizer_options = {'l_bfgs': dict(xtol=1e-3, maxiter=500, maxcor=20, c1=1e-4, max_halvings=40),
+                         'mma': dict(xtol=1e-3, maxiter=500),
+                         'tr_newton': dict(maxiter=200)}[optimizer]
+    xopt_FE_MPI = solvers_nonlinear.minimize(
+        fun=counted_objective,
         x0=phase_field_0.s.ravel(),
-      #  linear_constraint=c,
-        args=(),
-        jac=True,
-        bounds_lo=0.,
-        bounds_hi=1.,
-        zero_mask=None,
+        method=optimizer,
+        bounds=(0., 1.),
+        constraint_weights=a if volume_fraction is not None else None,
+        constraint_target=volume_fraction,
+        constraint_type='ineq' if optimizer == 'mma' else 'eq',
+        hessp=fd_hessian_product if optimizer == 'tr_newton' else None,
         gtol=1e-3,
-        xtol=1e-3,
-        maxiter=500,
-        maxcor=20,
-        c1=1e-4,
-        max_halvings=40,
         comm=MPI.COMM_WORLD,
         callback=my_callback,
         disp=True,
+        **optimizer_options,
     )
     if history_writer is not None:
         history_writer.close()

@@ -123,7 +123,7 @@ if animate:
     movie = animation.FuncAnimation(fig, draw, frames=run.nb_frames, interval=100, repeat=False)
     if animation.writers.is_available('ffmpeg'):
         movie_file = os.path.splitext(file_name)[0] + '.mp4'
-        movie.save(movie_file, writer=animation.FFMpegWriter(fps=8), dpi=100)
+        movie.save(movie_file, writer=animation.FFMpegWriter(fps=8), dpi=200)
     else:
         movie_file = os.path.splitext(file_name)[0] + '.gif'
         movie.save(movie_file, writer=animation.PillowWriter(fps=8), dpi=80)
@@ -139,6 +139,6 @@ else:
         fig.colorbar(plot_cell(ax, frame), ax=ax, label='damage')
     fig.tight_layout()
     if save:
-        fig.savefig(os.path.join(os.path.dirname(file_name), 'response.png'), dpi=90)
+        fig.savefig(os.path.join(os.path.dirname(file_name), 'response.png'), dpi=200)
     else:
         plt.show()

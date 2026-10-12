@@ -1,3 +1,6 @@
+# TODO [Martin] Nvidia Warp -> Ask claude to port material specific part that appluse this i
+# TODO [Martin] find out if this work on CPU also ..
+
 """Periodic unit cell and its (FEM / Fourier) discretization.
 
 This module is the core of muFFTTO. It defines

@@ -68,6 +68,7 @@ from muGrid import Solvers  # noqa: E402
 from NuMPI.Optimization import tr_newton_bounded  # noqa: E402
 
 from muFFTTO import domain  # noqa: E402
+from muFFTTO import solvers_nonlinear  # noqa: E402
 from muFFTTO import microstructure_library  # noqa: E402
 from muFFTTO import io_utils  # noqa: E402
 from muFFTTO import tensor_operations  # noqa: E402
@@ -541,10 +542,10 @@ def solve_increment(lam):
     for stagger in range(1, max_staggered_iterations + 1):
         if mechanics_preconditioner == 'Green_Jacobi':
             update_mechanics_jacobi(lam, u_fluc)
-        res = tr_newton_bounded(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), hessp=scaled_hessp, precond=precond,
-                                jac=True,
-                                gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
-                                inner_maxiter=None, comm=comm)
+        res = solvers_nonlinear.minimize(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), method='tr_newton',
+                                         hessp=scaled_hessp, precond=precond,
+                                         gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
+                                         inner_maxiter=None, comm=comm)
         stats['nb_hessp'] += int(res.nb_hessp)
         stats['nb_outer'] += int(res.nit)
         if not res.success or res.fun >= 0.5 * INADMISSIBLE_ENERGY:

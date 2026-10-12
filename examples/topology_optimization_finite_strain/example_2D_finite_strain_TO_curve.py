@@ -74,10 +74,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 import numpy as np
 from mpi4py import MPI
-from NuMPI import Optimization
 from NuMPI.Optimization import tr_newton_bounded
 
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import material_models
 from muFFTTO import topology_optimization
@@ -464,10 +464,10 @@ def minimize(u, tau):
         return False, 0, 0
     update_tangent(u.s.reshape(-1).copy(), tau)
     update_jacobi()
-    result = tr_newton_bounded(fun=energy_and_gradient, x0=u.s.reshape(-1).copy(), hessp=hessian_product,
-                               precond=preconditioner_flat, jac=True, gtol=tr_gtol, maxiter=tr_maxiter,
-                               inner_tol=None, inner_stop=tr_inner_stop, inner_delay=cg_delay,
-                               delta_max=tr_delta_max, comm=comm)
+    result = solvers_nonlinear.minimize(fun=energy_and_gradient, x0=u.s.reshape(-1).copy(), method='tr_newton',
+                                        hessp=hessian_product, precond=preconditioner_flat, gtol=tr_gtol,
+                                        maxiter=tr_maxiter, inner_tol=None, inner_stop=tr_inner_stop,
+                                        inner_delay=cg_delay, delta_max=tr_delta_max, comm=comm)
     if not result.success or result.fun >= 0.5 * INADMISSIBLE_ENERGY:
         return False, int(result.nit), int(result.nb_hessp)
     u.s[...] = np.asarray(result.x).reshape(u_shape)
@@ -751,10 +751,10 @@ if __name__ == '__main__':
         return objective_scale * f, objective_scale * g
 
     start = time.time()
-    result = Optimization.l_bfgs_bounded(fun=scaled_objective, x0=rho_0.ravel(), args=(), jac=True,
-                                         bounds_lo=0.0, bounds_hi=1.0, gtol=lbfgs_gtol * objective_scale, xtol=lbfgs_xtol,
-                                         maxiter=lbfgs_maxiter, maxcor=20, c1=1e-4, max_halvings=40,
-                                         comm=comm, callback=callback, disp=True)
+    result = solvers_nonlinear.minimize(fun=scaled_objective, x0=rho_0.ravel(), method='l_bfgs', bounds=(0.0, 1.0),
+                                        gtol=lbfgs_gtol * objective_scale, xtol=lbfgs_xtol,
+                                        maxiter=lbfgs_maxiter, maxcor=20, c1=1e-4, max_halvings=40,
+                                        comm=comm, callback=callback, disp=True)
     history.close()
     elapsed = time.time() - start
 

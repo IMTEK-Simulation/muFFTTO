@@ -388,6 +388,25 @@ def frame_contact_supports(coords, gap=0.2, thickness=0.15, overlap=0.1):
     return indicator(solid, coords)
 
 
+@register('bubble_array')
+def bubble_array(coords, radius=0.2, imperfection=0.02):
+    """Solid (1) with a 2 x 2 array of round bubbles (0) per cell: a buckling metamaterial.
+
+    The bubbles are centred at (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75).
+    Their radii alternate in a checkerboard, ``radius * (1 +- imperfection)``, which
+    selects the buckling pattern of alternating, mutually perpendicular ellipses
+    (the perfectly symmetric cell has no preferred direction to buckle). Under strong
+    compression the bubbles flatten until their walls come into contact.
+    """
+    shape = None
+    for i, cx in enumerate((0.25, 0.75)):
+        for j, cy in enumerate((0.25, 0.75)):
+            sign = 1.0 if (i + j) % 2 == 0 else -1.0
+            bubble = ball((cx, cy), radius * (1.0 + sign * imperfection))
+            shape = bubble if shape is None else shape | bubble
+    return indicator(~shape, coords)
+
+
 @register('contact_fracture_s_gap')
 def contact_fracture_s_gap(coords, corner=(0.42, 0.57), gap=0.05, overlap=0.12,
                            upper_radii=(0.26, 0.28), lower_radius_x=0.31, lower_bottom=0.18,

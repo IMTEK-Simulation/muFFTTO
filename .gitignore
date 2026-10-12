@@ -38,3 +38,5 @@ experiments/exp_data/
 .idea/
 
 *.log
+
+exp_data/

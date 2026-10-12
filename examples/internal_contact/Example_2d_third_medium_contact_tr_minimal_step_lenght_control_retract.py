@@ -58,6 +58,7 @@ if 'precond' not in inspect.signature(tr_newton_bounded).parameters:
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from muFFTTO import domain, tensor_operations
+from muFFTTO import solvers_nonlinear
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
 from muFFTTO import visualization_utils
@@ -603,12 +604,12 @@ for inc, dlam in enumerate(schedule, start=1):
 
     J_pred = _set_F_from(u)
 
-    res = tr_newton_bounded(
+    res = solvers_nonlinear.minimize(
         fun=fun_grad,
         x0=u,
+        method='tr_newton',
         hessp=hessp,
         precond=precond,
-        jac=True,
         gtol=1e-4,
         maxiter=500,
         inner_tol=1e-6,

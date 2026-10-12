@@ -53,9 +53,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 import numpy as np
 from mpi4py import MPI
-from NuMPI import Optimization
 
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import material_models
 from muFFTTO import topology_optimization
@@ -520,10 +520,10 @@ if __name__ == '__main__':
             save_figures(folder, f'it{iteration[0]:04d}')
 
     start = time.time()
-    result = Optimization.l_bfgs_bounded(fun=objective, x0=rho_0.ravel(), args=(), jac=True,
-                                         bounds_lo=0.0, bounds_hi=1.0, gtol=lbfgs_gtol, xtol=lbfgs_xtol,
-                                         maxiter=lbfgs_maxiter, maxcor=20, c1=1e-4, max_halvings=40,
-                                         comm=comm, callback=callback, disp=True)
+    result = solvers_nonlinear.minimize(fun=objective, x0=rho_0.ravel(), method='l_bfgs', bounds=(0.0, 1.0),
+                                        gtol=lbfgs_gtol, xtol=lbfgs_xtol,
+                                        maxiter=lbfgs_maxiter, maxcor=20, c1=1e-4, max_halvings=40,
+                                        comm=comm, callback=callback, disp=True)
     history.close()
     elapsed = time.time() - start
 

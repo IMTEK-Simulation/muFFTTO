@@ -56,9 +56,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 import numpy as np
 from mpi4py import MPI
-from NuMPI import Optimization
 
 from muFFTTO import density_filter, domain, geometry, io_utils, material_models, solvers, topology_optimization
+from muFFTTO import solvers_nonlinear
 
 parser = argparse.ArgumentParser(description='linear elastic TO from a bow-tie initial design')
 parser.add_argument('-n', type=int, default=64, help='pixels per direction (default 64)')
@@ -596,10 +596,10 @@ if __name__ == '__main__':
         if use_filter:
             density.beta = beta
             root_print(f'--- beta {beta:g} ---')
-        result = Optimization.l_bfgs_bounded(fun=scaled_objective, x0=x, args=(), jac=True, bounds_lo=0.0,
-                                             bounds_hi=1.0, gtol=arguments.gtol, xtol=xtol,
-                                             maxiter=arguments.stage_iterations if use_filter else 500, maxcor=20,
-                                             c1=1e-4, max_halvings=40, comm=comm, callback=callback, disp=True)
+        result = solvers_nonlinear.minimize(fun=scaled_objective, x0=x, method='l_bfgs', bounds=(0.0, 1.0),
+                                            gtol=arguments.gtol, xtol=xtol,
+                                            maxiter=arguments.stage_iterations if use_filter else 500, maxcor=20,
+                                            c1=1e-4, max_halvings=40, comm=comm, callback=callback, disp=True)
         x = result.x
         if use_filter:
             grey = density_filter.measure_of_non_discreteness(physical_density(x), discretization.communicator)

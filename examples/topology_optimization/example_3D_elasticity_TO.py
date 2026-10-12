@@ -10,6 +10,7 @@ import time
 from NuMPI import Optimization
 from mpi4py import MPI
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 from muFFTTO import material_models
@@ -448,15 +449,12 @@ if __name__ == '__main__':
     # discretization.fft.communicate_ghosts(a)
     # target = 0.0
     # c = Optimization.LinearConstraint(a.s, target)
-    xopt_FE_MPI = Optimization.l_bfgs_bounded(
+    xopt_FE_MPI = solvers_nonlinear.minimize(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
+        method='l_bfgs',
         #  linear_constraint=c,
-        args=(),
-        jac=True,
-        bounds_lo=0.,
-        bounds_hi=1.,
-        zero_mask=None,
+        bounds=(0., 1.),
         gtol=1e-5,
         xtol=1e-3,
         maxiter=500,
