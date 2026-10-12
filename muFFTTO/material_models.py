@@ -223,6 +223,10 @@ class LinearElastic(MaterialModelElasticity):
         lam = self.lam.s[0, 0]   # shape [q, x, y, z]
         mu  = self.mu.s[0, 0]    # shape [q, x, y, z]
 
+        # constant tensors are numpy arrays -> move them to the device of λ, μ (CPU or GPU)
+        xp = get_array_module(lam)
+        IxI, IsI1, IsI2 = xp.asarray(IxI), xp.asarray(IsI1), xp.asarray(IsI2)
+
         # Append one singleton axis per [q, x, y, z] axis to the (dim,)*4 constant tensors,
         # so they broadcast against the spatially varying λ, μ fields.
         n_extra        = lam.ndim
@@ -398,6 +402,8 @@ class NeoHookean(MaterialModelElasticity):
         # term3:  μ δ_ik δ_jl
         I = np.eye(dim)
         IsI = np.einsum('ik,jl->ijkl', I, I)
+        # constant tensor is a numpy array -> move it to the device of μ (CPU or GPU)
+        IsI = get_array_module(mu).asarray(IsI)
         term3_ijklqxyz.s[...] = IsI[index_extender] * mu
 
         tangent_ijklqxyz.s[...] = (term1_ijklqxyz.s
@@ -745,7 +751,9 @@ def linear_isotropic_elasticity_stress_from_strain_lame(strain_ijqxyz, lam_1qxyz
     trace_eps_qxyz = np.einsum('ii...->...', strain)  # shape (q, *xyz)
 
     # identity with singleton axes appended so it broadcasts over [q, x, y, z]
-    I = np.eye(dim).reshape((dim, dim) + (1,) * (strain.ndim - 2))
+    # (created on the device of the strain field, CPU or GPU)
+    xp = get_array_module(strain)
+    I = xp.eye(dim).reshape((dim, dim) + (1,) * (strain.ndim - 2))
 
     output_stress_ijqxyz.s[...] = lam * trace_eps_qxyz * I + 2.0 * mu * strain
 

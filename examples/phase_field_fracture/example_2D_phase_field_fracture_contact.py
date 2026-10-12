@@ -70,6 +70,7 @@ from NuMPI.Optimization import tr_newton_bounded  # noqa: E402
 from muFFTTO import domain  # noqa: E402
 from muFFTTO import microstructure_library  # noqa: E402
 from muFFTTO import io_utils  # noqa: E402
+from muFFTTO import tensor_operations  # noqa: E402
 
 if 'precond' not in inspect.signature(tr_newton_bounded).parameters:
     raise RuntimeError('this example needs the patched NuMPI with `precond` in tr_newton_bounded')
@@ -78,6 +79,8 @@ if 'precond' not in inspect.signature(tr_newton_bounded).parameters:
 # Parameters
 # ----------------------------------------------------------------------------
 nnn = 32                                   # pixels per direction
+# where the fields live: 'cpu' or 'gpu' (GPU needs muGrid built with CUDA + cupy)
+device = 'cpu'
 number_of_pixels = (nnn, nnn)
 domain_size = [1.0, 1.0]
 # 'bilinear_rectangle' (Q1) or 'biquadratic_rectangle' (Q2). With Q1 on pixels the
@@ -143,10 +146,17 @@ restart_file = None
 # ----------------------------------------------------------------------------
 disc_u = domain.Discretization(cell=domain.PeriodicUnitCell(domain_size=domain_size, problem_type='elasticity'),
                                nb_of_pixels_global=number_of_pixels, discretization_type='finite_element',
-                               element_type=element_type)
+                               element_type=element_type, device=device)
 disc_d = domain.Discretization(cell=domain.PeriodicUnitCell(domain_size=domain_size, problem_type='conductivity'),
                                nb_of_pixels_global=number_of_pixels, discretization_type='finite_element',
-                               element_type=element_type)
+                               element_type=element_type, device=device)
+
+# field data (.s) are numpy arrays on the CPU and cupy arrays on the GPU
+if device == 'gpu':
+    import cupy as xp
+else:
+    xp = np
+to_host = tensor_operations.to_host
 comm = MPI.COMM_WORLD
 rank = comm.rank
 dim = 2
@@ -177,12 +187,11 @@ def global_max(a):
 
 
 def global_mean(a):
-    a = np.asarray(a)
-    return global_sum(np.sum(a)) / max(global_sum(float(a.size)), 1.0)
+    return global_sum(a.sum()) / max(global_sum(float(a.size)), 1.0)
 
 
 def dot_global(a, b):
-    return global_sum(np.dot(np.asarray(a).ravel(), np.asarray(b).ravel()))
+    return global_sum((a.ravel() * b.ravel()).sum())
 
 
 # ----------------------------------------------------------------------------
@@ -193,15 +202,15 @@ phase_pixel = microstructure_library.get_geometry(nb_voxels=disc_u.nb_of_pixels,
                                                   coordinates=disc_u.fft.coords,
                                                   **geometry_parameters)           # 1 solid, 0 medium
 nb_q = disc_u.nb_quad_points_per_pixel
-solid_q = np.broadcast_to(phase_pixel > 0, (nb_q, *phase_pixel.shape))          # [q, x, y]
+solid_q = xp.broadcast_to(xp.asarray(phase_pixel > 0), (nb_q, *phase_pixel.shape))  # [q, x, y]
 
 mu_solid = E_solid / (2 * (1 + nu_solid))
 lam_solid = E_solid * nu_solid / ((1 + nu_solid) * (1 - 2 * nu_solid))
 kappa_solid = lam_solid + 2.0 * mu_solid / 3.0
-mu_q = np.where(solid_q, mu_solid, k_v * mu_solid)
-kappa_q = np.where(solid_q, kappa_solid, k_v * kappa_solid)
+mu_q = xp.where(solid_q, mu_solid, k_v * mu_solid)
+kappa_q = xp.where(solid_q, kappa_solid, k_v * kappa_solid)
 k_r = alpha * domain_size[0] ** 2 * (kappa_solid + 4.0 * mu_solid / 3.0)
-quad_weights = np.asarray(disc_u.quadrature_weights).reshape((-1,) + (1,) * dim)
+quad_weights = xp.asarray(disc_u.quadrature_weights).reshape((-1,) + (1,) * dim)
 
 root_print(f'mechanics preconditioner {mechanics_preconditioner}, damage preconditioner {damage_preconditioner}')
 root_print(f'grid {number_of_pixels}, {element_type}, ranks {comm.size}, solid fraction '
@@ -213,26 +222,27 @@ def split_neo_hookean(F, mu, kappa, g, tangent=False):
 
     F: [2, 2, ...]; mu, kappa, g: [...]. See the module docstring.
     """
+    xp_ = tensor_operations.get_array_module(F)   # numpy or cupy, where F lives
     J = F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]
-    FiT = np.array([[F[1, 1], -F[1, 0]], [-F[0, 1], F[0, 0]]]) / J       # F^-T
-    lnJ = np.log(J)
-    I1 = np.einsum('ij...,ij...->...', F, F)
+    FiT = xp_.stack([xp_.stack([F[1, 1], -F[1, 0]]), xp_.stack([-F[0, 1], F[0, 0]])]) / J       # F^-T
+    lnJ = xp_.log(J)
+    I1 = xp_.einsum('ij...,ij...->...', F, F)
     a = J ** (-2.0 / 3.0)
     b = (I1 + 1.0) / 3.0
     W_iso = 0.5 * mu * (a * (I1 + 1.0) - 3.0)
     W_vol = 0.5 * kappa * lnJ ** 2
-    g_vol = np.where(lnJ > 0, g, 1.0)
-    psi_plus = W_iso + np.where(lnJ > 0, W_vol, 0.0)
+    g_vol = xp_.where(lnJ > 0, g, 1.0)
+    psi_plus = W_iso + xp_.where(lnJ > 0, W_vol, 0.0)
     W = g * W_iso + g_vol * W_vol
     P = g * mu * a * (F - b * FiT) + g_vol * kappa * lnJ * FiT
     if not tangent:
         return W, psi_plus, P
-    identity = np.eye(2)
-    dd = np.einsum('ik,jl->ijkl', identity, identity).reshape((2, 2, 2, 2) + (1,) * (F.ndim - 2))
-    FiT_il_FiT_kj = np.einsum('il...,kj...->ijkl...', FiT, FiT)
-    A_iso = (-2.0 / 3.0 * np.einsum('kl...,ij...->ijkl...', FiT, F - b * FiT) + dd
-             - 2.0 / 3.0 * np.einsum('kl...,ij...->ijkl...', F, FiT) + b * FiT_il_FiT_kj)
-    A_vol = np.einsum('ij...,kl...->ijkl...', FiT, FiT) - lnJ * FiT_il_FiT_kj
+    identity = xp_.eye(2)
+    dd = xp_.einsum('ik,jl->ijkl', identity, identity).reshape((2, 2, 2, 2) + (1,) * (F.ndim - 2))
+    FiT_il_FiT_kj = xp_.einsum('il...,kj...->ijkl...', FiT, FiT)
+    A_iso = (-2.0 / 3.0 * xp_.einsum('kl...,ij...->ijkl...', FiT, F - b * FiT) + dd
+             - 2.0 / 3.0 * xp_.einsum('kl...,ij...->ijkl...', F, FiT) + b * FiT_il_FiT_kj)
+    A_vol = xp_.einsum('ij...,kl...->ijkl...', FiT, FiT) - lnJ * FiT_il_FiT_kj
     return W, psi_plus, P, g * mu * a * A_iso + g_vol * kappa * A_vol
 
 
@@ -272,17 +282,17 @@ temp_n = disc_d.get_unknown_size_field(name='temp_n')
 x_scaled_d = disc_d.get_unknown_size_field(name='x_scaled_d')
 # damage domain: weight 1 at solid quadrature points, 0 in the medium; free nodes = nodes of
 # at least one solid element (the others get a unit row and stay d = 0)
-damage_weight_q = np.ones(solid_q.shape) if damage_in_medium else solid_q.astype(float)
+damage_weight_q = xp.ones(solid_q.shape) if damage_in_medium else solid_q.astype(float)
 temp_q.s[0, 0] = damage_weight_q
 disc_d.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=temp_q, nodal_field_inxyz=temp_n, apply_weights=True)
 damage_free_nodes = temp_n.s > 0                                      # [1, nodes, x, y]
 
 # pixel-level output fields: phase and quadrature-averaged det F
 phase_out = disc_u.field_collection.real_field('phase', [1], 'pixel')
-phase_out.s[0, 0] = phase_pixel
+phase_out.s[0, 0] = xp.asarray(phase_pixel)
 detF_out = disc_u.field_collection.real_field('detF', [1], 'pixel')
 
-g_q = np.ones(solid_q.shape)               # g_s(d) at the quadrature points
+g_q = xp.ones(solid_q.shape)               # g_s(d) at the quadrature points
 # tangent A(F(x)) of the last state (x, lam) it was built for: x is fixed during a whole
 # Steihaug-CG solve, so it is rebuilt once per trust-region iterate, not per Hessian product
 tangent_cache = {'valid': False, 'x': None, 'lam': None}
@@ -291,7 +301,7 @@ lam_current = 0.0
 
 def update_degradation():
     disc_d.apply_N_operator_mugrid(damage, damage_q)
-    g_q[...] = np.where(solid_q, (1.0 - damage_q.s[0, 0]) ** 2 + k_residual, 1.0)
+    g_q[...] = xp.where(solid_q, (1.0 - damage_q.s[0, 0]) ** 2 + k_residual, 1.0)
     tangent_cache['valid'] = False         # the tangent depends on g(d)
 
 
@@ -325,15 +335,22 @@ def add_regularization(x, out):
 
 # the discrete Laplacian of a bilinear (Q1) field on axis-aligned pixels is identically zero,
 # so the L^T L part is skipped when it has no effect (it acts for Q2)
-LtL_field.s[...] = np.random.default_rng(rank).random(LtL_field.s.shape)
+LtL_field.s[...] = xp.asarray(np.random.default_rng(rank).random(LtL_field.s.shape))
 disc_u.fft.communicate_ghosts(LtL_field)
 disc_u.laplacian.apply(nodal_field=LtL_field, quadrature_point_field=lap_u)
 laplacian_acts = global_max(np.max(np.abs(lap_u.s))) > 0.0
 
 
+def field_to_optimizer(field):
+    """Copy of the field data as a numpy array (host), for NuMPI's optimizer."""
+    if device == 'gpu':
+        return field.s.get()  # .get() already makes a host copy
+    return np.array(field.s, copy=True)
+
+
 def fun_grad(x):
     """(Pi_elastic + Pi_reg, gradient) at the fluctuation x, damage fixed."""
-    x_field.s[...] = x.reshape(u_shape)
+    x_field.s[...] = xp.asarray(x.reshape(u_shape))
     if not set_F(lam_current, x_field) > 0.0:
         return INADMISSIBLE_ENERGY, np.zeros(u_shape)
     W, _, P = split_neo_hookean(F_field.s, mu_q, kappa_q, g_q)
@@ -348,16 +365,18 @@ def fun_grad(x):
     disc_u.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field, div_u_fnxyz=grad_field,
                                                      apply_weights=True)
     grad_field.s[...] += Ru_field.s
-    return Pi, np.array(grad_field.s, copy=True)
+    return Pi, field_to_optimizer(grad_field)
 
 
 def update_tangent(lam, x):
     """Tangent A(F) at (lam, x) into tangent_field, unless it is already there (cached)."""
+    # x comes from the optimizer (numpy) or from a field (numpy or cupy): compare on the host
+    x = to_host(x)
     stale = (not tangent_cache['valid'] or tangent_cache['lam'] != lam
              or not np.array_equal(tangent_cache['x'], np.reshape(x, -1)))
     if global_max(float(stale)) == 0.0:    # the same decision on all ranks (set_F is collective)
         return
-    x_field.s[...] = x.reshape(u_shape)
+    x_field.s[...] = xp.asarray(x.reshape(u_shape))
     set_F(lam, x_field)
     tangent_field.s[...] = split_neo_hookean(F_field.s, mu_q, kappa_q, g_q, tangent=True)[3]
     tangent_cache.update(valid=True, lam=lam, x=np.array(x, copy=True).reshape(-1))
@@ -366,13 +385,13 @@ def update_tangent(lam, x):
 def hessp(x, v):
     """(B^T A B + R) v with the tangent A at x (rebuilt only when x, lam or d changed)."""
     update_tangent(lam_current, x)
-    v_field.s[...] = v.reshape(u_shape)
+    v_field.s[...] = xp.asarray(v.reshape(u_shape))
     disc_u.fft.communicate_ghosts(v_field)
     disc_u.apply_system_matrix_mugrid(material_data_field=tangent_field, input_field_inxyz=v_field,
                                       output_field_inxyz=Bv_field, formulation='finite_strain')
     add_regularization(v_field, Bv_field)
     disc_u.fft.communicate_ghosts(Bv_field)
-    return np.array(Bv_field.s, copy=True)
+    return field_to_optimizer(Bv_field)
 
 
 # Green preconditioner of the undamaged solid at F = I, plus the regularization (built once)
@@ -412,11 +431,11 @@ def update_mechanics_jacobi(lam, u_field):
                                           output_field_inxyz=output_field_inxyz, formulation='finite_strain')
         add_regularization(input_field_inxyz, output_field_inxyz)
 
-    jacobi_u = np.sqrt(reference_diagonal) * disc_u.get_preconditioner_Jacobi_mugrid(operator=hessian_operator).s
+    jacobi_u = float(np.sqrt(reference_diagonal)) * disc_u.get_preconditioner_Jacobi_mugrid(operator=hessian_operator).s
 
 
 def precond(v):
-    r_field.s[...] = v.reshape(u_shape)
+    r_field.s[...] = xp.asarray(v.reshape(u_shape))
     if mechanics_preconditioner == 'Green_Jacobi':
         r_field.s[...] *= jacobi_u
     disc_u.fft.communicate_ghosts(r_field)
@@ -424,7 +443,7 @@ def precond(v):
                                        output_nodal_field_fnxyz=Pv_field)
     if mechanics_preconditioner == 'Green_Jacobi':
         Pv_field.s[...] *= jacobi_u
-    return np.array(Pv_field.s, copy=True)
+    return field_to_optimizer(Pv_field)
 
 
 # ----------------------------------------------------------------------------
@@ -445,7 +464,7 @@ def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q, wei
 def K_d(x, Ax):
     """Damage operator on the damage domain; unit rows (identity) for the pinned nodes."""
     apply_damage_operator(x, Ax, reaction.s, damage_weight_q)
-    Ax.s[...] = np.where(damage_free_nodes, Ax.s, x.s)
+    Ax.s[...] = xp.where(damage_free_nodes, Ax.s, x.s)
 
 
 green_d = disc_d.get_preconditioner_Green_mugrid(
@@ -465,7 +484,7 @@ def M_d(x, Px):
     else:
         disc_d.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_d, input_nodal_field_fnxyz=x,
                                            output_nodal_field_fnxyz=Px)
-    Px.s[...] = np.where(damage_free_nodes, Px.s, x.s)       # identity on the pinned nodes
+    Px.s[...] = xp.where(damage_free_nodes, Px.s, x.s)       # identity on the pinned nodes
 
 
 class IterationCounter:
@@ -480,7 +499,7 @@ def solve_damage():
     """History update and one damage solve; returns (max |d - d_old|, CG iterations)."""
     global jacobi_d
     psi_plus = split_neo_hookean(F_field.s, mu_q, kappa_q, g_q)[1]
-    history.s[0, 0] = np.maximum(history_n.s[0, 0], np.where(solid_q, psi_plus, 0.0))
+    history.s[0, 0] = xp.maximum(history_n.s[0, 0], xp.where(solid_q, psi_plus, 0.0))
     reaction.s[...] = Gc / length_scale + 2.0 * history.s
     temp_q.s[...] = 2.0 * history.s
     disc_d.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=temp_q, nodal_field_inxyz=rhs_d, apply_weights=True)
@@ -522,7 +541,7 @@ def solve_increment(lam):
     for stagger in range(1, max_staggered_iterations + 1):
         if mechanics_preconditioner == 'Green_Jacobi':
             update_mechanics_jacobi(lam, u_fluc)
-        res = tr_newton_bounded(fun=scaled_fun_grad, x0=np.array(u_fluc.s), hessp=scaled_hessp, precond=precond,
+        res = tr_newton_bounded(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), hessp=scaled_hessp, precond=precond,
                                 jac=True,
                                 gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
                                 inner_maxiter=None, comm=comm)
@@ -530,7 +549,7 @@ def solve_increment(lam):
         stats['nb_outer'] += int(res.nit)
         if not res.success or res.fun >= 0.5 * INADMISSIBLE_ENERGY:
             return False, f'trust region failed in staggered iteration {stagger}: {res.message}', stats
-        u_fluc.s[...] = np.asarray(res.x).reshape(u_shape)
+        u_fluc.s[...] = xp.asarray(np.asarray(res.x).reshape(u_shape))
         stats['min_J'] = set_F(lam, u_fluc)
         stats['energy'] = float(res.fun) * force_scale
         change, nb_cg = solve_damage()
@@ -603,7 +622,7 @@ if output_root is not None:
 start_time = time.time()
 lam, dlam, increment = 0.0, 1.0 / nb_increments, 0
 max_step = dlam
-u_previous, dlam_previous = np.copy(u_fluc.s), None     # last converged state before the current one
+u_previous, dlam_previous = u_fluc.s.copy(), None     # last converged state before the current one
 if restart_file is not None:
     previous, mismatch = None, None
     if rank == 0:
@@ -621,7 +640,7 @@ if restart_file is not None:
     for frame in range(nb_previous):         # copy the earlier load path into the new file
         io_utils.load_fields(restart_file, output_fields, frame=frame)
         if frame == nb_previous - 2:
-            u_previous = np.copy(u_fluc.s)
+            u_previous = u_fluc.s.copy()
         if writer is not None:
             writer.write(**{name: previous[name][frame] for name in frame_variables})
     # the fields now hold the last frame; H of that frame is the converged history
@@ -634,7 +653,7 @@ if restart_file is not None:
 update_degradation()
 while lam < 1.0 - 1e-12:
     dlam = min(dlam, 1.0 - lam)
-    u_saved, d_saved = np.copy(u_fluc.s), np.copy(damage.s)
+    u_saved, d_saved = u_fluc.s.copy(), damage.s.copy()
     # predictor: linear extrapolation in lam, if admissible (else the warm start u_n)
     if dlam_previous is not None:
         u_fluc.s[...] = u_saved + (dlam / dlam_previous) * (u_saved - u_previous)

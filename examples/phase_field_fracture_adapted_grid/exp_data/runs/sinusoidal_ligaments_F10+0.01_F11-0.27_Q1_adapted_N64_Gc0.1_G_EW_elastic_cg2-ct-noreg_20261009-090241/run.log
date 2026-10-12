@@ -1,9 +1,0 @@
-run folder /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N64_Gc0.1_G_EW_elastic_cg2-ct-noreg_20261009-090241
-inc   1  lam 0.0200 (dlam 0.0200)  F10 +0.0002  P10 +2.8292e-04  min J 9.40e-01  max d 0.000  stagger   1  hessp    274  converged
-inc   2  lam 0.0400 (dlam 0.0200)  F10 +0.0004  P10 +5.7755e-04  min J 9.20e-01  max d 0.000  stagger   1  hessp    516  converged
-inc   3  lam 0.0600 (dlam 0.0200)  F10 +0.0006  P10 +8.8368e-04  min J 8.80e-01  max d 0.000  stagger   1  hessp    458  converged
-inc   4  lam 0.0800 (dlam 0.0200)  F10 +0.0008  P10 +1.2014e-03  min J 8.40e-01  max d 0.000  stagger   1  hessp    301  converged
-inc   5  lam 0.1000 (dlam 0.0200)  F10 +0.0010  P10 +1.5308e-03  min J 8.01e-01  max d 0.000  stagger   1  hessp    305  converged
-inc   6  lam 0.1200 (dlam 0.0200)  F10 +0.0012  P10 +1.8719e-03  min J 7.61e-01  max d 0.000  stagger   1  hessp    343  converged
-elapsed 230.9 s, 6 increments, final lam 0.1200
-wrote /home/martin/Programming/microTopOpt/muFFTTO/examples/phase_field_fracture_adapted_grid/exp_data/runs/sinusoidal_ligaments_F10+0.01_F11-0.27_Q1_adapted_N64_Gc0.1_G_EW_elastic_cg2-ct-noreg_20261009-090241/contact_fracture.nc

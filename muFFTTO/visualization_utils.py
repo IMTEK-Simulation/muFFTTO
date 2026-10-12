@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+from .tensor_operations import to_host
+
 
 def plot_field_on_grid(
         coordinates_for_plot: np.ndarray,
@@ -62,6 +64,9 @@ def plot_field_on_grid(
         grid_lines_width=0.3
     else:
         grid_lines_width=0
+    # matplotlib works with numpy arrays -> copy GPU data to the host
+    coordinates_for_plot = to_host(coordinates_for_plot)
+    field_to_plot = to_host(field_to_plot)
     # 'flat' shading: field_to_plot[i, j] colours the quadrilateral spanned by
     # nodes (i, j), (i+1, j), (i+1, j+1), (i, j+1) -> needs one more node per axis
     pcm = ax.pcolormesh(coordinates_for_plot[0], coordinates_for_plot[1],
@@ -131,13 +136,16 @@ def get_deformed_grid_coords_two_dim(discretization,
     not receive the grid displacement.
     """
 
+    # plotting works with numpy arrays -> copy (possibly GPU) field data to the host once
+    u_fluctuation_inxyz = to_host(displacement_fluctuation.s)
+
     # Reference coordinates with periodic extension for plotting
-    x_plot_inxyz = discretization.get_nodal_points_coordinates_with_periodic_nodes()
+    x_plot_inxyz = to_host(discretization.get_nodal_points_coordinates_with_periodic_nodes())
     # add deformation  # x_p = x̃_p + ũ_Φ(x̃_p)
     # (only the interior/non-periodic nodes [:-1, :-1] receive the grid
     # displacement; the periodic copies in the last row/column are not shifted)
     if grid_nodes_displacement_inxyz is not None:
-        x_plot_inxyz[..., :-1, :-1] += grid_nodes_displacement_inxyz.s[...]
+        x_plot_inxyz[..., :-1, :-1] += to_host(grid_nodes_displacement_inxyz.s)
     # keep only the first nodal point per pixel -> shape (2, Nx+1, Ny+1)
     x_plot_ixyz = x_plot_inxyz[:, 0, ...]
     # macroscopic displacement of a deformed grid Ex_p = E * x_p
@@ -146,18 +154,18 @@ def get_deformed_grid_coords_two_dim(discretization,
     # u = x_p +  Ex_p
     x_plot_ixyz += macro_disp_of_a_deformed_grid
     # add  displacement fluctuation # u=Ex_p + ũ(x_p)
-    x_plot_ixyz[..., :-1, :-1] += displacement_fluctuation.s[:, 0, ...]
+    x_plot_ixyz[..., :-1, :-1] += u_fluctuation_inxyz[:, 0, ...]
 
     # add displacement fluctuation at periodic nodes
     # periodicity: u(x = L) = u(x = 0), so the last row/column/corner copy the
     # fluctuation of the first row/column/corner (component 0 = u_x)
-    x_plot_ixyz[0, -1, :-1] += displacement_fluctuation.s[0, 0, 0, :]
-    x_plot_ixyz[0, :-1, -1] += displacement_fluctuation.s[0, 0, :, 0]
-    x_plot_ixyz[0, -1, -1] += displacement_fluctuation.s[0, 0, 0, 0]
+    x_plot_ixyz[0, -1, :-1] += u_fluctuation_inxyz[0, 0, 0, :]
+    x_plot_ixyz[0, :-1, -1] += u_fluctuation_inxyz[0, 0, :, 0]
+    x_plot_ixyz[0, -1, -1] += u_fluctuation_inxyz[0, 0, 0, 0]
     # same for component 1 = u_y
-    x_plot_ixyz[1, -1, :-1] += displacement_fluctuation.s[1, 0, 0, :]
-    x_plot_ixyz[1, :-1, -1] += displacement_fluctuation.s[1, 0, :, 0]
-    x_plot_ixyz[1, -1, -1] += displacement_fluctuation.s[1, 0, 0, 0]
+    x_plot_ixyz[1, -1, :-1] += u_fluctuation_inxyz[1, 0, 0, :]
+    x_plot_ixyz[1, :-1, -1] += u_fluctuation_inxyz[1, 0, :, 0]
+    x_plot_ixyz[1, -1, -1] += u_fluctuation_inxyz[1, 0, 0, 0]
 
     return x_plot_ixyz
 

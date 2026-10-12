@@ -203,7 +203,8 @@ class Discretization:
                  nb_of_pixels_global=None,
                  discretization_type='finite_element',
                  element_type='linear_triangles',
-                 communicator=muGrid.Communicator(MPI.COMM_WORLD)):
+                 communicator=muGrid.Communicator(MPI.COMM_WORLD),
+                 device='cpu'):
         """Initialize discretization.
 
         Parameters
@@ -221,6 +222,10 @@ class Discretization:
         communicator : muGrid.Communicator, optional
             MPI communicator for parallel computation. Note: the default is
             evaluated once at import time (``MPI.COMM_WORLD``).
+        device : str, optional
+            Where the fields live: 'cpu' (default) or 'gpu'. Passed to
+            ``muGrid.FFTEngine``. For 'gpu', muGrid has to be built with CUDA
+            and field data (``.s``) are cupy arrays instead of numpy arrays.
 
         Raises
         ------
@@ -260,7 +265,8 @@ class Discretization:
                                     nb_ghosts_left=left_ghosts,
                                     nb_ghosts_right=right_ghosts,
                                     # nb_sub_pts=self.nb_nodes_per_pixel
-                                    )
+                                    device=device)
+        self.device = device
         self.communicator = communicator
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
         # Validate the symmetries of material data where it enters a solve
@@ -1224,6 +1230,9 @@ class Discretization:
             The same object as the input field.
         """
 
+        # macro gradient is a small numpy array -> move it to the device of the field (CPU or GPU)
+        xp = tensor_operations.get_array_module(macro_gradient_field_ijqxyz.s)
+        macro_gradient_ij = xp.asarray(macro_gradient_ij)
         # broadcast E_ij to every quadrature point and pixel: append (ndim-2) singleton axes
         macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
@@ -1296,9 +1305,8 @@ class Discretization:
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
 
-        # sum over the last (d + 1) axes = quadrature points q and pixels x, y(, z); global MPI sum
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        # sum over quadrature points q and pixels x, y(, z); global MPI sum
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_homogenized_energy_mugrid(self,
@@ -1372,8 +1380,7 @@ class Discretization:
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=flux_field_ijqxyz)
 
         # (E + grad u) : w_q C : (E + grad u),  reduced over q and space
-        contracted_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s * flux_field_ijqxyz.s,
-                                               axis=tuple(range(-self.domain_dimension - 1, 0)))
+        contracted_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s * flux_field_ijqxyz.s)
 
         return np.sum(contracted_ij) / self.cell.domain_volume
 
@@ -1425,8 +1432,7 @@ class Discretization:
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
 
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_homogenized_stress_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
@@ -1495,8 +1501,7 @@ class Discretization:
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
         gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s[...] * det_F.s[...][None, None, ...]
 
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_stress_field_mugrid(self,
@@ -1694,7 +1699,32 @@ class Discretization:
         None
         """
         # apply quadrature weights without material data
-        grad_field.s[...] = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
+        # (weights are a numpy array -> move them to the device of the field (CPU or GPU))
+        xp = tensor_operations.get_array_module(grad_field.s)
+        grad_field.s[...] = xp.einsum('ijq...,q->ijq...', grad_field.s, xp.asarray(self.quadrature_weights))
+
+    def sum_over_quad_points_and_pixels(self, data_qxyz):
+        """Sum over quadrature points and pixels of the whole cell (all MPI ranks).
+
+        Works for CPU (numpy) and GPU (cupy) data.
+
+        Parameters
+        ----------
+        data_qxyz : numpy or cupy ndarray [..., q, x, y, z]
+            The last (d + 1) axes -- quadrature points q and pixels x, y(, z) -- are summed.
+
+        Returns
+        -------
+        numpy ndarray [...]
+            Global sum, the same on every rank. Always a numpy array.
+        """
+        # local sum over q, x, y(, z) on the device of the data (CPU or GPU)
+        local_sum = data_qxyz.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
+        # MPI needs host memory -> copy the small result to the host before the global sum
+        local_sum = np.ascontiguousarray(tensor_operations.to_host(local_sum))
+        global_sum = np.empty_like(local_sum)
+        MPI.COMM_WORLD.Allreduce(local_sum, global_sum, op=MPI.SUM)
+        return global_sum
 
     def apply_material_data(self, material_data, gradient_field):
         """Legacy (numpy-returning) constitutive map, dispatched on problem type.
@@ -1781,11 +1811,14 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
+            material_data = xp.asarray(material_data)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                stress = np.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
+                stress = xp.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
             elif material_data.ndim > 4:
-                stress = np.einsum('ijkl...,kl...->ij...', material_data, gradient_field.s)
+                stress = xp.einsum('ijkl...,kl...->ij...', material_data, gradient_field.s)
         else:
             stress = np.einsum('ijkl...,kl...->ij...', material_data.s, gradient_field.s)
 
@@ -1810,12 +1843,15 @@ class Discretization:
         """
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.sg)
+            material_data = xp.asarray(material_data)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 2:
-                flux_ijnxyz = np.einsum('ij,uj...->ui...', material_data,
+                flux_ijnxyz = xp.einsum('ij,uj...->ui...', material_data,
                                         gradient_field.sg)  # 'u' just to keep the size of array consistent
             else:
-                flux_ijnxyz = np.einsum('ij...,uj...->ui...', material_data,
+                flux_ijnxyz = xp.einsum('ij...,uj...->ui...', material_data,
                                         gradient_field.sg)
 
                 # raise ValueError('The reference material_data for conductivity hase more dimensions than 2')
@@ -1876,9 +1912,11 @@ class Discretization:
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensorF
             if material_data.ndim == 2:
-                gradient_field.s[...] = np.einsum('ij,uj...->ui...', material_data,
+                gradient_field.s[...] = xp.einsum('ij,uj...->ui...', xp.asarray(material_data),
                                                   gradient_field.s)  # 'u' just to keep the size of array consistent
             else:
                 raise TypeError("apply_material_data_mugrid does not support global ndarray")
@@ -1910,9 +1948,11 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                gradient_field.s[...] = np.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
+                gradient_field.s[...] = xp.einsum('ijkl,kl...->ij...', xp.asarray(material_data), gradient_field.s)
 
             elif material_data.ndim > 4:
                 raise TypeError("apply_material_data_elasticity_mugrid does not support global ndarray")
@@ -2672,8 +2712,8 @@ class Discretization:
         """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        stress_field.s[...] = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
-        integral = self.mpi_reduction.sum(stress_field.s, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=stress_field)
+        integral = self.sum_over_quad_points_and_pixels(stress_field.s)
 
         return integral
 
@@ -3286,8 +3326,12 @@ class Discretization:
         Affine map ``f <- min_val + (max_val - min_val) (f - f_min) / (f_max - f_min)``
         with global (MPI-reduced) extrema; divides by zero for a constant field.
         """
-        field_min = self.mpi_reduction.min(field.s)
-        field_max = self.mpi_reduction.max(field.s)
+        # local min / max on the device of the field (CPU or GPU), global min / max over MPI ranks on the host
+        # (an empty subdomain contributes +inf / -inf)
+        local_min = float(field.s.min()) if field.s.size else np.inf
+        local_max = float(field.s.max()) if field.s.size else -np.inf
+        field_min = float(self.mpi_reduction.min(np.asarray(local_min)))
+        field_max = float(self.mpi_reduction.max(np.asarray(local_max)))
         field.s[...] = (field.s - field_min) / (field_max - field_min)
         field.s *= (max_val - min_val)
         field.s += min_val

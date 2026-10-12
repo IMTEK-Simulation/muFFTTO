@@ -337,6 +337,57 @@ def contact_test_geometry_2(coords):
     return indicator(solid, coords)
 
 
+@register('contact_beam_root_notch')
+def contact_beam_root_notch(coords, fillet_radius=0.08, notch_radius=0.025, notch_offset=0.03):
+    """``contact_test_geometry_2`` made to crack at the roots of the sticks (beams).
+
+    Same square frame and overlapping sticks, with two changes:
+
+    * the inner corners of the frame are rounded with ``fillet_radius``, which
+      removes the stress concentration at the frame corners;
+    * each stick has a semicircular notch of ``notch_radius`` in its top and its
+      bottom face, centred ``notch_offset`` from the frame wall, which weakens the
+      stick at its root (cross-section 0.1 -> 0.1 - 2 notch_radius).
+
+    Under shear the sticks come into contact and bend; the bending moment is
+    largest at the root, where the notches now localize the crack.
+    """
+    lower, upper = 0.15, 0.85
+    r = fillet_radius
+    # inner square with rounded corners: two crossed boxes plus a disk in every corner
+    cavity = (box([lower + r, lower], [upper - r, upper])
+              | box([lower, lower + r], [upper, upper - r]))
+    for cx in (lower + r, upper - r):
+        for cy in (lower + r, upper - r):
+            cavity = cavity | ball((cx, cy), r)
+    left_stick = box([lower, 0.35], [0.52, 0.45])            # root at the left wall, x = 0.15
+    right_stick = box([0.47, 0.55], [0.95, 0.65])            # root at the right wall, x = 0.85
+    notches = (ball((lower + notch_offset, 0.35), notch_radius) | ball((lower + notch_offset, 0.45), notch_radius)
+               | ball((upper - notch_offset, 0.55), notch_radius) | ball((upper - notch_offset, 0.65), notch_radius))
+    solid = (everywhere() - cavity) | ((left_stick | right_stick) - notches)
+    return indicator(solid, coords)
+
+
+@register('frame_contact_supports')
+def frame_contact_supports(coords, gap=0.2, thickness=0.15, overlap=0.1):
+    """Square frame (1) around a void (0) with two thick support blocks: a secondary load path.
+
+    The frame is the one of ``contact_test_geometry_2`` (inner square ``[0.15, 0.85)^2``,
+    sharp corners). A lower block on the left wall and an upper block on the right wall
+    overlap by ``overlap`` in ``x``; the vertical ``gap`` between them is centred at
+    ``y = 0.5``. Under shear (H_10 < 0) the gap closes; with a large gap the supports
+    come into contact only after the frame has started to crack, and then carry the load
+    until they crack as well.
+    """
+    lower, upper = 0.15, 0.85
+    x_mid = 0.5
+    left_top, right_bottom = 0.5 - gap / 2, 0.5 + gap / 2
+    left_block = box([lower, left_top - thickness], [x_mid + overlap / 2, left_top])
+    right_block = box([x_mid - overlap / 2, right_bottom], [upper, right_bottom + thickness])
+    solid = _square_frame(lower, upper) | left_block | right_block
+    return indicator(solid, coords)
+
+
 @register('contact_fracture_s_gap')
 def contact_fracture_s_gap(coords, corner=(0.42, 0.57), gap=0.05, overlap=0.12,
                            upper_radii=(0.26, 0.28), lower_radius_x=0.31, lower_bottom=0.18,

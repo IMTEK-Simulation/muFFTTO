@@ -1172,7 +1172,8 @@ def dr_pbcg_mugrid(
 
     def gram(u_list, v_list):
         """m × m matrix G[i,j] = <u_list[i], v_list[j]>."""
-        return np.array([[dot(u_list[i], v_list[j]) for j in range(m)]
+        # float() copies each (possibly GPU) scalar to the host -> G is always a small numpy matrix
+        return np.array([[float(dot(u_list[i], v_list[j])) for j in range(m)]
                          for i in range(m)])
 
     def householder_qr(r_list, q_list):

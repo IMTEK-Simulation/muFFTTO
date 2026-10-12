@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 import numpy as np  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.colors import ListedColormap  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap  # noqa: E402
 
 from muFFTTO import io_utils  # noqa: E402
 
@@ -46,11 +46,17 @@ H_macro = np.asarray(run.attributes['H_macro']).reshape(2, 2)
 i_d, j_d = np.unravel_index(np.argmax(np.abs(H_macro)), H_macro.shape)
 label = f'{i_d}{j_d}'
 F_d = (i_d == j_d) + lam * H_macro[i_d, j_d]                # F_bar_ij = delta_ij + lam H_ij
-P_d = h['mean_P'][:, i_d, j_d]
+# stress relative to the shear modulus of the solid, mu = E / (2 (1 + nu))
+mu_solid = float(run.attributes['E_solid']) / (2.0 * (1.0 + float(run.attributes['nu_solid'])))
+P_d = h['mean_P'][:, i_d, j_d] / mu_solid
 size = np.asarray(run.attributes['domain_size'], dtype=float)
 phase = run.fields['phase'][0, 0, 0]                       # [x, y], 1 solid / 0 third medium
 nx, ny = phase.shape
 medium_cmap = ListedColormap([(0.75, 0.87, 1.0)])
+# damage: black (intact) -> red (damaged)
+damage_cmap = LinearSegmentedColormap.from_list('damage', ['black', (0.9, 0.0, 0.0)])
+# fully cracked solid pixels (damage above this) are not drawn -> the crack shows as a white gap
+crack_threshold = 0.95
 
 
 def deformed_corners(frame):
@@ -72,7 +78,9 @@ def plot_cell(ax, frame):
     x, y = deformed_corners(frame)
     solid = phase > 0
     ax.pcolormesh(x, y, np.ma.masked_where(solid, np.ones_like(phase)), cmap=medium_cmap, shading='flat')
-    image = ax.pcolormesh(x, y, np.ma.masked_where(~solid, pixel_damage(frame)), cmap='inferno',
+    damage = pixel_damage(frame)
+    cracked = damage > crack_threshold
+    image = ax.pcolormesh(x, y, np.ma.masked_where(~solid | cracked, damage), cmap=damage_cmap,
                           vmin=0, vmax=1, shading='flat')
     ax.set_aspect('equal')
     ax.set_title(f'frame {frame}: F{label} = {F_d[frame]:+.3f}, max d = {d_max[frame]:.2f}', fontsize=10)
@@ -84,7 +92,7 @@ def plot_response(ax, marked_frames):
     ax.plot(np.r_[F0, F_d], np.r_[0, P_d], 'k.-', ms=3)
     ax.plot(F_d[marked_frames], P_d[marked_frames], 'rs')
     ax.set_xlabel(rf'$\bar F_{{{label}}}$')
-    ax.set_ylabel(rf'$\bar P_{{{label}}}$')
+    ax.set_ylabel(rf'$\bar P_{{{label}}} \,/\, \mu$')
     twin = ax.twinx()
     twin.plot(np.r_[F0, F_d], np.r_[0, d_max], '-', color='C3', lw=1)
     twin.set_ylim(0, 1.05)
@@ -94,6 +102,14 @@ def plot_response(ax, marked_frames):
 
 if animate:
     from matplotlib import animation
+
+    # no system ffmpeg: use the one shipped with imageio-ffmpeg (if installed), so the movie is an mp4
+    if not animation.writers.is_available('ffmpeg'):
+        try:
+            import imageio_ffmpeg
+            plt.rcParams['animation.ffmpeg_path'] = imageio_ffmpeg.get_ffmpeg_exe()
+        except ImportError:
+            pass
 
     fig, (ax_r, ax_c) = plt.subplots(1, 2, figsize=(11, 4.6))
 

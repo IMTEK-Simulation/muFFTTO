@@ -36,3 +36,5 @@ experiments/exp_data/
 .output.txt
 
 .idea/
+
+*.log

@@ -51,6 +51,36 @@ separate fields.
 
 import numpy as np
 
+try:
+    import cupy
+except ImportError:  # CPU-only installation
+    cupy = None
+
+
+# ============================================================================
+# CPU / GPU helpers
+# Field data (.s) is a numpy array for CPU fields and a cupy array for GPU fields.
+# Small constant tensors (identity, weights, macro gradient, ...) are created with
+# numpy and have to be moved to the same device before they are combined with field data.
+# ============================================================================
+
+def get_array_module(array):
+    """Return ``numpy`` or ``cupy``, depending on where ``array`` lives.
+
+    Example: ``xp = get_array_module(field.s)`` and then ``xp.asarray(I)``
+    moves a numpy constant ``I`` to the device of ``field``.
+    """
+    if cupy is None:
+        return np
+    return cupy.get_array_module(array)
+
+
+def to_host(array):
+    """Return ``array`` as a numpy array; GPU data is copied to the host."""
+    if cupy is not None and isinstance(array, cupy.ndarray):
+        return array.get()
+    return np.asarray(array)
+
 
 # ============================================================================
 # Einsum operators — layout [i, j, q, x, y, z]
