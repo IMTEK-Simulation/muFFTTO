@@ -29,7 +29,7 @@ R_MM         = 3.0              # void & inclusion radius r                     
 MU_M_MPA     = 0.6              # matrix shear modulus mu^(m) (FLX9860)           [MPa]
 MU_I_MPA     = 600.0            # stiff inclusion shear modulus mu^(i) (VeroWhite) [MPa]
 LAM_OVER_MU  = 1e3              # Lambda / mu, matrix and inclusion (Sec. 3, after Eq. 1) [-]
-C_MATRIX     = 0.25             # target matrix volume fraction c^(m)                   [-]
+C_MATRIX     = 0.25              # target matrix volume fraction c^(m) ratio            [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
 MU_V_MPA     = 1e-4 * MU_M_MPA  # void stand-in shear modulus (arbitrary) [MPa]
@@ -43,31 +43,26 @@ c_matrix = C_MATRIX
 r = R_MM / L_REF                   # = 1
 CONTRAST = MU_I_MPA / S_REF        # = 1000
 MU_VOID = MU_V_MPA / S_REF         # = 1e-4
-inclusion_vol_frac = 1.0 - c_matrix                   # total circle fraction (voids + stiff)
+incl_vol_frac = 1.0 - c_matrix                   # total circle fraction (voids + stiff)
 
 # Numerical settings ==========================================================================
 skip_shear = True        # only the two normal load cases (cell is orthotropic in X/Y)
-eps_plot = -0.05         # macro compression in X used for the field plot
+eps_plot = -0.1         # macro compression in X used for the field plot
 cg_tol = 1e-6           # CG tolerance (relative)
 # =============================================================================================
 
-# Mesh resolution: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
-# Value must come from the convergence study (Stefanus_convergence_ligament.py), as the paper's
+# Mesh RESOLUTION: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
 # "mesh sensitive analysis" (Sec. 3). Command-line options are used by that driver script.
 parser = argparse.ArgumentParser()
 parser.add_argument('--px_per_ligament', type=int, default=8)   # pixels across ligament a - 2r (numerical choice)
-parser.add_argument('--no_plots', action='store_true')          # batch runs: no figures
-parser.add_argument('--results_json', default=None)             # batch runs: write results here
+# parser.add_argument('--no_plots', action='store_true')          # batch runs: no figures
+# parser.add_argument('--results_json', default=None)             # batch runs: write results here
 args, _ = parser.parse_known_args()
 PX_PER_LIGAMENT = args.px_per_ligament
-MAKE_PLOTS = not args.no_plots
-if not MAKE_PLOTS:                       # keep all plotting code, but make plt.show() a no-op
-    plt.switch_backend('Agg')
-    plt.show = lambda *a, **k: plt.close('all')
 # =============================================================================================
 
 # Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
-a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * inclusion_vol_frac))   # from c_circles = 2 pi r^2 / (sqrt(3) a^2)
+a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * incl_vol_frac))
 ligament = a - 2 * r                                            # thinnest matrix ligament (void-void)
 
 h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
@@ -98,7 +93,7 @@ phase_field = discretization.get_scalar_field(name='phase_field')
 phase_field.s[0, 0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
                                                           microstructure_name=geometry_ID,
                                                           coordinates=discretization.fft.coords,
-                                                          vol_frac=inclusion_vol_frac,
+                                                          vol_frac=incl_vol_frac,
                                                           domain_size=domain_size)
 
 # volume fraction actually resolved on the pixel grid (differs from target on coarse grids)
@@ -107,7 +102,7 @@ vf_soft = discretization.mpi_reduction.sum(phase_field.s[0, 0] == 1) / nb_px_glo
 vf_stiff = discretization.mpi_reduction.sum(phase_field.s[0, 0] == 2) / nb_px_global
 
 if MPI.COMM_WORLD.rank == 0:
-    print(f'target inclusion vol. frac = {inclusion_vol_frac:.4f} | '
+    print(f'target inclusion vol. frac = {incl_vol_frac:.4f} | '
           f'resolved: soft = {vf_soft:.4f}, stiff = {vf_stiff:.4f}, total = {vf_soft + vf_stiff:.4f}')
 
 
@@ -131,7 +126,7 @@ cbar = fig.colorbar(pcm, ax=ax, ticks=[0, 1, 2])
 cbar.ax.set_yticklabels(['matrix', 'void', 'stiff'])
 
 # exact circles (r = R_MM) on top of the pixel map -> visual check of radius and positions
-centres_frac = [(0.00, 0.00), (0.25, 0.50), (0.75, 0.50), (0.50, 0.00)]   # as in geometry_stefanus
+centres_frac = [(0.00, 0.00), (0.25, 0.50), (0.75, 0.50), (0.50, 0.00)]
 for fx, fy in centres_frac:
     for sx in (-1, 0, 1):                 # images that cut into the cell
         for sy in (-1, 0, 1):
@@ -145,6 +140,39 @@ ax.set_ylabel('y [mm]')
 ax.set_title(f'Composite A unit cell: {Lx_mm:.2f} x {Ly_mm:.2f} mm\n'
              f'r = {R_MM} mm, a = {a * L_REF:.3f} mm, c(m) = {C_MATRIX}', fontsize=10)
 plt.show()
+
+# Plot domain size result
+Lx, Ly = domain_size                                   # cell size, units of r
+nx, ny = discretization.nb_of_pixels_global
+X_plot, Y_plot = np.meshgrid(np.linspace(0, 1, nx + 1),            # pixel EDGES, normalised
+                             np.linspace(0, 1, ny + 1), indexing='ij')
+
+fig, ax = plt.subplots(figsize=(6, 6 * Ly / Lx))
+pcm = ax.pcolormesh(X_plot, Y_plot, phase_field.s[0, 0],
+                    cmap=phase_cmap, norm=phase_norm, shading='flat')
+cbar = fig.colorbar(pcm, ax=ax, ticks=[0, 1, 2])
+cbar.ax.set_yticklabels(['matrix', 'void', 'stiff'])
+
+# exact circles (radius r) on top of the pixel map. In normalised coordinates a circle has
+# # semi-axes r/Lx and r/Ly; with the aspect ratio below it is drawn round again.
+# centres_frac = [(0.00, 0.00), (0.25, 0.50), (0.75, 0.50), (0.50, 0.00)]   # as in geometry_stefanus
+# for fx, fy in centres_frac:
+#     for sx in (-1, 0, 1):                 # periodic images that cut into the cell
+#         for sy in (-1, 0, 1):
+#             ax.add_patch(Ellipse((fx + sx, fy + sy), width=2 * r / Lx, height=2 * r / Ly,
+#                                  fill=False, color='k', lw=0.8, ls='--'))
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
+ax.set_aspect(Ly / Lx)                    # 1 unit in y is drawn Ly/Lx as long as 1 unit in x -> true shape
+ax.set_xticks(np.linspace(0, 1, 5))
+ax.set_yticks(np.linspace(0, 1, 5))
+ax.set_xlabel(r'$x / L_x$')
+ax.set_ylabel(r'$y / L_y$')
+ax.set_title(f'Composite A unit cell (normalised), true ratio $L_x : L_y$ = 2 : $\\sqrt{{3}}$\n'
+             f'$L_x$ = {Lx * L_REF:.2f} mm, $L_y$ = {Ly * L_REF:.2f} mm, '
+             f'r = {R_MM} mm, c(m) = {C_MATRIX}', fontsize=10)
+plt.show()
+
 
 matrix_mask = phase_field.s[0, 0] == 0
 inc_soft_mask = phase_field.s[0, 0] == 1
@@ -348,6 +376,16 @@ vm = np.sqrt(
 #  I want to plot the field/ Von Mises stress. I have four quad points , but matplotlib plots only one number per pixel # shape: (4, 16, 32)
 Von_Mises_1nxyz.s[...] = np.mean(vm, axis=0)
 
+# homogenized_flux = discretization.get_homogenized_stress(
+#     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
+#     displacement_field_inxyz=temperature_field,
+#     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
+# get_homogenized_stress_mugrid(
+#                               material_data_field_ijklqxyz=,
+#                               displacement_field_inxyz,
+#                               macro_gradient_field_ijqxyz,
+#                               formulation=None):
+
 def deformed_grid_physical(macro_gradient_ij, u_fluc_field):
     """Deformed nodal grid in physical units (serial only).
     visualization_utils.get_deformed_grid_coords_two_dim uses coordinates in [0, 1],
@@ -377,16 +415,3 @@ if discretization.communicator.size == 1:
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
-
-# results for the convergence study ===========================================================
-if args.results_json is not None and MPI.COMM_WORLD.rank == 0:
-    with open(args.results_json, 'w') as f:
-        json.dump({'px_per_ligament': PX_PER_LIGAMENT,
-                   'nb_pixels': list(number_of_pixels),
-                   'h_mm': max(h_x, h_y) * L_REF,
-                   'element_type': element_type,
-                   'c_matrix_resolved': float(1 - vf_soft - vf_stiff),
-                   'E_X': float(E_X), 'E_Y': float(E_Y),          # units of mu_m
-                   'nu_YX': float(nu_YX), 'nu_XY': float(nu_XY),
-                   'cg_its': [int(v) for v in cg_its.values()],
-                   'time_s': float(elapsed_time)}, f)
