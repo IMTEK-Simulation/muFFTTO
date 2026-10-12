@@ -42,21 +42,18 @@ S_REF = MU_M_MPA    # stress scale  [MPa] -> stresses / moduli in units of mu^(m
 c_matrix = C_MATRIX
 r = R_MM / L_REF                   # = 1
 CONTRAST = MU_I_MPA / S_REF        # = 1000
-MU_VOID = MU_V_MPA / S_REF         # = 1e-4
+MU_VOID = 0. # MU_V_MPA / S_REF         # = 1e-4
 incl_vol_frac = 1.0 - c_matrix                   # total circle fraction (voids + stiff)
 
 # Numerical settings ==========================================================================
-skip_shear = True        # only the two normal load cases (cell is orthotropic in X/Y)
-eps_plot = -0.1         # macro compression in X used for the field plot
 cg_tol = 1e-6           # CG tolerance (relative)
+plot_load_cases = True  # example's plots assume a [0,1] domain -> distorted for this cell
 # =============================================================================================
 
 # Mesh RESOLUTION: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
 # "mesh sensitive analysis" (Sec. 3). Command-line options are used by that driver script.
 parser = argparse.ArgumentParser()
-parser.add_argument('--px_per_ligament', type=int, default=8)   # pixels across ligament a - 2r (numerical choice)
-# parser.add_argument('--no_plots', action='store_true')          # batch runs: no figures
-# parser.add_argument('--results_json', default=None)             # batch runs: write results here
+parser.add_argument('--px_per_ligament', type=int, default=4)   # pixels across ligament a - 2r (numerical choice)
 args, _ = parser.parse_known_args()
 PX_PER_LIGAMENT = args.px_per_ligament
 # =============================================================================================
@@ -67,7 +64,7 @@ ligament = a - 2 * r                                            # thinnest matri
 
 h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
 domain_size = [2 * a, np.sqrt(3) * a]
-number_of_pixels = (int(round(domain_size[0] / h)), int(round(domain_size[1] / h)))
+number_of_pixels = (1*64,1*32)#(int(round(domain_size[0] / h)), int(round(domain_size[1] / h)))
 h_x, h_y = domain_size[0] / number_of_pixels[0], domain_size[1] / number_of_pixels[1]   # actual sizes
 
 if MPI.COMM_WORLD.rank == 0:
@@ -173,7 +170,6 @@ ax.set_title(f'Composite A unit cell (normalised), true ratio $L_x : L_y$ = 2 : 
              f'r = {R_MM} mm, c(m) = {C_MATRIX}', fontsize=10)
 plt.show()
 
-
 matrix_mask = phase_field.s[0, 0] == 0
 inc_soft_mask = phase_field.s[0, 0] == 1
 inc_stiff_mask = phase_field.s[0, 0] == 2
@@ -225,7 +221,6 @@ total_strain_ijqxyz = discretization.get_strain_sized_field(name='total_strain_f
 
 material.get_algorithmic_tangent(total_strain_ijqxyz, material_data_field_C_0)
 
-
 def K_fun(x, Ax):
 
     discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0,
@@ -234,12 +229,16 @@ def K_fun(x, Ax):
                                               formulation='small_strain')
     discretization.fft.communicate_ghosts(Ax)
 
-# preconditioner: matrix as reference, built from the SAME (lambda, mu) as the material
-dim = discretization.domain_dimension
-I2 = np.eye(dim)
-II = np.einsum('ij,kl->ijkl', I2, I2)
-I4s = 0.5 * (np.einsum('ik,jl->ijkl', I2, I2) + np.einsum('il,jk->ijkl', I2, I2))
-elastic_C_ref = lam_0 * II + 2.0 * mu_0 * I4s
+
+# reference medium for the preconditioner = matrix
+K_0 = lam_0 + 2.0 * mu_0 / 3.0   # bulk modulus as used by get_elastic_material_tensor (3D form)
+G_0 = mu_0
+
+# preconditioner
+elastic_C_ref = material_models.get_elastic_material_tensor(dim=discretization.domain_dimension,
+                                                 K=K_0,
+                                                 mu=G_0,
+                                                 kind='linear')
 preconditioner = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_ref)
 
 def M_fun(x, Px):
@@ -255,7 +254,7 @@ def M_fun(x, Px):
 # Allocate fields
 macro_gradient_field = discretization.get_gradient_size_field(name='macro_gradient_field')
 rhs_field = discretization.get_unknown_size_field(name='rhs_field')
-displacement_fluctuation_field = discretization.get_unknown_size_field(name='solution')
+solution_field = discretization.get_unknown_size_field(name='solution')
 
 
 def callback(iteration, fields):
@@ -263,155 +262,69 @@ def callback(iteration, fields):
     Callback function to print the current solution, residual, and search direction.
     """
     norm_of_rr = fields['rr']
-    # if discretization.communicator.rank == 0:
-    #     print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
+    if discretization.communicator.rank == 0:
+        print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
+
+dim = discretization.domain_dimension
+homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
+# compute whole homogenized elastic tangent
+for i in range(dim):
+    for j in range(dim):
+        # set macroscopic gradient
+        macro_gradient_ij = np.zeros([dim, dim])
+        macro_gradient_ij[i, j] = 1
+        # Set up right hand side
+        discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+                                                       macro_gradient_field_ijqxyz=macro_gradient_field)
+        # Solve mechanical equilibrium constrain
+        discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                      macro_gradient_field_ijqxyz=macro_gradient_field,
+                                      rhs_inxyz=rhs_field)
+        # tol is ABSOLUTE on ||b - Ax||; scale with ||b|| so cg_tol (line 51) acts as a RELATIVE tolerance
+        # norm_b = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+        # print(f'Norm of b = {norm_b:.5}')
+        Solvers.conjugate_gradients(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,  # linear operator
+            b=rhs_field,  # right-hand side
+            x=solution_field,
+            prec=M_fun,
+            tol=cg_tol, #* norm_b,
+            maxiter=2000,
+            callback=callback)
 
 
-def solve_for_macro_gradient(macro_gradient_ij):
-    """Solve for the fluctuation under a prescribed macro strain; returns number of CG iterations."""
-    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
-                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
-    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                  macro_gradient_field_ijqxyz=macro_gradient_field,
-                                  rhs_inxyz=rhs_field)
-    displacement_fluctuation_field.s.fill(0)
+        if plot_load_cases and discretization.communicator.size == 1:
+            # Plot the first two components of the solution field
+            try:
+                x_plot_ixyz=visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+                                                 macro_gradient_ij=macro_gradient_ij,
+                                                 displacement_fluctuation=solution_field)
 
-    # tol is an ABSOLUTE threshold on ||b - Ax||  ->  scale with ||b|| to make cg_tol relative
-    norm_b = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
-    its = []
-
-    def counting_callback(iteration, fields):
-        its.append(iteration)
-        callback(iteration, fields)
-
-    Solvers.conjugate_gradients(
-        comm=discretization.communicator,
-        fc=discretization.field_collection,
-        hessp=K_fun,  # linear operator
-        b=rhs_field,  # right-hand side
-        x=displacement_fluctuation_field,
-        prec=M_fun,
-        tol=cg_tol * norm_b,
-        maxiter=5000,
-        callback=counting_callback)
-    return len(its)
-
-
-# homogenized stiffness: unit macro strain per (k, l) -> column C[:, :, k, l]
-homogenized_C_ijkl = np.zeros(4 * [dim])
-load_cases = [(0, 0), (1, 1)] if skip_shear else [(0, 0), (1, 1), (0, 1)]
-cg_its = {}
-for k, l in load_cases:
-    macro_gradient_ij = np.zeros([dim, dim])
-    macro_gradient_ij[k, l] = 1.0
-    cg_its[(k, l)] = solve_for_macro_gradient(macro_gradient_ij)
-    homogenized_C_ijkl[:, :, k, l] = discretization.get_homogenized_stress_mugrid(
-        material_data_field_ijklqxyz=material_data_field_C_0,
-        displacement_field_inxyz=displacement_fluctuation_field,
-        macro_gradient_field_ijqxyz=macro_gradient_field,
-        formulation='small_strain')
-
-C_voigt = material_models.compute_Voigt_notation_4order(homogenized_C_ijkl)  # [xx, yy, xy]
-S_voigt = np.zeros((3, 3))
-if skip_shear:
-    S_voigt[:2, :2] = np.linalg.inv(C_voigt[:2, :2])  # orthotropic: normal block decouples
-else:
-    S_voigt = np.linalg.inv(C_voigt)
-
-# lateral faces traction-free (plane strain), paper notation
-E_X = 1.0 / S_voigt[0, 0]
-E_Y = 1.0 / S_voigt[1, 1]
-nu_YX = -S_voigt[1, 0] / S_voigt[0, 0]  # load in X
-nu_XY = -S_voigt[0, 1] / S_voigt[1, 1]  # load in Y
-if not skip_shear:
-    G_XY = 1.0 / S_voigt[2, 2]           # effective in-plane shear modulus / mu_m
-    coupling = np.abs(C_voigt[:2, 2]).max() / np.abs(C_voigt[:2, :2]).max()   # ~0 for orthotropic cells
-    if MPI.COMM_WORLD.rank == 0:
-        print(f'G_XY / mu_m = {G_XY:.4f}   normal-shear coupling = {coupling:.2e}')
+                visualization_utils.plot_field_on_grid(
+                    coordinates_for_plot=x_plot_ixyz,
+                    field_to_plot=solution_field.s[0, 0],
+                    name = fr'$\tilde{{u}}_{{x}}$   ')
+                visualization_utils.plot_field_on_grid(
+                    coordinates_for_plot=x_plot_ixyz,
+                    field_to_plot=solution_field.s[1, 0],
+                    name=fr'$\tilde{{u}}_{{y}}$   ')
+            except:
+                print(f"Plotting failed:  ")
+        # ----------------------------------------------------------------------
+        # compute homogenized stress field corresponding
+        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+            material_data_field_ijklqxyz=material_data_field_C_0,
+            displacement_field_inxyz=solution_field,
+            macro_gradient_field_ijqxyz=macro_gradient_field,
+            formulation='small_strain')
 
 if MPI.COMM_WORLD.rank == 0:
-    print(f'CG iterations per load case: {cg_its}')
-    print('Homogenized C (Voigt [xx, yy, xy], units of mu_matrix) =\n' +
-          np.array2string(C_voigt, formatter={'float_kind': lambda v: f'{v:12.6f}'}))
-    print(f'E_X / mu_m = {E_X:.4f}   nu_YX = {nu_YX:.4f}   (load in X)')
-    print(f'E_Y / mu_m = {E_Y:.4f}   nu_XY = {nu_XY:.4f}   (load in Y)')
-
-# state for the field plot: uniaxial compression in X, lateral faces traction-free
-macro_gradient_ij = np.zeros([dim, dim])
-macro_gradient_ij[0, 0] = eps_plot
-macro_gradient_ij[1, 1] = -nu_YX * eps_plot
-solve_for_macro_gradient(macro_gradient_ij)
-
-# strain from displacement increment
-# Apply small strain (Linearized) Elasticity
-strain_fluc_field = discretization.get_strain_sized_field(name='strain_fluc_field')
-discretization.apply_gradient_operator_symmetrized_mugrid(
-    u_inxyz=displacement_fluctuation_field,
-    grad_u_ijqxyz=strain_fluc_field,
-)
-
-# update total strain and displacement
-total_strain_ijqxyz.s[...] = macro_gradient_field.s[...] + strain_fluc_field.s[...]
-
-# re-evaluate constitutive response
-total_stress_field = discretization.get_strain_sized_field(name='total_stress_field')
-
-material.get_stress(total_strain_ijqxyz, total_stress_field)
-
-Von_Mises_1nxyz = discretization.get_scalar_field(name='Von_Mises')
-
-s = total_stress_field.s
-sxx = s[0, 0]
-syy = s[1, 1]
-sxy = s[0, 1]
-
-# plane strain: sigma_zz = lambda * tr(eps), per quadrature point
-szz = lam_11qxyz.s[0, 0] * (total_strain_ijqxyz.s[0, 0] + total_strain_ijqxyz.s[1, 1])
-
-vm = np.sqrt(
-    0.5 * ((sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2)
-    + 3.0 * sxy ** 2
-)
-
-#  I want to plot the field/ Von Mises stress. I have four quad points , but matplotlib plots only one number per pixel # shape: (4, 16, 32)
-Von_Mises_1nxyz.s[...] = np.mean(vm, axis=0)
-
-# homogenized_flux = discretization.get_homogenized_stress(
-#     material_data_field_ijklqxyz=material_data_field_C_0_rho_ijklqxyz,
-#     displacement_field_inxyz=temperature_field,
-#     macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-# get_homogenized_stress_mugrid(
-#                               material_data_field_ijklqxyz=,
-#                               displacement_field_inxyz,
-#                               macro_gradient_field_ijqxyz,
-#                               formulation=None):
-
-def deformed_grid_physical(macro_gradient_ij, u_fluc_field):
-    """Deformed nodal grid in physical units (serial only).
-    visualization_utils.get_deformed_grid_coords_two_dim uses coordinates in [0, 1],
-    which is inconsistent with physical displacements when L != 1."""
-    nx, ny = discretization.nb_of_pixels_global
-    gx, gy = np.meshgrid(np.linspace(0, domain_size[0], nx + 1),
-                         np.linspace(0, domain_size[1], ny + 1), indexing='ij')
-    x_ixy = np.stack([gx, gy])
-    x_ixy = x_ixy + np.einsum('ij,jxy->ixy', macro_gradient_ij, x_ixy)  # x + E x
-    u_ixy = u_fluc_field.s[:, 0]                                         # first nodal point per pixel
-    u_ixy = np.pad(u_ixy, ((0, 0), (0, 1), (0, 1)), mode='wrap')         # periodic end nodes
-    return x_ixy + u_ixy
-
-
-if discretization.communicator.size == 1:
-    x_plot_ixyz = deformed_grid_physical(macro_gradient_ij, displacement_fluctuation_field)
-    vm_plot = np.ma.masked_where(inc_soft_mask, Von_Mises_1nxyz.s[0, 0])  # hide the void stand-in
-    fig, ax = plt.subplots(figsize=(5, 5))
-    pcm = ax.pcolormesh(x_plot_ixyz[0], x_plot_ixyz[1], vm_plot, shading='flat', cmap='jet')
-    fig.colorbar(pcm, ax=ax, label=r'$\sigma_{vM} / \mu_m$')
-    ax.set_aspect('equal')
-    ax.set_xlabel('x / r')
-    ax.set_ylabel('y / r')
-    ax.set_title(fr'uniaxial compression X, $\varepsilon$ = {eps_plot}')
-    plt.show()
-
+    print(
+        "Homogenized elastic tangent =\n" +
+        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
+    )
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
