@@ -1,7 +1,6 @@
 import sys
 import os
 import argparse
-import json
 
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -24,6 +23,12 @@ discretization_type = 'finite_element'
 element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
+# Numerical settings ==========================================================================
+NX = 128                 # Arbitrary number of pixels
+cg_tol = 1e-6            # CG tolerance (relative)
+plot_load_cases = False  # example's plots assume a [0,1] domain -> distorted for this cell
+# =============================================================================================
+
 # Unit Cells input: -- PHYSICAL units ===================
 R_MM         = 3.0              # void & inclusion radius r                      [mm]
 MU_M_MPA     = 0.6              # matrix shear modulus mu^(m) (FLX9860)           [MPa]
@@ -45,15 +50,11 @@ CONTRAST = MU_I_MPA / S_REF        # = 1000
 MU_VOID = 0. # MU_V_MPA / S_REF         # = 1e-4
 incl_vol_frac = 1.0 - c_matrix                   # total circle fraction (voids + stiff)
 
-# Numerical settings ==========================================================================
-cg_tol = 1e-6           # CG tolerance (relative)
-plot_load_cases = True  # example's plots assume a [0,1] domain -> distorted for this cell
-# =============================================================================================
 
 # Mesh RESOLUTION: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
 # "mesh sensitive analysis" (Sec. 3). Command-line options are used by that driver script.
 parser = argparse.ArgumentParser()
-parser.add_argument('--px_per_ligament', type=int, default=4)   # pixels across ligament a - 2r (numerical choice)
+parser.add_argument('--px_per_ligament', type=int, default=6)   # pixels across ligament a - 2r (numerical choice)
 args, _ = parser.parse_known_args()
 PX_PER_LIGAMENT = args.px_per_ligament
 # =============================================================================================
@@ -64,7 +65,8 @@ ligament = a - 2 * r                                            # thinnest matri
 
 h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
 domain_size = [2 * a, np.sqrt(3) * a]
-number_of_pixels = (1*64,1*32)#(int(round(domain_size[0] / h)), int(round(domain_size[1] / h)))
+# number_of_pixels = (int(round(domain_size[0] / h)), int(round(domain_size[1] / h))) # ->the one with the h = minimum true meaningful proportion
+number_of_pixels = (NX, int(round(NX * domain_size[1] / domain_size[0]))) #manually
 h_x, h_y = domain_size[0] / number_of_pixels[0], domain_size[1] / number_of_pixels[1]   # actual sizes
 
 if MPI.COMM_WORLD.rank == 0:
@@ -184,6 +186,7 @@ mu_2, lam_2 = CONTRAST, LAM_OVER_MU * CONTRAST        # stiff inclusion
 R_PHYS_MM = L_REF          # paper: void / inclusion radius r = 3 mm      -> length scale (r = 1 here)
 MU_M_PHYS_MPA = S_REF     # paper: matrix shear modulus 0.6 MPa         -> stress scale (mu_0 = 1 here)
 SPECIMEN_MM = (92.37, 91.42)   # paper: specimen width x height (finite sample, NOT modelled here)
+# Sanity check =========================================================
 
 r_resolved = np.sqrt(vf_stiff * domain_size[0] * domain_size[1] / np.pi)  # 1 stiff circle per cell
 if MPI.COMM_WORLD.rank == 0:
@@ -261,10 +264,11 @@ def callback(iteration, fields):
     """
     Callback function to print the current solution, residual, and search direction.
     """
-    norm_of_rr = fields['rr']
-    if discretization.communicator.rank == 0:
-        print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
+    # norm_of_rr = fields['rr']
+    # if discretization.communicator.rank == 0:
+    #     print(f"{iteration:5} norm of residual = {norm_of_rr:.5}")
 
+homogenized_stress = {}
 dim = discretization.domain_dimension
 homogenized_C_ijkl = np.zeros(np.array(4 * [dim, ]))
 # compute whole homogenized elastic tangent
@@ -314,17 +318,30 @@ for i in range(dim):
                 print(f"Plotting failed:  ")
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+        stress_ij = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
+        homogenized_C_ijkl[i, j] = stress_ij             # same as before
+        homogenized_stress[(i, j)] = stress_ij           # keep it for printing
 
+fmt = {'float_kind': lambda x: f"{x:0.8f}"}
 if MPI.COMM_WORLD.rank == 0:
-    print(
-        "Homogenized elastic tangent =\n" +
-        np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter={'float_kind': lambda x: f"{x:0.8f}"})
-    )
+    print("Homogenized elastic tangent =\n" +
+          np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter=fmt))
+    for (i, j), stress_ij in homogenized_stress.items():
+        print(f"Homogenized stress for unit macro strain E[{i},{j}] = 1  (units of mu_m) =\n" +
+              np.array2string(stress_ij, formatter=fmt))
+
+# homogenized stress for an ACTUAL macro strain (linear: superposition of the unit cases)
+# E_macro = np.array([[-0.05, 0.0],
+#                     [ 0.0,  0.0]])
+# sigma_macro = np.einsum('ij,ijkl->kl', E_macro, homogenized_C_ijkl)
+# if MPI.COMM_WORLD.rank == 0:
+#     print(f"Homogenized stress for E_macro =\n{E_macro}\n(units of mu_m) =\n" +
+#           np.array2string(sigma_macro, formatter=fmt) +
+#           f"\n(in MPa) =\n" + np.array2string(sigma_macro * S_REF, formatter=fmt))
 end_time = time.time()
 elapsed_time = end_time - start_time
 print("Elapsed time: ", elapsed_time)
