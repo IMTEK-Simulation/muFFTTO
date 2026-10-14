@@ -23,11 +23,11 @@ discretization_type = 'finite_element'
 element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
-# Numerical settings ==========================================================================
-NX = 128                 # Arbitrary number of pixels
+# Numerical settings ============================
+NX = 1024                # Arbitrary number of pixels
 cg_tol = 1e-6            # CG tolerance (relative)
 plot_load_cases = False  # example's plots assume a [0,1] domain -> distorted for this cell
-# =============================================================================================
+# ===============================================
 
 # Unit Cells input: -- PHYSICAL units ===================
 R_MM         = 3.0              # void & inclusion radius r                      [mm]
@@ -50,6 +50,9 @@ CONTRAST = MU_I_MPA / S_REF        # = 1000
 MU_VOID = 0. # MU_V_MPA / S_REF         # = 1e-4
 incl_vol_frac = 1.0 - c_matrix                   # total circle fraction (voids + stiff)
 
+# Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
+a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * incl_vol_frac))
+ligament = a - 2 * r                                            # thinnest matrix ligament (void-void)
 
 # Mesh RESOLUTION: defined on the LIGAMENT (thinnest feature, paper Fig. 1a), not on the cell.
 # "mesh sensitive analysis" (Sec. 3). Command-line options are used by that driver script.
@@ -57,13 +60,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--px_per_ligament', type=int, default=6)   # pixels across ligament a - 2r (numerical choice)
 args, _ = parser.parse_known_args()
 PX_PER_LIGAMENT = args.px_per_ligament
+h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
 # =============================================================================================
 
-# Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
-a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * incl_vol_frac))
-ligament = a - 2 * r                                            # thinnest matrix ligament (void-void)
-
-h = ligament / PX_PER_LIGAMENT                                  # target pixel size, units of r
 domain_size = [2 * a, np.sqrt(3) * a]
 # number_of_pixels = (int(round(domain_size[0] / h)), int(round(domain_size[1] / h))) # ->the one with the h = minimum true meaningful proportion
 number_of_pixels = (NX, int(round(NX * domain_size[1] / domain_size[0]))) #manually
