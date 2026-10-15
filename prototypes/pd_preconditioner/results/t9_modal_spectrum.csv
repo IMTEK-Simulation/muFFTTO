@@ -1,0 +1,9 @@
+material,method,nonzero,lambda_min,lambda_max,cond,distinct_values,max_imag,predicted_longitudinal
+uniform mu = 2000,G,510,673.3,2000,2.97,99,3.4e-13,45 ... 45
+uniform mu = 2000,GJ,510,0.2512,0.4975,1.98,99,0.0e+00,45 ... 45
+uniform mu = 2000,PD pointwise,510,1,50.5,50.5,99,2.3e-14,45 ... 45
+uniform mu = 2000,PD modal,510,1,1.327,1.327,98,0.0e+00,45 ... 45
+smooth mu 500...40000,G,510,205.3,3.161e+04,154,509,0.0e+00,12.64 ... 818.3
+smooth mu 500...40000,GJ,510,0.04728,1.353,28.62,509,0.0e+00,12.64 ... 818.3
+smooth mu 500...40000,PD pointwise,510,1,827,826.9,508,0.0e+00,12.64 ... 818.3
+smooth mu 500...40000,PD modal,510,0.197,10.37,52.63,510,0.0e+00,12.64 ... 818.3

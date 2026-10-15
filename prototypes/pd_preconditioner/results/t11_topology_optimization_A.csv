@@ -1,0 +1,36 @@
+part,case,n,method,iterations,ffts,converged,rho_min
+A,path k = 0,128,G,164,656,True,9.2e-05
+A,path k = 0,128,GJ,1007,4028,True,9.2e-05
+A,path k = 0,128,PD clip 0.01,88,704,True,9.2e-05
+A,path k = 0,128,PD clip 0.0001,309,2472,True,9.2e-05
+A,path k = 0,128,PD clip none,310,2480,True,9.2e-05
+A,path k = 50,128,G,15000,60012,False,1.0e-15
+A,path k = 50,128,GJ,1778,7112,True,1.0e-15
+A,path k = 50,128,PD clip 0.01,12669,101352,True,1.0e-15
+A,path k = 50,128,PD clip 0.0001,14764,118128,False,1.0e-15
+A,path k = 50,128,PD clip none,15000,120024,False,1.0e-15
+A,path k = 200,128,G,15000,60012,False,1.0e-15
+A,path k = 200,128,GJ,681,2724,True,1.0e-15
+A,path k = 200,128,PD clip 0.01,13972,111784,False,1.0e-15
+A,path k = 200,128,PD clip 0.0001,15000,120024,False,1.0e-15
+A,path k = 200,128,PD clip none,15000,120024,False,1.0e-15
+A,path k = 250,128,G,15000,60012,False,1.0e-15
+A,path k = 250,128,GJ,688,2752,True,1.0e-15
+A,path k = 250,128,PD clip 0.01,14150,113208,False,1.0e-15
+A,path k = 250,128,PD clip 0.0001,15000,120024,False,1.0e-15
+A,path k = 250,128,PD clip none,15000,120024,False,1.0e-15
+A,path k = 270,128,G,15000,60012,False,1.0e-15
+A,path k = 270,128,GJ,714,2856,True,1.0e-15
+A,path k = 270,128,PD clip 0.01,13989,111928,False,1.0e-15
+A,path k = 270,128,PD clip 0.0001,15000,120024,False,1.0e-15
+A,path k = 270,128,PD clip none,15000,120024,False,1.0e-15
+A,"final thresholded, void 0.0001",128,G,89,356,True,1.0e-04
+A,"final thresholded, void 0.0001",128,GJ,745,2980,True,1.0e-04
+A,"final thresholded, void 0.0001",128,PD clip 0.01,59,472,True,1.0e-04
+A,"final thresholded, void 0.0001",128,PD clip 0.0001,104,832,True,1.0e-04
+A,"final thresholded, void 0.0001",128,PD clip none,104,832,True,1.0e-04
+A,"final thresholded, void 0",128,G,89,356,True,0.0e+00
+A,"final thresholded, void 0",128,GJ,276,1104,True,0.0e+00
+A,"final thresholded, void 0",128,PD clip 0.01,59,472,True,0.0e+00
+A,"final thresholded, void 0",128,PD clip 0.0001,104,832,True,0.0e+00
+A,"final thresholded, void 0",128,PD clip none,107,856,True,0.0e+00

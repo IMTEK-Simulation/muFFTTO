@@ -125,9 +125,12 @@ mechanics_preconditioner = 'Green'
 # Scaling the energy, gradient and Hessian by a constant leaves all steps unchanged.
 SOLVER_GTOL = 3e-6                         # max |nodal force| / s  (~ residual stress / E)
 SOLVER_MAXITER = 500
-# relative tolerance of the inner CG; None = inexact Newton (NuMPI forcing
+# inner (Steihaug) CG stops on the energy-norm error: Hestenes-Stiefel lower estimate with delay SOLVER_INNER_DELAY,
+# |e_k|_K <= SOLVER_INNER_TOL |e_0|_K. The energy norm does not depend on the preconditioner, so CG counts of
+# different preconditioners measure the same accuracy. None = inexact Newton (NuMPI forcing
 # min(0.5, sqrt(max|g| / s)): loose far from the solution, tight close to it)
-SOLVER_INNER_TOL = None
+SOLVER_INNER_TOL = 1e-6
+SOLVER_INNER_DELAY = 10
 INADMISSIBLE_ENERGY = 1e30                 # finite, so the trust region shrinks (inf - inf = nan)
 
 # Output: every run gets its own, new folder (earlier runs are never overwritten)
@@ -398,6 +401,13 @@ def hessp(x, v):
 # Green preconditioner of the undamaged solid at F = I, plus the regularization (built once)
 reference_tangent = split_neo_hookean(np.eye(2)[:, :, None], np.array([mu_solid]), np.array([kappa_solid]),
                                       np.array([1.0]), tangent=True)[3][..., 0]
+# Green-Jacobi: the Jacobi diagonal carries the local magnitude of the tangent, so the Green part only needs its
+# structure; the identity (delta_ik delta_jl) needs fewer CG iterations than the solid tangent (Ladecky et al.,
+# CMAME 461 (2026) 119269, Sec. 4.5; bubble array, Green-Jacobi: -8 % at 32^2, -19 % at 48^2). The factor 2 mu_solid
+# keeps the magnitude of the solid, i.e. the trust-region norm.
+green_reference = 'identity' if mechanics_preconditioner == 'Green_Jacobi' else 'solid'
+if green_reference == 'identity':
+    reference_tangent = 2 * mu_solid * np.einsum('ik,jl->ijkl', np.eye(2), np.eye(2)).reshape(reference_tangent.shape)
 
 
 def operator_for_preconditioner(input_field_inxyz, output_field_inxyz):
@@ -545,6 +555,7 @@ def solve_increment(lam):
         res = solvers_nonlinear.minimize(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), method='tr_newton',
                                          hessp=scaled_hessp, precond=precond,
                                          gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
+                                         inner_stop='energy', inner_delay=SOLVER_INNER_DELAY,
                                          inner_maxiter=None, comm=comm)
         stats['nb_hessp'] += int(res.nb_hessp)
         stats['nb_outer'] += int(res.nit)
@@ -573,7 +584,7 @@ run_attributes = {'geometry': geometry_name, 'geometry_parameters': repr(geometr
                   'domain_size': np.asarray(domain_size), 'H_macro': H_macro, 'E_solid': E_solid,
                   'nu_solid': nu_solid, 'k_v': k_v, 'alpha': alpha, 'k_r': k_r, 'Gc': Gc,
                   'length_scale': length_scale, 'k_residual': k_residual, 'staggered_tol': staggered_tol,
-                  'mechanics_preconditioner': mechanics_preconditioner,
+                  'mechanics_preconditioner': mechanics_preconditioner, 'green_reference': green_reference,
                   'inner_tol': 'forcing' if SOLVER_INNER_TOL is None else SOLVER_INNER_TOL,
                   'gtol': SOLVER_GTOL, 'force_scale': force_scale,
                   'damage_in_medium': int(damage_in_medium),

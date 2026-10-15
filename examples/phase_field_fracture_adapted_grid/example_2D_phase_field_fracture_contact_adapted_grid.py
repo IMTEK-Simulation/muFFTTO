@@ -140,9 +140,20 @@ k_v = 1e-5                                 # third-medium stiffness ratio
 # eps = sym(F - I), convex (constant tangent), finite for any F, J > 0 in the solid only
 void_model = 'neo_hookean'
 alpha = 1e-6                               # HuHu-LuLu regularization strength
+# where the HuHu-LuLu term acts: 'everywhere' (solid and third medium) or 'medium' (the third medium only, as in
+# Frederiksen et al., CMAME 436 (2025) 117595: in the solid it is a second-gradient stiffness that is not part of
+# the material and penalizes the displacement jump of a crack). The Green preconditioner keeps the constant term.
+regularization_region = 'everywhere'
 
 # phase-field fracture (AT2)
 Gc = 0.1                                   # fracture toughness
+# 'uniform': Gc everywhere; 'random': a correlated random field Gc(x) with values spread uniformly over Gc_range
+# (correlation length Gc_correlation_length, fixed seed). The field is defined in physical coordinates, so every
+# grid samples the same material; Gc is then set to the mean of Gc_range (run name, damage preconditioner).
+Gc_field = 'uniform'
+Gc_range = (0.5, 1.0)
+Gc_correlation_length = 0.1
+Gc_seed = 0
 # fixed in physical units (not in pixels), so a finer grid refines the same problem:
 # 1 px at 32^2, 2 px at 64^2, 4 px at 128^2
 length_scale = domain_size[0] / 32
@@ -166,9 +177,20 @@ mechanics_preconditioner = 'Green_Jacobi'
 # Scaling the energy, gradient and Hessian by a constant leaves all steps unchanged.
 SOLVER_GTOL = 3e-6                         # max |nodal force| / s  (~ residual stress / E)
 SOLVER_MAXITER = 500
-# relative tolerance of the inner CG; None = inexact Newton (NuMPI forcing
+# inner (Steihaug) CG stops on the energy-norm error: Hestenes-Stiefel lower estimate with delay SOLVER_INNER_DELAY,
+# |e_k|_K <= SOLVER_INNER_TOL |e_0|_K. The energy norm does not depend on the preconditioner, so CG counts of
+# different preconditioners measure the same accuracy. None = inexact Newton (NuMPI forcing
 # min(0.5, sqrt(max|g| / s)): loose far from the solution, tight close to it)
-SOLVER_INNER_TOL = None
+SOLVER_INNER_TOL = 1e-6
+SOLVER_INNER_DELAY = 10
+# cap of one inner CG solve, in multiples of the number of unknowns n. In exact arithmetic CG needs at most n steps,
+# but on badly conditioned systems (soft third medium, cracks, adapted grids) round-off delays it far beyond n; with
+# the cap at n (NuMPI's default) such solves were cut off before the energy stop. The energy stop is the stopping
+# rule, the cap only guards against a hang.
+SOLVER_INNER_MAXITER_FACTOR = 20
+# 'tr_newton' (trust-region Newton-CG, handles negative curvature, e.g. buckling) or 'newton_cg' (plain Newton
+# with full steps and the same inner PCG: fails once the tangent is no longer positive definite)
+mechanics_solver = 'tr_newton'
 INADMISSIBLE_ENERGY = 1e30                 # finite, so the trust region shrinks (inf - inf = nan)
 
 # grid: True = conformal grid from muFFTTO.grid_adaptation.adapt_grid (cached in exp_data/grids),
@@ -279,12 +301,51 @@ else:
 nb_q = disc_u.nb_quad_points_per_pixel
 solid_q = xp.broadcast_to(xp.asarray(phase_pixel > 0), (nb_q, *phase_pixel.shape))  # [q, x, y]
 
+
+def correlated_random_field(points, correlation_length, seed):
+    """Smooth periodic random field on the unit cell with values in (0, 1), at the points [2, ...].
+
+    A random Fourier series sum_k a_k (xi_k cos 2 pi k.x + eta_k sin 2 pi k.x), xi, eta ~ N(0, 1), with the Gaussian
+    spectrum a_k^2 ~ exp(-(2 pi |k| l_c)^2 / 2), mapped by the normal CDF of its standard deviation to a uniform
+    marginal. It depends on the points only, not on the grid.
+    """
+    from scipy.special import ndtr
+    rng = np.random.default_rng(seed)
+    k_max = int(np.ceil(3.0 / (2 * np.pi * correlation_length)))
+    wave_vectors = [(i, j) for i in range(-k_max, k_max + 1) for j in range(0, k_max + 1) if j > 0 or i > 0]
+    field = np.zeros(points.shape[1:])
+    variance = 0.0
+    for i, j in wave_vectors:
+        amplitude = np.exp(-(2 * np.pi * np.hypot(i, j) * correlation_length) ** 2 / 4)
+        xi, eta = rng.standard_normal(2)
+        phase = 2 * np.pi * (i * points[0] + j * points[1])
+        field += amplitude * (xi * np.cos(phase) + eta * np.sin(phase))
+        variance += amplitude ** 2
+    return ndtr(field / np.sqrt(variance))
+
+
+# fracture toughness per pixel (constant, or the random field at the physical pixel centres)
+if Gc_field == 'random':
+    # physical pixel centre / L: the regular centre moved by the mean grid displacement of the four corner nodes
+    # (d_g is periodic, so averaging rolled copies needs no wrapping; the field is periodic too)
+    d_g = grid_displacement_local / np.asarray(domain_size).reshape(-1, 1, 1)
+    corner_mean = 0.25 * (d_g + np.roll(d_g, -1, 1) + np.roll(d_g, -1, 2) + np.roll(np.roll(d_g, -1, 1), -1, 2))
+    pixel_centre = coords + 0.5 / np.asarray(number_of_pixels).reshape(-1, 1, 1) + corner_mean
+    Gc_pixel = Gc_range[0] + (Gc_range[1] - Gc_range[0]) * correlated_random_field(pixel_centre, Gc_correlation_length,
+                                                                                   Gc_seed)
+    Gc = 0.5 * (Gc_range[0] + Gc_range[1])
+else:
+    Gc_pixel = np.full(phase_pixel.shape, Gc)
+Gc_q = xp.broadcast_to(xp.asarray(Gc_pixel), solid_q.shape)                 # [q, x, y]
+
 mu_solid = E_solid / (2 * (1 + nu_solid))
 lam_solid = E_solid * nu_solid / ((1 + nu_solid) * (1 - 2 * nu_solid))
 kappa_solid = lam_solid + 2.0 * mu_solid / 3.0
 mu_q = xp.where(solid_q, mu_solid, k_v * mu_solid)
 kappa_q = xp.where(solid_q, kappa_solid, k_v * kappa_solid)
 k_r = alpha * domain_size[0] ** 2 * (kappa_solid + 4.0 * mu_solid / 3.0)
+# 1 where the regularization acts, 0 elsewhere, at the quadrature points [q, x, y]
+regularization_weight_q = xp.where(solid_q, 0.0, 1.0) if regularization_region == 'medium' else xp.ones(solid_q.shape)
 quad_weights = xp.asarray(disc_u.quadrature_weights).reshape((-1,) + (1,) * dim)
 
 # grid map: F_g = I + grad_X d_g, J_g, F_g^-1 at the quadrature points (constant during the run)
@@ -307,7 +368,9 @@ root_print(f'grid {number_of_pixels}, {element_type}, ranks {comm.size}, '
            f'{"adapted" if adapt_grid_to_geometry else "regular"} grid (min J_g {global_min(np.min(J_g)):.3f}, '
            f'max J_g {global_max(np.max(J_g)):.3f}), solid fraction '
            f'{global_sum(np.sum(weights_J * solid_q)) / np.prod(domain_size):.4f}, '
-           f'l = {length_scale:.4f}, Gc = {Gc}, k_r = {k_r:.2e}')
+           f'l = {length_scale:.4f}, Gc = {Gc}' + (f' (random {Gc_range[0]:g} ... {Gc_range[1]:g}, correlation length '
+                                                   f'{Gc_correlation_length:g}, seed {Gc_seed})'
+                                                   if Gc_field == 'random' else '') + f', k_r = {k_r:.2e}')
 
 
 def split_neo_hookean(F, mu, kappa, g, tangent=False):
@@ -431,6 +494,8 @@ damage_free_nodes = temp_n.s > 0                                      # [1, node
 phase_out = disc_u.field_collection.real_field('phase', [1], 'pixel')
 phase_out.s[0, 0] = xp.asarray(phase_pixel)
 detF_out = disc_u.field_collection.real_field('detF', [1], 'pixel')
+Gc_out = disc_u.field_collection.real_field('Gc', [1], 'pixel')
+Gc_out.s[0, 0] = xp.asarray(Gc_pixel)
 
 g_q = xp.ones(solid_q.shape)               # g_s(d) at the quadrature points
 # tangent A(F(x)) of the last state (x, lam) it was built for: x is fixed during a whole
@@ -462,15 +527,18 @@ def set_F(lam, u_field):
     return global_min(xp.min(J))
 
 
-def add_regularization(x, out):
-    """out += R x = k_r (H^T H - L^T L / dim) x; ghosts of x must be current."""
+def add_regularization(x, out, weight_q=1.0):
+    """out += R x = k_r (H^T w H - L^T w L / dim) x with the weight w at the quadrature points (1: everywhere);
+    ghosts of x must be current."""
     disc_u.apply_hessian_operator_to_vector_field_mugrid(u_inxyz=x, hess_u_ijkqxyz=hess_u)
+    hess_u.s[...] *= weight_q
     disc_u.apply_hessian_operator_transposed_to_vector_field_mugrid(hess_u_ijkqxyz=hess_u,
                                                                     nodal_field_inxyz=HtH_field,
                                                                     apply_weights=True)
     out.s[...] += k_r * HtH_field.s
     if laplacian_acts:
         disc_u.laplacian.apply(nodal_field=x, quadrature_point_field=lap_u)
+        lap_u.s[...] *= weight_q
         disc_u.laplacian.transpose(quadrature_point_field=lap_u, nodal_field=LtL_field,
                                    weights=disc_u.quadrature_weights)
         out.s[...] -= (k_r / dim) * LtL_field.s
@@ -513,7 +581,7 @@ def add_regularization_physical(x, out):
     H_x = physical_hessian(x)
     L_x = xp.einsum('ikk...->i...', H_x)                    # LuLu part: L_x = tr H_x (zero for Q1 on pixels)
     Y = H_x - (1.0 / dim) * xp.einsum('i...,kl->ikl...', L_x, xp.eye(dim))
-    Y = k_r * J_g * Y                                      # quadrature weights w_q: in the transposed operators
+    Y = k_r * J_g * regularization_weight_q * Y            # quadrature weights w_q: in the transposed operators
     # adjoint of H_x = F_g^-T T F_g^-1, T = H_X u~ - grad_x u~ . H_X d_g, grad_x = grad_X . F_g^-1
     T_hat = xp.einsum('ak...,ikl...,bl...->iab...', F_g_inv, Y, F_g_inv, optimize=True)
     hess_u.s[...] = T_hat
@@ -532,7 +600,7 @@ def add_regularization_of_the_problem(x, out):
     if regularization_in_physical_coordinates:
         add_regularization_physical(x, out)
     else:
-        add_regularization(x, out)
+        add_regularization(x, out, regularization_weight_q)
 
 
 def field_to_optimizer(field):
@@ -594,6 +662,13 @@ def hessp(x, v):
 # Green preconditioner of the undamaged solid at F = I, plus the regularization (built once)
 reference_tangent = split_neo_hookean(np.eye(2)[:, :, None], np.array([mu_solid]), np.array([kappa_solid]),
                                       np.array([1.0]), tangent=True)[3][..., 0]
+# Green-Jacobi: the Jacobi diagonal carries the local magnitude of the tangent, so the Green part only needs its
+# structure; the identity (delta_ik delta_jl) needs fewer CG iterations than the solid tangent (Ladecky et al.,
+# CMAME 461 (2026) 119269, Sec. 4.5; bubble array, Green-Jacobi: -8 % at 32^2, -19 % at 48^2). The factor 2 mu_solid
+# keeps the magnitude of the solid, i.e. the trust-region norm.
+green_reference = 'identity' if mechanics_preconditioner == 'Green_Jacobi' else 'solid'
+if green_reference == 'identity':
+    reference_tangent = 2 * mu_solid * np.einsum('ik,jl->ijkl', np.eye(2), np.eye(2)).reshape(reference_tangent.shape)
 
 
 def operator_for_preconditioner(input_field_inxyz, output_field_inxyz):
@@ -646,13 +721,14 @@ def precond(v):
 # ----------------------------------------------------------------------------
 # Damage: [Gc l B^T W B + N^T W (Gc/l + 2H) N] d = N^T W 2H
 # ----------------------------------------------------------------------------
-def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q, weight_q=1.0, pulled_back=True):
-    """Damage operator on the deformed grid (pulled_back=False: on the regular grid, for the Green
-    preconditioner, which needs a translation-invariant operator)."""
+def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q, weight_q=1.0, pulled_back=True,
+                          toughness_q=None):
+    """Damage operator on the deformed grid with the toughness Gc(x) (pulled_back=False, constant toughness: on the
+    regular grid, for the Green preconditioner, which needs a translation-invariant operator)."""
     disc_d.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz, grad_u_ijqxyz=grad_d)
     if pulled_back:
         grad_d.s[...] = xp.einsum('ak...,kl...->al...', grad_d.s, K_g)
-    grad_d.s[...] *= Gc * length_scale * weight_q
+    grad_d.s[...] *= (Gc if toughness_q is None else toughness_q) * length_scale * weight_q
     disc_d.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=grad_d, div_u_fnxyz=output_field_inxyz,
                                                      apply_weights=True)
     disc_d.apply_N_operator_mugrid(input_field_inxyz, temp_q)
@@ -664,7 +740,7 @@ def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q, wei
 
 def K_d(x, Ax):
     """Damage operator on the damage domain; unit rows (identity) for the pinned nodes."""
-    apply_damage_operator(x, Ax, reaction.s, damage_weight_q)
+    apply_damage_operator(x, Ax, reaction.s, damage_weight_q, toughness_q=Gc_q)
     Ax.s[...] = xp.where(damage_free_nodes, Ax.s, x.s)
 
 
@@ -701,7 +777,7 @@ def solve_damage():
     global jacobi_d
     psi_plus = material(F_field.s, g_q)[1]
     history.s[0, 0] = xp.maximum(history_n.s[0, 0], xp.where(solid_q, psi_plus, 0.0))
-    reaction.s[...] = Gc / length_scale + 2.0 * history.s
+    reaction.s[...] = Gc_q / length_scale + 2.0 * history.s
     temp_q.s[...] = 2.0 * history.s * J_g
     disc_d.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=temp_q, nodal_field_inxyz=rhs_d, apply_weights=True)
     rhs_d.s[...] *= damage_free_nodes                          # pinned nodes: d = 0
@@ -720,6 +796,10 @@ def solve_damage():
 # One load increment (staggered); False if it has to be retried with a smaller step
 # ----------------------------------------------------------------------------
 force_scale = E_solid * pixel_size ** (dim - 1)    # s: the solver sees Pi / s, g / s, H / s
+
+
+# the inner CG cap: SOLVER_INNER_MAXITER_FACTOR x the global number of unknowns
+inner_maxiter = SOLVER_INNER_MAXITER_FACTOR * int(round(global_sum(float(np.prod(u_shape)))))
 
 
 def scaled_fun_grad(x):
@@ -742,10 +822,11 @@ def solve_increment(lam):
     for stagger in range(1, max_staggered_iterations + 1):
         if mechanics_preconditioner == 'Green_Jacobi':
             update_mechanics_jacobi(lam, u_fluc)
-        res = solvers_nonlinear.minimize(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), method='tr_newton',
+        res = solvers_nonlinear.minimize(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), method=mechanics_solver,
                                          hessp=scaled_hessp, precond=precond,
                                          gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
-                                         inner_maxiter=None, comm=comm)
+                                         inner_stop='energy', inner_delay=SOLVER_INNER_DELAY,
+                                         inner_maxiter=inner_maxiter, comm=comm)
         stats['nb_hessp'] += int(res.nb_hessp)
         stats['nb_outer'] += int(res.nit)
         if not res.success or res.fun >= 0.5 * INADMISSIBLE_ENERGY:
@@ -772,8 +853,12 @@ run_attributes = {'geometry': geometry_name, 'geometry_parameters': repr(geometr
                   'element_type': element_type, 'nb_grid_pts': number_of_pixels,
                   'domain_size': np.asarray(domain_size), 'H_macro': H_macro, 'E_solid': E_solid,
                   'nu_solid': nu_solid, 'k_v': k_v, 'alpha': alpha, 'k_r': k_r, 'Gc': Gc,
+                  'regularization_region': regularization_region, 'inner_maxiter': inner_maxiter,
+                  'Gc_field': Gc_field, 'Gc_range': np.asarray(Gc_range), 'Gc_correlation_length': Gc_correlation_length,
+                  'Gc_seed': Gc_seed,
                   'length_scale': length_scale, 'k_residual': k_residual, 'staggered_tol': staggered_tol,
-                  'mechanics_preconditioner': mechanics_preconditioner,
+                  'mechanics_preconditioner': mechanics_preconditioner, 'green_reference': green_reference,
+                  'mechanics_solver': mechanics_solver,
                   'inner_tol': 'forcing' if SOLVER_INNER_TOL is None else SOLVER_INNER_TOL,
                   'gtol': SOLVER_GTOL, 'force_scale': force_scale,
                   'damage_in_medium': int(damage_in_medium),
@@ -790,7 +875,7 @@ frame_variables = {'increment': (), 'lam': (), 'dlam': (), 'F10': (), 'P10': (),
                    'mean_P': (dim, dim), 'min_det_F': (), 'energy': (), 'damage_max': (),
                    'staggered_iterations': (), 'nb_outer': (), 'nb_hessp': (), 'cg_damage': (),
                    'converged': (), 'elapsed_time': ()}
-output_fields = [damage, u_fluc, history, detF_out, phase_out, grid_displacement]
+output_fields = [damage, u_fluc, history, detF_out, phase_out, grid_displacement, Gc_out]
 # a restart must continue the same problem: these attributes have to match
 restart_keys = ['geometry', 'geometry_parameters', 'element_type', 'nb_grid_pts', 'domain_size', 'H_macro',
                 'E_solid', 'nu_solid', 'k_v', 'alpha', 'Gc', 'length_scale', 'k_residual', 'damage_in_medium',
@@ -804,13 +889,17 @@ if output_root is not None:
     element_tag = {'bilinear_rectangle': 'Q1', 'biquadratic_rectangle': 'Q2'}.get(element_type, element_type)
     run_name = (f'{geometry_name}_{load_tag}_{element_tag}'
                 f'_{"adapted" if adapt_grid_to_geometry else "regular"}'
-                f'_N{nnn}_Gc{Gc:g}_{"GJ" if mechanics_preconditioner == "Green_Jacobi" else "G"}'
+                f'_N{nnn}_Gc{Gc:g}' + (f'r{Gc_range[0]:g}-{Gc_range[1]:g}' if Gc_field == 'random' else '')
+                + f'_{"GJ" if mechanics_preconditioner == "Green_Jacobi" else "G"}'
                 f'_{"EW" if SOLVER_INNER_TOL is None else f"inner{SOLVER_INNER_TOL:g}"}'
                 f'{"_dmg-all" if damage_in_medium else ""}'
                 f'{"" if staggered_tol == 1e-3 else f"_stag{staggered_tol:g}"}'
                 f'{"" if restart_file is None else "_restart"}'
                 f'{"" if solve_damage_problem else "_elastic"}'
-                f'{ {"neo_hookean": "", "saint_venant_kirchhoff": "_svk-void", "linear": "_lin-void"}[void_model]}_' + time.strftime('%Y%m%d-%H%M%S'))
+                f'{"" if mechanics_solver == "tr_newton" else "_newton-cg"}'
+                f'{ {"neo_hookean": "", "saint_venant_kirchhoff": "_svk-void", "linear": "_lin-void"}[void_model]}'
+                f'{"_reg-medium" if regularization_region == "medium" else ""}'
+                f'{"_gpu" if device == "gpu" else ""}_' + time.strftime('%Y%m%d-%H%M%S'))
     output_folder = None
     if rank == 0:                          # a new folder; never reuse an existing one
         for attempt in range(100):

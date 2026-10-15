@@ -1,0 +1,136 @@
+case,d,n,p,chi,method,iterations,converged,it_energy,true_residual,K_applications,M_applications,ffts,time_s
+cosine random rhs,1,16,4,10000.0,G,19,True,17,6.60e-06,19,19,38,0.005
+cosine random rhs,1,16,4,10000.0,GJ,15,True,13,6.13e-06,15,15,30,0.004
+cosine random rhs,1,16,4,10000.0,PD,14,True,14,3.89e-06,14,14,56,0.007
+cosine random rhs,1,16,8,10000.0,G,32,True,32,8.85e-06,32,32,64,0.009
+cosine random rhs,1,16,8,10000.0,GJ,9,True,9,2.77e-06,9,9,18,0.002
+cosine random rhs,1,16,8,10000.0,PD,15,True,15,8.24e-06,15,15,60,0.007
+cosine random rhs,1,16,16,10000.0,G,27,True,27,9.94e-06,27,27,54,0.007
+cosine random rhs,1,16,16,10000.0,GJ,7,True,8,9.34e-06,7,7,14,0.002
+cosine random rhs,1,16,16,10000.0,PD,10,True,10,5.77e-06,10,10,40,0.005
+disk i=0 random rhs,1,16,,10000.0,G,15,True,13,2.25e-06,15,15,30,0.009
+disk i=0 random rhs,1,16,,10000.0,GJ,16,True,14,6.85e-06,16,16,32,0.004
+disk i=0 random rhs,1,16,,10000.0,PD,8,True,7,7.70e-06,8,8,32,0.004
+disk i=8 random rhs,1,16,,10000.0,G,15,True,15,5.10e-06,15,15,30,0.004
+disk i=8 random rhs,1,16,,10000.0,GJ,5,True,5,5.26e-06,5,5,10,0.001
+disk i=8 random rhs,1,16,,10000.0,PD,5,True,5,5.45e-07,5,5,20,0.002
+cosine random rhs,1,32,4,10000.0,G,20,True,17,7.44e-06,20,20,40,0.006
+cosine random rhs,1,32,4,10000.0,GJ,23,True,20,5.46e-06,23,23,46,0.007
+cosine random rhs,1,32,4,10000.0,PD,15,True,14,5.04e-06,15,15,60,0.008
+cosine random rhs,1,32,8,10000.0,G,37,True,35,7.52e-06,37,37,74,0.011
+cosine random rhs,1,32,8,10000.0,GJ,14,True,13,5.81e-06,14,14,28,0.004
+cosine random rhs,1,32,8,10000.0,PD,16,True,16,7.40e-06,16,16,64,0.013
+cosine random rhs,1,32,16,10000.0,G,62,True,59,8.58e-06,62,62,124,0.019
+cosine random rhs,1,32,16,10000.0,GJ,10,True,10,3.73e-06,10,10,20,0.003
+cosine random rhs,1,32,16,10000.0,PD,15,True,15,4.59e-06,15,15,60,0.008
+cosine random rhs,1,32,32,10000.0,G,54,True,54,9.79e-06,54,54,108,0.017
+cosine random rhs,1,32,32,10000.0,GJ,8,True,8,4.23e-06,8,8,16,0.003
+cosine random rhs,1,32,32,10000.0,PD,11,True,11,4.07e-06,11,11,44,0.006
+disk i=0 random rhs,1,32,,10000.0,G,16,True,13,5.10e-06,16,16,32,0.005
+disk i=0 random rhs,1,32,,10000.0,GJ,25,True,20,4.45e-06,25,25,50,0.013
+disk i=0 random rhs,1,32,,10000.0,PD,9,True,7,9.16e-07,9,9,36,0.005
+disk i=8 random rhs,1,32,,10000.0,G,232,True,229,9.04e-06,232,232,464,0.076
+disk i=8 random rhs,1,32,,10000.0,GJ,9,True,9,2.26e-06,9,9,18,0.003
+disk i=8 random rhs,1,32,,10000.0,PD,13,True,13,9.47e-06,13,13,52,0.007
+cosine random rhs,1,64,4,10000.0,G,21,True,19,8.77e-06,21,21,42,0.009
+cosine random rhs,1,64,4,10000.0,GJ,35,True,28,7.71e-06,35,35,70,0.021
+cosine random rhs,1,64,4,10000.0,PD,15,True,14,5.62e-06,15,15,60,0.013
+cosine random rhs,1,64,8,10000.0,G,39,True,35,7.66e-06,39,39,78,0.023
+cosine random rhs,1,64,8,10000.0,GJ,24,True,22,5.51e-06,24,24,48,0.011
+cosine random rhs,1,64,8,10000.0,PD,16,True,14,6.11e-06,16,16,64,0.014
+cosine random rhs,1,64,16,10000.0,G,67,True,64,8.31e-06,67,67,134,0.031
+cosine random rhs,1,64,16,10000.0,GJ,14,True,14,9.27e-06,14,14,28,0.007
+cosine random rhs,1,64,16,10000.0,PD,16,True,14,6.24e-06,16,16,64,0.021
+cosine random rhs,1,64,32,10000.0,G,113,True,112,8.20e-06,113,113,226,0.053
+cosine random rhs,1,64,32,10000.0,GJ,10,True,11,7.46e-06,10,10,20,0.005
+cosine random rhs,1,64,32,10000.0,PD,15,True,16,5.46e-06,15,15,60,0.013
+cosine random rhs,1,64,64,10000.0,G,104,True,104,9.22e-06,104,104,208,0.069
+cosine random rhs,1,64,64,10000.0,GJ,8,True,9,6.25e-06,8,8,16,0.005
+cosine random rhs,1,64,64,10000.0,PD,11,True,11,5.83e-06,11,11,44,0.013
+disk i=0 random rhs,1,64,,10000.0,G,16,True,13,4.20e-06,16,16,32,0.010
+disk i=0 random rhs,1,64,,10000.0,GJ,39,True,31,6.12e-06,39,39,78,0.022
+disk i=0 random rhs,1,64,,10000.0,PD,8,True,7,9.56e-06,8,8,32,0.008
+disk i=8 random rhs,1,64,,10000.0,G,544,True,505,9.28e-06,544,544,1088,0.282
+disk i=8 random rhs,1,64,,10000.0,GJ,15,True,14,4.79e-06,15,15,30,0.008
+disk i=8 random rhs,1,64,,10000.0,PD,32,True,30,9.01e-06,32,32,128,0.032
+cosine random rhs,1,128,4,10000.0,G,21,True,19,6.68e-06,21,21,42,0.048
+cosine random rhs,1,128,4,10000.0,GJ,55,True,47,8.40e-06,55,55,110,0.142
+cosine random rhs,1,128,4,10000.0,PD,15,True,14,4.51e-06,15,15,60,0.066
+cosine random rhs,1,128,8,10000.0,G,39,True,35,8.05e-06,39,39,78,0.089
+cosine random rhs,1,128,8,10000.0,GJ,37,True,33,7.64e-06,37,37,74,0.106
+cosine random rhs,1,128,8,10000.0,PD,16,True,14,6.01e-06,16,16,64,0.071
+cosine random rhs,1,128,16,10000.0,G,71,True,68,8.07e-06,71,71,142,0.177
+cosine random rhs,1,128,16,10000.0,GJ,22,True,22,5.65e-06,22,22,44,0.056
+cosine random rhs,1,128,16,10000.0,PD,16,True,14,3.68e-06,16,16,64,0.075
+cosine random rhs,1,128,32,10000.0,G,122,True,123,9.53e-06,122,122,244,0.272
+cosine random rhs,1,128,32,10000.0,GJ,14,True,15,6.83e-06,14,14,28,0.034
+cosine random rhs,1,128,32,10000.0,PD,15,True,16,7.95e-06,15,15,60,0.067
+cosine random rhs,1,128,64,10000.0,G,196,True,207,9.24e-06,196,196,392,0.423
+cosine random rhs,1,128,64,10000.0,GJ,10,True,10,3.54e-06,10,10,20,0.027
+cosine random rhs,1,128,64,10000.0,PD,13,True,14,5.27e-06,13,13,52,0.054
+cosine random rhs,1,128,128,10000.0,G,199,True,199,9.49e-06,199,199,398,0.438
+cosine random rhs,1,128,128,10000.0,GJ,9,True,9,8.30e-07,9,9,18,0.023
+cosine random rhs,1,128,128,10000.0,PD,10,True,10,3.61e-06,10,10,40,0.045
+disk i=0 random rhs,1,128,,10000.0,G,16,True,13,4.42e-06,16,16,32,0.034
+disk i=0 random rhs,1,128,,10000.0,GJ,60,True,48,8.63e-06,60,60,120,0.161
+disk i=0 random rhs,1,128,,10000.0,PD,8,True,7,7.34e-06,8,8,32,0.034
+disk i=8 random rhs,1,128,,10000.0,G,593,True,496,9.15e-06,593,593,1186,1.324
+disk i=8 random rhs,1,128,,10000.0,GJ,26,True,24,9.27e-06,26,26,52,0.132
+disk i=8 random rhs,1,128,,10000.0,PD,65,True,61,8.13e-06,65,65,260,0.321
+cosine random rhs,1,256,4,10000.0,G,22,True,19,7.94e-06,22,22,44,0.247
+cosine random rhs,1,256,4,10000.0,GJ,90,True,73,8.03e-06,90,90,180,1.252
+cosine random rhs,1,256,4,10000.0,PD,15,True,11,4.36e-06,15,15,60,0.368
+cosine random rhs,1,256,8,10000.0,G,40,True,36,6.29e-06,40,40,80,0.471
+cosine random rhs,1,256,8,10000.0,GJ,56,True,51,8.89e-06,56,56,112,0.735
+cosine random rhs,1,256,8,10000.0,PD,16,True,14,8.34e-06,16,16,64,0.443
+cosine random rhs,1,256,16,10000.0,G,72,True,69,8.00e-06,72,72,144,0.916
+cosine random rhs,1,256,16,10000.0,GJ,35,True,34,7.67e-06,35,35,70,0.653
+cosine random rhs,1,256,16,10000.0,PD,17,True,14,2.13e-06,17,17,68,0.640
+cosine random rhs,1,256,32,10000.0,G,128,True,126,8.82e-06,128,128,256,1.664
+cosine random rhs,1,256,32,10000.0,GJ,23,True,23,4.31e-06,23,23,46,0.322
+cosine random rhs,1,256,32,10000.0,PD,14,True,14,5.68e-06,14,14,56,0.353
+cosine random rhs,1,256,64,10000.0,G,213,True,216,9.62e-06,213,213,426,2.769
+cosine random rhs,1,256,64,10000.0,GJ,15,True,15,5.80e-06,15,15,30,0.196
+cosine random rhs,1,256,64,10000.0,PD,13,True,14,8.43e-06,13,13,52,0.427
+cosine random rhs,1,256,128,10000.0,G,322,True,330,9.97e-06,322,322,644,4.797
+cosine random rhs,1,256,128,10000.0,GJ,10,True,11,4.53e-06,10,10,20,0.096
+cosine random rhs,1,256,128,10000.0,PD,10,True,10,2.30e-06,10,10,40,0.185
+cosine random rhs,1,256,256,10000.0,G,340,True,347,9.58e-06,340,340,680,5.563
+cosine random rhs,1,256,256,10000.0,GJ,9,True,10,6.43e-06,9,9,18,0.097
+cosine random rhs,1,256,256,10000.0,PD,9,True,9,2.65e-06,9,9,36,0.165
+disk i=0 random rhs,1,256,,10000.0,G,16,True,14,8.61e-06,16,16,32,0.181
+disk i=0 random rhs,1,256,,10000.0,GJ,97,True,76,9.56e-06,97,97,194,1.891
+disk i=0 random rhs,1,256,,10000.0,PD,9,True,7,8.98e-07,9,9,36,0.320
+disk i=8 random rhs,1,256,,10000.0,G,602,True,489,9.68e-06,602,602,1204,9.393
+disk i=8 random rhs,1,256,,10000.0,GJ,41,True,37,7.55e-06,41,41,82,0.566
+disk i=8 random rhs,1,256,,10000.0,PD,110,True,97,9.71e-06,110,110,440,3.032
+cosine random rhs,1,512,4,10000.0,G,22,True,19,9.63e-06,22,22,44,1.073
+cosine random rhs,1,512,4,10000.0,GJ,155,True,125,9.88e-06,155,155,310,10.034
+cosine random rhs,1,512,4,10000.0,PD,15,True,11,4.24e-06,15,15,60,1.522
+cosine random rhs,1,512,8,10000.0,G,40,True,37,7.26e-06,40,40,80,2.265
+cosine random rhs,1,512,8,10000.0,GJ,96,True,87,9.50e-06,96,96,192,5.647
+cosine random rhs,1,512,8,10000.0,PD,17,True,14,2.67e-06,17,17,68,2.724
+cosine random rhs,1,512,16,10000.0,G,73,True,69,9.09e-06,73,73,146,5.083
+cosine random rhs,1,512,16,10000.0,GJ,60,True,56,6.74e-06,60,60,120,3.726
+cosine random rhs,1,512,16,10000.0,PD,14,True,14,9.95e-06,14,14,56,1.677
+cosine random rhs,1,512,32,10000.0,G,129,True,127,8.39e-06,129,129,258,6.917
+cosine random rhs,1,512,32,10000.0,GJ,35,True,37,8.59e-06,35,35,70,1.637
+cosine random rhs,1,512,32,10000.0,PD,13,True,14,9.32e-06,13,13,52,1.095
+cosine random rhs,1,512,64,10000.0,G,218,True,225,9.81e-06,218,218,436,12.678
+cosine random rhs,1,512,64,10000.0,GJ,23,True,23,4.18e-06,23,23,46,1.226
+cosine random rhs,1,512,64,10000.0,PD,12,True,14,7.69e-06,12,12,48,1.473
+cosine random rhs,1,512,128,10000.0,G,343,True,354,9.87e-06,343,343,686,19.470
+cosine random rhs,1,512,128,10000.0,GJ,15,True,15,7.85e-06,15,15,30,0.732
+cosine random rhs,1,512,128,10000.0,PD,9,True,10,6.43e-06,9,9,36,0.931
+cosine random rhs,1,512,256,10000.0,G,443,True,451,9.80e-06,443,443,886,29.944
+cosine random rhs,1,512,256,10000.0,GJ,10,True,10,2.92e-06,10,10,20,0.510
+cosine random rhs,1,512,256,10000.0,PD,8,True,9,6.15e-06,8,8,32,0.771
+cosine random rhs,1,512,512,10000.0,G,443,True,455,9.94e-06,443,443,886,16.664
+cosine random rhs,1,512,512,10000.0,GJ,9,True,10,8.93e-06,9,9,18,0.438
+cosine random rhs,1,512,512,10000.0,PD,8,True,9,4.93e-06,8,8,32,0.833
+disk i=0 random rhs,1,512,,10000.0,G,16,True,13,6.97e-06,16,16,32,0.806
+disk i=0 random rhs,1,512,,10000.0,GJ,174,True,131,9.82e-06,174,174,348,8.688
+disk i=0 random rhs,1,512,,10000.0,PD,8,True,7,7.17e-06,8,8,32,0.613
+disk i=8 random rhs,1,512,,10000.0,G,597,True,468,9.59e-06,597,597,1194,28.057
+disk i=8 random rhs,1,512,,10000.0,GJ,80,True,67,9.24e-06,80,80,160,4.364
+disk i=8 random rhs,1,512,,10000.0,PD,159,True,136,9.58e-06,159,159,636,16.020

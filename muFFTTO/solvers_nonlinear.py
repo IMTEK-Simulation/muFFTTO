@@ -15,6 +15,7 @@ Optimization (energy minimization, topology optimization)
     'l_bfgs'       limited-memory BFGS, line search    f, gradient                   box, box + <a,x> = V       NuMPI
     'mma'          method of moving asymptotes         f, gradient                   box, box + <a,x> <= / = V  muFFTTO
     'tr_newton'    trust-region Newton, Steihaug CG    f, gradient, Hessian-vector   box                        NuMPI
+    'newton_cg'    plain Newton, full steps, PCG       f, gradient, Hessian-vector   none                       muFFTTO
 
     :func:`mma_bounded` is the MMA implementation (also usable directly).
 
@@ -421,7 +422,7 @@ def solve_finite_strain_newton_cg(
 # Optimization
 # ---------------------------------------------------------------------------------------------------------------------
 
-METHODS = ('l_bfgs', 'mma', 'tr_newton')
+METHODS = ('l_bfgs', 'mma', 'tr_newton', 'newton_cg')
 
 
 def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, constraint_target=None,
@@ -438,7 +439,7 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         slices (flat arrays).
     x0 : ndarray
         Initial guess (local slice; any shape, numpy or cupy for 'l_bfgs' / 'tr_newton'; passed on unchanged).
-    method : {'l_bfgs', 'mma', 'tr_newton'}
+    method : {'l_bfgs', 'mma', 'tr_newton', 'newton_cg'}
         Optimizer, see the table in the module docstring.
     bounds : (lo, hi) or None
         Box bounds, scalars or local arrays; None (default): unbounded (not for 'mma').
@@ -447,9 +448,11 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         V = constraint_target (global). None: no constraint. 'l_bfgs' supports 'eq' (projected L-BFGS),
         'mma' both, 'tr_newton' none.
     hessp : callable, optional
-        ``hessp(x, v)`` returns the Hessian (or a symmetric approximation) applied to v. Required by 'tr_newton'.
+        ``hessp(x, v)`` returns the Hessian (or a symmetric approximation) applied to v. Required by 'tr_newton' and
+        'newton_cg'.
     precond : callable, optional
-        ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded).
+        ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded)
+        and 'newton_cg'.
     callback : callable, optional
         ``callback(x)`` after every accepted iterate.
     comm : MPI communicator, optional
@@ -459,7 +462,8 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
     **options
         Passed unchanged to the optimizer (its own defaults apply otherwise), e.g. gtol, xtol, maxiter (all);
         maxcor, c1, max_halvings, zero_mask (l_bfgs); move, asyinit, max_retries (mma); delta0, delta_max,
-        inner_tol, inner_stop, inner_maxiter, fun_error, request_accuracy, zero_mask (tr_newton).
+        inner_tol, inner_stop, inner_maxiter, fun_error, request_accuracy, zero_mask (tr_newton); gtol, maxiter,
+        inner_tol, inner_delay, inner_maxiter (newton_cg).
 
     Returns
     -------
@@ -510,6 +514,12 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         result = mma_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi,
                              constraint_weights=constraint_weights, constraint_target=constraint_target,
                              constraint_type=constraint_type, comm=comm, **common, **options)
+    elif method == 'newton_cg':
+        if hessp is None:
+            raise ValueError("'newton_cg' needs hessp(x, v)")
+        if constrained or bounds is not None:
+            raise ValueError("'newton_cg' is unconstrained; use 'tr_newton' with box bounds")
+        result = newton_cg(counted_fun, x0, counted_hessp, precond=precond, comm=comm, **common, **options)
     else:  # tr_newton
         if hessp is None:
             raise ValueError("'tr_newton' needs hessp(x, v)")
@@ -521,6 +531,100 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
     result['nfev'] = counts['nfev']
     result['nhessp'] = counts['nhessp']
     return result
+
+
+def newton_cg(fun, x0, hessp, precond=None, gtol=1e-5, maxiter=100, inner_tol=1e-6, inner_delay=10,
+              inner_maxiter=None, inner_stop='energy', comm=None, callback=None, disp=False):
+    """
+    Plain Newton-CG: full Newton steps x <- x + p with B(x) p = -g(x) solved by preconditioned CG.
+
+    No globalization (no line search, no trust region): the method converges quickly near a minimum but fails as
+    soon as the Hessian is not positive definite (e.g. at buckling), which the inner CG detects as nonpositive
+    curvature (p, B p) <= 0. It is the reference for :func:`NuMPI.Optimization.tr_newton_bounded` ('tr_newton'),
+    which handles that case.
+
+    The inner CG stops on the Hestenes-Stiefel lower estimate of the energy error with the delay inner_delay, like
+    the trust-region solver: with Delta_j = alpha_j (r_j, z_j), stop at iteration k >= inner_delay once
+    sum_{j=k-d}^{k} Delta_j <= inner_tol^2 sum_{j=0}^{k} Delta_j.
+
+    Parameters
+    ----------
+    fun : callable
+        ``fun(x) -> (f, g)``, global f, local gradient.
+    hessp, precond : callable
+        ``hessp(x, v)`` = B(x) v and ``precond(r)`` = M^-1 r (None: identity).
+    gtol : float
+        Convergence: max |g| <= gtol.
+    maxiter : int
+        Maximum number of Newton steps.
+    inner_tol, inner_delay, inner_maxiter : float, int, int
+        Relative energy-error tolerance, delay and iteration cap (default: number of unknowns) of the inner CG.
+    inner_stop : str
+        Only 'energy' (accepted for interface compatibility with tr_newton).
+
+    Returns
+    -------
+    OptimizeResult
+        x, fun, jac, nit (Newton steps), nb_hessp (inner CG iterations), success, message, max_grad.
+    """
+    if inner_stop != 'energy':
+        raise ValueError("newton_cg supports only inner_stop='energy'")
+    comm = MPI.COMM_WORLD if comm is None else comm
+
+    def dot(a, b):
+        return comm.allreduce(float((a * b).sum()), op=MPI.SUM)
+
+    def max_abs(a):
+        return comm.allreduce(float(abs(a).max()) if a.size else 0.0, op=MPI.MAX)
+
+    apply_precond = (lambda r: r.copy()) if precond is None else precond
+    if inner_maxiter is None:
+        inner_maxiter = comm.allreduce(int(x0.size), op=MPI.SUM)
+    x = x0.copy()
+    nb_hessp = 0
+
+    def finish(success, message, nit, f, g):
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nb_hessp': nb_hessp, 'max_grad': max_abs(g)})
+
+    for newton_step in range(maxiter + 1):
+        f, g = fun(x)
+        if max_abs(g) <= gtol:
+            return finish(True, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL', newton_step, f, g)
+        if newton_step == maxiter:
+            break
+        # --- inner PCG on B p = -g, from p = 0 ---
+        p = 0.0 * g
+        r = -g
+        z = apply_precond(r)
+        d = z.copy()
+        rz = dot(r, z)
+        energy_steps = []                       # Delta_j = alpha_j (r_j, z_j)
+        for _ in range(inner_maxiter):
+            Bd = hessp(x, d)
+            nb_hessp += 1
+            curvature = dot(d, Bd)
+            if curvature <= 0.0:
+                return finish(False, 'Hessian is not positive definite', newton_step, f, g)
+            alpha = rz / curvature
+            p = p + alpha * d
+            r = r - alpha * Bd
+            energy_steps.append(alpha * rz)
+            k = len(energy_steps) - 1
+            if k >= inner_delay and sum(energy_steps[k - inner_delay:]) <= inner_tol ** 2 * sum(energy_steps):
+                break
+            z = apply_precond(r)
+            rz_next = dot(r, z)
+            if rz_next <= 0.0:
+                break
+            d = z + (rz_next / rz) * d
+            rz = rz_next
+        x = x + p
+        if callback is not None:
+            callback(x)
+        if disp and comm.rank == 0:
+            print(f'Newton step {newton_step + 1}: f = {f:.10e}, max|g| = {max_abs(g):.3e}, CG {len(energy_steps)}')
+    return finish(False, 'NO CONVERGENCE: MAXITERATIONS REACHED', maxiter, f, g)
 
 
 def mma_bounded(fun, x0, args=(), jac=True, bounds_lo=0.0, bounds_hi=1.0, constraint_weights=None,

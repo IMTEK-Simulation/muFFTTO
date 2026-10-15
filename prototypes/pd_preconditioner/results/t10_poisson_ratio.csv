@@ -1,0 +1,17 @@
+material,load,method,iterations,it_energy,ffts
+"matrix (20, 2000): different Poisson ratio",macro E,G,77,62,308
+"matrix (20, 2000): different Poisson ratio",macro E,GJ,523,423,2092
+"matrix (20, 2000): different Poisson ratio",macro E,PD_pointwise,109,76,872
+"matrix (20, 2000): different Poisson ratio",macro E,PD_modal,235,164,1880
+"matrix (20, 2000): different Poisson ratio",random rhs,G,132,114,528
+"matrix (20, 2000): different Poisson ratio",random rhs,GJ,861,743,3444
+"matrix (20, 2000): different Poisson ratio",random rhs,PD_pointwise,129,102,1032
+"matrix (20, 2000): different Poisson ratio",random rhs,PD_modal,345,274,2760
+"matrix (4000, 2000): same Poisson ratio",macro E,G,14,12,56
+"matrix (4000, 2000): same Poisson ratio",macro E,GJ,142,127,568
+"matrix (4000, 2000): same Poisson ratio",macro E,PD_pointwise,7,6,56
+"matrix (4000, 2000): same Poisson ratio",macro E,PD_modal,7,6,56
+"matrix (4000, 2000): same Poisson ratio",random rhs,G,24,20,96
+"matrix (4000, 2000): same Poisson ratio",random rhs,GJ,185,152,740
+"matrix (4000, 2000): same Poisson ratio",random rhs,PD_pointwise,12,10,96
+"matrix (4000, 2000): same Poisson ratio",random rhs,PD_modal,12,10,96

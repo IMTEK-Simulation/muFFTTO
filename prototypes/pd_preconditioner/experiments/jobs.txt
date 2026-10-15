@@ -1,0 +1,22 @@
+t3b_contrast_clip.py 1 1e4
+t3b_contrast_clip.py 1 1e6
+t3b_contrast_clip.py 1 1e8
+t3b_contrast_clip.py 1 1e12
+t8_random_rhs.py 1
+t5b_mean_drift_voids.py 1
+t3b_contrast_clip.py 2 1e4
+t3b_contrast_clip.py 2 1e6
+t3b_contrast_clip.py 2 1e8
+t3b_contrast_clip.py 2 1e12
+t8_random_rhs.py 2
+t5b_mean_drift_voids.py 2
+t7b_newton.py 3 512
+t7b_newton.py 3 256
+t7b_newton.py 3 128
+t7b_newton.py 3 64
+t7b_newton.py 3 32
+t7b_newton.py 5 512
+t7b_newton.py 5 256
+t7b_newton.py 5 128
+t7b_newton.py 5 64
+t7b_newton.py 5 32

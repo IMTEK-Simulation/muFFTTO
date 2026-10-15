@@ -1,0 +1,25 @@
+d,case,tol,method,displacement_error,displacement_error_mean_removed,strain_error,mean_relative
+2,cosine chi=inf p=16,0.0001,GJ,7.809e-02,7.809e-02,9.349e-01,3.840e-09
+2,cosine chi=inf p=16,0.0001,PD,1.440e-05,1.440e-05,6.456e-05,3.835e-17
+2,cosine chi=inf p=16,1e-06,GJ,7.809e-02,7.809e-02,9.349e-01,8.600e-13
+2,cosine chi=inf p=16,1e-06,PD,1.142e-07,1.142e-07,6.399e-07,4.346e-17
+2,cosine chi=inf p=16,1e-08,GJ,7.809e-02,7.809e-02,9.349e-01,4.505e-13
+2,cosine chi=inf p=16,1e-08,PD,7.055e-10,7.055e-10,6.771e-09,3.835e-17
+2,cosine chi=inf p=16,1e-10,GJ,7.809e-02,7.809e-02,9.349e-01,1.015e-13
+2,cosine chi=inf p=16,1e-10,PD,4.057e-10,4.057e-10,3.869e-09,3.835e-17
+2,cosine chi=1e4 p=256,0.0001,GJ,7.696e-06,7.696e-06,1.247e-04,6.275e-11
+2,cosine chi=1e4 p=256,0.0001,PD,1.081e-05,1.081e-05,1.784e-04,3.304e-18
+2,cosine chi=1e4 p=256,1e-06,GJ,1.250e-07,1.242e-07,1.077e-06,5.167e-09
+2,cosine chi=1e4 p=256,1e-06,PD,4.086e-07,4.086e-07,3.813e-06,9.911e-18
+2,cosine chi=1e4 p=256,1e-08,GJ,9.561e-09,9.561e-09,5.122e-08,2.187e-11
+2,cosine chi=1e4 p=256,1e-08,PD,1.484e-09,1.484e-09,2.448e-08,3.304e-18
+2,cosine chi=1e4 p=256,1e-10,GJ,1.312e-11,1.312e-11,2.463e-10,8.808e-15
+2,cosine chi=1e4 p=256,1e-10,PD,5.005e-11,5.005e-11,2.710e-10,6.608e-18
+2,sharp disk chi=1e4,0.0001,GJ,3.770e-05,3.770e-05,7.553e-04,6.056e-08
+2,sharp disk chi=1e4,0.0001,PD,2.109e-06,2.109e-06,1.122e-05,1.596e-17
+2,sharp disk chi=1e4,1e-06,GJ,2.056e-07,2.049e-07,5.520e-06,8.375e-09
+2,sharp disk chi=1e4,1e-06,PD,5.844e-09,5.844e-09,5.471e-08,1.596e-17
+2,sharp disk chi=1e4,1e-08,GJ,2.523e-09,2.523e-09,6.713e-08,6.378e-12
+2,sharp disk chi=1e4,1e-08,PD,5.725e-11,5.725e-11,7.699e-10,1.596e-17
+2,sharp disk chi=1e4,1e-10,GJ,4.415e-11,4.414e-11,7.740e-10,3.045e-13
+2,sharp disk chi=1e4,1e-10,PD,1.142e-12,1.142e-12,9.042e-12,0.000e+00

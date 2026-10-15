@@ -142,3 +142,25 @@ def test_minimize_volume_constraint(method):
 def test_minimize_rejects_unsupported(method, kwargs):
     with pytest.raises(ValueError):
         minimize(separable_quadratic(np.zeros(4)), np.zeros(4), method=method, **kwargs)
+
+
+# --- newton_cg: plain Newton with a PCG inner solve -----------------------------------------------------------------
+
+def test_newton_cg_converges_on_convex_problem():
+    """Strictly convex, nonquadratic: f(x) = sum(exp(x) - c x) has the minimum x = log(c)."""
+    c = np.random.default_rng(3).uniform(0.5, 2.0, 50)
+    fun = lambda x: (float(np.sum(np.exp(x) - c * x)), np.exp(x) - c)
+    hessp = lambda x, v: np.exp(x) * v
+    result = minimize(fun, np.zeros(50), method='newton_cg', hessp=hessp, gtol=1e-10, maxiter=50)
+    assert result.success, result.message
+    np.testing.assert_allclose(result.x, np.log(c), atol=1e-9)
+    assert result.nit <= 10                     # quadratic convergence
+
+
+def test_newton_cg_fails_on_indefinite_hessian():
+    """f(x) = x0^2 - x1^2 has a saddle: the inner CG meets negative curvature and Newton-CG reports failure."""
+    fun = lambda x: (float(x[0] ** 2 - x[1] ** 2), np.array([2 * x[0], -2 * x[1]]))
+    hessp = lambda x, v: np.array([2 * v[0], -2 * v[1]])
+    result = minimize(fun, np.array([1.0, 1.0]), method='newton_cg', hessp=hessp, gtol=1e-10)
+    assert not result.success
+    assert 'not positive definite' in result.message

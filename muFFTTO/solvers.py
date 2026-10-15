@@ -7,7 +7,9 @@ problems (homogenisation) and their adjoints (topology optimisation):
 
 * :func:`conjugate_gradients_mugrid` -- preconditioned conjugate gradients
   (PCG) operating directly on muGrid fields, MPI-parallel through a muGrid
-  ``Communicator``. This is the production solver.
+  ``Communicator``. This is the production solver. It stops on the residual
+  or, with ``stop_crit_norm='total_error'``, when the algebraic error is a
+  small fraction of the total error (see :mod:`muFFTTO.error_bounds`).
 * :func:`conjugate_gradients_mugrid_experimental` -- the same PCG with
   additional a-posteriori energy-norm error estimates (Hestenes--Stiefel
   lower bound with adaptive delay, Gauss--Radau upper bound) and selectable
@@ -113,6 +115,8 @@ def conjugate_gradients_mugrid(
         maxiter: int = 1000,
         callback: callable = None,
         norm_metric: callable = None,
+        stop_crit_norm: str = "residual",
+        stopping_rule: callable = None,
         **kwargs
 ):
     """
@@ -121,9 +125,9 @@ def conjugate_gradients_mugrid(
 
     ``A`` is represented by the function ``hessp`` (which computes the product
     of A with a field) and the preconditioner ``M^{-1}`` by ``P``. The method
-    iteratively refines the solution ``x`` until the squared stopping
-    quantity (by default the squared Euclidean residual norm ``(r, r)``) is
-    below ``tol**2``, or until ``maxiter`` iterations are reached.
+    iteratively refines the solution ``x`` until the stopping test selected by
+    ``stop_crit_norm`` holds (by default: the squared Euclidean residual norm
+    ``(r, r)`` is below ``tol**2``), or until ``maxiter`` iterations are reached.
 
     Parameters
     ----------
@@ -170,6 +174,18 @@ def conjugate_gradients_mugrid(
         ``norm_metric(r, Pr)``: writes ``G r`` into ``Pr`` for some SPD
         metric ``G``. If given, the stopping quantity becomes ``(r, G r)``
         instead of the Euclidean ``(r, r)``.
+    stop_crit_norm : str, optional
+        ``'residual'`` (default): stop when ``(r, r)`` (or ``(r, G r)``) is
+        below ``tol**2`` (relative to its initial value with ``rtol``).
+        ``'total_error'``: stop when ``stopping_rule`` says so, e.g. a
+        :class:`muFFTTO.error_bounds.TotalErrorStoppingRule` (algebraic error
+        a fraction of a guaranteed bound on the total error); ``tol`` and
+        ``rtol`` are then not used.
+    stopping_rule : callable, optional
+        ``stopping_rule(iteration, x, alpha, rz) -> bool``, called after every
+        iteration with the new iterate ``x = x_k`` and the coefficients
+        ``alpha_{k-1}``, ``(r_{k-1}, z_{k-1})`` of the step that produced it.
+        Required for ``stop_crit_norm='total_error'``.
     **kwargs
         Ignored; accepted for interface compatibility with other solvers.
 
@@ -184,6 +200,9 @@ def conjugate_gradients_mugrid(
     RuntimeError
         If ``(p, A p) <= 0`` is encountered, i.e. A is not positive definite
         (or has lost positive definiteness due to round-off).
+    ValueError
+        If ``stop_crit_norm`` is unknown, or 'total_error' without
+        ``stopping_rule``.
 
     Warns
     -----
@@ -209,6 +228,11 @@ def conjugate_gradients_mugrid(
     reductions (``comm.sum``). With ``rtol=True`` the initial guess is only
     accepted as converged if its residual is exactly zero.
     """
+
+    if stop_crit_norm not in ("residual", "total_error"):
+        raise ValueError(f"stop_crit_norm must be 'residual' or 'total_error', got {stop_crit_norm!r}")
+    if stop_crit_norm == "total_error" and stopping_rule is None:
+        raise ValueError("stop_crit_norm='total_error' requires stopping_rule")
 
     # all stopping tests compare squared norms, hence tol**2
     tol_sq = tol * tol
@@ -261,7 +285,7 @@ def conjugate_gradients_mugrid(
 
     # initial guess already good enough: absolute test, or (for rtol) an
     # exactly zero residual -- a relative test against itself is meaningless
-    if stop_crit == 0 or (not rtol and stop_crit < tol_sq):
+    if stop_crit == 0 or (stop_crit_norm == "residual" and not rtol and stop_crit < tol_sq):
         return x
 
     # relative tolerance: scale by the initial (squared) stopping quantity
@@ -304,7 +328,10 @@ def conjugate_gradients_mugrid(
         if callback:
             callback(iteration + 1, x.s, r.s, p.s, z.s, stop_crit)
 
-        if stop_crit < tol_sq:
+        if stop_crit_norm == "residual":
+            if stop_crit < tol_sq:
+                return x
+        elif stopping_rule(iteration + 1, x, alpha, rz):   # rz is still (r_k, z_k) of this step
             return x
 
         # Update search direction
@@ -338,6 +365,7 @@ def conjugate_gradients_mugrid_experimental(
         norm_metric: callable = None,
         lambda_min: float = None,
         stop_crit_norm: str = "rr",
+        stopping_rule: callable = None,
         **kwargs
 ):
     """
@@ -403,6 +431,10 @@ def conjugate_gradients_mugrid_experimental(
           'energy_upper_estim' that lower bound divided by (1 - tau); needs
                                0 <= tau < 1. Computed on the fly, not stored
           'energy_upper_bound' Gauss-Radau upper bound; needs lambda_min
+          'total_error'        stopping_rule(iteration, x, alpha, rz) decides,
+                               e.g. muFFTTO.error_bounds.TotalErrorStoppingRule
+                               (algebraic error a fraction of a guaranteed
+                               bound on the total error); tol is not used
           'all'                iterate until EVERY applicable criterion above
                                is satisfied, i.e. until the slowest one is
 
@@ -504,7 +536,7 @@ def conjugate_gradients_mugrid_experimental(
     # ---- stopping-criterion selection -------------------------------------
     _VALID_STOP = ("rr", "rz", "custom",
                    "energy_lower_estim", "energy_upper_estim",
-                   "energy_upper_bound",
+                   "energy_upper_bound", "total_error",
                    "all")
     if stop_crit_norm not in _VALID_STOP:
         raise ValueError(f"stop_crit_norm must be one of {_VALID_STOP}, "
@@ -513,6 +545,8 @@ def conjugate_gradients_mugrid_experimental(
         raise ValueError("stop_crit_norm='custom' requires norm_metric")
     if stop_crit_norm == "energy_upper_bound" and lambda_min is None:
         raise ValueError("stop_crit_norm='energy_upper_bound' requires lambda_min")
+    if stop_crit_norm == "total_error" and stopping_rule is None:
+        raise ValueError("stop_crit_norm='total_error' requires stopping_rule")
     if stop_crit_norm in ("energy_upper_estim", "all") and not (0.0 <= tau < 1.0):
         raise ValueError(f"stop_crit_norm={stop_crit_norm!r} requires "
                          f"0 <= tau < 1, got {tau}")
@@ -563,7 +597,7 @@ def conjugate_gradients_mugrid_experimental(
 
     # initial guess already good enough: absolute test, or (for rtol) an
     # exactly zero residual; norms is still empty
-    if stop_crit == 0 or (not rtol and stop_crit < tol_sq
+    if stop_crit == 0 or (not rtol and stop_crit < tol_sq and stop_crit_norm != "total_error"
                           and not (energy_rtol and stop_crit_norm in energy_criteria)):
         return x, norms
 
@@ -740,6 +774,7 @@ def conjugate_gradients_mugrid_experimental(
             d = d + 1
 
         # shift (r_k, z_k) <- (r_{k+1}, z_{k+1}) for the next iteration
+        rz_of_step = rz
         rz = next_rz
         # p.s *= beta
         # p.s += z.s
@@ -756,7 +791,10 @@ def conjugate_gradients_mugrid_experimental(
                     and _val is not None and _val < _threshold(_name)):
                 norms['stop_iteration'][_name] = iteration + 1
 
-        if stop_crit_norm == "all":
+        if stop_crit_norm == "total_error":
+            if stopping_rule(iteration + 1, x, alpha, rz_of_step):
+                return x, norms
+        elif stop_crit_norm == "all":
             if all(v is not None and v < _threshold(c) for c, v in stop_values.items()):
                 return x, norms
         else:

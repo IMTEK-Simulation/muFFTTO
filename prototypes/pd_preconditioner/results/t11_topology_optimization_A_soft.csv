@@ -1,0 +1,26 @@
+part,case,n,method,iterations,ffts,converged,rho_min
+A,"path k = 0, soft phase 1e-5",128,G,164,656,True,1.0e-04
+A,"path k = 0, soft phase 1e-5",128,GJ,1008,4032,True,1.0e-04
+A,"path k = 0, soft phase 1e-5",128,PD clip 0.01,88,704,True,1.0e-04
+A,"path k = 0, soft phase 1e-5",128,PD clip 0.0001,303,2424,True,1.0e-04
+A,"path k = 0, soft phase 1e-5",128,PD clip none,303,2424,True,1.0e-04
+A,"path k = 50, soft phase 1e-5",128,G,3508,14032,True,1.0e-05
+A,"path k = 50, soft phase 1e-5",128,GJ,924,3696,True,1.0e-05
+A,"path k = 50, soft phase 1e-5",128,PD clip 0.01,1361,10888,True,1.0e-05
+A,"path k = 50, soft phase 1e-5",128,PD clip 0.0001,1178,9424,True,1.0e-05
+A,"path k = 50, soft phase 1e-5",128,PD clip none,1464,11712,True,1.0e-05
+A,"path k = 200, soft phase 1e-5",128,G,3727,14908,True,1.0e-05
+A,"path k = 200, soft phase 1e-5",128,GJ,517,2068,True,1.0e-05
+A,"path k = 200, soft phase 1e-5",128,PD clip 0.01,1441,11528,True,1.0e-05
+A,"path k = 200, soft phase 1e-5",128,PD clip 0.0001,1269,10152,True,1.0e-05
+A,"path k = 200, soft phase 1e-5",128,PD clip none,1485,11880,True,1.0e-05
+A,"path k = 250, soft phase 1e-5",128,G,3706,14824,True,1.0e-05
+A,"path k = 250, soft phase 1e-5",128,GJ,514,2056,True,1.0e-05
+A,"path k = 250, soft phase 1e-5",128,PD clip 0.01,1421,11368,True,1.0e-05
+A,"path k = 250, soft phase 1e-5",128,PD clip 0.0001,1274,10192,True,1.0e-05
+A,"path k = 250, soft phase 1e-5",128,PD clip none,1503,12024,True,1.0e-05
+A,"path k = 270, soft phase 1e-5",128,G,3691,14764,True,1.0e-05
+A,"path k = 270, soft phase 1e-5",128,GJ,519,2076,True,1.0e-05
+A,"path k = 270, soft phase 1e-5",128,PD clip 0.01,1438,11504,True,1.0e-05
+A,"path k = 270, soft phase 1e-5",128,PD clip 0.0001,1274,10192,True,1.0e-05
+A,"path k = 270, soft phase 1e-5",128,PD clip none,1509,12072,True,1.0e-05
