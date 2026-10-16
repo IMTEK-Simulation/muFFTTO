@@ -1,0 +1,28 @@
+P1 N32 kappa 1e-3 Green: CG 2601, Newton 40, 1.0 s
+P1 N32 kappa 1e-3 Green_Jacobi: CG 1951, Newton 40, 0.9 s
+P1 N32 kappa 1e+3 Green: CG 3189, Newton 48, 1.3 s
+P1 N32 kappa 1e+3 Green_Jacobi: CG 3364, Newton 48, 1.4 s
+P3 N32 kappa 1e-3 Green: CG 10333, Newton 40, 3.7 s
+P2 N32 kappa 1e+3 Green: CG 20585, Newton 53, 6.2 s
+P3 N32 kappa 1e-3 Green_Jacobi: CG 2164, Newton 40, 0.9 s
+P2 N32 kappa 1e-3 Green: CG 23560, Newton 71, 8.5 s
+P1 N32 kappa 1e-3 dual: CG 2085, Newton 40, 1.6 s
+P1 N32 kappa 1e+3 dual: CG 4448, Newton 48, 3.4 s
+P2 N32 kappa 1e+3 Green_Jacobi: CG 13332, Newton 53, 4.7 s
+P3 N32 kappa 1e-3 dual: CG 2732, Newton 40, 2.1 s
+P1 N64 kappa 1e-3 Green: CG 2843, Newton 40, 2.6 s
+P1 N64 kappa 1e+3 Green: CG 3578, Newton 49, 3.6 s
+P2 N64 kappa 1e-3 Green: CG 4675, Newton 16, 4.5 s; FAILED increment 3, Newton step 2: Hessian is not positive definite
+P1 N64 kappa 1e-3 Green_Jacobi: CG 2929, Newton 40, 3.3 s
+P2 N32 kappa 1e+3 dual: CG 22895, Newton 53, 14.3 s
+P2 N32 kappa 1e-3 Green_Jacobi: CG 66631, Newton 71, 30.1 s
+P1 N64 kappa 1e+3 Green_Jacobi: CG 5352, Newton 49, 6.9 s
+P3 N64 kappa 1e-3 Green_Jacobi: CG 3093, Newton 41, 5.1 s
+P3 N64 kappa 1e-3 Green: CG 14436, Newton 41, 17.5 s
+P2 N32 kappa 1e-3 dual: CG 46464, Newton 71, 34.5 s
+P1 N64 kappa 1e-3 dual: CG 2841, Newton 40, 8.2 s
+P1 N64 kappa 1e+3 dual: CG 5645, Newton 49, 12.9 s
+P3 N64 kappa 1e-3 dual: CG 3488, Newton 41, 6.5 s
+P2 N64 kappa 1e-3 dual: CG 7311, Newton 16, 12.7 s; FAILED increment 3, Newton step 2: Hessian is not positive definite
+P2 N64 kappa 1e-3 Green_Jacobi: CG 28513, Newton 16, 31.9 s; FAILED increment 3, Newton step 2: Hessian is not positive definite
+numpy.linalg.LinAlgError: Eigenvalues did not converge

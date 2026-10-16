@@ -1244,6 +1244,24 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     return output_field_inxyz
 
 
+def energy_stop_kwargs(discretization, system_matrix_fun, x, tol):
+    """Stopping arguments of :func:`muFFTTO.solvers.conjugate_gradients_mugrid_experimental` for the test
+    ``||e_k||_K <= tol ||u||_K`` (energy norm, relative to the energy of the solution ``u``) with a warm start ``x``.
+
+    Cold start (``x = 0``): ``e_0 = u``, so the test is the reduction of the initial energy error (``energy_rtol``).
+    Warm start: ``||x||_K`` (the previous solution) stands in for ``||u||_K`` and the test becomes the absolute floor
+    ``energy_atol = tol ||x||_K`` -- the same accuracy at every solve, however good the start already is (a test
+    relative to the tiny initial error of a good warm start may be out of reach of round-off). One product with K.
+    """
+    Kx = discretization.get_unknown_size_field(name='energy_stop_Kx')
+    discretization.fft.communicate_ghosts(x)
+    system_matrix_fun(x, Kx)
+    energy = discretization.communicator.sum(np.dot(x.s.ravel(), Kx.s.ravel()))
+    if energy > 0:
+        return dict(tol=0.0, energy_rtol=False, energy_atol=tol * np.sqrt(energy))
+    return dict(tol=tol, energy_rtol=True)
+
+
 def sensitivity_stress_and_adjoint_FE_NEW(discretization,
                                           base_material_data_ijkl,
                                           void_material_data_ijkl,
@@ -1342,6 +1360,12 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     """
     cg_tol = kwargs.get('cg_tol', 1e-7)
     r_tol = kwargs.get('r_tol', True)
+    # 'residual' (default): |r| <= cg_tol |b| (r_tol) or cg_tol; 'energy': the energy-error estimate relative to the
+    # energy of the solution, ||e_k||_K <= cg_tol ||lambda||_K, minimal delay cg_delay (solvers.conjugate_gradients_
+    # mugrid_experimental, see energy_stop_kwargs); with a warm start ||lambda||_K is taken from the start vector.
+    cg_stop = kwargs.get('cg_stop', 'residual')
+    cg_warm_start = kwargs.get('cg_warm_start', True)
+    cg_delay = kwargs.get('cg_delay', 10)
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -1456,8 +1480,23 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # relative to that residual cannot be met; CG then iterates in round-off and returns a wrong adjoint
     # (gradients off by an order of magnitude were observed). |b| = 0 means lambda = 0.
     b_norm = np.sqrt(discretization.communicator.sum(np.dot(df_du_field.s.ravel(), df_du_field.s.ravel())))
+    if not cg_warm_start:
+        adjoint_field_inxyz.s[...] = 0.0
     if b_norm == 0:
         adjoint_field_inxyz.s[...] = 0.0
+    elif cg_stop == 'energy':
+        solvers.conjugate_gradients_mugrid_experimental(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=system_matrix_fun,
+            b=df_du_field,
+            x=adjoint_field_inxyz,
+            P=preconditioner_fun,
+            maxiter=int(100000),
+            callback=callback_adjoint,
+            stop_crit_norm='energy_lower_estim',
+            d_min=cg_delay,
+            **energy_stop_kwargs(discretization, system_matrix_fun, adjoint_field_inxyz, cg_tol))
     else:
         solvers.conjugate_gradients_mugrid(
             comm=discretization.communicator,

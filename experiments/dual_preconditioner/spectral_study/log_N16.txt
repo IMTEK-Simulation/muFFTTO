@@ -1,0 +1,108 @@
+N 16  scalar  bubble_array  k_v 0.1
+  green            it     6  lam [0.1, 1]  minEig(P) 1.25e-01
+  green_jacobi     it     7  lam [0.0676, 0.754]  minEig(P) 3.43e-02
+  dual             it     5  lam [1, 3.02]  minEig(P) 1.37e-01
+  dual_solid       it     5  lam [1, 3.02]  minEig(P) 1.37e-01
+  schur_neumann_1  it     6  lam [1, 2.08]  minEig(P) 1.37e-01
+  schur_neumann_3  it     5  lam [1, 1.48]  minEig(P) 1.36e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -1.84e+01
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.36e-01
+N 16  scalar  bubble_array  k_v 0.001
+  green            it     6  lam [0.001, 1]  minEig(P) 1.25e-01
+  green_jacobi     it     9  lam [0.0368, 1.25]  minEig(P) 3.44e-02
+  dual             it     5  lam [1, 250]  minEig(P) 1.38e-01
+  dual_solid       it     5  lam [1, 250]  minEig(P) 1.38e-01
+  schur_neumann_1  it     6  lam [1, 149]  minEig(P) 1.38e-01
+  schur_neumann_3  it     6  lam [1, 82.5]  minEig(P) 1.38e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -7.79e+05
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.36e-01
+N 16  scalar  bubble_array  k_v 1e-05
+  green            it     6  lam [1e-05, 1]  minEig(P) 1.25e-01
+  green_jacobi     it     9  lam [0.0353, 1.31]  minEig(P) 3.44e-02
+  dual             it     5  lam [1, 2.5e+04]  minEig(P) 1.38e-01
+  dual_solid       it     5  lam [1, 2.5e+04]  minEig(P) 1.38e-01
+  schur_neumann_1  it     6  lam [1, 1.48e+04]  minEig(P) 1.38e-01
+  schur_neumann_3  it     6  lam [1, 8.19e+03]  minEig(P) 1.38e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -7.84e+09
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.36e-01
+N 16  scalar  square_inclusion  k_v 0.1
+  green            it     5  lam [0.1, 1]  minEig(P) 1.25e-01
+  green_jacobi     it     9  lam [0.118, 0.562]  minEig(P) 3.16e-02
+  dual             it     3  lam [1, 3.03]  minEig(P) 1.26e-01
+  dual_solid       it     3  lam [1, 3.03]  minEig(P) 1.26e-01
+  schur_neumann_1  it     5  lam [1, 2.08]  minEig(P) 1.26e-01
+  schur_neumann_3  it     5  lam [1, 1.41]  minEig(P) 1.26e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -1.49e+01
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.26e-01
+N 16  scalar  square_inclusion  k_v 0.001
+  green            it     5  lam [0.001, 1]  minEig(P) 1.25e-01
+  green_jacobi     it    11  lam [0.085, 0.818]  minEig(P) 3.16e-02
+  dual             it     3  lam [1, 251]  minEig(P) 1.26e-01
+  dual_solid       it     3  lam [1, 251]  minEig(P) 1.26e-01
+  schur_neumann_1  it     6  lam [1, 148]  minEig(P) 1.26e-01
+  schur_neumann_3  it     7  lam [1, 69.7]  minEig(P) 1.26e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -4.62e+05
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.26e-01
+N 16  scalar  square_inclusion  k_v 1e-05
+  green            it     5  lam [1e-05, 1]  minEig(P) 1.25e-01
+  green_jacobi     it    11  lam [0.0829, 0.848]  minEig(P) 3.16e-02
+  dual             it     3  lam [1, 2.5e+04]  minEig(P) 1.26e-01
+  dual_solid       it     3  lam [1, 2.5e+04]  minEig(P) 1.26e-01
+  schur_neumann_1  it     6  lam [1, 1.48e+04]  minEig(P) 1.26e-01
+  schur_neumann_3  it     7  lam [1, 6.9e+03]  minEig(P) 1.26e-01
+  schur_A          it  None  lam [-, -]  minEig(P) -4.64e+09
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.26e-01
+N 16  elastic  bubble_array  k_v 0.1
+  green            it    11  lam [0.1, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    14  lam [0.0334, 1.18]  minEig(P) 4.03e-04
+  dual             it    13  lam [1, 5.89]  minEig(P) 1.28e-03
+  dual_solid       it     7  lam [1, 3.02]  minEig(P) 1.04e-03
+  schur_neumann_1  it    11  lam [1, 3.57]  minEig(P) 1.26e-03
+  schur_neumann_3  it     8  lam [1, 2.07]  minEig(P) 1.22e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -7.86e-01
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.02e-03
+N 16  elastic  bubble_array  k_v 0.001
+  green            it    13  lam [0.001, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    20  lam [0.00844, 2.22]  minEig(P) 4.05e-04
+  dual             it    28  lam [1, 526]  minEig(P) 1.29e-03
+  dual_solid       it     9  lam [1, 251]  minEig(P) 1.04e-03
+  schur_neumann_1  it    29  lam [1, 292]  minEig(P) 1.29e-03
+  schur_neumann_3  it    29  lam [1, 138]  minEig(P) 1.29e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -1.40e+04
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.03e-03
+N 16  elastic  bubble_array  k_v 1e-05
+  green            it    13  lam [1e-05, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    20  lam [0.00791, 2.35]  minEig(P) 4.05e-04
+  dual             it    36  lam [1, 5.25e+04]  minEig(P) 1.29e-03
+  dual_solid       it     9  lam [1, 2.5e+04]  minEig(P) 1.04e-03
+  schur_neumann_1  it    39  lam [1, 2.92e+04]  minEig(P) 1.29e-03
+  schur_neumann_3  it    45  lam [1, 1.37e+04]  minEig(P) 1.29e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -1.41e+08
+  schur_exact      it     1  lam [1, 1]  minEig(P) 1.03e-03
+N 16  elastic  square_inclusion  k_v 0.1
+  green            it     9  lam [0.1, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    17  lam [0.0883, 0.866]  minEig(P) 3.66e-04
+  dual             it    13  lam [1, 5.15]  minEig(P) 1.15e-03
+  dual_solid       it     6  lam [1, 3.02]  minEig(P) 9.41e-04
+  schur_neumann_1  it    11  lam [1, 3.45]  minEig(P) 1.14e-03
+  schur_neumann_3  it     8  lam [1, 2.14]  minEig(P) 1.11e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -1.07e+00
+  schur_exact      it     1  lam [1, 1]  minEig(P) 9.40e-04
+N 16  elastic  square_inclusion  k_v 0.001
+  green            it    10  lam [0.001, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    22  lam [0.057, 1.3]  minEig(P) 3.66e-04
+  dual             it    29  lam [1, 455]  minEig(P) 1.15e-03
+  dual_solid       it     7  lam [1, 250]  minEig(P) 9.42e-04
+  schur_neumann_1  it    33  lam [1, 282]  minEig(P) 1.15e-03
+  schur_neumann_3  it    33  lam [1, 148]  minEig(P) 1.15e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -2.16e+04
+  schur_exact      it     1  lam [1, 1]  minEig(P) 9.41e-04
+N 16  elastic  square_inclusion  k_v 1e-05
+  green            it    10  lam [1e-05, 1]  minEig(P) 9.29e-04
+  green_jacobi     it    22  lam [0.0548, 1.35]  minEig(P) 3.66e-04
+  dual             it    37  lam [1, 4.54e+04]  minEig(P) 1.15e-03
+  dual_solid       it     7  lam [1, 2.5e+04]  minEig(P) 9.42e-04
+  schur_neumann_1  it    39  lam [1, 2.81e+04]  minEig(P) 1.15e-03
+  schur_neumann_3  it    42  lam [1, 1.47e+04]  minEig(P) 1.15e-03
+  schur_A          it  None  lam [-, -]  minEig(P) -2.18e+08
+  schur_exact      it     1  lam [1, 1]  minEig(P) 9.41e-04

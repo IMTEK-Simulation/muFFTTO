@@ -22,16 +22,26 @@ formulation = 'small_strain'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (64,64)
+n_pix = int(os.environ.get('NPIX', 64))  # grid (environment NPIX overrides)
+number_of_pixels = (n_pix, n_pix)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
 # Optimization Parameters
-soft_phase_exponent = 5
-preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
-eta = max(1 * pixel_size)  # Filter width
+soft_phase_exponent = int(os.environ.get('SOFT_EXP', 5))  # void = 10^-SOFT_EXP C_0
+# Options: 'Green', 'Jacobi', 'Green_Jacobi', 'dual' (G K(C_0 A^-1 C_0) G); first command-line argument overrides
+preconditioner_type = sys.argv[1] if len(sys.argv) > 1 else "Green_Jacobi"
+show_plots = os.environ.get('SHOW_PLOTS', '1') == '1'  # phase field figure after every optimizer iteration (serial)
+eta = float(os.environ['ETA']) if 'ETA' in os.environ else max(1 * pixel_size)  # Filter width (ETA: fixed in physical units)
+init_noise_grid = int(os.environ.get('INIT_NOISE_GRID', '0'))  # >0: start noise drawn on this grid (see below)
 weight = 5.  # Weight for the stress match term
 cg_setup = {'cg_tol': 1e-3}
+# CG_MODE='energy': every forward and adjoint solve from zero, stopped on the energy-error estimate relative to the
+# initial error (1e-6, delay 10) -> accurate gradients, the same for every preconditioner. Default: warm starts and
+# the residual tolerance cg_tol (absolute for the forward problem, relative to |b| for the adjoint)
+cg_mode = os.environ.get('CG_MODE', 'residual')
+if cg_mode == 'energy':
+    cg_setup = {'cg_tol': 1e-6, 'cg_stop': 'energy', 'cg_warm_start': False, 'cg_delay': 10}
 optimizer = 'l_bfgs'  # Options: 'l_bfgs', 'mma', 'tr_newton' (box constraints only), see solvers_nonlinear.minimize
 volume_fraction = None  # None: box constraints only; e.g. 0.6: mean(phase) <= 0.6 (MMA) / = 0.6 (projected L-BFGS)
 fd_step = 1e-3  # tr_newton: Hessian-vector products by central differences of the gradient, step in phase units
@@ -67,8 +77,11 @@ elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.dom
 soft_phase = 10 ** (-soft_phase_exponent) if soft_phase_exponent > 0 else 0
 elastic_C_void = elastic_C_0 * soft_phase
 
-# Preconditioner setup
-preconditioner_fnfnqks = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=elastic_C_0)
+# Preconditioner setup. Reference material: Green and dual C_0; Green-Jacobi 2 mu I (the Jacobi diagonal carries the
+# local magnitude, the Green part only the structure)
+green_reference_ijkl = (2 * G_0 * np.einsum('ik,jl->ijkl', np.eye(dim), np.eye(dim))
+                        if preconditioner_type == 'Green_Jacobi' else elastic_C_0)
+preconditioner_fnfnqks = discretization.get_preconditioner_Green_mugrid(reference_material_data_ijkl=green_reference_ijkl)
 
 
 def M_fun_Green(x, Px):
@@ -142,6 +155,9 @@ material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_fie
 s_sensitivity_field = discretization.get_scalar_field(name='sensitivity_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field')
 s_stress_and_adjoint_load_case = discretization.get_scalar_field(name='stress_adj_sensitivity')
+dual_material = discretization.get_material_data_size_field_mugrid(name='dual_material')   # C_0 A^-1 C_0 (dual)
+dual_temp_1 = discretization.get_unknown_size_field(name='dual_temp_1')
+dual_temp_2 = discretization.get_unknown_size_field(name='dual_temp_2')
 
 w = weight / nb_load_cases
 
@@ -217,6 +233,25 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
 
         M_fun = M_fun_Green_Jacobi
 
+    elif preconditioner_type == 'dual':
+        # P = G K(C_0 A^-1 C_0) G. The SIMP material is A = s(x) C_0, s = rho^p (1 - soft_phase) + soft_phase, so the
+        # middle material is exactly C_0 A^-1 C_0 = C_0 / s(x)
+        dual_material.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] / (
+            np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0] * (1 - soft_phase) + soft_phase)
+
+        def M_fun_dual(x, Px):
+            discretization.fft.communicate_ghosts(x)
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                                                       input_nodal_field_fnxyz=x, output_nodal_field_fnxyz=dual_temp_1)
+            discretization.apply_system_matrix_mugrid(material_data_field=dual_material, input_field_inxyz=dual_temp_1,
+                                                      output_field_inxyz=dual_temp_2, formulation='small_strain')
+            discretization.fft.communicate_ghosts(dual_temp_2)
+            discretization.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=preconditioner_fnfnqks,
+                                                       input_nodal_field_fnxyz=dual_temp_2, output_nodal_field_fnxyz=Px)
+            discretization.fft.communicate_ghosts(Px)
+
+        M_fun = M_fun_dual
+
     def K_fun(x, Ax):
         discretization.apply_system_matrix_mugrid(material_data_field=material_data_field_C_0_rho_ijklqxyz,
                                                   input_field_inxyz=x,
@@ -254,17 +289,33 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
-        solvers.conjugate_gradients_mugrid(
-            comm=discretization.communicator,
-            fc=discretization.field_collection,
-            hessp=K_fun,  # linear operator
-            b=rhs_load_case_inxyz,
-            x=displacement_field_load_case[load_case],
-            P=M_fun,
-            tol=cg_setup['cg_tol'],
-            maxiter=10000,
-            callback=callback,
-        )
+        if cg_mode == 'energy':
+            displacement_field_load_case[load_case].s[...] = 0.0
+            solvers.conjugate_gradients_mugrid_experimental(
+                comm=discretization.communicator,
+                fc=discretization.field_collection,
+                hessp=K_fun,
+                b=rhs_load_case_inxyz,
+                x=displacement_field_load_case[load_case],
+                P=M_fun,
+                tol=cg_setup['cg_tol'],
+                maxiter=100000,
+                callback=callback,
+                stop_crit_norm='energy_lower_estim',
+                energy_rtol=True,
+                d_min=cg_setup['cg_delay'])
+        else:
+            solvers.conjugate_gradients_mugrid(
+                comm=discretization.communicator,
+                fc=discretization.field_collection,
+                hessp=K_fun,  # linear operator
+                b=rhs_load_case_inxyz,
+                x=displacement_field_load_case[load_case],
+                P=M_fun,
+                tol=cg_setup['cg_tol'],
+                maxiter=10000,
+                callback=callback,
+            )
 
         if MPI.COMM_WORLD.rank == 0:
             nb_it = len(norms_cg_mech['residual_rr'])
@@ -341,7 +392,8 @@ if __name__ == '__main__':
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
     random_init = False
-    save_history = True  # store the phase field of every iteration in <output_name>_history.nc
+    save_history = True  # store the phase field in <output_name>_history.nc ...
+    history_every = int(os.environ.get('HISTORY_EVERY', '1'))  # ... of every HISTORY_EVERY-th iteration
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)
@@ -349,11 +401,14 @@ if __name__ == '__main__':
     MPI.COMM_WORLD.Barrier()
 
     # Output files (NetCDF, see docs/io.md): <output_name>_history.nc and <output_name>_final.nc
-    output_name = data_folder_path + f'{preconditioner_type}_eta_{eta}_w_{weight}_{optimizer}' + (
-        f'_vol_{volume_fraction}' if volume_fraction is not None else '')
+    output_name = data_folder_path + (f'N{n_pix}_soft{soft_phase:g}_{cg_mode}_' if (n_pix != 64 or soft_phase_exponent != 5
+                                                                              or cg_mode != 'residual') else '') \
+        + f'{preconditioner_type}_eta_{eta}_w_{weight}_{optimizer}' + (
+        f'_vol_{volume_fraction}' if volume_fraction is not None else '') + (
+        f'_noise{init_noise_grid}' if init_noise_grid else '')
     parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
                   'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
-                  'soft_phase': soft_phase, 'optimizer': optimizer,
+                  'soft_phase': soft_phase, 'optimizer': optimizer, 'cg_mode': cg_mode,
                   'volume_fraction': volume_fraction if volume_fraction is not None else -1.0,
                   'target_C_voigt': material_models.compute_Voigt_notation_4order(elastic_C_target)}
 
@@ -380,7 +435,15 @@ if __name__ == '__main__':
         np.random.seed(MPI.COMM_WORLD.rank)
         coords = discretization.fft.coords
         phase_field_0.s[0, 0] = (np.sin(coords[0] * 4 * np.pi) + np.sin(coords[1] * 4 * np.pi) + 2) / 4
-        phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
+        noise_grid = init_noise_grid
+        if noise_grid:  # the noise of a serial run on noise_grid^2, pixel-replicated: same start on every grid / MPI split
+            np.random.seed(0)
+            factor = number_of_pixels[0] // noise_grid
+            noise = np.kron(np.random.rand(1, 1, noise_grid, noise_grid), np.ones((factor, factor)))
+            (x0, y0), (nx, ny) = discretization.fft.subdomain_locations, discretization.fft.nb_subdomain_grid_pts
+            phase_field_0.s[0, 0] += 0.5 * noise[0, 0, x0:x0 + nx, y0:y0 + ny]
+        else:
+            phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
 
     iterat = 0
     phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
@@ -415,14 +478,14 @@ if __name__ == '__main__':
         """Callback to store and visualize progress during optimization."""
         global iterat
         iterat += 1
-        if history_writer is not None:
+        if history_writer is not None and (iterat - 1) % history_every == 0:
             phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
             # the optimizers evaluate the accepted iterate last, so last_f is f(x_current)
             history_writer.write(objective=evaluations['last_f'],
                                  volume_fraction=MPI.COMM_WORLD.allreduce(np.sum(x_current)) / np.prod(
                                      number_of_pixels),
                                  nb_evaluations=evaluations['count'])
-        if MPI.COMM_WORLD.size == 1:
+        if MPI.COMM_WORLD.size == 1 and show_plots:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
             plt.figure()
@@ -439,6 +502,12 @@ if __name__ == '__main__':
     # Run optimization
     # volume weights: <a, phase> = mean(phase) = volume fraction (a is the local slice under MPI)
     a = np.full(phase_field_0.s.size, 1.0 / np.prod(number_of_pixels))
+    # stop when max |gradient| < gtol. The gradient w.r.t. the nodal phase values scales with the pixel area ~ 1/N^2,
+    # so the 64^2 value 1e-3 is scaled: the same criterion on every grid (unscaled, 128^2 stopped after 44 evaluations)
+    gtol = 1e-3 * (64 / n_pix) ** 2
+    # GTOL overrides it, e.g. GTOL=0: stop only on the step test (xtol: largest change of the phase < 1e-3) or maxiter
+    # -- the max-norm of the gradient does not scale exactly with h^2 (scaled, 128^2 still stopped at 52 evaluations)
+    gtol = float(os.environ.get('GTOL', gtol))
     optimizer_options = {'l_bfgs': dict(xtol=1e-3, maxiter=500, maxcor=20, c1=1e-4, max_halvings=40),
                          'mma': dict(xtol=1e-3, maxiter=500),
                          'tr_newton': dict(maxiter=200)}[optimizer]
@@ -451,7 +520,7 @@ if __name__ == '__main__':
         constraint_target=volume_fraction,
         constraint_type='ineq' if optimizer == 'mma' else 'eq',
         hessp=fd_hessian_product if optimizer == 'tr_newton' else None,
-        gtol=1e-3,
+        gtol=gtol,
         comm=MPI.COMM_WORLD,
         callback=my_callback,
         disp=True,
@@ -569,6 +638,7 @@ if __name__ == '__main__':
     io_utils.save_fields(output_name + '_final.nc', [solution_phase], attributes={
         **parameters,
         'nb_iterations': iterat,
+        'elapsed_time': time.time() - start_time,
         'homogenized_C_voigt': material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
         'target_stresses': target_stresses,
         'homogenized_stresses': homogenized_stresses,

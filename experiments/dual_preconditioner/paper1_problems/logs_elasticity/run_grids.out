@@ -1,0 +1,17 @@
+P1_N512_kappa1e-3_green: k* = 10 (e_k <= 1e-10), production stop at k = 23 (e_k / e_0 = 7.36e-27), 2.45 s; A_h = 0.8061353103; total 14.4 s
+P1_N512_kappa1e-3_dual: k* = 7 (e_k <= 1e-10), production stop at k = 18 (e_k / e_0 = 1.49e-25), 3.71 s; A_h = 0.8061353103; total 16.8 s
+P3_N512_kappa1e-3_dual: k* = 37 (e_k <= 1e-10), production stop at k = 55 (e_k / e_0 = 6.41e-16), 10.89 s; A_h = 0.5979685013; total 57.3 s
+P2_N512_kappa1e-3_dual: k* = 44 (e_k <= 1e-10), production stop at k = 68 (e_k / e_0 = 2.59e-14), 13.17 s; A_h = 0.1328782489; total 76.7 s
+P2_N512_kappa1e-3_green: k* = 105 (e_k <= 1e-10), production stop at k = 161 (e_k / e_0 = 5.35e-14), 16.19 s; A_h = 0.1328782489; total 106.1 s
+P3_N512_kappa1e-3_green: k* = 155 (e_k <= 1e-10), production stop at k = 205 (e_k / e_0 = 1.91e-13), 20.70 s; A_h = 0.5979685013; total 115.2 s
+P3_N512_kappa1e-3_green_jacobi: k* = 88 (e_k <= 1e-10), production stop at k = 114 (e_k / e_0 = 5.46e-14), 10.19 s; A_h = 0.5979685013; total 79.5 s
+P1_N1024_kappa1e-3_dual: k* = 7 (e_k <= 1e-10), production stop at k = 19 (e_k / e_0 = 1.50e-25), 15.44 s; A_h = 0.8058499057; total 73.7 s
+P1_N512_kappa1e-3_green_jacobi: k* = 252 (e_k <= 1e-10), production stop at k = 331 (e_k / e_0 = 5.10e-14), 31.42 s; A_h = 0.8061353103; total 167.7 s
+P1_N1024_kappa1e-3_green: k* = 11 (e_k <= 1e-10), production stop at k = 23 (e_k / e_0 = 7.66e-26), 14.48 s; A_h = 0.8058499057; total 80.6 s
+P3_N1024_kappa1e-3_dual: k* = 37 (e_k <= 1e-10), production stop at k = 55 (e_k / e_0 = 6.69e-16), 43.42 s; A_h = 0.5941563973; total 237.4 s
+P2_N1024_kappa1e-3_dual: k* = 46 (e_k <= 1e-10), production stop at k = 70 (e_k / e_0 = 3.93e-14), 56.49 s; A_h = 0.1284126233; total 333.8 s
+P2_N1024_kappa1e-3_green: k* = 109 (e_k <= 1e-10), production stop at k = 168 (e_k / e_0 = 4.13e-14), 72.85 s; A_h = 0.1284126233; total 439.3 s
+P3_N1024_kappa1e-3_green: k* = 155 (e_k <= 1e-10), production stop at k = 206 (e_k / e_0 = 1.79e-13), 87.83 s; A_h = 0.5941563973; total 517.2 s
+P3_N1024_kappa1e-3_green_jacobi: k* = 153 (e_k <= 1e-10), production stop at k = 196 (e_k / e_0 = 9.21e-14), 74.29 s; A_h = 0.5941563973; total 1140.2 s
+P1_N1024_kappa1e-3_green_jacobi: k* = 449 (e_k <= 1e-10), production stop at k = 645 (e_k / e_0 = 6.13e-14), 982.60 s; A_h = 0.8058499057; total 2573.4 s
+P2_N512_kappa1e-3_green_jacobi: k* = 6818 (e_k <= 1e-10), production stop at k = 9158 (e_k / e_0 = 1.28e-13), 1155.29 s; A_h = 0.1328782489; total 5850.9 s

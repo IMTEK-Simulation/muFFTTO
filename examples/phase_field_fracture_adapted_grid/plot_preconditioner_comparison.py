@@ -1,4 +1,4 @@
-"""Mechanics preconditioners (Green vs Green-Jacobi) on the same problem at several grid sizes.
+"""Mechanics preconditioners (Green vs Green-Jacobi vs dual) on the same problem at several grid sizes.
 
 Reads contact_fracture.nc files of example_2D_phase_field_fracture_contact_adapted_grid.py; grid size and
 preconditioner are taken from the file attributes (nb_grid_pts, mechanics_preconditioner). One column per grid size:
@@ -19,8 +19,8 @@ import numpy as np
 
 # reference palette, light surface; categorical slots in fixed order, colour follows the preconditioner
 SURFACE, TEXT_1, TEXT_2, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e1", "#a3a29c"
-COLORS = {"Green": "#2a78d6", "Green_Jacobi": "#eb6834"}
-LABELS = {"Green": "Green", "Green_Jacobi": "Green-Jacobi"}
+COLORS = {"Green": "#2a78d6", "Green_Jacobi": "#eb6834", "dual": "#1baf7a"}
+LABELS = {"Green": "Green", "Green_Jacobi": "Green-Jacobi", "dual": "dual GK(A⁻¹)G"}
 
 out, title, subtitle = sys.argv[1:4]
 runs = {}
@@ -62,7 +62,7 @@ for column, n in enumerate(sizes):
         ax.set_axisbelow(True)
         ax.set_title(f"{n}²   {row_titles[row]}" if row == 0 else row_titles[row], loc="left", fontsize=11,
                      color=TEXT_1, pad=5)
-        for preconditioner in ("Green", "Green_Jacobi"):
+        for preconditioner in ("Green", "Green_Jacobi", "dual"):
             run = runs.get((n, preconditioner))
             if run is None:
                 continue
@@ -80,15 +80,16 @@ axes[0, 0].invert_xaxis()
 fig.savefig(out, dpi=200, facecolor=SURFACE)
 
 print(f"| grid | preconditioner | reached F{component} | load steps | CG total | CG / step (median) | wall time | "
-      f"speed-up GJ |")
+      f"speed-up vs Green |")
 print("|---|---|---|---|---|---|---|---|")
 for n in sizes:
-    for preconditioner in ("Green", "Green_Jacobi"):
+    for preconditioner in ("Green", "Green_Jacobi", "dual"):
         run = runs.get((n, preconditioner))
         if run is None:
             continue
         other = runs.get((n, "Green"))
-        speedup = f"{other['wall'][-1] / run['wall'][-1]:.2f}x" if preconditioner == "Green_Jacobi" and other else ""
         done = "" if abs(run["F"][-1] - run["F_end"]) < 1e-9 else " (stopped)"
+        speedup = (f"{other['wall'][-1] / run['wall'][-1]:.2f}x" if preconditioner != "Green" and other and not done
+                   else "")
         print(f"| {n}² | {LABELS[preconditioner]} | {run['F'][-1]:.3f}{done} | {len(run['F'])} | "
               f"{int(run['cg'].sum()):,} | {np.median(run['cg']):.0f} | {run['wall'][-1]:.0f} s | {speedup} |")

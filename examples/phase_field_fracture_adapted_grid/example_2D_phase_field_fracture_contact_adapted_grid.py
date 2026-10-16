@@ -168,8 +168,15 @@ damage_preconditioner = 'Green_Jacobi'     # or 'Green'
 damage_in_medium = False
 # mechanics (inner CG of the trust region): 'Green' = fixed Green operator of the undamaged
 # solid; 'Green_Jacobi' = D^-1/2 G D^-1/2 with D = diag(B^T A B + R) of the current tangent,
-# recomputed at the start of every trust-region solve (M stays fixed within a solve)
+# recomputed at the start of every trust-region solve (M stays fixed within a solve);
+# 'dual' = G K(C_ref A^+ C_ref) G with the current tangent A (pseudo-inverse through |eigenvalues|, so it stays SPD for
+# an indefinite tangent), C_ref = the solid tangent at F = I (as Green); equals G wherever A = C_ref; rebuilt per
+# trust-region solve (DUAL_UPDATE)
 mechanics_preconditioner = 'Green_Jacobi'
+DUAL_EIGENVALUE_CUTOFF = 1e-6                # 'dual': relative cutoff of the tangent pseudo-inverse
+# 'dual': rebuild P from the current tangent once per trust-region solve ('solve', like Green-Jacobi) or after every
+# accepted Newton iterate ('newton', via the optimizer callback: between two Steihaug solves, never inside one)
+DUAL_UPDATE = 'solve'
 
 # trust-region Newton-CG. The solver works on the energy divided by the force scale
 # s = E_solid h^(dim-1) (h = pixel size): a nodal force for a unit strain error, so the
@@ -666,6 +673,9 @@ reference_tangent = split_neo_hookean(np.eye(2)[:, :, None], np.array([mu_solid]
 # structure; the identity (delta_ik delta_jl) needs fewer CG iterations than the solid tangent (Ladecky et al.,
 # CMAME 461 (2026) 119269, Sec. 4.5; bubble array, Green-Jacobi: -8 % at 32^2, -19 % at 48^2). The factor 2 mu_solid
 # keeps the magnitude of the solid, i.e. the trust-region norm.
+# Dual: C_ref = the solid tangent at F = I, like Green (with 2 mu I_sym, i.e. without the bulk part, the dual was 2-6x
+# worse than Green and degraded with the contrast; examples/dual_preconditioner_study). Its trial flux C_ref B G f is
+# symmetric, i.e. in the range of a hyperelastic tangent (no stiffness for skew gradients at F = I).
 green_reference = 'identity' if mechanics_preconditioner == 'Green_Jacobi' else 'solid'
 if green_reference == 'identity':
     reference_tangent = 2 * mu_solid * np.einsum('ik,jl->ijkl', np.eye(2), np.eye(2)).reshape(reference_tangent.shape)
@@ -706,8 +716,54 @@ def update_mechanics_jacobi(lam, u_field):
     jacobi_u = float(np.sqrt(reference_diagonal)) * disc_u.get_preconditioner_Jacobi_mugrid(operator=hessian_operator).s
 
 
+# Dual preconditioner P = G K(C_ref A^-1 C_ref) G. With G = K_ref^-1, K_ref = B^T W C_ref B, the flux q = C_ref B G f
+# is admissible (B^T W q = f), so by the complementary energy f.K^-1 f <= q.W A^-1 q = f.P f for an SPD tangent A.
+# The pulled-back tangent carries the grid map, so on an adapted grid P sees J_g and F_g (G does not). The
+# regularization R is only in G.
+tangent_inv_field = disc_u.get_material_data_size_field_mugrid(name='A_dual')
+dual_temp_1 = disc_u.get_unknown_size_field(name='dual_temp_1')
+dual_temp_2 = disc_u.get_unknown_size_field(name='dual_temp_2')
+
+
+def update_mechanics_dual(lam, x):
+    """C_ref A^+ C_ref of the tangent at the state (lam, x) (x: nodal array), for the next Steihaug solve."""
+    update_tangent(lam, x)
+    A = tangent_field.s
+    shape = A.shape
+    A = xp.moveaxis(A.reshape((dim * dim, dim * dim) + shape[4:]), (0, 1), (-2, -1))      # [..., (ij), (kl)]
+    A = 0.5 * (A + xp.swapaxes(A, -1, -2))
+    eigenvalues, eigenvectors = xp.linalg.eigh(A)
+    eigenvalues = xp.abs(eigenvalues)
+    # pseudo-inverse: modes softer than DUAL_EIGENVALUE_CUTOFF x the stiffest one of the same quadrature point are
+    # dropped. At F = I the skew (rotation) mode of a hyperelastic tangent has zero stiffness; a floor would
+    # put a huge weight on it. Only a rigid motion has a skew gradient everywhere, so P stays SPD.
+    keep = eigenvalues > DUAL_EIGENVALUE_CUTOFF * xp.max(eigenvalues, axis=-1, keepdims=True)
+    inverse_eigenvalues = xp.where(keep, 1.0 / xp.where(keep, eigenvalues, 1.0), 0.0)
+    inverse = xp.einsum('...ab,...b,...cb->...ac', eigenvectors, inverse_eigenvalues, eigenvectors)
+    # C_ref A^+ C_ref with C_ref = reference_tangent (the solid at F = I)
+    C_ref = xp.asarray(np.asarray(reference_tangent).reshape(dim * dim, dim * dim))
+    inverse = xp.einsum('ab,...bc,cd->...ad', C_ref, inverse, C_ref)
+    tangent_inv_field.s[...] = xp.moveaxis(inverse, (-2, -1), (0, 1)).reshape(shape)
+
+
+def apply_dual(r, out):
+    """out = G K(C_ref A^-1 C_ref) G r (fields)."""
+    disc_u.fft.communicate_ghosts(r)
+    disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u, input_nodal_field_fnxyz=r,
+                                       output_nodal_field_fnxyz=dual_temp_1)
+    disc_u.fft.communicate_ghosts(dual_temp_1)
+    disc_u.apply_system_matrix_mugrid(material_data_field=tangent_inv_field, input_field_inxyz=dual_temp_1,
+                                      output_field_inxyz=dual_temp_2, formulation='finite_strain')
+    disc_u.fft.communicate_ghosts(dual_temp_2)
+    disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u, input_nodal_field_fnxyz=dual_temp_2,
+                                       output_nodal_field_fnxyz=out)
+
+
 def precond(v):
     r_field.s[...] = xp.asarray(v.reshape(u_shape))
+    if mechanics_preconditioner == 'dual':
+        apply_dual(r_field, Pv_field)
+        return field_to_optimizer(Pv_field)
     if mechanics_preconditioner == 'Green_Jacobi':
         r_field.s[...] *= jacobi_u
     disc_u.fft.communicate_ghosts(r_field)
@@ -822,8 +878,12 @@ def solve_increment(lam):
     for stagger in range(1, max_staggered_iterations + 1):
         if mechanics_preconditioner == 'Green_Jacobi':
             update_mechanics_jacobi(lam, u_fluc)
+        elif mechanics_preconditioner == 'dual':
+            update_mechanics_dual(lam, u_fluc.s)
+        newton_callback = (lambda x: update_mechanics_dual(lam, x)) if (mechanics_preconditioner == 'dual'
+                                                                         and DUAL_UPDATE == 'newton') else None
         res = solvers_nonlinear.minimize(fun=scaled_fun_grad, x0=field_to_optimizer(u_fluc), method=mechanics_solver,
-                                         hessp=scaled_hessp, precond=precond,
+                                         hessp=scaled_hessp, precond=precond, callback=newton_callback,
                                          gtol=SOLVER_GTOL, maxiter=SOLVER_MAXITER, inner_tol=SOLVER_INNER_TOL,
                                          inner_stop='energy', inner_delay=SOLVER_INNER_DELAY,
                                          inner_maxiter=inner_maxiter, comm=comm)
@@ -858,6 +918,7 @@ run_attributes = {'geometry': geometry_name, 'geometry_parameters': repr(geometr
                   'Gc_seed': Gc_seed,
                   'length_scale': length_scale, 'k_residual': k_residual, 'staggered_tol': staggered_tol,
                   'mechanics_preconditioner': mechanics_preconditioner, 'green_reference': green_reference,
+                  'dual_update': DUAL_UPDATE,
                   'mechanics_solver': mechanics_solver,
                   'inner_tol': 'forcing' if SOLVER_INNER_TOL is None else SOLVER_INNER_TOL,
                   'gtol': SOLVER_GTOL, 'force_scale': force_scale,
@@ -890,7 +951,7 @@ if output_root is not None:
     run_name = (f'{geometry_name}_{load_tag}_{element_tag}'
                 f'_{"adapted" if adapt_grid_to_geometry else "regular"}'
                 f'_N{nnn}_Gc{Gc:g}' + (f'r{Gc_range[0]:g}-{Gc_range[1]:g}' if Gc_field == 'random' else '')
-                + f'_{"GJ" if mechanics_preconditioner == "Green_Jacobi" else "G"}'
+                + f'_{ {"Green_Jacobi": "GJ", "Green": "G", "dual": "D"}[mechanics_preconditioner]}'
                 f'_{"EW" if SOLVER_INNER_TOL is None else f"inner{SOLVER_INNER_TOL:g}"}'
                 f'{"_dmg-all" if damage_in_medium else ""}'
                 f'{"" if staggered_tol == 1e-3 else f"_stag{staggered_tol:g}"}'
@@ -899,6 +960,7 @@ if output_root is not None:
                 f'{"" if mechanics_solver == "tr_newton" else "_newton-cg"}'
                 f'{ {"neo_hookean": "", "saint_venant_kirchhoff": "_svk-void", "linear": "_lin-void"}[void_model]}'
                 f'{"_reg-medium" if regularization_region == "medium" else ""}'
+                f'{"_dual-newton" if mechanics_preconditioner == "dual" and DUAL_UPDATE == "newton" else ""}'
                 f'{"_gpu" if device == "gpu" else ""}_' + time.strftime('%Y%m%d-%H%M%S'))
     output_folder = None
     if rank == 0:                          # a new folder; never reuse an existing one

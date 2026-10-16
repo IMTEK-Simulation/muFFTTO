@@ -2017,7 +2017,8 @@ class Discretization:
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
                                         formulation=None,
                                         operator=None,
-                                        invert_zero_mode=False):
+                                        invert_zero_mode=False,
+                                        name='Greens_diagonal_fast'):
         """Assemble the Fourier-space Green preconditioner ``(K_ref)^{-1}``.
 
         Parameters
@@ -2039,11 +2040,15 @@ class Discretization:
             ``K_ref = B^T W B + c N^T W N`` with a mass (reaction) term
             ``c > 0``. Default ``False``: ``K_ref_hat(0)`` is singular for a
             pure stiffness operator and is left as is.
+        name : str, optional
+            Name of the returned field. A second call with the same name
+            reuses (overwrites) the same field, so give every preconditioner
+            that has to coexist on one discretization its own name.
 
         Returns
         -------
         preconditioner_diagonals_ininqks : muGrid complex Field [f, n, f, n, k_x, k_y, (k_z)]
-            Field ``'Greens_diagonal_fast'``: for every wave vector ``k`` the
+            Field ``name``: for every wave vector ``k`` the
             inverse of the (``f*n`` x ``f*n``) block ``K_ref_hat(k)``.
 
         Notes
@@ -2085,7 +2090,7 @@ class Discretization:
             unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
 
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
-                name='Greens_diagonal_fast',  # name of the field
+                name=name,  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
                 sub_pt='nodal_points'
             )  #
@@ -2152,7 +2157,7 @@ class Discretization:
             unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
 
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
-                name='Greens_diagonal_fast',  # name of the field
+                name=name,  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
                 sub_pt='nodal_points'  # sub-point type
             )  #
@@ -2231,6 +2236,7 @@ class Discretization:
                                          constitutive: callable = None,
                                          formulation=None,
                                          operator: callable = None,
+                                         name='jacobi_diagonal_inxyz',
                                          **kwargs):
         """Matrix-free Jacobi preconditioner ``diag(K)^{-1/2}`` via Dirac combs.
 
@@ -2249,6 +2255,10 @@ class Discretization:
             output_field_inxyz=...)`` whose diagonal is computed instead
             (takes precedence over the two arguments above). Its stencil must
             couple only nearest-neighbour pixels.
+        name : str, optional
+            Name of the returned field. A second call with the same name
+            reuses (overwrites) the same field, so give every Jacobi diagonal
+            that has to coexist on one discretization its own name.
         **kwargs
             ``zero_threshold`` (float, default 1.0): value stored where the
             diagonal entry is exactly zero (e.g. void pixels).
@@ -2256,7 +2266,7 @@ class Discretization:
         Returns
         -------
         diagonal_inxyz : muGrid Field [f, n, x, y, z]
-            Field ``'jacobi_diagonal_inxyz'`` containing ``1/sqrt(K_ii)``,
+            Field ``name`` containing ``1/sqrt(K_ii)``,
             to be used as a symmetric (split) scaling ``D^{-1/2} K D^{-1/2}``.
 
         Notes
@@ -2282,7 +2292,7 @@ class Discretization:
 
         threshold = kwargs.get('zero_threshold', 1.)
 
-        diagonal_inxyz = self.get_unknown_size_field(name='jacobi_diagonal_inxyz')
+        diagonal_inxyz = self.get_unknown_size_field(name=name)
         dirac_comb_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_inxyz_temporary')
         dirac_comb_response_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_response_inxyz_temporary')
 
