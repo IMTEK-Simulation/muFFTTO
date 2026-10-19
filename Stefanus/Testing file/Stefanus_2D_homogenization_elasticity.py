@@ -24,9 +24,9 @@ element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
 # Numerical settings ============================
-NX = 128                # Arbitrary number of pixels
-cg_tol = 1e-6           # CG tolerance (relative)
-plot_load_cases = False  # example's plots assume a [0,1] domain -> distorted for this cell
+NX = 256                     # Arbitrary number of pixels
+cg_tol = 1e-6               # CG tolerance (relative)
+plot_load_cases = False     # example's plots assume a [0,1] domain -> distorted for this cell
 # ===============================================
 
 # Unit Cells input: -- PHYSICAL units ===================
@@ -336,9 +336,9 @@ if MPI.COMM_WORLD.rank == 0:
 # ============================================================================================
 # ONE applied load (shear and/or compression) + deformed plot with muFFTTO's visualization_utils
 # ============================================================================================
-SHEAR_STRAIN = 0.0      # engineering shear strain gamma            [-]
-LOAD_X = 0.0             # normal strain in X (negative = compression) [-]
-LOAD_Y = 0.5             # normal strain in Y                          [-]
+SHEAR_STRAIN = 0.00       # engineering shear strain gamma            [-]
+LOAD_X = 0.02             # normal strain in X (negative = compression) [-]
+LOAD_Y = 0.00             # normal strain in Y                          [-]
 
 macro_gradient_ij = np.zeros([dim, dim])
 macro_gradient_ij[0, 1] = SHEAR_STRAIN
@@ -394,6 +394,22 @@ if discretization.communicator.size == 1:
     ax.set_xlabel('x [mm]')
     ax.set_ylabel('y [mm]')
     ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}', fontsize=10)
+    plt.show()
+
+    # ---- same deformed cell, axes normalised to the UNDEFORMED cell (0..1); stretched cell goes past 1 ----
+    elong_x = (x_unit[0][-1, :].mean() - x_unit[0][0, :].mean()) - 1    # right edge - left edge - 1
+    elong_y = (x_unit[1][:, -1].mean() - x_unit[1][:, 0].mean()) - 1    # top edge - bottom edge - 1
+
+    fig, ax = plt.subplots(figsize=(6, 6 * Ly / Lx))
+    ax.pcolormesh(x_unit[0], x_unit[1], phase_field.s[0, 0], cmap=phase_cmap, norm=phase_norm, shading='flat')
+    ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k--', lw=0.8)   # undeformed cell = 0..1
+    ax.set_aspect(Ly / Lx)                                              # keeps the true cell shape
+    ax.set_xlim(min(0, x_unit[0].min()), max(1, x_unit[0].max()))
+    ax.set_ylim(min(0, x_unit[1].min()), max(1, x_unit[1].max()))
+    ax.set_xlabel(r'$x / L_x$')
+    ax.set_ylabel(r'$y / L_y$')
+    ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}\n'
+                 f'elongation: x {elong_x:+.2%}, y {elong_y:+.2%}   (dashed = undeformed cell)', fontsize=10)
     plt.show()
 
 end_time = time.time()
