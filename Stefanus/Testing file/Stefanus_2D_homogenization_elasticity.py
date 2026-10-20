@@ -24,8 +24,9 @@ element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
 # Numerical settings ============================
-NX = 256                     # Arbitrary number of pixels
+NX = 128                     # Arbitrary number of pixels
 cg_tol = 1e-6               # CG tolerance (relative)
+E_LOAD = 1.5                  # load value of every load case below [-]
 plot_load_cases = False     # example's plots assume a [0,1] domain -> distorted for this cell
 # ===============================================
 
@@ -275,7 +276,7 @@ for i in range(dim):
     for j in range(dim):
         # set macroscopic gradient (Load)
         macro_gradient_ij = np.zeros([dim, dim])
-        macro_gradient_ij[i, j] = 1
+        macro_gradient_ij[i, j] = E_LOAD
         # Set up right hand side
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -283,8 +284,7 @@ for i in range(dim):
         discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                       macro_gradient_field_ijqxyz=macro_gradient_field,
                                       rhs_inxyz=rhs_field)
-        # tol is ABSOLUTE on ||b - Ax||; scale with ||b|| so cg_tol (line 51) acts as a RELATIVE tolerance
-        # norm_b = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+
         # print(f'Norm of b = {norm_b:.5}')
         Solvers.conjugate_gradients(
             comm=discretization.communicator,
@@ -293,10 +293,9 @@ for i in range(dim):
             b=rhs_field,  # right-hand side
             x=solution_field,
             prec=M_fun,
-            tol=cg_tol, #* norm_b,
+            tol=cg_tol,
             maxiter=2000,
             callback=callback)
-
 
         if plot_load_cases and discretization.communicator.size == 1:
             # Plot the first two components of the solution field
@@ -322,95 +321,137 @@ for i in range(dim):
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,
             formulation='small_strain')
-        homogenized_C_ijkl[i, j] = stress_ij             # same as before
-        homogenized_stress[(i, j)] = stress_ij           # keep it for printing
+        homogenized_C_ijkl[i, j] = stress_ij / E_LOAD
+        homogenized_stress[(i, j)] = stress_ij
 
 fmt = {'float_kind': lambda x: f"{x:0.8f}"}
 if MPI.COMM_WORLD.rank == 0:
     print("Homogenized elastic tangent =\n" +
           np.array2string(material_models.compute_Voigt_notation_4order(homogenized_C_ijkl), formatter=fmt))
     for (i, j), stress_ij in homogenized_stress.items():
-        print(f"Homogenized stress for unit macro strain E[{i},{j}] = 1  (units of mu_m) =\n" +
+        print(f"Homogenized stress for unit macro strain E[{i},{j}] = {E_LOAD}  (units of mu_m) =\n" +
               np.array2string(stress_ij, formatter=fmt))
+
+# ---- P11 vs E_xx, small strain: one real solve per E_xx  ->  CSV for a spreadsheet ----
+# Same load as the loop above (macro_gradient_ij[0, 0] = E_LOAD), scaled from 0 up to E_LOAD.
+# The last point (E_xx = E_LOAD) must equal sigma_xx printed above for "E[0,0] = E_LOAD".
+E_XX_VALUES = np.linspace(0.0, E_LOAD, 11)          # applied macro gradient E_xx from 0 up to E_LOAD (line 278)  [-]
+P11_list, P22_list = [], []
+for E_xx in E_XX_VALUES:
+    macro_gradient_ij = np.zeros([dim, dim])
+    macro_gradient_ij[0, 0] = E_xx                  # same entry as macro_gradient_ij[i, j] with (i, j) = (0, 0)
+    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
+    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                  macro_gradient_field_ijqxyz=macro_gradient_field,
+                                  rhs_inxyz=rhs_field)
+    solution_field.s.fill(0)
+    if E_xx != 0:
+        Solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
+                                    hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
+                                    tol=cg_tol, maxiter=5000, callback=callback)
+    stress = discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+                                                          displacement_field_inxyz=solution_field,
+                                                          macro_gradient_field_ijqxyz=macro_gradient_field,
+                                                          formulation='small_strain')
+    P11_list.append(stress[0, 0])                   # small strain: P11 = sigma_xx
+    P22_list.append(stress[1, 1])                   # sigma_yy (lateral stress, cell width held fixed)
+
+if MPI.COMM_WORLD.rank == 0:
+    P11_arr, P22_arr = np.array(P11_list), np.array(P22_list)
+    # link to the unit-load result printed above
+    print(f"P11 at E_xx = {E_LOAD} : {P11_arr[-1]:.8f}   |   sigma_xx for E[0,0] = {E_LOAD} above : "
+          f"{homogenized_stress[(0, 0)][0, 0]:.8f}   (units of mu_m, must be equal)")
+    print(f"P22 at E_xx = {E_LOAD} : {P22_arr[-1]:.8f}   |   sigma_yy for E[0,0] = {E_LOAD} above : "
+          f"{homogenized_stress[(0, 0)][1, 1]:.8f}")
+    print(' E_xx     P11 [mu_m]    P11 [MPa]    P22 [mu_m]')
+    for E_xx, p11, p22 in zip(E_XX_VALUES, P11_arr, P22_arr):
+        print(f'{E_xx:5.2f}  {p11:12.8f}  {p11 * S_REF:11.8f}  {p22:12.8f}')
+
+    table = np.column_stack([E_XX_VALUES, P11_arr, P11_arr * S_REF, P22_arr])
+    fname = f'P11_vs_Exx_small_strain_{number_of_pixels[0]}x{number_of_pixels[1]}.csv'
+    np.savetxt(fname, table, delimiter=',', fmt='%.8f',
+               header='E_xx [-],P11 [mu_m],P11 [MPa],P22 [mu_m]', comments='')
+    print(f'saved {os.path.abspath(fname)}')
 
 # ============================================================================================
 # ONE applied load (shear and/or compression) + deformed plot with muFFTTO's visualization_utils
 # ============================================================================================
-SHEAR_STRAIN = 0.00       # engineering shear strain gamma            [-]
-LOAD_X = 0.02             # normal strain in X (negative = compression) [-]
-LOAD_Y = 0.00             # normal strain in Y                          [-]
-
-macro_gradient_ij = np.zeros([dim, dim])
-macro_gradient_ij[0, 1] = SHEAR_STRAIN
-macro_gradient_ij[0, 0] = LOAD_X
-macro_gradient_ij[1, 1] = LOAD_Y
-
-# solve the cell problem for this load (same steps as inside the loop)
-discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
-                                               macro_gradient_field_ijqxyz=macro_gradient_field)
-discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                              macro_gradient_field_ijqxyz=macro_gradient_field,
-                              rhs_inxyz=rhs_field)
-solution_field.s.fill(0)
-Solvers.conjugate_gradients(comm=discretization.communicator,
-                            fc=discretization.field_collection,
-                            hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
-                            tol=cg_tol, maxiter=5000, callback=callback)
-
-stress_load = discretization.get_homogenized_stress_mugrid(
-    material_data_field_ijklqxyz=material_data_field_C_0,
-    displacement_field_inxyz=solution_field,
-    macro_gradient_field_ijqxyz=macro_gradient_field,
-    formulation='small_strain')
-if MPI.COMM_WORLD.rank == 0:
-    print(f"Applied macro gradient =\n{macro_gradient_ij}\nHomogenized stress (units of mu_m) =\n" +
-          np.array2string(stress_load, formatter=fmt) +
-          "\n(in MPa) =\n" + np.array2string(stress_load * S_REF, formatter=fmt))
-
-# muFFTTO's visualization_utils works on a UNIT cell [0,1] x [0,1].
-# Map the load and the displacement to that unit cell, let muFFTTO deform the grid, map back to mm.
-if discretization.communicator.size == 1:
-    L_cell = np.diag(domain_size)                                   # cell size, units of r
-    E_unit = np.linalg.inv(L_cell) @ macro_gradient_ij @ L_cell     # same deformation in unit-cell coords
-    u_unit = discretization.get_unknown_size_field(name='u_unit_cell')
-    u_unit.s[0] = solution_field.s[0] / domain_size[0]
-    u_unit.s[1] = solution_field.s[1] / domain_size[1]
-
-    x_unit = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
-                                                                  macro_gradient_ij=E_unit,
-                                                                  displacement_fluctuation=u_unit)
-    x_mm = np.einsum('ij,jxy->ixy', L_cell, x_unit) * L_REF        # deformed nodes [mm]
-
-    visualization_utils.plot_field_on_grid(coordinates_for_plot=x_mm,
-                                           field_to_plot=phase_field.s[0, 0],   # 0 matrix, 1 void, 2 stiff
-                                           name=f'deformed cell [mm], gamma = {SHEAR_STRAIN}, '
-                                                f'eps_x = {LOAD_X}, eps_y = {LOAD_Y}')
-
-    # same muFFTTO coordinates, drawn without the black grid lines and with the phase colours
-    fig, ax = plt.subplots(figsize=(6, 6 * Ly_mm / Lx_mm))
-    ax.pcolormesh(x_mm[0], x_mm[1], phase_field.s[0, 0], cmap=phase_cmap, norm=phase_norm, shading='flat')
-    ax.plot([0, Lx_mm, Lx_mm, 0, 0], [0, 0, Ly_mm, Ly_mm, 0], 'k--', lw=0.8)   # undeformed cell
-    ax.set_aspect('equal')
-    ax.set_xlabel('x [mm]')
-    ax.set_ylabel('y [mm]')
-    ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}', fontsize=10)
-    plt.show()
-
-    # ---- same deformed cell, axes normalised to the UNDEFORMED cell (0..1); stretched cell goes past 1 ----
-    elong_x = (x_unit[0][-1, :].mean() - x_unit[0][0, :].mean()) - 1    # right edge - left edge - 1
-    elong_y = (x_unit[1][:, -1].mean() - x_unit[1][:, 0].mean()) - 1    # top edge - bottom edge - 1
-
-    fig, ax = plt.subplots(figsize=(6, 6 * Ly / Lx))
-    ax.pcolormesh(x_unit[0], x_unit[1], phase_field.s[0, 0], cmap=phase_cmap, norm=phase_norm, shading='flat')
-    ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k--', lw=0.8)   # undeformed cell = 0..1
-    ax.set_aspect(Ly / Lx)                                              # keeps the true cell shape
-    ax.set_xlim(min(0, x_unit[0].min()), max(1, x_unit[0].max()))
-    ax.set_ylim(min(0, x_unit[1].min()), max(1, x_unit[1].max()))
-    ax.set_xlabel(r'$x / L_x$')
-    ax.set_ylabel(r'$y / L_y$')
-    ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}\n'
-                 f'elongation: x {elong_x:+.2%}, y {elong_y:+.2%}   (dashed = undeformed cell)', fontsize=10)
-    plt.show()
+# SHEAR_STRAIN = 0.00       # engineering shear strain gamma            [-]
+# LOAD_X = 0.02             # normal strain in X (negative = compression) [-]
+# LOAD_Y = 0.00             # normal strain in Y                          [-]
+#
+# macro_gradient_ij = np.zeros([dim, dim])
+# macro_gradient_ij[0, 1] = SHEAR_STRAIN
+# macro_gradient_ij[0, 0] = LOAD_X
+# macro_gradient_ij[1, 1] = LOAD_Y
+#
+# # solve the cell problem for this load (same steps as inside the loop)
+# discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradient_ij,
+#                                                macro_gradient_field_ijqxyz=macro_gradient_field)
+# discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+#                               macro_gradient_field_ijqxyz=macro_gradient_field,
+#                               rhs_inxyz=rhs_field)
+# solution_field.s.fill(0)
+# Solvers.conjugate_gradients(comm=discretization.communicator,
+#                             fc=discretization.field_collection,
+#                             hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
+#                             tol=cg_tol, maxiter=5000, callback=callback)
+#
+# stress_load = discretization.get_homogenized_stress_mugrid(
+#     material_data_field_ijklqxyz=material_data_field_C_0,
+#     displacement_field_inxyz=solution_field,
+#     macro_gradient_field_ijqxyz=macro_gradient_field,
+#     formulation='small_strain')
+# if MPI.COMM_WORLD.rank == 0:
+#     print(f"Applied macro gradient =\n{macro_gradient_ij}\nHomogenized stress (units of mu_m) =\n" +
+#           np.array2string(stress_load, formatter=fmt) +
+#           "\n(in MPa) =\n" + np.array2string(stress_load * S_REF, formatter=fmt))
+#
+# # muFFTTO's visualization_utils works on a UNIT cell [0,1] x [0,1].
+# # Map the load and the displacement to that unit cell, let muFFTTO deform the grid, map back to mm.
+# if discretization.communicator.size == 1:
+#     L_cell = np.diag(domain_size)                                   # cell size, units of r
+#     E_unit = np.linalg.inv(L_cell) @ macro_gradient_ij @ L_cell     # same deformation in unit-cell coords
+#     u_unit = discretization.get_unknown_size_field(name='u_unit_cell')
+#     u_unit.s[0] = solution_field.s[0] / domain_size[0]
+#     u_unit.s[1] = solution_field.s[1] / domain_size[1]
+#
+#     x_unit = visualization_utils.get_deformed_grid_coords_two_dim(discretization,
+#                                                                   macro_gradient_ij=E_unit,
+#                                                                   displacement_fluctuation=u_unit)
+#     x_mm = np.einsum('ij,jxy->ixy', L_cell, x_unit) * L_REF        # deformed nodes [mm]
+#
+#     visualization_utils.plot_field_on_grid(coordinates_for_plot=x_mm,
+#                                            field_to_plot=phase_field.s[0, 0],   # 0 matrix, 1 void, 2 stiff
+#                                            name=f'deformed cell [mm], gamma = {SHEAR_STRAIN}, '
+#                                                 f'eps_x = {LOAD_X}, eps_y = {LOAD_Y}')
+#
+#     # same muFFTTO coordinates, drawn without the black grid lines and with the phase colours
+#     fig, ax = plt.subplots(figsize=(6, 6 * Ly_mm / Lx_mm))
+#     ax.pcolormesh(x_mm[0], x_mm[1], phase_field.s[0, 0], cmap=phase_cmap, norm=phase_norm, shading='flat')
+#     ax.plot([0, Lx_mm, Lx_mm, 0, 0], [0, 0, Ly_mm, Ly_mm, 0], 'k--', lw=0.8)   # undeformed cell
+#     ax.set_aspect('equal')
+#     ax.set_xlabel('x [mm]')
+#     ax.set_ylabel('y [mm]')
+#     ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}', fontsize=10)
+#     plt.show()
+#
+#     # ---- same deformed cell, axes normalised to the UNDEFORMED cell (0..1); stretched cell goes past 1 ----
+#     elong_x = (x_unit[0][-1, :].mean() - x_unit[0][0, :].mean()) - 1    # right edge - left edge - 1
+#     elong_y = (x_unit[1][:, -1].mean() - x_unit[1][:, 0].mean()) - 1    # top edge - bottom edge - 1
+#
+#     fig, ax = plt.subplots(figsize=(6, 6 * Ly / Lx))
+#     ax.pcolormesh(x_unit[0], x_unit[1], phase_field.s[0, 0], cmap=phase_cmap, norm=phase_norm, shading='flat')
+#     ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0], 'k--', lw=0.8)   # undeformed cell = 0..1
+#     ax.set_aspect(Ly / Lx)                                              # keeps the true cell shape
+#     ax.set_xlim(min(0, x_unit[0].min()), max(1, x_unit[0].max()))
+#     ax.set_ylim(min(0, x_unit[1].min()), max(1, x_unit[1].max()))
+#     ax.set_xlabel(r'$x / L_x$')
+#     ax.set_ylabel(r'$y / L_y$')
+#     ax.set_title(f'deformed cell: gamma = {SHEAR_STRAIN}, eps_x = {LOAD_X}, eps_y = {LOAD_Y}\n'
+#                  f'elongation: x {elong_x:+.2%}, y {elong_y:+.2%}   (dashed = undeformed cell)', fontsize=10)
+#     plt.show()
 
 end_time = time.time()
 elapsed_time = end_time - start_time
