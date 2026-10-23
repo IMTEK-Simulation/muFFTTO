@@ -20,14 +20,14 @@ from muFFTTO import visualization_utils
 
 problem_type = 'elasticity' #or conductivity
 discretization_type = 'finite_element'
-element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
+element_type = 'biquadratic_rectangle'
 formulation = 'small_strain'
 
 # Numerical settings ============================
-NX = 512                     # Arbitrary number of pixels
-cg_tol = 1e-6               # CG tolerance (relative)
+NX = 512                    # Arbitrary number of pixels
+cg_tol = 1e-6               # CG tolerance
 E_LOAD = 1                  # load value of every basics load value before but not for PAPER CASES
-plot_load_cases = False     # example's plots assume a [0,1] domain -> distorted for this cell
+plot_load_cases = False     # example's distortion plots assume a [0,1] domain -> distorted for this cell
 # ===============================================
 
 # Unit Cells input: -- PHYSICAL units ===================
@@ -293,7 +293,7 @@ for i in range(dim):
             b=rhs_field,  # right-hand side
             x=solution_field,
             prec=M_fun,
-            tol=cg_tol,
+            atol=cg_tol, rtol=0,
             maxiter=2000,
             callback=callback)
 
@@ -401,7 +401,7 @@ def homogenized_stress_for(E_macro):
     if np.any(E_macro != 0):
         Solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
                                     hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
-                                    tol=cg_tol, maxiter=5000, callback=callback)
+                                    atol=cg_tol, rtol=0, maxiter=5000, callback=callback)
     return discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
                                                         displacement_field_inxyz=solution_field,
                                                         macro_gradient_field_ijqxyz=macro_gradient_field,
