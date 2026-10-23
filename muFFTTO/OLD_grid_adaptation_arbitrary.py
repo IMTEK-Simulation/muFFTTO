@@ -534,6 +534,7 @@ def build_periodic_plot_coordinates(
     return plot_coordinates
 
 PathLike = Union[str, Path]
+
 def run_grid_adaptation_workflow(
     input_path: PathLike,
     coarse_Nx: int = 16,
@@ -542,7 +543,7 @@ def run_grid_adaptation_workflow(
     Ly: float = 1.0,
     relax_iters: int = 400,
     relax_omega: float = 0.35,
-    relax_b: float = 0.5,
+    relax_b: float = 0,
     verbose: bool = True,
     fix_boundary: bool = True,
 ) -> dict[str, np.ndarray]:
@@ -618,7 +619,7 @@ def run_grid_adaptation_workflow(
     # if relax_iters < 0:
     #     raise ValueError("relax_iters must be non-negative.")
     #
-    # data = np.load(input_path).astype(np.float32)
+    data = np.load(input_path).astype(np.float32)
     #
     # if data.ndim != 2:
     #     raise ValueError(
@@ -792,18 +793,18 @@ def run_grid_adaptation_workflow(
         & (~coarse_interface_node_refined)
     )
 
-    if verbose:
-        print(
-            "Original interface nodes:",
-            np.count_nonzero(coarse_interface_node),
-        )
-        print(
-            "Refined interface nodes:",
-            np.count_nonzero(
-                coarse_interface_node_refined
-            ),
-        )
-        print("Removed nodes:", removed_count)
+    # if verbose:
+    #     print(
+    #         "Original interface nodes:",
+    #         np.count_nonzero(coarse_interface_node),
+    #     )
+    #     print(
+    #         "Refined interface nodes:",
+    #         np.count_nonzero(
+    #             coarse_interface_node_refined
+    #         ),
+    #     )
+    #     print("Removed nodes:", removed_count)
 
     # ------------------------------------------------------------------
     # Project refined interface nodes to nearest fine edge points
@@ -955,6 +956,430 @@ def run_grid_adaptation_workflow(
     }
 
 
+def run_grid_adaptation_workflow_2(
+    phase_field_geom: np.array,
+    coarse_Nx: int = 16,
+    coarse_Ny: int = 16,
+    Lx: float = 1.0,
+    Ly: float = 1.0,
+    relax_iters: int = 400,
+    relax_omega: float = 0.35,
+    relax_b: float = 0.5,
+    verbose: bool = True,
+    fix_boundary: bool = True,
+) -> dict[str, np.ndarray]:
+    """Run the complete image-to-deformed-grid workflow.
+
+    Parameters
+    ----------
+    input_path:
+        Path to a 2-D image saved as a NumPy ``.npy`` file.
+    coarse_Nx, coarse_Ny:
+        Number of coarse cells in the x and y directions.
+    Lx, Ly:
+        Physical domain lengths in the x and y directions.
+    relax_iters:
+        Number of spring-relaxation iterations.
+    relax_omega:
+        Relaxation step size.
+    relax_b:
+        Parameter controlling distance-dependent node stiffness.
+    verbose:
+        If True, print workflow information.
+    fix_boundary:
+        Currently unused (the code that fixed the left/bottom boundary nodes
+        is commented out in the body).
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Dictionary containing the selected solver, plotting, phase, and
+        interface outputs.
+
+        ``coords_of_displaced_nodes`` has shape ``(2, coarse_Ny, coarse_Nx)``
+        and is intended for muFFTTO.
+
+        ``full_plot_coords_of_displaced_nodes`` has shape
+        ``(2, coarse_Ny + 1, coarse_Nx + 1)`` and is intended for plotting.
+
+        Further keys: ``phase_mask_label`` (fine labels, ``(ny, nx)``),
+        ``coarse_phase_label`` (majority-vote labels, ``(coarse_Ny, coarse_Nx)``),
+        ``coarse_interface_cell`` (bool, ``(coarse_Ny, coarse_Nx)``),
+        ``phase_mask_binary`` and ``edge_mask`` (fine, from the Otsu step).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``input_path`` does not exist.
+    ValueError
+        For non-positive grid sizes / domain lengths, negative
+        ``relax_iters``, a non-2-D image, or if no edge pixels are found.
+
+    Notes
+    -----
+    The coordinate arrays use the layout ``[xy, j(y), i(x)]`` (see the module
+    docstring), the phase labels the matching ``[j, i]`` layout. The coarse
+    phase labels are evaluated on the *reference* grid; the grid deformation
+    does not change which coarse cell carries which phase.
+    """
+    #input_path = Path(input_path)
+
+    # if not input_path.is_file():
+    #     raise FileNotFoundError(
+    #         f"Input file does not exist: {input_path}"
+    #     )
+    #
+    # if coarse_Nx < 1 or coarse_Ny < 1:
+    #     raise ValueError(
+    #         "coarse_Nx and coarse_Ny must be positive integers."
+    #     )
+    #
+    # if Lx <= 0 or Ly <= 0:
+    #     raise ValueError("Lx and Ly must be positive.")
+    #
+    # if relax_iters < 0:
+    #     raise ValueError("relax_iters must be non-negative.")
+    #
+    #data = np.load(input_path).astype(np.float32)
+    #
+    # if data.ndim != 2:
+    #     raise ValueError(
+    #         "Expected a 2-D input image, "
+    #         f"but got shape {data.shape}."
+    #     )
+    #
+    # if verbose:
+    #     print(f"Loaded data successfully: {input_path}")
+
+    # ------------------------------------------------------------------
+    # Fine-grid Otsu detection
+    # ------------------------------------------------------------------
+    # start_time = time.time()
+    # results = otsu_edgeDetection_and_phaseIndicator(data)
+    # elapsed_time = time.time() - start_time
+
+    phase_mask_binary = phase_field_geom
+
+
+
+    edge_mask = results["edge_mask"]
+
+    phase_mask_label = results["phase_mask_label"]
+
+
+    # if verbose:
+    #     print(f"Otsu processing time: {elapsed_time:.4f} s")
+    #     print(f"Data shape: {data.shape}")
+    #     print(f"Edge-mask shape: {edge_mask.shape}")
+    #     print(f"Phase-label shape: {phase_mask_label.shape}")
+    #     print(
+    #         "Fine phase labels:",
+    #         np.unique(phase_mask_label),
+    #     )
+    #
+    #     if "number_of_phase_regions" in results:
+    #         print(
+    #             "Number of phase regions:",
+    #             results["number_of_phase_regions"],
+    #         )
+
+    ny, nx = data.shape
+    edge_binary = (edge_mask > 0).astype(np.uint8)
+
+    # ------------------------------------------------------------------
+    # Fine edge points
+    # ------------------------------------------------------------------
+    edge_idx_y, edge_idx_x = np.nonzero(edge_binary)
+
+    # Edge pixel (row j, column i) -> physical pixel-center coordinates
+    edge_pts_x = (edge_idx_x + 0.5) / nx * Lx
+    edge_pts_y = (edge_idx_y + 0.5) / ny * Ly
+
+    fine_edge_points = np.column_stack(
+        (edge_pts_x, edge_pts_y)
+    )
+
+    # if fine_edge_points.shape[0] == 0:
+    #     raise ValueError(
+    #         "No fine edge points were found in edge_mask."
+    #     )
+
+    # ------------------------------------------------------------------
+    # Regular coarse grid
+    # ------------------------------------------------------------------
+    # TODO: get discretization.coords
+    P0_coarse, Xn, Yn = build_regular_coarse_grid(
+        coarse_Nx,
+        coarse_Ny,
+        Lx,
+        Ly,
+    )
+
+    dx_coarse = Lx / coarse_Nx
+    dy_coarse = Ly / coarse_Ny
+
+    x_lines = np.linspace(0, Lx, coarse_Nx + 1)
+    y_lines = np.linspace(0, Ly, coarse_Ny + 1)
+
+    # Fine-pixel index bounds of each coarse cell: coarse cell i covers fine
+    # columns x_idx[i]:x_idx[i+1] (same partition as in
+    # majority_downsample_phase_labels).
+    x_idx = np.linspace(
+        0,
+        nx,
+        coarse_Nx + 1,
+        dtype=int,
+    )
+    y_idx = np.linspace(
+        0,
+        ny,
+        coarse_Ny + 1,
+        dtype=int,
+    )
+
+    # ------------------------------------------------------------------
+    # Coarse multiclass phase labels by majority vote
+    # ------------------------------------------------------------------
+    coarse_phase_label, _coarse_phase_confidence = (
+        majority_downsample_phase_labels(
+            fine_phase_labels=phase_mask_label,
+            coarse_Nx=coarse_Nx,
+            coarse_Ny=coarse_Ny,
+        )
+    )
+
+    # ------------------------------------------------------------------
+    # Coarse interface cells from the fine edge mask
+    # ------------------------------------------------------------------
+    coarse_interface_cell = np.zeros(
+        (coarse_Ny, coarse_Nx),
+        dtype=bool,
+    )
+
+    for j in range(coarse_Ny):
+        for i in range(coarse_Nx):
+            x0, x1 = x_idx[i], x_idx[i + 1]
+            y0, y1 = y_idx[j], y_idx[j + 1]
+
+            edge_patch = edge_binary[y0:y1, x0:x1]
+            coarse_interface_cell[j, i] = np.any(edge_patch)
+
+    # ------------------------------------------------------------------
+    # Coarse interface nodes from surrounding interface cells
+    # ------------------------------------------------------------------
+    coarse_interface_node = np.zeros(
+        (coarse_Ny, coarse_Nx),
+        dtype=bool,
+    )
+
+    # Node (j, i) is the lower-left corner of cell (j, i) and the shared corner
+    # of cells (j-1, i-1), (j-1, i), (j, i-1), (j, i) (periodic indices).
+    for j in range(coarse_Ny):
+        for i in range(coarse_Nx):
+            surrounding_cells = [
+                coarse_interface_cell[
+                    (j - 1) % coarse_Ny,
+                    (i - 1) % coarse_Nx,
+                ],
+                coarse_interface_cell[
+                    (j - 1) % coarse_Ny,
+                    i % coarse_Nx,
+                ],
+                coarse_interface_cell[
+                    j % coarse_Ny,
+                    (i - 1) % coarse_Nx,
+                ],
+                coarse_interface_cell[
+                    j % coarse_Ny,
+                    i % coarse_Nx,
+                ],
+            ]
+
+            coarse_interface_node[j, i] = np.any(
+                surrounding_cells
+            )
+
+    # ------------------------------------------------------------------
+    # Remove interface nodes that are not sufficiently close to fine edge
+    # ------------------------------------------------------------------
+    (
+        coarse_interface_node_refined,
+        removed_count,
+    ) = refine_interface_nodes_by_local_square(
+        coarse_interface_node=coarse_interface_node,
+        Xn=Xn,
+        Yn=Yn,
+        fine_edge_points=fine_edge_points,
+        dx_coarse=dx_coarse,
+        dy_coarse=dy_coarse,
+    )
+
+    removed_nodes_mask = (
+        coarse_interface_node
+        & (~coarse_interface_node_refined)
+    )
+
+    # if verbose:
+    #     print(
+    #         "Original interface nodes:",
+    #         np.count_nonzero(coarse_interface_node),
+    #     )
+    #     print(
+    #         "Refined interface nodes:",
+    #         np.count_nonzero(
+    #             coarse_interface_node_refined
+    #         ),
+    #     )
+    #     print("Removed nodes:", removed_count)
+
+    # ------------------------------------------------------------------
+    # Project refined interface nodes to nearest fine edge points
+    # ------------------------------------------------------------------
+    interface_node_indices = np.argwhere(
+        coarse_interface_node_refined
+    )
+
+    coarse_node_points = np.column_stack(
+        (
+            Xn[coarse_interface_node_refined],
+            Yn[coarse_interface_node_refined],
+        )
+    )
+
+    projected_points = np.zeros_like(coarse_node_points)
+    projection_distance = np.zeros(
+        coarse_node_points.shape[0],
+        dtype=float,
+    )
+
+    # Brute-force nearest-neighbour search (O(#nodes * #edge points)).
+    # NOTE: Euclidean distance without periodic minimum-image correction.
+    # interface_node_indices and coarse_node_points share the same (row-major)
+    # ordering, so index k refers to the same node in both arrays.
+    for k, point in enumerate(coarse_node_points):
+        difference = fine_edge_points - point[None, :]
+        distance_squared = np.sum(difference**2, axis=1)
+        nearest_index = np.argmin(distance_squared)
+
+        projected_points[k] = fine_edge_points[nearest_index]
+        projection_distance[k] = np.sqrt(
+            distance_squared[nearest_index]
+        )
+
+    # if verbose:
+    #     print(
+    #         "Projected interface nodes:",
+    #         projected_points.shape[0],
+    #     )
+    #
+    #     if projection_distance.size:
+    #         print("Projection distance statistics:")
+    #         print("  min  =", projection_distance.min())
+    #         print("  max  =", projection_distance.max())
+    #         print("  mean =", projection_distance.mean())
+
+    # ------------------------------------------------------------------
+    # Set projected interface nodes and fixed boundaries
+    # ------------------------------------------------------------------
+    P_init = P0_coarse.copy()
+
+    # Legacy/alternative: optionally keep left/bottom boundary nodes undeformed
+    # (commented out; cf. the unused `fix_boundary` argument).
+    for k, (j, i) in enumerate(interface_node_indices):
+        #is_fixed_boundary = (j == 0) or (i == 0)
+
+        #if not is_fixed_boundary:
+        P_init[0, j, i] = projected_points[k, 0]
+        P_init[1, j, i] = projected_points[k, 1]
+
+    # Projected interface nodes are held fixed during the spring relaxation
+    fixed_mask = coarse_interface_node_refined.copy()
+    #fixed_mask[0, :] = True
+    #fixed_mask[:, 0] = True
+
+    # ------------------------------------------------------------------
+    # Distance-dependent stiffness and spring relaxation
+    # ------------------------------------------------------------------
+    dist_to_interface = periodic_manhattan_distance_to_mask(
+        fixed_mask
+    )
+
+    k_node = stiffness_from_distance(
+        dist_to_interface,
+        k0=1.0,
+        b=relax_b,
+        a=1.0,
+        kmin=0.05,
+    )
+
+    P_relaxed = spring_relax_projected_grid(
+        P_init=P_init,
+        fixed_mask=fixed_mask,
+        k_node=k_node,
+        iters=relax_iters,
+        omega=relax_omega,
+    )
+
+    # ------------------------------------------------------------------
+    # Periodically extended coordinates for plotting only
+    # ------------------------------------------------------------------
+    # NOTE: both helpers produce the same array; the returned plotting
+    # coordinates are those of build_periodic_plot_coordinates, while
+    # make_plot_coords' result is only used for the verbose shape print.
+    full_plot_coords_of_displaced_nodes = make_plot_coords(
+        P_relaxed,
+        Lx=Lx,
+        Ly=Ly,
+    )
+    deformed_grid_coordinates_for_plot = (
+        build_periodic_plot_coordinates(
+            stored_deformed_coordinates=P_relaxed,
+            Lx=Lx,
+            Ly=Ly,
+        )
+    )
+
+    if verbose:
+        displacement = P_relaxed - P0_coarse
+
+        print(
+            "Stored deformed grid shape:",
+            P_relaxed.shape,
+        )
+        print(
+            "Plotting deformed grid shape:",
+            full_plot_coords_of_displaced_nodes.shape,
+        )
+        print(
+            "Coarse phase-label shape:",
+            coarse_phase_label.shape,
+        )
+        print(
+            "Coarse phase labels:",
+            np.unique(coarse_phase_label),
+        )
+        print(
+            "ux min/max:",
+            displacement[0].min(),
+            displacement[0].max(),
+        )
+        print(
+            "uy min/max:",
+            displacement[1].min(),
+            displacement[1].max(),
+        )
+
+    return {
+        "coords_of_displaced_nodes": P_relaxed,
+        "full_plot_coords_of_displaced_nodes": (
+            deformed_grid_coordinates_for_plot
+        ),
+        "phase_mask_label": phase_mask_label,
+        "coarse_phase_label": coarse_phase_label,
+        "coarse_interface_cell": coarse_interface_cell,
+        "phase_mask_binary": phase_mask_binary,
+        "edge_mask": edge_mask,
+    }
 
 if __name__ == "__main__":
     input_file = (

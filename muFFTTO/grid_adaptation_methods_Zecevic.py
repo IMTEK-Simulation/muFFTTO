@@ -1,3 +1,4 @@
+#TODO: periodic cell check
 '''
 (FIXED!)
 Periodic Unit Grid Adaptation using spring relaxation method by Zecevic
@@ -455,7 +456,6 @@ def adapt_grid_to_circle(
         interface = interface_node_mask(inside)
 
         # Snap interface nodes radially onto the exact circle
-
         P = ref_grid_coords_ixyz.copy()
         idx = np.argwhere(interface)
         if idx.size:
@@ -463,8 +463,8 @@ def adapt_grid_to_circle(
             P[:, idx[:, 0], idx[:, 1]] = project_points_to_circle(pts,center=center,R=radius,)
         # Distance-dependent spring stiffness: stiff near the interface, soft far away
         dist = manhattan_distance_to_interface(interface)
-        k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)
-        # Interface nodes stay fixed on the circle; all others are relaxed
+
+        k_node = stiffness_from_distance(dist, k0=k0, b=b, a=1.0, kmin=kmin)  # Interface nodes stay fixed on the circle; all others are relaxed
         fixed = interface.copy()
         P1 = spring_relax_weighted(P, fixed_mask=fixed, k_node=k_node, iters=iters, omega=omega)
 
