@@ -24,9 +24,9 @@ element_type = 'biquadratic_rectangle'
 formulation = 'small_strain'
 
 # Numerical settings ============================
-NX = 512                    # Arbitrary number of pixels
+NX = 256                     # Arbitrary number of pixels
 cg_tol = 1e-6               # CG tolerance
-E_LOAD = 1                  # load value of every basics load value before but not for PAPER CASES
+E_LOAD = 1.5                # load value of every basics load value before but not for PAPER CASES
 plot_load_cases = False     # example's distortion plots assume a [0,1] domain -> distorted for this cell
 # ===============================================
 
@@ -376,86 +376,86 @@ if MPI.COMM_WORLD.rank == 0:
 
 
 
-# ============================================================================================
-# Li & Rudykh (2019), Fig. 4: uniaxial compression in X (a) and in Y (b), lateral sides FREE.
-# Free lateral side = lateral STRESS is 0 (not the lateral strain), so the lateral macro strain
-# is set from C (computed above with E_LOAD):
-#   load in X:  E_yy = -C_yy,xx / C_yy,yy * E_xx   ->  P22 = 0
-#   load in Y:  E_xx = -C_xx,yy / C_xx,xx * E_yy   ->  P11 = 0
-# ============================================================================================
-EPS_MAX = {'X': 0.02, 'Y': 0.03}      # max nominal (compressive) strain per direction, ~ dotted lines in Fig. 4
-N_PTS = 5                             # points per curve, including 0
-PAPER_SLOPE_MPA = {'X': {'Exp.': 0.32, 'Sim. periodic': 0.35},   # read off Fig. 4 paper by digitising the initial slopes, approx. +-10 %
-                   'Y': {'Exp.': 0.46, 'Sim. periodic': 0.50}}
-
-C = homogenized_C_ijkl                 # C[i, j, k, l] = sigma_kl for unit E_ij
-
-
-def homogenized_stress_for(E_macro):
-    """one small-strain cell solve for the macro strain E_macro, returns the average stress"""
-    discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=E_macro,
-                                                   macro_gradient_field_ijqxyz=macro_gradient_field)
-    discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                  macro_gradient_field_ijqxyz=macro_gradient_field, rhs_inxyz=rhs_field)
-    solution_field.s.fill(0)
-    if np.any(E_macro != 0):
-        Solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
-                                    hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
-                                    atol=cg_tol, rtol=0, maxiter=5000, callback=callback)
-    return discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
-                                                        displacement_field_inxyz=solution_field,
-                                                        macro_gradient_field_ijqxyz=macro_gradient_field,
-                                                        formulation='small_strain')
-
-
-fig4 = {}
-for direction in ['X', 'Y']:
-    k, l = (0, 1) if direction == 'X' else (1, 0)          # k = loaded axis, l = free lateral axis
-    lateral_ratio = -C[k, k, l, l] / C[l, l, l, l]          # E_ll / E_kk that makes sigma_ll = 0 (= -nu)
-    strains = -np.linspace(0.0, EPS_MAX[direction], N_PTS)  # compression -> negative E_kk
-    P_load, P_lat = [], []
-    for e in strains:
-        E_macro = np.zeros([dim, dim])
-        E_macro[k, k] = e
-        E_macro[l, l] = lateral_ratio * e
-        stress = homogenized_stress_for(E_macro)
-        P_load.append(stress[k, k])                          # small strain: P = sigma
-        P_lat.append(stress[l, l])                           # must be ~0 (free lateral side)
-    fig4[direction] = dict(eps=-strains, stress_MPa=-np.array(P_load) * S_REF,   # paper: compression > 0
-                           lateral_MPa=np.array(P_lat) * S_REF, nu=-lateral_ratio)
-
-if MPI.COMM_WORLD.rank == 0:
-    for direction, res in fig4.items():
-        E_eff = res['stress_MPa'][-1] / res['eps'][-1]
-        print(f'--- Fig. 4 {"(a)" if direction == "X" else "(b)"}: uniaxial compression in {direction} ---')
-        print(f'effective modulus E_{direction} = {E_eff:.4f} MPa  (= {E_eff / S_REF:.4f} mu_m) | '
-              f'nu = {res["nu"]:.4f} | max |lateral stress| = {np.abs(res["lateral_MPa"]).max():.2e} MPa')
-        print('  paper initial slope (digitised, approx.): ' +
-              ', '.join(f'{name} {s:.2f} MPa' for name, s in PAPER_SLOPE_MPA[direction].items()))
-        # fname = f'Fig4_uniaxial_{direction}_{number_of_pixels[0]}x{number_of_pixels[1]}.csv'
-        # np.savetxt(fname, np.column_stack([res['eps'], res['stress_MPa'], res['lateral_MPa']]),
-        #            delimiter=',', fmt='%.8f', comments='',
-        #            header=f'nominal strain eps_{direction} [-],nominal stress [MPa],lateral stress [MPa]')
-        # print(f'  saved {os.path.abspath(fname)}')
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
-    for ax, direction, panel in zip(axes, ['X', 'Y'], ['(a)', '(b)']):
-        res = fig4[direction]
-        ax.plot(res['eps'], res['stress_MPa'], 'o-', color='tab:green', ms=4,
-                label=f'muFFTTO periodic, small strain ({number_of_pixels[0]}x{number_of_pixels[1]})')
-        for (name, slope), style in zip(PAPER_SLOPE_MPA[direction].items(), ['k-', 'r-.']):
-            ax.plot(res['eps'], slope * res['eps'], style, lw=1, label=f'paper {name} (slope digitised)')
-        ax.set_xlim(0, EPS_MAX[direction])
-        ax.xaxis.set_major_locator(plt.MaxNLocator(5))
-        ax.set_ylim(bottom=0)
-        ax.set_xlabel(rf'Nominal strain, $\varepsilon_{direction}$')
-        ax.set_ylabel('Nominal stress (MPa)')
-        ax.set_title(f'{panel} uniaxial compression in {direction} (linear part of Fig. 4)', fontsize=10)
-        ax.legend(fontsize=7, loc='upper left')
-        ax.grid(alpha=0.3)
-    fig.tight_layout()
-    # fig.savefig(f'Fig4_linear_comparison_{number_of_pixels[0]}x{number_of_pixels[1]}.png', dpi=200)
-    plt.show()
+# # ============================================================================================
+# # Li & Rudykh (2019), Fig. 4: uniaxial compression in X (a) and in Y (b), lateral sides FREE.
+# # Free lateral side = lateral STRESS is 0 (not the lateral strain), so the lateral macro strain
+# # is set from C (computed above with E_LOAD):
+# #   load in X:  E_yy = -C_yy,xx / C_yy,yy * E_xx   ->  P22 = 0
+# #   load in Y:  E_xx = -C_xx,yy / C_xx,xx * E_yy   ->  P11 = 0
+# # ============================================================================================
+# EPS_MAX = {'X': 0.02, 'Y': 0.03}      # max nominal (compressive) strain per direction, ~ dotted lines in Fig. 4
+# N_PTS = 5                             # points per curve, including 0
+# PAPER_SLOPE_MPA = {'X': {'Exp.': 0.32, 'Sim. periodic': 0.35},   # read off Fig. 4 paper by digitising the initial slopes, approx. +-10 %
+#                    'Y': {'Exp.': 0.46, 'Sim. periodic': 0.50}}
+#
+# C = homogenized_C_ijkl                 # C[i, j, k, l] = sigma_kl for unit E_ij
+#
+#
+# def homogenized_stress_for(E_macro):
+#     """one small-strain cell solve for the macro strain E_macro, returns the average stress"""
+#     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=E_macro,
+#                                                    macro_gradient_field_ijqxyz=macro_gradient_field)
+#     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+#                                   macro_gradient_field_ijqxyz=macro_gradient_field, rhs_inxyz=rhs_field)
+#     solution_field.s.fill(0)
+#     if np.any(E_macro != 0):
+#         Solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
+#                                     hessp=K_fun, b=rhs_field, x=solution_field, prec=M_fun,
+#                                     atol=cg_tol, rtol=0, maxiter=5000, callback=callback)
+#     return discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=material_data_field_C_0,
+#                                                         displacement_field_inxyz=solution_field,
+#                                                         macro_gradient_field_ijqxyz=macro_gradient_field,
+#                                                         formulation='small_strain')
+#
+#
+# fig4 = {}
+# for direction in ['X', 'Y']:
+#     k, l = (0, 1) if direction == 'X' else (1, 0)          # k = loaded axis, l = free lateral axis
+#     lateral_ratio = -C[k, k, l, l] / C[l, l, l, l]          # E_ll / E_kk that makes sigma_ll = 0 (= -nu)
+#     strains = -np.linspace(0.0, EPS_MAX[direction], N_PTS)  # compression -> negative E_kk
+#     P_load, P_lat = [], []
+#     for e in strains:
+#         E_macro = np.zeros([dim, dim])
+#         E_macro[k, k] = e
+#         E_macro[l, l] = lateral_ratio * e
+#         stress = homogenized_stress_for(E_macro)
+#         P_load.append(stress[k, k])                          # small strain: P = sigma
+#         P_lat.append(stress[l, l])                           # must be ~0 (free lateral side)
+#     fig4[direction] = dict(eps=-strains, stress_MPa=-np.array(P_load) * S_REF,   # paper: compression > 0
+#                            lateral_MPa=np.array(P_lat) * S_REF, nu=-lateral_ratio)
+#
+# if MPI.COMM_WORLD.rank == 0:
+#     for direction, res in fig4.items():
+#         E_eff = res['stress_MPa'][-1] / res['eps'][-1]
+#         print(f'--- Fig. 4 {"(a)" if direction == "X" else "(b)"}: uniaxial compression in {direction} ---')
+#         print(f'effective modulus E_{direction} = {E_eff:.4f} MPa  (= {E_eff / S_REF:.4f} mu_m) | '
+#               f'nu = {res["nu"]:.4f} | max |lateral stress| = {np.abs(res["lateral_MPa"]).max():.2e} MPa')
+#         print('  paper initial slope (digitised, approx.): ' +
+#               ', '.join(f'{name} {s:.2f} MPa' for name, s in PAPER_SLOPE_MPA[direction].items()))
+#         # fname = f'Fig4_uniaxial_{direction}_{number_of_pixels[0]}x{number_of_pixels[1]}.csv'
+#         # np.savetxt(fname, np.column_stack([res['eps'], res['stress_MPa'], res['lateral_MPa']]),
+#         #            delimiter=',', fmt='%.8f', comments='',
+#         #            header=f'nominal strain eps_{direction} [-],nominal stress [MPa],lateral stress [MPa]')
+#         # print(f'  saved {os.path.abspath(fname)}')
+#
+#     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
+#     for ax, direction, panel in zip(axes, ['X', 'Y'], ['(a)', '(b)']):
+#         res = fig4[direction]
+#         ax.plot(res['eps'], res['stress_MPa'], 'o-', color='tab:green', ms=4,
+#                 label=f'muFFTTO periodic, small strain ({number_of_pixels[0]}x{number_of_pixels[1]})')
+#         for (name, slope), style in zip(PAPER_SLOPE_MPA[direction].items(), ['k-', 'r-.']):
+#             ax.plot(res['eps'], slope * res['eps'], style, lw=1, label=f'paper {name} (slope digitised)')
+#         ax.set_xlim(0, EPS_MAX[direction])
+#         ax.xaxis.set_major_locator(plt.MaxNLocator(5))
+#         ax.set_ylim(bottom=0)
+#         ax.set_xlabel(rf'Nominal strain, $\varepsilon_{direction}$')
+#         ax.set_ylabel('Nominal stress (MPa)')
+#         ax.set_title(f'{panel} uniaxial compression in {direction} (linear part of Fig. 4)', fontsize=10)
+#         ax.legend(fontsize=7, loc='upper left')
+#         ax.grid(alpha=0.3)
+#     fig.tight_layout()
+#     # fig.savefig(f'Fig4_linear_comparison_{number_of_pixels[0]}x{number_of_pixels[1]}.png', dpi=200)
+#     plt.show()
 
 # # PLOT PRINT for SMALL STRAIN Piola-Kirchhoff dataset
 # grid_labels = ['64x55', '128x111', '256x222', '512x443']
