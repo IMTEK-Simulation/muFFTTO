@@ -16,6 +16,7 @@ Optimization (energy minimization, topology optimization)
     'mma'          method of moving asymptotes         f, gradient                   box, box + <a,x> <= / = V  muFFTTO
     'tr_newton'    trust-region Newton, Steihaug CG    f, gradient, Hessian-vector   box                        NuMPI
     'newton_cg'    plain Newton, full steps, PCG       f, gradient, Hessian-vector   none                       muFFTTO
+    'bb'           Barzilai-Borwein gradient (BB1/2)   f, gradient (+ precond)       none                       muFFTTO
 
     :func:`mma_bounded` is the MMA implementation (also usable directly).
 
@@ -422,7 +423,7 @@ def solve_finite_strain_newton_cg(
 # Optimization
 # ---------------------------------------------------------------------------------------------------------------------
 
-METHODS = ('l_bfgs', 'mma', 'tr_newton', 'newton_cg')
+METHODS = ('l_bfgs', 'mma', 'tr_newton', 'newton_cg', 'bb')
 
 
 def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, constraint_target=None,
@@ -439,7 +440,7 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         slices (flat arrays).
     x0 : ndarray
         Initial guess (local slice; any shape, numpy or cupy for 'l_bfgs' / 'tr_newton'; passed on unchanged).
-    method : {'l_bfgs', 'mma', 'tr_newton', 'newton_cg'}
+    method : {'l_bfgs', 'mma', 'tr_newton', 'newton_cg', 'bb'}
         Optimizer, see the table in the module docstring.
     bounds : (lo, hi) or None
         Box bounds, scalars or local arrays; None (default): unbounded (not for 'mma').
@@ -451,8 +452,8 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         ``hessp(x, v)`` returns the Hessian (or a symmetric approximation) applied to v. Required by 'tr_newton' and
         'newton_cg'.
     precond : callable, optional
-        ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded)
-        and 'newton_cg'.
+        ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded),
+        'newton_cg' and 'bb'.
     callback : callable, optional
         ``callback(x)`` after every accepted iterate.
     comm : MPI communicator, optional
@@ -463,7 +464,8 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         Passed unchanged to the optimizer (its own defaults apply otherwise), e.g. gtol, xtol, maxiter (all);
         maxcor, c1, max_halvings, zero_mask (l_bfgs); move, asyinit, max_retries (mma); delta0, delta_max,
         inner_tol, inner_stop, inner_maxiter, fun_error, request_accuracy, zero_mask (tr_newton); gtol, maxiter,
-        inner_tol, inner_delay, inner_maxiter (newton_cg).
+        inner_tol, inner_delay, inner_maxiter (newton_cg); variant, alpha0, globalize, memory, beta, theta (bb, which
+        ignores hessp and the inner-solver options).
 
     Returns
     -------
@@ -514,6 +516,10 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         result = mma_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi,
                              constraint_weights=constraint_weights, constraint_target=constraint_target,
                              constraint_type=constraint_type, comm=comm, **common, **options)
+    elif method == 'bb':
+        if constrained or bounds is not None:
+            raise ValueError("'bb' is unconstrained")
+        result = barzilai_borwein(counted_fun, x0, precond=precond, comm=comm, **common, **options)
     elif method == 'newton_cg':
         if hessp is None:
             raise ValueError("'newton_cg' needs hessp(x, v)")
@@ -625,6 +631,114 @@ def newton_cg(fun, x0, hessp, precond=None, gtol=1e-5, maxiter=100, inner_tol=1e
         if disp and comm.rank == 0:
             print(f'Newton step {newton_step + 1}: f = {f:.10e}, max|g| = {max_abs(g):.3e}, CG {len(energy_steps)}')
     return finish(False, 'NO CONVERGENCE: MAXITERATIONS REACHED', maxiter, f, g)
+
+
+def barzilai_borwein(fun, x0, precond=None, gtol=1e-5, maxiter=20000, variant=1, alpha0=1.0, globalize=False,
+                     memory=10, beta=0.5, theta=1e-4, fun_error=1e-12, alpha_min=1e-12, alpha_max=1e12,
+                     max_backtracks=40, inadmissible=1e29, converged=None, comm=None, callback=None, disp=False,
+                     **ignored):
+    """
+    Preconditioned Barzilai-Borwein gradient method (Schneider, IJNME 118 (2019) 482: the "Barzilai-Borwein basic
+    scheme"; with precond = the Green operator of a reference material and alpha = 1 it is the basic scheme of
+    Moulinec-Suquet).
+
+        x_{n+1} = x_n - t_n z_n,      z_n = M^-1 g_n,      t_n = beta^k alpha_n
+
+    with the step sizes (s = x_{n+1} - x_n, y = g_{n+1} - g_n, M-inner product for s, M^-1 for y)
+
+        variant 1 (BB1):  alpha_{n+1} = (s, M s) / (s, y)  = t_n (g_n, z_n) / ((g_n, z_n) - (g_{n+1}, z_n))
+        variant 2 (BB2):  alpha_{n+1} = (s, y) / (y, M^-1 y)
+
+    Globalization (globalize='gradient', Schneider's choice, Fletcher 2005): nonmonotone backtracking on the
+    preconditioned gradient norm, |g(x - t z)|_M^-1 <= (1 - theta t) max of the last `memory` norms (only gradients
+    are needed). globalize='energy' (or True): nonmonotone Armijo backtracking on the energy (Grippo-Lampariello-Lucidi /
+    Raydan), f(x - t z) <= max of the last `memory` energies - theta t (g, z) + fun_error |f|, t = alpha beta^k (the
+    relative energy tolerance fun_error absorbs the round-off of f near the minimum). Schneider uses the
+    gradient-norm variant of Fletcher because his material routines give no energy; ours do. Without globalization
+    only inadmissible trial points (f >= inadmissible, e.g. det F <= 0) are backtracked. (s, y) <= 0 (no positive
+    curvature along s): alpha is kept.
+
+    converged(x, g, z) -> bool replaces the default test max |g| <= gtol (e.g. a norm of the preconditioned residual
+    z = M^-1 g, Schneider's |Gamma sigma| / |<sigma>|).
+
+    No Hessian is used: hessp and the inner-solver options of the Newton methods are accepted and ignored (**ignored)
+    so that one call site can switch methods.
+
+    Returns
+    -------
+    OptimizeResult
+        x, fun, jac, nit (iterations), nfev (fun calls), nb_precond (preconditioner applications), nb_hessp (0),
+        nb_backtracks, alpha (the last BB step size, to warm-start the next solve), success, message, max_grad.
+    """
+    comm = MPI.COMM_WORLD if comm is None else comm
+
+    def dot(a, b):
+        return comm.allreduce(float((a * b).sum()), op=MPI.SUM)
+
+    def max_abs(a):
+        return comm.allreduce(float(abs(a).max()) if a.size else 0.0, op=MPI.MAX)
+
+    apply_precond = (lambda r: r.copy()) if precond is None else precond
+    x = x0.copy()
+    f, g = fun(x)
+    z = apply_precond(g)
+    counts = {'nfev': 1, 'nb_precond': 1, 'nb_backtracks': 0}
+    gz = dot(g, z)
+    history = [f]
+    norm_history = [np.sqrt(max(gz, 0.0))]
+    alpha = alpha0
+
+    def finish(success, message, nit):
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nb_hessp': 0, 'max_grad': max_abs(g), 'alpha': alpha, **counts})
+
+    for it in range(maxiter + 1):
+        if (converged(x, g, z) if converged is not None else max_abs(g) <= gtol):
+            return finish(True, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL' if converged is None else 'CONVERGENCE', it)
+        if it == maxiter:
+            break
+        t = alpha
+        reference = max(history[-memory:])
+        for _ in range(max_backtracks + 1):
+            x_new = x - t * z
+            f_new, g_new = fun(x_new)
+            counts['nfev'] += 1
+            admissible = np.isfinite(f_new) and f_new < inadmissible
+            if admissible and globalize == 'gradient':
+                z_new = apply_precond(g_new)
+                counts['nb_precond'] += 1
+                if np.sqrt(max(dot(g_new, z_new), 0.0)) <= (1.0 - theta * t) * max(norm_history[-memory:]):
+                    break
+            elif admissible and (not globalize or f_new <= reference - theta * t * gz
+                                 + fun_error * max(abs(reference), 1e-300)):
+                z_new = None
+                break
+            t *= beta
+            counts['nb_backtracks'] += 1
+        else:
+            return finish(False, 'LINE SEARCH FAILED', it)
+        if z_new is None:
+            z_new = apply_precond(g_new)
+            counts['nb_precond'] += 1
+        y = g_new - g
+        sy = -t * dot(z, y)                                   # (s, y), s = -t z
+        if sy > 0.0:
+            if variant == 1:
+                alpha = t * t * gz / sy                       # (s, M s) = t^2 (z, g)
+            else:
+                alpha = sy / dot(y, z_new - z)                # (y, M^-1 y)
+            if not np.isfinite(alpha):
+                alpha = t
+            alpha = min(max(alpha, alpha_min), alpha_max)
+        x, f, g, z = x_new, f_new, g_new, z_new
+        gz = dot(g, z)
+        history.append(f)
+        norm_history.append(np.sqrt(max(gz, 0.0)))
+        if callback is not None:
+            callback(x)
+        if disp and comm.rank == 0:
+            print(f'BB{variant} iteration {it + 1}: f = {f:.10e}, max|g| = {max_abs(g):.3e}, t = {t:.3e}')
+    return finish(False, 'NO CONVERGENCE: MAXITERATIONS REACHED', maxiter)
 
 
 def mma_bounded(fun, x0, args=(), jac=True, bounds_lo=0.0, bounds_hi=1.0, constraint_weights=None,

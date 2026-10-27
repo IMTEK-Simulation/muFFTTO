@@ -1,0 +1,915 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+
+\graphicspath{{../exp_data/}}
+\newcommand{\fig}[1]{\includegraphics[width=\textwidth]{#1}}
+
+\title{Why CG slows down on the cantilever}
+\author{muFFTTO, \texttt{experiments/linear\_elastic\_mesh\_study}}
+\date{23 October 2026}
+
+\begin{document}
+\maketitle
+
+\noindent A linear elastic beam in a periodic cell with void pixels, solved by conjugate gradients (CG) with the Green
+preconditioner. On finer meshes CG needs more and more iterations. These notes trace where that comes from and how to
+remove it.
+
+\medskip
+\noindent\fbox{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule}{%
+\textbf{Short answer.} Two separate things make CG depend on the mesh, and both can be removed.
+\begin{itemize}
+  \item \textbf{The void is too thin.} With a fixed number of void pixels, the void gets physically thinner every time
+        the mesh is refined. That pushes the smallest eigenvalue towards zero. With a void of fixed \emph{physical}
+        thickness, the smallest eigenvalue no longer depends on the mesh.
+  \item \textbf{Dirichlet conditions (fixed nodes) spoil the largest eigenvalue.} A clamped face makes the largest
+        eigenvalue grow like $1/h$. With forces only (Neumann conditions), the largest eigenvalue stays exactly 1.
+\end{itemize}
+With both fixes, the cantilever loaded only by forces needs 30--33 CG iterations on every mesh from $h = 1/40$ to
+$1/640$. The clamped cantilever needs 40--94. The same holds in 3D (42 iterations up to 2 million voxels,
+Section~\ref{sec:3d}). Fewer fixed nodes help only like a square root, and a stiff layer instead of the clamp works
+only with a physical thickness and still costs more than the clamp (Sections~\ref{sec:nodes}, \ref{sec:stiff}).
+
+\smallskip
+\textbf{Dirichlet conditions can be kept.} The \emph{corrected Green} preconditioner is the exact inverse of the
+reference problem with the fixed nodes (Section~\ref{sec:corrected}). With it, $\lambda_{\max} = 1$ for any fixed nodes,
+and the clamped cantilever needs 30--32 CG iterations on every mesh, the same as the beam loaded by forces only.}}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{The test problem}
+
+A horizontal beam, length $L = 1$ and height $H = 0.2$, linear elastic ($E = 1$, $\nu = 0.3$, plane strain, small
+strain), discretised with bilinear pixel elements. The beam sits in a periodic cell and is surrounded by void pixels
+with zero stiffness, so it does not touch its periodic copies. The left face is clamped and a shear force acts on the
+right face (Figure~\ref{fig:setup}).
+
+The mesh is refined by changing the number of pixels over the beam height, $n_H$, from 2 to 256. The physical beam
+stays the same.
+
+\begin{figure}[h]
+  \centering\includegraphics[width=0.75\textwidth]{cantilever_mesh_study_setup.png}
+  \caption{The periodic cell at $n_H = 4$: void pixels (white), beam (yellow), clamped nodes (black squares) and the
+  shear load on the right face (red).}
+  \label{fig:setup}
+\end{figure}
+
+\paragraph{How CG is stopped.} CG stops when the estimated error in the energy norm, $\|u - u_k\|_K$, is below
+$10^{-6}\,\|u\|_K$ (Hestenes--Stiefel lower estimate, minimal delay 10). This measures the error the way the elastic
+energy sees it and does not depend on the preconditioner, so iteration counts can be compared between runs.
+
+\paragraph{How the error is plotted.} The plots show the exact CG error, computed from the energy functional
+$\Pi(v) = \tfrac12 v^\top K v - f^\top v$:
+\[
+  \|u - u_k\|_K^2 = 2\bigl(\Pi(u_k) - \Pi(u)\bigr), \qquad \|u\|_K^2 = -2\,\Pi(u).
+\]
+Since $r_k = f - K u_k$, $\Pi(u_k) = -\tfrac12 (f + r_k)^\top u_k$: two dot products per iteration.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{What we saw: a long stall, then fast convergence}
+
+On every mesh, the CG error stays at 100\,\% for many iterations, then drops quickly, at about one decade per 8--10
+iterations (Figure~\ref{fig:cg}). The drop rate is the same on every mesh. Only the stall gets longer as the mesh gets
+finer. With 2 void pixels, the number of CG iterations grows almost like $1/h$: 85, 136, 237 and 429 iterations for
+$n_H = 32$, 64, 128 and 256.
+
+\begin{figure}[h]
+  \fig{cantilever_mesh_study_cg_convergence.png}
+  \caption{Left: exact CG error (solid), the stopping estimate (dotted) and the discretisation error of each mesh
+  (dashed). Middle: the residual, which first grows by about $100\times$ and is useless as a stopping test here.
+  Right: estimate divided by exact error. Once CG converges, the estimate is within 1--6\,\% of the exact error.
+  During the stall it badly underestimates, which would matter for a loose tolerance.}
+  \label{fig:cg}
+\end{figure}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{The stall follows the beam length, not the fixed nodes}
+
+When the mesh is refined, three things grow together: the number of fixed nodes, the beam length in pixels, and the
+number of pixels overall. To separate them, the mesh was held fixed ($n_H = 64$) and one thing was changed at a time
+(Figure~\ref{fig:plateau}).
+\begin{itemize}
+  \item[\textbf{A.}] Beam length $L = 0.5$, 1, 2, 4 with the same fixed nodes. The stall grows with the length, by
+        about one iteration per 5 pixels of beam.
+  \item[\textbf{B, C.}] $8\times$ more fixed nodes, or $4\times$ fewer. The stall changes by only 10--15\,\%.
+  \item[\textbf{D.}] A beam of length 4 with the load moved close to the clamp. The stall stays the same as with the
+        load at the tip, so the load--clamp distance is not what matters.
+\end{itemize}
+
+\begin{figure}[h]
+  \fig{plateau_study_n_H64.png}
+  \caption{Exact CG error at $n_H = 64$. Only panel A (the beam length) moves the stall substantially. In panel D all
+  four load positions stall until about iteration 270.}
+  \label{fig:plateau}
+\end{figure}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{The spectrum behind it}
+
+The CG coefficients $\alpha_k$, $\beta_k$ give, almost for free, the eigenvalues that CG ``sees'': the eigenvalues
+(Ritz values) of the Lanczos matrix
+\[
+  T_{kk} = \frac{1}{\alpha_k} + \frac{\beta_{k-1}}{\alpha_{k-1}}, \qquad
+  T_{k,k+1} = \frac{\sqrt{\beta_k}}{\alpha_k}.
+\]
+On small meshes these were checked against a full dense eigenvalue computation of $M^{-1}K$
+(Figure~\ref{fig:dense}). The smallest and largest values agree to all printed digits. Some small eigenvalues are never
+seen by CG, because this load does not excite their mode shapes.
+
+\begin{figure}[h]
+  \centering\includegraphics[width=0.62\textwidth]{spectrum_check_dense.png}
+  \caption{All eigenvalues from a dense computation (grey) and the Ritz values from the CG run (blue). The zero
+  eigenvalues of nodes that touch only void, and of fixed nodes, are left out.}
+  \label{fig:dense}
+\end{figure}
+
+\begin{figure}[h]
+  \fig{spectrum_study.png}
+  \caption{With 2 void pixels: the smallest eigenvalue falls like $h^3$ and the largest grows like $1/h$, so the
+  condition number grows like $h^{-4}$. CG still does much better than $\sqrt{\kappa}$ would suggest, because the very
+  small eigenvalues are few and isolated; the stall is CG finding them one at a time. Right: the number of eigenvalues
+  below 0.05 doubles each time the beam length doubles (2, 4, 7, 14).}
+  \label{fig:spectrum}
+\end{figure}
+
+\noindent So two different things are going on: something pulls the smallest eigenvalue down, and something pushes the
+largest one up. The next two sections deal with each.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{rrrrrr}
+    \toprule
+    $n_H$ & $h$ & CG its & $\lambda_{\min}$ & $\lambda_{\max}$ & $\kappa$ \\
+    \midrule
+    16  & 1/80   & 59  & $4.0\times10^{-6}$ & 6.8 & $1.7\times10^{6}$ \\
+    32  & 1/160  & 85  & $6.1\times10^{-7}$ & 13.4 & $2.2\times10^{7}$ \\
+    64  & 1/320  & 136 & $8.4\times10^{-8}$ & 26.6 & $3.2\times10^{8}$ \\
+    128 & 1/640  & 237 & $1.1\times10^{-8}$ & 53.2 & $4.8\times10^{9}$ \\
+    256 & 1/1280 & 429 & $1.4\times10^{-9}$ & 106 & $7.5\times10^{10}$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Clamped cantilever with 2 void pixels: CG iterations and the extreme eigenvalues of $M^{-1}K$.}
+\end{table}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Fix 1: give the void a fixed physical thickness}
+
+This follows from the earlier study of a strip in vacuum. The Green preconditioner $M$ is the inverse of the stiffness
+of a cell that is solid \emph{everywhere}, void included. Each eigenvalue of $M^{-1}K$ is therefore a ratio of two
+energies of the same displacement $v$:
+\[
+  \lambda(v) = \frac{\text{energy of } v \text{ in the real beam}}
+                    {\text{energy of } v \text{ in a cell that is solid everywhere}}.
+\]
+A deformation pattern with wavelength $\ell$ along the beam fades into the void over a distance of about $\ell/(2\pi)$.
+If the void is thinner than that, the pattern has to be squeezed into a thin gap, its reference energy becomes large,
+and $\lambda$ becomes small. With 2 void pixels the void is $2h$ thick, so it gets thinner on every refinement and
+$\lambda_{\min}$ falls.
+
+The test: the void thickness $t$ was fixed in physical units ($0.025$ to $0.8$) and the mesh refined
+(Figure~\ref{fig:void}). With a fixed $t$, the smallest eigenvalue is the same on every mesh. A thicker void gives a
+larger eigenvalue and fewer iterations, levelling off at about $t = 0.4$--$0.8$. The solution does not depend on $t$,
+since the void carries no load.
+
+\begin{figure}[h]
+  \fig{void_study.png}
+  \caption{Fixed physical void thickness $t$ against 2 void pixels (dashed). Second panel: $\lambda_{\min}$ is flat in
+  $h$ for every fixed $t$. Right: the tip deflection differs by $10^{-11}$ between void thicknesses.}
+  \label{fig:void}
+\end{figure}
+
+\noindent The iterations still grow somewhat (55 $\to$ 71 per halving of $h$ at $t = 0.8$), and the largest eigenvalue
+still doubles on each refinement. That is the second effect.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Fix 2: avoid Dirichlet conditions}
+
+With the solid as the Green reference, every eigenvalue of $M^{-1}K$ should be at most 1, because the real material
+is never stiffer than the reference. Fixed nodes break this. CG uses the preconditioner with the fixed nodes projected
+out, $Q M Q$, and that is not the inverse of the reference problem with those nodes fixed, $(Q K_{\mathrm{ref}} Q)^{-1}$.
+Next to each fixed node the mismatch acts at the scale of one pixel, which is why it grows like $1/h$.
+
+The test: the same beam, a void of 0.4 on each side, and four ways of holding it (Figures~\ref{fig:bcsetup}
+and~\ref{fig:bc}, Table~\ref{tab:bc}).
+
+\begin{figure}[h]
+  \centering\includegraphics[width=0.9\textwidth]{bc_setups.png}
+  \caption{Supports and computed deformation at $n_H = 16$: clamped left face; pin + roller (3 fixed values); a free
+  beam with a balanced load. For the free beam the rigid motion was removed before drawing. The fourth setting, the
+  cantilever loaded by forces only, is described in Section~\ref{sec:traction}.}
+  \label{fig:bcsetup}
+\end{figure}
+
+\begin{figure}[h]
+  \fig{bc_study.png}
+  \caption{Top left: CG iterations versus $h$. Top middle: the largest eigenvalue grows like $1/h$ only for the
+  clamped face; it is exactly 1 for the free beam and for the cantilever loaded by forces. Top right: the smallest
+  eigenvalue is constant in $h$ in every case, because the void is now thick enough. Bottom left: CG on the finest mesh
+  ($n_H = 128$). Bottom middle: error of the compliance.}
+  \label{fig:bc}
+\end{figure}
+
+\begin{table}[h]
+  \centering
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llcccc}
+    \toprule
+    Support & Fixed & CG its & $\lambda_{\max}$ & $\lambda_{\min}$ & Mesh- \\
+            & values & ($h = 1/40 \to 1/640$) & & & independent \\
+    \midrule
+    Clamped left face    & $2(n_H + 1)$ & 40 $\to$ 94 & 5.3 $\to$ 79 ($\propto 1/h$) & $6.6\times10^{-4}$ & no \\
+    Pin + roller         & 3            & 41 $\to$ 48 & 1.4 $\to$ 1.9 & $5.2 \to 4.0\times10^{-3}$ & nearly \\
+    Free, balanced load  & 0            & 24 $\to$ 27 & 1.000 & $1.85\times10^{-2}$ & yes \\
+    Cantilever by forces & 0            & 30 $\to$ 33 & 1.000 & $1.85\times10^{-2}$ & yes \\
+    \bottomrule
+  \end{tabular}
+  \caption{Supports study, void thickness 0.4, $n_H = 8 \to 128$.}
+  \label{tab:bc}
+\end{table}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{The cantilever without Dirichlet conditions}
+\label{sec:traction}
+
+The reactions of a cantilever are known from statics: a shear force $F$ and a bending moment $F L$. So the clamp can
+be replaced by these reactions, applied as forces on the left face. With $\eta = y - H/2$ and $I = H^3/12$:
+\begin{align*}
+  \text{right face:}\quad & t_y(\eta) = \frac{3F}{2H}\Bigl(1 - \frac{4\eta^2}{H^2}\Bigr)
+      && \text{(parabolic shear, total } F), \\
+  \text{left face:}\quad  & t_y(\eta) = -\frac{3F}{2H}\Bigl(1 - \frac{4\eta^2}{H^2}\Bigr), \quad
+                            t_x(\eta) = \frac{F L}{I}\,\eta
+      && \text{(shear } {-F} \text{ and bending moment } F L).
+\end{align*}
+The tractions are integrated exactly onto the nodes (two-point Gauss per pixel), so the nodal forces balance to
+round-off. Nothing is fixed. The solution is unique only up to a rigid motion, which CG handles without trouble because
+the loads do not act on rigid motions.
+
+This is the classical end-loaded beam of Timoshenko and Goodier, for which the 2D elasticity solution is known
+exactly. Its compliance (twice the strain energy) is
+\[
+  F\cdot u = \frac{F^2 L^3}{3 E' I} + \frac{6 F^2 L}{5 \mu H}, \qquad E' = \frac{E}{1 - \nu^2} \ \text{(plane strain)},
+\]
+which is exactly the Timoshenko beam with shear coefficient $5/6$. The results:
+\begin{itemize}
+  \item \textbf{CG:} 30--33 iterations on every mesh, with $\lambda_{\max} = 1$ and $\lambda_{\min}$ constant.
+  \item \textbf{Accuracy:} the compliance converges to the exact value as exactly $h^2$ (error $3.6\times10^{-5}$ at
+        $n_H = 128$). The clamped version converges as $h^{1.76}$, because of the stress singularity at the corners of
+        the clamp.
+  \item \textbf{Difference from a real clamp:} the left face may warp slightly instead of staying flat. That changes the
+        solution only near the left end (Saint-Venant's principle).
+\end{itemize}
+\textbf{Limit:} this only works when the reactions follow from statics alone (statically determinate supports:
+cantilever, simply supported beam). For a beam clamped at both ends, the reactions are unknown in advance and Dirichlet
+conditions are needed.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Check in 3D}
+\label{sec:3d}
+
+The same beam in 3D: length 1, cross-section $0.2 \times 0.2$, trilinear voxels, the same material, preconditioner and
+stopping test. Two supports (clamped left face, or the cantilever loaded by forces only, with the shear spread
+parabolically over the height and uniformly over the width), and two voids (2 voxels on each side, or a physical
+thickness of 0.2). The meshes go from $n_H = 4$ to 32, the largest with $224 \times 96 \times 96 \approx 2$ million
+voxels (Figure~\ref{fig:3d}, Table~\ref{tab:3d}).
+
+\begin{figure}[h]
+  \centering\includegraphics[width=0.85\textwidth]{cantilever_3D_study.png}
+  \caption{3D beam: CG iterations, largest and smallest eigenvalue versus the voxel size, and CG on the finest mesh
+  ($n_H = 32$). Red: forces only; blue: clamped face. Solid: void 0.2; dashed: 2 void voxels.}
+  \label{fig:3d}
+\end{figure}
+
+\begin{table}[h]
+  \centering\small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccc}
+    \toprule
+    Case & CG its ($n_H = 4 \to 32$) & $\lambda_{\max}$ & $\lambda_{\min}$ \\
+    \midrule
+    Forces only, void 0.2      & 39 $\to$ 42  & 1.000 & $9.3\times10^{-3}$, constant \\
+    Forces only, 2 void voxels & 38 $\to$ 54  & $\le 1$ & $1.1\times10^{-2} \to 5.4\times10^{-3}$, falls \\
+    Clamped, void 0.2          & 49 $\to$ 94  & 1.9 $\to$ 12.7 ($\propto 1/h$) & $2.4\times10^{-4}$, constant \\
+    Clamped, 2 void voxels     & 50 $\to$ 141 & 1.8 $\to$ 12.3 & $1.1\times10^{-4} \to 1.2\times10^{-6}$, falls \\
+    \bottomrule
+  \end{tabular}
+  \caption{3D beam, $n_H = 4, 8, 16, 32$.}
+  \label{tab:3d}
+\end{table}
+
+\noindent Both claims hold in 3D:
+\begin{itemize}
+  \item \textbf{The void:} with a physical void thickness, the smallest eigenvalue is the same on every mesh. With 2 void
+        voxels it falls, fastest for the clamped beam (about $h^{2.5}$). In 3D even the beam loaded by forces only feels
+        the thin void ($5.4\times10^{-3}$ instead of $9.4\times10^{-3}$ at $n_H = 32$).
+  \item \textbf{The supports:} without Dirichlet conditions, $\lambda_{\max} = 1$ and CG needs 42 iterations from half a
+        thousand to 2 million voxels. A clamped face makes $\lambda_{\max}$ double on every refinement, as in 2D.
+\end{itemize}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Does the number of fixed nodes matter?}
+\label{sec:nodes}
+
+Yes, together with the pixel size. Here only a part of the left face is clamped: $k$ nodes, centred on the face, with
+both components fixed. The void is 0.4 thick, so it plays no role. The same $k$ on two meshes separates ``how many fixed
+nodes'' from ``how small the pixels are'' (Figure~\ref{fig:nodes}, left two panels, Table~\ref{tab:nodes}).
+
+\begin{table}[h]
+  \centering\small
+  \begin{tabular}{rccc}
+    \toprule
+    $k$ & $n_H = 16$ & $n_H = 32$ & $n_H = 64$ \\
+    \midrule
+    3  & 3.9  & 4.6  & 5.3 \\
+    5  & 5.4  & 6.7  & 7.9 \\
+    9  & 7.7  & 9.9  & 12.1 \\
+    17 & 10.2 & 14.6 & 18.7 \\
+    33 & --   & 20.1 & 28.3 \\
+    65 & --   & --   & 39.9 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Largest eigenvalue $\lambda_{\max}$ for $k$ fixed nodes on the left face.}
+  \label{tab:nodes}
+\end{table}
+
+All points follow one law within about $\pm 5\,\%$:
+\[
+  \lambda_{\max} \approx 0.6\,\sqrt{k\, n_H}, \qquad\text{i.e.}\qquad \lambda_{\max} \propto \sqrt{k/h}.
+\]
+\begin{itemize}
+  \item A fully clamped face has $k = n_H + 1$ nodes, which gives $\lambda_{\max} \propto 1/h$, as seen before.
+  \item With a fixed number of nodes, $\lambda_{\max}$ still grows, like $h^{-1/2}$.
+  \item Fewer fixed nodes help, but only like a square root. The CG count grows mildly with $k$ (46 to 71 at
+        $n_H = 64$).
+\end{itemize}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{A stiff layer instead of the clamp}
+\label{sec:stiff}
+
+Idea: replace the clamped face by a layer of very stiff material left of the beam, $\kappa$ times stiffer than the beam,
+and fix only the bottom and the top node of that layer. Those two nodes remove the rigid motion; the large reaction
+forces that hold the layer in place come out of them. The void is again 0.4 thick.
+
+\paragraph{One pixel thick: does not work.} A layer one pixel thick gets thinner on every refinement. Its bending
+stiffness falls like $\kappa h^3$, so it clamps worse on finer meshes, and CG also gets slower
+(Figure~\ref{fig:nodes}, right panels). At $n_H = 128$ the layer with $\kappa = 100$ is 29\,\% too soft and CG needs
+236 iterations; with $\kappa = 10^4$ it is 11\,\% too soft and needs 968 iterations.
+
+\begin{figure}[h]
+  \fig{fixed_nodes_study.png}
+  \caption{Left two panels: largest eigenvalue and CG iterations for $k$ fixed nodes on three meshes. Other panels: a
+  stiff layer one pixel thick, held at two nodes: largest eigenvalue, CG iterations, how much softer than the real
+  clamp it is, and CG at $n_H = 64$.}
+  \label{fig:nodes}
+\end{figure}
+
+\paragraph{Fixed physical thickness: works as predicted, but costs more than the clamp.} A layer 0.05 thick (a quarter
+of the beam height) keeps the same stiffness on every mesh (Figure~\ref{fig:stiff}, Table~\ref{tab:stiff}).
+\begin{itemize}
+  \item \textbf{It clamps equally well on every mesh.} With $\kappa = 100$ the beam is about 1\,\% too soft, on every
+        mesh.
+  \item \textbf{The eigenvalues form two clusters}, one around 0.1--1 from the beam and one up to about $\kappa$ from the
+        layer. They barely move with $h$: $\lambda_{\max} \approx 1.5$--$2\kappa$, growing about 8\,\% per halving of $h$.
+  \item \textbf{CG handles the stiff cluster.} The cost grows by about 40--60 iterations per decade of $\kappa$, far less
+        than $\sqrt{\kappa}$ would suggest. The convergence curves show steps: CG resolves the stiff-layer eigenvalues a
+        few at a time.
+  \item \textbf{But it is more expensive than the clamp.} For a 1\,\% clamp error ($\kappa = 100$) CG needs 153
+        iterations at $n_H = 128$, against 94 for the real clamp and 33 for the beam loaded by forces only.
+\end{itemize}
+
+\begin{figure}[h]
+  \fig{stiff_layer_study.png}
+  \caption{Stiff layer held at two nodes. Solid: layer 0.05 thick; dashed: one pixel thick. Top: largest and smallest
+  eigenvalue and CG iterations versus $h$. Bottom: how much softer than the real clamp, CG at $n_H = 64$, and the Ritz
+  values at $n_H = 64$ for each $\kappa$ (two clusters).}
+  \label{fig:stiff}
+\end{figure}
+
+\begin{table}[h]
+  \centering\footnotesize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{rccc}
+    \toprule
+    $\kappa$ & CG its ($n_H = 16 \to 128$) & $\lambda_{\max}$ & too soft vs.\ clamp \\
+    \midrule
+    1      & 37 $\to$ 41   & 1.6 $\to$ 2.0      & 53 $\to$ 95\,\% (no real clamp) \\
+    10     & 73 $\to$ 88   & 15 $\to$ 20        & 5.6 $\to$ 9.8\,\% \\
+    100    & 115 $\to$ 153 & 154 $\to$ 196      & 0.6 $\to$ 1.0\,\% \\
+    1000   & 158 $\to$ 226 & 1540 $\to$ 1960    & 0.06 $\to$ 0.10\,\% \\
+    $10^4$ & 201 $\to$ 289 & 15400 $\to$ 19600  & 0.006 $\to$ 0.010\,\% \\
+    \midrule
+    clamped face & 46 $\to$ 94 & 10 $\to$ 79 & -- \\
+    forces only  & 31 $\to$ 33 & 1.000       & -- \\
+    \bottomrule
+  \end{tabular}
+  \caption{Stiff layer 0.05 thick, held at two nodes, void 0.4.}
+  \label{tab:stiff}
+\end{table}
+
+\noindent\textbf{Why.} The Green preconditioner uses one reference material. With the beam as reference, the layer's
+eigenvalues sit near $\kappa$; with the layer as reference, the beam's would sit near $1/\kappa$. One reference cannot
+serve both materials. A preconditioner that adapts locally, such as Green-Jacobi (Green plus a diagonal scaling), should
+pull the $\kappa$ cluster back towards 1. That is the next test.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Fix 3: the corrected Green for Dirichlet conditions}
+\label{sec:corrected}
+
+Section~6 showed that fixed nodes break the bound $\lambda_{\max} \le 1$. The reason is the way the preconditioner
+treats them: CG uses Green with the fixed dofs cut out, and that is not the inverse of the reference problem with
+those dofs fixed. The corrected Green is that inverse. It is built from the ordinary Green operator plus a small
+correction on the fixed dofs, so it keeps Dirichlet conditions and still has $\lambda_{\max} \le 1$.
+
+\paragraph{Notation.} $\mathbf{K}(\mathbb{C}) = \mathbf{B}^{\top}\mathbf{W}\mathbb{C}\mathbf{B}$ is the stiffness matrix of
+the material $\mathbb{C}$, $\mathbf{K}_0 = \mathbf{K}(\mathbb{C}_0)$ that of the constant reference, and
+$\mathbf{G}_0 = \mathbf{K}_0^{-1}$ on the mean-free vectors the Green operator (FFT, zero frequency omitted). The $m$
+fixed (Dirichlet) dofs are selected by the projection $\mathbf{P} \in \mathbb{R}^{n\times n}$ (diagonal, 1 at the fixed
+dofs and 0 elsewhere), $\mathbf{Q} = \mathbf{I} - \mathbf{P}$ projects onto the free dofs, and $\mathbf{N} \in \mathbb{R}^{n\times d}$ holds the $d$ rigid
+translations, which $\mathbf{G}_0$ leaves out ($\mathbf{G}_0\mathbf{N} = \mathbf{0}$).
+
+\subsection*{The idea without formulas}
+
+\paragraph{What a preconditioner does.} In every iteration, CG has a residual $\mathbf{r}$: the forces that are not yet in
+balance. The preconditioner answers the question \emph{``how would the structure move under these forces?''}, not
+exactly, but for a simpler structure whose answer is cheap. The closer that simpler structure is to the real one, the
+fewer iterations CG needs.
+
+\paragraph{The simpler structure of Green.} Green answers the question for the \emph{reference solid}: the whole periodic
+cell filled with the beam material, voids filled in, and \emph{nothing held}. For that structure the answer is cheap,
+because every pixel is the same, so the FFT solves it exactly. As long as the real problem has no supports, the real
+beam differs from the reference solid only by its missing material (the void). Missing material can only make the
+structure softer, never stiffer. That is where $\lambda_{\max} \le 1$ comes from.
+
+\paragraph{What goes wrong with fixed nodes (plain Green).} The real problem now has nodes that must not move. Plain
+Green ignores them. It computes the motion of the free reference solid, in which the fixed nodes move like any other
+node, and then simply sets the motion of the fixed nodes to zero afterwards. Picture a rubber sheet that you push with
+your hand, look at its shape, and then pin a few points back to their original place by force. Next to every pinned
+point the sheet now has a sharp dent, one pixel wide. A dent that is one pixel wide stores a lot of energy, and the
+smaller the pixels, the sharper and more energetic the dent. To CG this looks like a far too stiff answer, and that is
+exactly the $\lambda_{\max} \propto 1/h$ we measured. The more nodes are pinned this way, the more dents (the
+$\sqrt{k}$ in Section~\ref{sec:nodes}).
+
+\paragraph{What the corrected Green does instead.} It answers the right question: how does the reference solid move
+when the fixed nodes are \emph{held while it deforms}? It gets this from Green in three steps, by superposition:
+\begin{enumerate}
+  \item \textbf{Let it move freely.} Apply Green to the forces $\mathbf{r}$. The fixed nodes move by some amount; call it
+        their \emph{error}.
+  \item \textbf{Find the holding forces.} Ask which forces $\boldsymbol{\lambda}$, applied at the fixed nodes only, move
+        the fixed nodes back by exactly that error. For this one needs to know how a unit force at one fixed node
+        moves the other fixed nodes. That is the small table $\mathbf{S}$ (one row and column per fixed dof). It does
+        not depend on $\mathbf{r}$, so it is computed once, before CG starts, by applying Green to one unit force per
+        fixed dof.
+  \item \textbf{Move it again with the holding forces.} Apply Green once more, now to the forces $\mathbf{r}$ minus the
+        holding forces. Because the system is linear, the fixed nodes now end up exactly at zero, and the rest of the
+        solid has moved smoothly around them, without dents.
+\end{enumerate}
+The holding forces are what the supports of a real structure would provide: the \emph{reaction forces} of the
+reference solid. The result is the exact motion of the reference solid with the same supports as the real problem.
+The real beam then again differs from its reference only by missing material, so $\lambda_{\max} \le 1$ is back, for
+any number and position of fixed nodes.
+
+\paragraph{One more detail: the translation.} Green does not know where the structure sits: a rigid shift of the whole
+cell costs no energy, and Green leaves it out (the zero frequency). With supports the shift is no longer free, so the
+corrected Green has to determine it as well. That adds $d$ unknowns $\boldsymbol{\alpha}$ (one shift per direction)
+to the small table, together with the condition that the forces in step 3 are in balance.
+
+\subsection*{The same in formulas}
+
+So far CG used
+\[
+  \mathbf{M}_{\mathrm{G}} = \mathbf{Q}\,\mathbf{G}_0\,\mathbf{Q} \;\neq\; \bigl(\mathbf{Q}\mathbf{K}_0\mathbf{Q}\bigr)^{-1}:
+\]
+$\mathbf{G}_0$ is the free motion of the reference solid, and the $\mathbf{Q}$ on the left sets the fixed dofs to zero
+afterwards (the dents). The corrected Green is the exact inverse, $\mathbf{M}_{\mathrm{GD}} =
+(\mathbf{Q}\mathbf{K}_0\mathbf{Q})^{-1}$ on the free dofs. Applying it to a residual $\mathbf{r}$ means solving the
+reference problem with the fixed dofs,
+\[
+  \begin{bmatrix} \mathbf{K}_0 & \mathbf{P} \\ \mathbf{P} & \mathbf{0} \end{bmatrix}
+  \begin{bmatrix} \mathbf{z} \\ \boldsymbol{\lambda} \end{bmatrix}
+  =
+  \begin{bmatrix} \mathbf{r} \\ \mathbf{0} \end{bmatrix},
+\]
+where $\boldsymbol{\lambda} = \mathbf{P}\boldsymbol{\lambda}$ are the reaction forces, nonzero only at the fixed dofs.
+With the Green operator,
+\[
+  \mathbf{z} = \mathbf{G}_0\bigl(\mathbf{r} - \boldsymbol{\lambda}\bigr) + \mathbf{N}\boldsymbol{\alpha},
+\]
+and $\boldsymbol{\lambda}$ and the translation $\boldsymbol{\alpha}$ follow from $\mathbf{P}\mathbf{z} = \mathbf{0}$
+(the fixed dofs do not move) and $\mathbf{N}^{\top}(\mathbf{r} - \boldsymbol{\lambda}) = \mathbf{0}$ (the
+reference problem is solvable only for a load in equilibrium):
+\[
+  \begin{bmatrix} \mathbf{S} & \mathbf{P}\mathbf{N} \\ \mathbf{N}^{\top}\mathbf{P} & \mathbf{0} \end{bmatrix}
+  \begin{bmatrix} \boldsymbol{\lambda} \\ -\boldsymbol{\alpha} \end{bmatrix}
+  =
+  \begin{bmatrix} \mathbf{P}\mathbf{G}_0\mathbf{r} \\ \mathbf{N}^{\top}\mathbf{r} \end{bmatrix},
+  \qquad
+  \mathbf{S} = \mathbf{P}\mathbf{G}_0\mathbf{P}.
+\]
+The three steps above are: $\mathbf{y} = \mathbf{G}_0\mathbf{r}$ (step 1; its error at the fixed dofs is
+$\mathbf{P}\mathbf{y}$), the small solve for $\boldsymbol{\lambda}$ and $\boldsymbol{\alpha}$ (step 2), and
+$\mathbf{z} = \mathbf{G}_0(\mathbf{r} - \boldsymbol{\lambda}) + \mathbf{N}\boldsymbol{\alpha}$ (step 3).
+$\mathbf{S}$ is the Green operator seen only at the fixed dofs; on the range of $\mathbf{P}$ it is an $m\times m$
+symmetric positive definite matrix, and the small system is solved only there ($m + d$ unknowns). Without
+the translations this is the Woodbury formula $\mathbf{M}_{\mathrm{GD}} = \mathbf{G}_0 -
+\mathbf{G}_0\mathbf{P}\mathbf{S}^{-1}\mathbf{P}\mathbf{G}_0$ (with $\mathbf{S}^{-1}$ the inverse on the range of
+$\mathbf{P}$). The idea is the capacitance matrix method of fast
+Poisson solvers on irregular domains (Buzbee, Dorr, George and Golub 1971; Proskurowski and Widlund 1976), used here as a
+preconditioner.
+
+\paragraph{Cost.} Setup, once: $m$ Green applications to assemble $\mathbf{S}$, and one factorization of the
+$(m+d)\times(m+d)$ matrix. In every CG iteration: two Green applications instead of one ($\mathbf{G}_0\mathbf{r}$ and
+$\mathbf{G}_0(\mathbf{r} - \boldsymbol{\lambda})$) and one small solve.
+
+\paragraph{Why it works.} If the real material is nowhere stiffer than the reference, $\mathbb{C}_q \le \mathbb{C}_0$
+(void included), then $\mathbf{Q}\mathbf{K}\mathbf{Q} \le \mathbf{Q}\mathbf{K}_0\mathbf{Q}$, and therefore
+$\lambda_{\max}(\mathbf{M}_{\mathrm{GD}}\mathbf{K}) \le 1$, whatever the number and position of the fixed dofs and
+whatever $h$. Only the preconditioner changes; the solution is the same.
+
+\paragraph{Results.} The same beam, void 0.4, $n_H = 16 \to 128$ (Table~\ref{tab:corrected}, Figure~\ref{fig:corrected}).
+
+\begin{table}[h]
+  \centering\footnotesize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llccc}
+    \toprule
+    Supports & Preconditioner & CG its, $n_H = 16, 32, 64, 128$ & $\lambda_{\max}$ & $\lambda_{\min}$ \\
+    \midrule
+    clamped face          & plain Green     & 46, 55, 71, 94 & 10 $\to$ 79 ($\propto 1/h$) & $6.6\times10^{-4}$ \\
+                          & corrected Green & 30, 31, 32, 32 & 1.000 & $2.70\times10^{-3}$ \\
+    pin + roller          & plain Green     & 43, 45, 47, 48 & 1.54 $\to$ 1.93 & $4.8 \to 4.0\times10^{-3}$ \\
+                          & corrected Green & 29, 30, 31, 31 & 1.000 & $1.85\times10^{-2}$ \\
+    3 fixed nodes         & plain Green     & 41, 45, 46 ($n_H \le 64$) & 3.9 $\to$ 5.3 & \\
+                          & corrected Green & 34, 36, 38 ($n_H \le 64$) & 1.000 & \\
+    stiff layer $\kappa = 100$, 2 nodes & plain Green & 115, 133, 143, 153 & 154 $\to$ 196 & $6.2\times10^{-4}$ \\
+                          & corrected Green & 96, 111, 123, 132 & 100.0 & $2.6\times10^{-3}$ \\
+    stiff layer $\kappa = 100$, by forces & plain Green & 94, 111, 118, 123 & 100.0 & $1.7\times10^{-2}$ \\
+    forces only           & plain Green     & 31, 32, 32, 33 & 1.000 & $1.85\times10^{-2}$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Plain against corrected Green. The solutions are identical in all printed digits.}
+  \label{tab:corrected}
+\end{table}
+
+\begin{figure}[h]
+  \fig{dirichlet_fix_study.png}
+  \caption{Plain Green (dashed) against corrected Green (solid). Top: CG iterations, largest and smallest eigenvalue
+  against $h$. Bottom: CG convergence at $n_H = 128$; the largest eigenvalue for partial clamps of 3 and 17 nodes; CG
+  iterations of the stiff layer against its stiffness $\kappa$.}
+  \label{fig:corrected}
+\end{figure}
+
+\begin{itemize}
+  \item \textbf{Every Dirichlet case becomes mesh-independent.} The clamped face needs 30--32 iterations on every mesh,
+        with $\lambda_{\max} = 1$ and $\lambda_{\min}$ constant. That is the level of the beam loaded by forces only.
+  \item \textbf{Fixed dofs that only stop the rigid motion cost nothing.} With the pin + roller, the spectrum is exactly
+        that of the beam loaded by forces only ($\lambda_{\min} = 1.85\times10^{-2}$).
+  \item \textbf{The stiff layer keeps $\lambda_{\max} = \kappa$.} The corrected Green removes the Dirichlet part exactly,
+        but a material stiffer than the reference still gives eigenvalues up to $\kappa$. Holding the layer by forces
+        changes little. With the corrected Green the stiff layer is not needed: the clamp itself is cheaper.
+  \item \textbf{Limit.} The setup grows with the number of fixed dofs $m$; see Section~\ref{sec:large_m}.
+\end{itemize}
+
+\subsection*{A beam with holes, and the cost in time}
+\label{sec:holes}
+
+To check that the result does not depend on the simple solid beam, the same comparison was run on a beam with four
+circular holes of radius 0.05 on its centre line (Figure~\ref{fig:holes}). The holes are fixed in physical units, like
+the void.
+
+\begin{figure}[h]
+  \fig{holes_study.png}
+  \caption{Beam with four holes, void 0.4. Top: the deformed structure; CG iterations; largest and smallest eigenvalue
+  against $h$. Bottom: CG convergence at $n_H = 128$; wall time (setup + CG, and setup alone); time per CG iteration.}
+  \label{fig:holes}
+\end{figure}
+
+\begin{table}[h]
+  \centering\small
+  \begin{tabular}{lcc}
+    \toprule
+    Supports and preconditioner & CG its, $n_H = 16, 32, 64, 128$ & $\lambda_{\max}$ \\
+    \midrule
+    clamped face, plain Green     & 60, 74, 92, 122 & 10 $\to$ 79 \\
+    clamped face, corrected Green & 41, 42, 41, 42  & $\le 1$ \\
+    pin + roller, plain Green     & 50, 51, 52, 54  & 1.5 $\to$ 1.9 \\
+    pin + roller, corrected Green & 37, 37, 37, 36  & 1.000 \\
+    forces only                   & 39, 40, 40, 40  & $\le 1$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Beam with four holes: CG iterations. The solutions of plain and corrected Green are identical in all printed
+  digits.}
+  \label{tab:holes}
+\end{table}
+
+The holes make the beam softer, so every case needs about ten iterations more than the solid beam, but the picture is
+the same: with the corrected Green every case is mesh-independent.
+
+\paragraph{Time.} Clamped face, one thread, each run timed alone:
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+  \toprule
+  & \multicolumn{2}{c}{$n_H = 64$} & \multicolumn{2}{c}{$n_H = 128$} \\
+  & plain & corrected & plain & corrected \\
+  \midrule
+  setup [s]                 & 0.30 & 0.71 & 1.3 & 5.7 \\
+  time per CG iteration [ms] & 122 & 133 & 562 & 594 \\
+  CG iterations             & 92 & 41 & 122 & 42 \\
+  \textbf{total [s]}        & \textbf{11.5} & \textbf{6.2} & \textbf{69.9} & \textbf{30.6} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{One iteration costs only 6--9\,\% more,} not twice as much. A CG iteration is dominated by the product
+        with the stiffness matrix (strains and stresses at all quadrature points); the second Green application, an FFT
+        pair, is comparatively cheap.
+  \item \textbf{The setup} ($m = 258$ Green applications and a dense inverse at $n_H = 128$) adds 4.4\,s.
+  \item \textbf{Overall the corrected Green is 2.3 times faster} at $n_H = 128$, and the gap grows on finer meshes,
+        because plain Green needs more iterations on every refinement while the corrected Green does not.
+\end{itemize}
+
+\subsection*{Heterogeneous material}
+\label{sec:hetero}
+
+The beam with holes was also given a smooth heterogeneous stiffness, fixed in physical units: the beam material is
+multiplied by $\kappa^{-\varphi}$ with $\varphi = \tfrac12\bigl(1 + \sin(2\pi x/0.2 + 0.7)\sin(2\pi y/0.1 + 0.3)\bigr)$, so
+the stiffness varies between $1/\kappa$ and 1 times the beam material, for contrasts $\kappa = 10$ and $100$
+(Figures~\ref{fig:het10} and~\ref{fig:het100}). The Green reference stays the stiffest material, so the bound
+$\lambda_{\max} \le 1$ of the corrected Green still applies.
+
+\begin{figure}[h]
+  \fig{holes_study_het10.png}
+  \caption{Beam with holes and heterogeneous stiffness, contrast 10. Same panels as Figure~\ref{fig:holes}; the
+  structure is coloured by the stiffness. All runs 6 in parallel, so the times are rough.}
+  \label{fig:het10}
+\end{figure}
+
+\begin{figure}[h]
+  \fig{holes_study_het100.png}
+  \caption{As Figure~\ref{fig:het10}, contrast 100.}
+  \label{fig:het100}
+\end{figure}
+
+\begin{table}[h]
+  \centering\small
+  \begin{tabular}{lcc}
+    \toprule
+    & \multicolumn{2}{c}{CG its, $n_H = 16, 32, 64, 128$} \\
+    Supports and preconditioner & $\kappa = 10$ & $\kappa = 100$ \\
+    \midrule
+    clamped face, plain Green               & 104, 120, 149, 192 & 219, 254, 309, 384 \\
+    clamped face, corrected Green           & 78, 81, 85, 85     & 166, 187, 200, 204 \\
+    clamped face, corrected Green, $\mathbf{S}$ only & 89, 93, 94, 94 & 196, 217, 236, 241 \\
+    pin + roller, plain Green               & 89, 94, 98, 100    & 203, 220, 239, 243 \\
+    pin + roller, corrected Green           & 74, 76, 76, 76     & 158, 177, 198, 201 \\
+    forces only                             & 75, 77, 82, 81     & 166, 181, 200, 200 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Beam with holes and heterogeneous stiffness: CG iterations.}
+  \label{tab:hetero}
+\end{table}
+
+\begin{itemize}
+  \item \textbf{The corrected Green behaves like the problem without Dirichlet conditions.} For both contrasts its
+        iteration counts follow those of the beam loaded by forces only, and $\lambda_{\max} \le 1$. Plain Green with the
+        clamp grows to 192 and 384 iterations at $n_H = 128$, about twice as many.
+  \item \textbf{The contrast sets the level.} The soft material lowers $\lambda_{\min}$ roughly in proportion to $1/\kappa$
+        ($7.2\times10^{-4}$ at $\kappa = 10$, $1.9\times10^{-4}$ at $\kappa = 100$ for the clamp with the corrected Green),
+        so all cases need more iterations at $\kappa = 100$. $\lambda_{\min}$ itself is constant in $h$.
+  \item \textbf{Mild growth on the coarse meshes at $\kappa = 100$} (166 $\to$ 200) also appears for the forces-only
+        problem, and it stops between $n_H = 64$ and 128. It comes from the sampled material: on coarse meshes the
+        pixels do not yet resolve the stiffness field. It is not caused by the supports.
+  \item \textbf{$\mathbf{S}$ only costs 10--20\,\% more iterations here} (94 vs.\ 85, 241 vs.\ 204). Its $\lambda_{\min}$
+        equals that of plain Green: the missing translation leaves one small eigenvalue that CG has to resolve.
+  \item \textbf{Time} (rough, all runs in parallel): at $n_H = 128$ the corrected Green needs 93\,s against 266\,s for
+        plain Green ($\kappa = 10$), and 213\,s against 369\,s ($\kappa = 100$).
+\end{itemize}
+
+\subsection*{The correction with $\mathbf{S}$ only}
+\label{sec:s_only}
+
+The translation part ($\mathbf{N}$, $\boldsymbol{\alpha}$ and the balance condition) makes the correction look more
+complicated than it is. A simpler version keeps only $\mathbf{S}$:
+\[
+  \mathbf{S}\boldsymbol{\lambda} = \mathbf{P}\mathbf{G}_0\mathbf{r}, \qquad
+  \mathbf{z} = \mathbf{G}_0\bigl(\mathbf{r} - \boldsymbol{\lambda}\bigr), \qquad
+  \mathbf{S} = \mathbf{P}\mathbf{G}_0\mathbf{P}.
+\]
+The fixed dofs still end at zero, $\mathbf{P}\mathbf{z} = \mathbf{P}\mathbf{G}_0\mathbf{r} - \mathbf{S}\boldsymbol{\lambda} =
+\mathbf{0}$. What is missing is the shift: $\mathbf{G}_0$ returns only vectors with zero mean, so every direction CG
+receives has zero mean, while the true solution usually does not.
+
+\paragraph{Why it still works here.} The mean is taken over \emph{all} nodes of the cell, including the nodes in the
+void. Their displacements cost no energy, so they can take up any mean without changing the solution in the solid.
+On the beam with holes, the version with $\mathbf{S}$ only gives the same solution in all printed digits and needs
+44 iterations at $n_H = 16$ and 32, against 41--42 for the full correction (and 60--74 for plain Green). With
+heterogeneous material it needs 10--20\,\% more iterations than the full correction (Table~\ref{tab:hetero}): the
+missing translation leaves one small eigenvalue, at the level of plain Green's $\lambda_{\min}$.
+
+\paragraph{When it would not work.} In a cell without void, for example a solid that fills the whole periodic cell and
+is clamped on an internal plane, there are no free nodes to take up the mean, and the translation part is needed.
+Around a structure in void, the version with $\mathbf{S}$ only is enough.
+
+\subsection*{How thin may the void be? Large grids}
+\label{sec:thin_void}
+
+The void around the beam costs pixels: with $t = 0.4$ on each side the cell is $1.8 \times 1.0$ while the beam is
+$1 \times 0.2$, so about 90\,\% of the pixels carry no material. The beam with holes was therefore solved with void
+thicknesses from $t = 0.4$ down to $t = 0.00625$ (one pixel at $n_H = 32$), always fixed in physical units
+(Figure~\ref{fig:thin_void}). The solution in the beam is the same for every $t$ (the compliances agree in all printed
+digits), so only the cost changes.
+
+\begin{figure}[h]
+  \fig{void_holes_study.png}
+  \caption{Beam with four holes, void thickness $t$ from 0.4 down to 0.00625 on each side. Left: CG iterations against
+  $h$ (corrected Green solid, plain Green dashed, forces only dotted); the thinnest void is run up to $n_H = 1024$
+  ($h = 1/5120$). Middle: smallest eigenvalue at $n_H = 128$. Right: wall time and number of pixels at $n_H = 128$
+  (6 runs in parallel, so the times are rough).}
+  \label{fig:thin_void}
+\end{figure}
+
+\begin{table}[h]
+  \centering\footnotesize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{rrcccccc}
+    \toprule
+    & & \multicolumn{2}{c}{CG its, $n_H = 16, 32, 64, 128$} & & \multicolumn{2}{c}{$\lambda_{\min}$ at $n_H = 128$} &
+    total time [s] \\
+    $t$ & pixels & plain Green & corrected Green & forces only & corrected & forces only & corr.\,/\,plain \\
+    \midrule
+    0.4     & 737\,280 & 60, 74, 92, 122  & 41, 42, 41, 42 & 39--40 & $2.5\times10^{-3}$ & $1.6\times10^{-2}$ & 31 / 70 \\
+    0.2     & 344\,064 & 62, 75, 95, 125  & 41, 42, 41, 41 & 39--40 & $2.3\times10^{-3}$ & $1.7\times10^{-2}$ & 22 / 49 \\
+    0.1     & 196\,608 & 64, 78, 99, 132  & 41, 42, 41, 41 & 39--40 & $1.9\times10^{-3}$ & $1.8\times10^{-2}$ & 16 / 28 \\
+    0.05    & 135\,168 & 69, 84, 106, 141 & 42, 43, 42, 42 & 40--41 & $1.3\times10^{-3}$ & $1.5\times10^{-2}$ & 8 / 20 \\
+    0.025   & 107\,520 & 73, 91, 115, 153 & 45, 45, 45, 45 & 43--44 & $8.0\times10^{-4}$ & $1.0\times10^{-2}$ & 6 / 17 \\
+    0.0125  &  94\,464 & 82, 101, 124, 170 & 49, 50, 49, 49 & 48--49 & $4.5\times10^{-4}$ & $6.1\times10^{-3}$ & 6 / 17 \\
+    0.00625 &  88\,128 & --, 115, 147, 193 & --, 58, 58, 58 & 57--58 & $2.4\times10^{-4}$ & $3.3\times10^{-3}$ & 6 / 16 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Beam with holes, clamped face: void thickness $t$ on each side. Pixels and times at $n_H = 128$; the time is
+  setup + CG. $t = 0.00625$ is less than one pixel at $n_H = 16$ and was not run there.}
+  \label{tab:thin_void}
+\end{table}
+
+\begin{itemize}
+  \item \textbf{With the corrected Green every void thickness is mesh-independent.} Halving $t$ lowers
+        $\lambda_{\min}$ roughly by a factor 1.8 below $t \approx 0.05$, and the iteration count rises slowly, from 42
+        to 58 between $t = 0.4$ and $0.00625$. The forces-only beam behaves the same, iteration for iteration.
+  \item \textbf{Plain Green is not}, for any $t$, because its $\lambda_{\max}$ grows like $1/h$ (Section~\ref{sec:nodes}).
+  \item \textbf{A thin void is cheaper overall.} The thin void needs more iterations but far fewer pixels: at
+        $n_H = 128$ the cell has 8 times fewer pixels with $t = 0.00625$ than with $t = 0.4$. With the corrected Green the
+        fastest runs are $t = 0.0125$--$0.025$ (5--6\,s against 31\,s for $t = 0.4$).
+\end{itemize}
+
+\paragraph{Large grids.} The thinnest void, $t = 0.00625$, was run up to $n_H = 1024$: a grid of $5184 \times 1088$, 5.6
+million pixels, 32 times finer than $n_H = 32$.
+
+\begin{center}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{rrcccccc}
+  \toprule
+  & & \multicolumn{3}{c}{CG iterations} & \multicolumn{2}{c}{$\lambda_{\min}$ / $\lambda_{\max}$} & \\
+  $n_H$ & grid & plain & corrected & forces only & plain & corrected & fixed nodes \\
+  \midrule
+  32   & $162 \times 34$     & 115 & 58 & 58 & & $2.34\times10^{-4}$ / 0.999 & 33 \\
+  128  & $648 \times 136$    & 193 & 58 & 57 & $2.9\times10^{-6}$ / 52  & $2.36\times10^{-4}$ / 0.999 & 129 \\
+  256  & $1296 \times 272$   & 262 & 58 & 57 & $2.9\times10^{-6}$ / 103 & $2.37\times10^{-4}$ / 0.999 & 257 \\
+  512  & $2592 \times 544$   & 370 & 58 & 57 & $2.9\times10^{-6}$ / 206 & $2.37\times10^{-4}$ / 0.999 & 513 \\
+  1024 & $5184 \times 1088$  & \textbf{520} & \textbf{58} & 57 & $2.9\times10^{-6}$ / 412 & $2.37\times10^{-4}$ / 0.999 & 1025 \\
+  \bottomrule
+\end{tabular}
+
+\vspace{6pt}
+\begin{tabular}{rccc}
+  \toprule
+  $n_H$ & corrected Green: setup + CG [s] & plain Green [s] & speed-up \\
+  \midrule
+  256  & 9 + 27 = 36        & 115  & 3.2 \\
+  512  & 61 + 96 = 157      & 606  & 3.9 \\
+  1024 & 533 + 360 = \textbf{893} & \textbf{5462} & \textbf{6.1} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{The corrected Green needs 58 iterations on every mesh} from $n_H = 32$ to 1024. Its $\lambda_{\min}$ is
+        constant to three digits and $\lambda_{\max} = 0.999$. Plain Green grows from 115 to 520 iterations, roughly like
+        $h^{-1/2}$, as its $\lambda_{\max}$ doubles on each refinement ($\sqrt{\kappa} \propto h^{-1/2}$). Both give the
+        same compliance, $5.198629\times10^{-6}$ at $n_H = 1024$.
+  \item \textbf{The speed-up grows with the mesh}: 3.2, 3.9 and 6.1 times (4 runs in parallel, so the times are rough).
+  \item \textbf{At $n_H = 1024$ the setup is 60\,\% of the time.} Assembling $\mathbf{S}$ takes $m = 2050$ Green
+        applications of about 0.25\,s each. Its cost grows like $m$ times the grid size, about $4.5\times$ per refinement
+        in 2D, faster than the CG part ($4\times$). One more refinement and the setup would dominate clearly. This is the
+        2D version of the problem of the next paragraph, and the inner CG proposed there would remove most of it.
+\end{itemize}
+
+\subsection*{Many fixed dofs: a clamped wall in 3D}
+\label{sec:large_m}
+
+$\mathbf{S}$ has one row and one column per fixed dof. For a clamped face in 2D that is $m = 2(n_H+1)$, at most a few
+hundred. A clamped wall in 3D has $(n+1)^2$ nodes with 3 dofs each, so $m$ grows like $h^{-2}$:
+
+\begin{center}
+\small
+\begin{tabular}{rrrl}
+  \toprule
+  $n_H$ & fixed dofs $m$ & dense $\mathbf{S}$ & setup ($m$ Green applications) \\
+  \midrule
+  16 & 867    & 6 MB   & fine \\
+  32 & 3\,267  & 85 MB  & about 1 hour on 2 million voxels \\
+  64 & 12\,675 & 1.3 GB & not feasible \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\noindent What breaks is the assembly of $\mathbf{S}$ ($m$ Green applications) and its dense factorization
+($\sim m^3$), not the method. \emph{Applying} $\mathbf{S}$ stays cheap: $\mathbf{S}\mathbf{y} =
+\mathbf{P}\mathbf{G}_0\mathbf{P}\mathbf{y}$ is one Green application. Ways to keep it general:
+\begin{enumerate}
+  \item \textbf{Do not assemble $\mathbf{S}$; solve $\mathbf{S}\boldsymbol{\lambda} = \mathbf{P}\mathbf{G}_0\mathbf{r}$ by an inner
+        CG} in every outer iteration. One inner step is one Green application, about 6\,\% of an outer iteration, so
+        15--20 inner steps cost about one extra outer iteration. Starting the inner CG from the $\boldsymbol{\lambda}$ of
+        the previous outer iteration should cut this further. If the inner solve is not exact, the preconditioner
+        changes slightly from one outer iteration to the next; that needs flexible CG or a tight inner tolerance.
+  \item \textbf{Precondition the inner solve.} $\mathbf{S}$ is the flexibility of the reference solid seen at the wall;
+        its condition number grows roughly like $1/h$. If the wall is a flat grid plane, $\mathbf{S}$ is nearly
+        translation invariant along it, and an FFT in the plane of the wall would be a cheap preconditioner for it.
+  \item \textbf{Use forces where statics allows it.} For statically determinate supports no $\mathbf{S}$ is needed at
+        all (Section~\ref{sec:traction}).
+\end{enumerate}
+The inner-CG version is the natural next test, on the 3D clamped beam of Section~\ref{sec:3d} ($n_H = 8 \to 32$).
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Practical rules}
+\begin{enumerate}
+  \item \textbf{Size the void in physical units, not in pixels.} Its thickness should be at least comparable to the
+        wavelength of the softest deformation divided by $2\pi$. For this beam, 0.4 (twice the beam height) was enough.
+        With the corrected Green a much thinner void also works: any fixed thickness is mesh-independent, and
+        $t = 0.0125$--$0.025$ (a tenth of the beam height) was the fastest overall, because it saves many more pixels
+        than it costs iterations (Section~\ref{sec:thin_void}).
+  \item \textbf{With fixed nodes, use the corrected Green.} It keeps all eigenvalues at or below 1 for any Dirichlet
+        conditions, and CG needs the same number of iterations on every mesh (Section~\ref{sec:corrected}). Without it,
+        prefer forces to fixed nodes where statics allows it.
+  \item \textbf{With plain Green, a few fixed values are cheap; fixed faces are not.} Pinning 3 values to remove rigid
+        motion costs almost nothing. Clamping a face makes the largest eigenvalue grow like $1/h$.
+  \item \textbf{Mesh-independent does not mean few iterations.} The smallest eigenvalue is set by the geometry. A more
+        slender beam or a thinner void gives a smaller value, constant in $h$ but with more iterations.
+  \item \textbf{Stop on the energy error, not the residual.} Here the residual first grows by $100\times$ before it
+        falls.
+  \item \textbf{The cost of fixed nodes grows like a square root.} With $k$ fixed nodes, $\lambda_{\max} \approx
+        0.6\sqrt{k\,n_H}$.
+  \item \textbf{A stiff layer needs a physical thickness.} A layer one pixel thick clamps worse and converges slower on
+        every refinement. With a fixed thickness it behaves well, but with plain Green it is still more expensive than a
+        clamped face.
+\end{enumerate}
+
+\subsection*{Open questions}
+\begin{itemize}
+  \item The corrected Green with many fixed dofs (a clamped wall in 3D): $\mathbf{S}$ applied without assembling it
+        and solved by an inner CG, possibly preconditioned by an FFT in the plane of the wall
+        (Section~\ref{sec:large_m}).
+  \item How the smallest eigenvalue depends on the slenderness $L/H$. For the void thickness, Section~\ref{sec:thin_void}
+        gives the trend for this beam ($\lambda_{\min}$ about halves when $t$ halves below $t \approx 0.05$), but not a
+        rule for other geometries.
+  \item Whether Green-Jacobi brings the stiff-layer cluster near $\kappa$ back towards 1, which would make the stiff
+        layer cheaper than the clamp.
+\end{itemize}
+
+\subsection*{Files}
+All in \texttt{experiments/linear\_elastic\_mesh\_study/}. Each mesh is solved once and stored in
+\texttt{exp\_data/runs/}; the figures are rebuilt from the stored runs.
+{\raggedright
+\begin{description}[font=\ttfamily\small,style=nextline]
+  \item[cantilever\_mesh\_study.py] the solver. Options: \texttt{N\_H}, \texttt{VOID} or \texttt{VOID\_THICKNESS},
+        \texttt{BEAM\_LENGTH}, \texttt{CLAMP\_COLUMNS}, \texttt{CLAMP\_SPAN}, \texttt{LOAD\_X},
+        \texttt{BC=clamp|simple|free|traction|stiff|stiffforce}, \texttt{STIFF\_FACTOR}, \texttt{STIFF\_THICKNESS},
+        \texttt{PRECOND=green\_dirichlet} (the corrected Green), \texttt{DENSE\_SPECTRUM}.
+  \item[run\_parallel.sh] mesh study, one process per mesh (Figures~\ref{fig:setup}, \ref{fig:cg}).
+  \item[run\_plateau.sh, plateau\_study.py] what sets the stall (Figure~\ref{fig:plateau}).
+  \item[spectrum\_study.py] Ritz values and the dense check (Figures~\ref{fig:dense}, \ref{fig:spectrum}).
+  \item[run\_void.sh, void\_study.py] fixed physical void thickness (Figure~\ref{fig:void}).
+  \item[run\_bc.sh, bc\_study.py, plot\_bc\_setups.py] supports study and the cantilever by forces
+        (Figures~\ref{fig:bcsetup}, \ref{fig:bc}).
+  \item[cantilever\_3D\_study.py, run\_3D.sh] the 3D check, runs in \texttt{exp\_data/runs3d/}
+        (Figure~\ref{fig:3d}).
+  \item[run\_fixed\_nodes.sh, fixed\_nodes\_study.py] number of fixed nodes and the one-pixel stiff layer
+        (Figure~\ref{fig:nodes}).
+  \item[run\_stiff\_layer.sh, stiff\_layer\_study.py] stiff layer of fixed thickness (Figure~\ref{fig:stiff}).
+  \item[run\_dirichlet\_fix.sh, dirichlet\_fix\_study.py] the corrected Green and the stiff layer held by forces
+        (Figure~\ref{fig:corrected}).
+  \item[run\_hetero.sh] the beam with holes and heterogeneous stiffness (Figures~\ref{fig:het10}, \ref{fig:het100});
+        \texttt{HETERO=}$\kappa$ in the solver, \texttt{holes\_study.py --hetero} $\kappa$ for the figure.
+  \item[run\_holes.sh, holes\_study.py] the beam with holes, iterations and time (Figure~\ref{fig:holes});
+        \texttt{PRECOND=green\_dirichlet\_S} is the version with $\mathbf{S}$ only.
+  \item[run\_void\_holes.sh, run\_void\_holes\_thin.sh, run\_void\_large.sh, void\_holes\_study.py] void thickness on
+        the beam with holes, and $t = 0.00625$ up to $n_H = 1024$ (Figure~\ref{fig:thin_void}).
+  \item[report/corrected\_green.tex] a short stand-alone note on the corrected Green.
+\end{description}
+}
+
+\end{document}

@@ -323,3 +323,42 @@ def test_green_preconditioner_is_inverse_of_homogeneous_problem(
     )
 
 
+
+
+@pytest.mark.parametrize('element_type,nb_pixels', [('bilinear_rectangle', (6, 5)),
+                                                    ('trilinear_hexahedron', (5, 4, 6))])
+@pytest.mark.parametrize('young', [1.0, 1e10])
+def test_green_preconditioner_symmetric_for_physical_scale(element_type, nb_pixels, young):
+    """The Green operator must be symmetric positive semi-definite and invert the homogeneous stiffness on
+    zero-mean fields for any material scale. Regression: the un-inverted zero-frequency block K_hat(0) was left at
+    its round-off ~ E eps, which for E = 1e10 dominated the inverted blocks ~ 1/E and made G asymmetric/indefinite."""
+    dim = len(nb_pixels)
+    cell = domain.PeriodicUnitCell(domain_size=[0.3 * n for n in nb_pixels], problem_type='elasticity')
+    disc = domain.Discretization(cell=cell, nb_of_pixels_global=nb_pixels, discretization_type='finite_element',
+                                 element_type=element_type)
+    lam, mu = material_models.get_lame_parameters(E=young, poisson=0.2)
+    I = np.eye(dim)
+    C = lam * np.einsum('ij,kl->ijkl', I, I) + mu * (np.einsum('ik,jl->ijkl', I, I) + np.einsum('il,jk->ijkl', I, I))
+    green = disc.get_preconditioner_Green_mugrid(reference_material_data_ijkl=C, name='green_scale_test')
+    x, y, Gx, Gy, Kx, GKx = (disc.get_unknown_size_field(name=f'scale_test_{k}') for k in
+                             ('x', 'y', 'Gx', 'Gy', 'Kx', 'GKx'))
+    rng = np.random.default_rng(0)
+    x.s[...] = rng.standard_normal(x.s.shape)
+    y.s[...] = rng.standard_normal(y.s.shape)
+
+    def G(a, b):
+        disc.fft.communicate_ghosts(a)
+        disc.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green, input_nodal_field_fnxyz=a,
+                                         output_nodal_field_fnxyz=b)
+
+    G(x, Gx)
+    G(y, Gy)
+    yGx, xGy, xGx = np.sum(y.s * Gx.s), np.sum(x.s * Gy.s), np.sum(x.s * Gx.s)
+    assert abs(yGx - xGy) <= 1e-10 * abs(xGx), f'G not symmetric: {yGx} vs {xGy}'
+    assert xGx > 0, f'G not positive: x.Gx = {xGx}'
+    # G K x = x minus its mean (per component)
+    disc.fft.communicate_ghosts(x)
+    disc.apply_system_matrix_mugrid(material_data_field=C, input_field_inxyz=x, output_field_inxyz=Kx)
+    G(Kx, GKx)
+    x_zero_mean = x.s - x.s.mean(axis=tuple(range(1, x.s.ndim)), keepdims=True)
+    np.testing.assert_allclose(GKx.s, x_zero_mean, rtol=1e-8, atol=1e-8 * np.abs(x_zero_mean).max())

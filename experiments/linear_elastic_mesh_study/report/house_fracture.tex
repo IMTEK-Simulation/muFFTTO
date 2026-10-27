@@ -1,0 +1,242 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+
+\graphicspath{{../exp_data/}}
+\newcommand{\fig}[1]{\includegraphics[width=\textwidth]{#1}}
+
+\title{A house cracking under wind: phase-field fracture with the corrected Green preconditioner}
+\author{muFFTTO, \texttt{experiments/linear\_elastic\_mesh\_study}}
+\date{24 October 2026}
+
+\begin{document}
+\maketitle
+
+\noindent\fbox{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule}{%
+\textbf{Summary.}
+\begin{itemize}
+  \item A masonry house (6 $\times$ 8\,m, ridge 5\,m, walls 0.25\,m) on voxels, clamped at the foundation, under
+        self-weight and growing wind, with AT2 phase-field fracture. Run on the GPU, controlled by the eaves displacement
+        so that the softening branch after the peak wind is followed.
+  \item \textbf{Where it cracks.} With self-weight: diagonal shear cracks in both gable walls, from the windward
+        eaves corner down to the gable windows (2--3\,m height), later a band near the window sills (0.5--1\,m).
+        Without self-weight the cracks start low: at 0.5--1.5\,m in the gable walls and at the windward corners.
+        Peak wind 10.0\,kPa (with self-weight) and 8.8\,kPa (without).
+  \item \textbf{A bug in the Green preconditioner} made every 3D solve stall in physical units ($E = 10$\,GPa): the
+        un-inverted zero-frequency block was left at its round-off. Fixed in \texttt{domain.py}, with a regression test
+        (Section~\ref{sec:bug}).
+  \item \textbf{Which preconditioner.} On the same matrices (frozen damage, intact to cracked) the corrected
+        Green needs 245--370 CG iterations, plain Green 360--500, Green-Jacobi 600--890, and a dual with the corrected
+        Green and the void taken as a soft material inside the dual 124--187. A dual iteration costs twice as much, so
+        corrected Green and this dual are equally fast, 1.2--1.4 times faster than plain Green and 2.0--2.3 times faster
+        than Green-Jacobi. The dual with the void as zero stiffness does not converge at all (Section~\ref{sec:precond}).
+\end{itemize}}}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Set-up}
+\label{sec:setup}
+
+\paragraph{Geometry.} The house is 6\,m deep in the wind direction $x$, 8\,m long in $z$, with the eaves at 3\,m and
+the ridge at 5\,m (Figure~\ref{fig:geometry}). Walls and roof slab are 0.25\,m thick masonry ($E = 10$\,GPa,
+$\nu = 0.2$, 1800\,kg/m$^3$); the roof overhangs by 0.25\,m. The door and the seven windows are closed by soft panels
+($E = 0.2$\,GPa, 500\,kg/m$^3$) that pass their wind load to the frames. Around the house is a void of 0.5\,m (zero
+stiffness). The walls are clamped at the foundation: every node of the bottom face of a wall voxel.
+
+\paragraph{Loads.} Self-weight at full value, and the wind with Eurocode-style external pressure coefficients on the
+outer faces, $p = c_{pe}\,q$: windward wall $+0.8$ (pushed in), leeward wall $-0.5$, side walls $-0.7$ (sucked out), roof
+$-0.6$ (uplift). A voxel face counts as outer if the straight line from it out of the house meets no solid. At
+$q = 1$\,kPa the wind gives 56\,kN horizontally and 33\,kN uplift; the self-weight is 657\,kN.
+
+\begin{figure}[h]
+  \fig{house_geometry_h0.125.png}
+  \caption{The house at voxel size 12.5\,cm (grid $60 \times 51 \times 76$), with a sample of the wind loads: red
+  windward pressure, blue leeward suction, purple side suction, green roof uplift.}
+  \label{fig:geometry}
+\end{figure}
+
+\paragraph{Fracture.} AT2 phase field as in \texttt{experiments/dual\_preconditioner/damage\_AT2\_small\_strain}:
+$\mathbb{C}(d) = ((1-d)^2 + 10^{-4})\,\mathbb{C}_0$ (hybrid formulation), history field
+$H = \max_t \psi^+(\varepsilon)$ with the volumetric--deviatoric split of Amor et al., staggered scheme with
+tolerance $\max|d - d_{\mathrm{old}}| < 10^{-2}$. Only the masonry can crack. The length scale is two voxels,
+$\ell = 2h$, and the toughness follows from a tensile strength $f_t = 0.2$\,MPa through the AT2 peak stress
+$\sigma_c = \tfrac{9}{16}\sqrt{E G_c/(3\ell)}$: $G_c = 9.5$\,N/m at $h = 12.5$\,cm.
+
+\paragraph{Load control.} Under growing wind (force control) the house breaks in one load step once the peak is passed:
+there is no equilibrium beyond it. The run is therefore controlled by the mean horizontal displacement of the eaves.
+For a fixed damage field the problem is linear, $u = u_g + \lambda u_w$ (self-weight, wind of 1\,kPa), so in every
+staggered iteration both parts are solved (warm started) and the wind factor $\lambda$ is chosen to hit the prescribed
+eaves displacement. The prescribed displacement grows in steps adapted to the number of staggered iterations. The scale
+is $q_{\mathrm{crit}}$, the wind at which the largest principal stress of the linear solution reaches $f_t$.
+
+\paragraph{Solvers.} CG with energy-norm stopping (relative $10^{-6}$, delay 10) for both problems. Elasticity: the
+corrected Green preconditioner (exact inverse of the homogeneous reference problem with the clamped dofs, $\mathbf{S}$
+assembled once from 1944 Green applications in 10\,s; it never changes, since the damage changes only the material).
+Damage: Green-Jacobi.
+
+\paragraph{Output.} \texttt{exp\_data/house/damage\_h0.125\_ft0.2.nc} (NetCDF): one frame per staggered iteration with
+the damage and displacement fields, the wind, the eaves displacement, maximum damage, cracked masonry volume, CG
+iterations and times, and the full CG convergence histories (energy-error estimate per iteration) of both solves.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Results}
+\label{sec:results}
+Two runs at voxel size 12.5\,cm ($60 \times 51 \times 76$ voxels, 0.7 million unknowns), one with and one without
+self-weight (Figure~\ref{fig:curves}). Both start elastic, soften as the damage grows, and break suddenly at the peak
+wind: the first crack runs through in one displacement step (95 and 68 staggered iterations), the wind drops to 60\,\%
+and 42\,\% of the peak, and the house then softens further as the cracks extend.
+
+\begin{figure}[h]
+  \fig{house_damage_curves_h0.125.png}
+  \caption{Left: wind against the controlled eaves displacement; the thin lines are the staggered iterations inside the
+  snaps. Middle: cracked masonry (voxels with mean nodal damage above 0.9). Right: CG iterations per elastic solve over
+  all staggered iterations.}
+  \label{fig:curves}
+\end{figure}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+  \toprule
+  & with self-weight & without self-weight \\
+  \midrule
+  linear first crack $q_{\mathrm{crit}}$ (max principal stress $= f_t$) & 2.22\,kPa at 2.3\,m height & 1.84\,kPa at 2.2\,m \\
+  peak wind & 10.0\,kPa & 8.8\,kPa \\
+  first crack: wind after the snap, cracked masonry & 6.0\,kPa, 0.20\,m$^3$ & 3.7\,kPa, 0.25\,m$^3$ \\
+  last converged step: wind, cracked masonry & 5.7\,kPa, 0.29\,m$^3$ & %NOGRAV_LAST \\
+  where & gables 2--3\,m (diagonal), 0.5--1\,m & gables and windward corners, 0.5--1.5\,m \\
+  wall time (GPU, shared from 03:00) & 5\,h (stopped at the deadline) & %NOGRAV_TIME \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{With self-weight} the base is precompressed (about 60\,kPa at the foundation), so the first crack forms
+where the wind stresses are highest relative to that: at the re-entrant corners near the eaves of the two gable walls,
+which carry the wind as shear walls. It grows as a diagonal crack from the windward eaves corner down to the gable
+window (Figure~\ref{fig:last}). Later a second band opens near the window sills. In the last load step (85) the
+remaining capacity collapses: the wind falls to zero within the staggered iterations, which did not converge before
+the deadline (06:00) stopped the run; the NetCDF holds all of them.
+
+\paragraph{Without self-weight} uplift and overturning put the lower walls in tension, and the cracks form low: in the
+gable walls at 0.5--1.5\,m and at the windward corners where the facade meets them.
+
+\paragraph{Resolution.} At 25\,cm ($\ell = 0.5$\,m, two voxels through the wall thickness counted as one) the same
+house with self-weight cracked in a horizontal band at the window sills (0.75--1\,m), peak wind 15.3\,kPa: the coarse
+crack band smears out the corner concentrations. At 12.5\,cm the corners near the eaves win and the peak is lower.
+The crack pattern is therefore not yet converged in $h$; 6.25\,cm (5.6 million unknowns) would be the next check.
+
+\paragraph{Videos.} \texttt{exp\_data/house\_damage\_h0.125\_ft0.2.mp4} and
+\texttt{exp\_data/house\_damage\_h0.125\_ft0.2\_nograv.mp4}: one frame per converged step, plus every staggered
+iteration of the steps that needed more than five, so the cracks are seen running through during the snaps.
+
+\begin{figure}[h]
+  \fig{house_damage_h0.125_ft0.2_last.png}
+  \caption{With self-weight, the last frame: deformed house (magnified) from the windward and the leeward side,
+  masonry coloured by the damage; wind against eaves displacement; CG iterations.}
+  \label{fig:last}
+\end{figure}
+
+\begin{figure}[h]
+  \fig{house_damage_h0.125_ft0.2_nograv_last.png}
+  \caption{As Figure~\ref{fig:last}, without self-weight.}
+  \label{fig:last_nograv}
+\end{figure}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{Which preconditioner for the cracking house?}
+\label{sec:precond}
+The elastic solves dominate the cost. To compare preconditioners fairly, the damage field of five converged steps of
+the run with self-weight (intact, $\max d = 0.2$, peak, after the first crack, last) was frozen and the same elastic
+problem solved from zero with each preconditioner (\texttt{house\_precond\_study.py}, Figure~\ref{fig:precond}). All
+give the same compliance to seven digits.
+
+\begin{figure}[h]
+  \fig{house_precond_h0.125.png}
+  \caption{CG iterations, time per solve and time per iteration, five frozen damage states, 12.5\,cm. Hatched:
+  projected (Dirichlet by $\mathbf{Q}$); solid: corrected for the clamped foundation. Times taken while the second
+  run shared the GPU.}
+  \label{fig:precond}
+\end{figure}
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+  \toprule
+  CG iterations & intact & $\max d$ 0.2 & peak & first crack & last \\
+  \midrule
+  Green, projected                  & 375 & 369 & 358 & 445 & 497 \\
+  Green, corrected                  & 248 & 245 & 257 & 315 & 368 \\
+  Green-Jacobi, projected           & 615 & 601 & 637 & 754 & 825 \\
+  Green-Jacobi, corrected           & 677 & 665 & 678 & 818 & 890 \\
+  dual, corrected, void as soft     & \textbf{128} & \textbf{124} & \textbf{133} & \textbf{161} & \textbf{187} \\
+  \midrule
+  time [s]: Green, corrected        & 27.5 & 27.0 & 29.2 & 35.9 & 41.7 \\
+  time [s]: dual, void as soft      & 27.9 & 27.0 & 29.0 & 35.1 & 40.7 \\
+  time [s]: Green, projected        & 38.6 & 37.9 & 36.8 & 45.8 & 50.8 \\
+  time [s]: Green-Jacobi, projected & 63.1 & 61.9 & 65.6 & 77.7 & 85.1 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{Green beats Green-Jacobi here.} The structure has only two stiff phases (masonry, panels) and void,
+        all voxel-aligned, so the Green reference fits well; the Jacobi scaling does not help: Green-Jacobi needs 1.6--1.8 times the
+        iterations of plain Green and 2.2--2.5 times those of the corrected Green. Damage hardly changes this: all methods need 30--50\,\% more iterations once cracks are open.
+  \item \textbf{The correction for the clamped foundation} saves a third of the iterations of Green (as in the 2D
+        study), but makes Green-Jacobi slightly worse (by 5--10\,\%); the correction is exact for the
+        $2\mu\,\mathbb{I}$ reference, not for the Jacobi-scaled operator that CG actually sees.
+  \item \textbf{The dual} $\mathbf{M}_c\,\mathbf{K}(\mathbb{C}_{\mathrm{ref}}\,\mathbb{C}_d^{-1}\,
+        \mathbb{C}_{\mathrm{ref}})\,\mathbf{M}_c$ halves the iterations again but needs two Green and one stiffness
+        application per iteration, so it is as fast as the corrected Green. It needs $\mathbb{C}_d^{-1}$ in the void:
+        with the pseudo-inverse (zero in the void) it reduces to $\mathbf{G}\mathbf{K}_{\mathrm{solid}}\mathbf{G}$,
+        which squares the spectrum instead of inverting it, and CG did not converge in 6000 iterations (25\,cm, both
+        projected and corrected). Taking the void as $\varepsilon\,\mathbb{C}_{\mathrm{ref}}$ inside the dual only (the
+        problem keeps zero stiffness) fixes this, and the result hardly depends on $\varepsilon$: 149--220 iterations at
+        25\,cm for $\varepsilon = 10^{-2}, 10^{-3}, 10^{-4}$.
+  \item \textbf{Damage solves} (Green-Jacobi) need 13--30 CG iterations and under a second; they are not the cost.
+\end{itemize}
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section{The bug: Green in physical units}
+\label{sec:bug}
+
+The first 3D solves stalled: the energy error fell only like $1/k$, plain and corrected Green converged to different
+solutions, and the Ritz values were impossible ($\lambda_{\max} \approx 3\times10^5$ for the corrected Green, negative
+ones for plain Green). The stiffness operator and the raw Green operator applied with $E = 1$ were exactly symmetric;
+with $E = 10$\,GPa the Green operator was not: $x \cdot Gy \ne y \cdot Gx$ and $x \cdot Gx < 0$ for random fields.
+
+\paragraph{Cause.} \texttt{get\_preconditioner\_Green\_mugrid} inverts the blocks $\hat K(k)$ of the reference stiffness
+for every frequency except $k = 0$, which is singular; that block was left as it was, assuming it is zero. It is zero
+only up to round-off, about $|\mathbb{C}_{\mathrm{ref}}|\,\varepsilon \approx 10^{10}\cdot 10^{-16}\cdot N$, while the
+inverted blocks are of order $1/|\mathbb{C}_{\mathrm{ref}}| \approx 10^{-10}$. In physical units the round-off dominated
+the operator. With $E = 1$, as in all earlier studies, it is harmless, which is why it never showed.
+
+\paragraph{Fix.} The zero-frequency block is set to exactly zero (one line in \texttt{muFFTTO/domain.py}, the one-node
+branch; the multi-node branch already used a pseudo-inverse with a relative cut-off). The new test
+\texttt{test\_green\_preconditioner\_symmetric\_for\_physical\_scale} in \texttt{test/test\_preconditioners.py} checks
+symmetry, positivity and $G K x = x - \bar x$ for $E = 1$ and $10^{10}$ in 2D and 3D; it fails without the fix.
+After the fix: $\lambda_{\max} = 0.968$ for the corrected Green, 1.28 for plain Green.
+
+\paragraph{Green-Jacobi} needs a dimensionless reference ($2\mu/E\,\mathbb{I}$): the Jacobi scaling already carries the
+material scale.
+
+%-----------------------------------------------------------------------------------------------------------------------
+\section*{Files}
+All in \texttt{experiments/linear\_elastic\_mesh\_study/}.
+{\raggedright
+\begin{description}[font=\ttfamily\small,style=nextline]
+  \item[house\_wind\_3D.py] geometry, wind loads, the elastic solve and the geometry figure (\texttt{GEOMETRY=1}).
+  \item[house\_damage\_3D.py] the fracture run (GPU), NetCDF output.
+  \item[house\_damage\_video.py] the video and its last frame from the NetCDF.
+  \item[house\_precond\_study.py] the frozen-damage preconditioner comparison and its figure (\texttt{PLOT=1}).
+  \item[house\_elastic\_diag.py] diagnostics of the elastic solve (symmetry, power iteration, variants).
+  \item[house\_geometry\_video.py] rotating view of the geometry.
+\end{description}
+}
+\end{document}

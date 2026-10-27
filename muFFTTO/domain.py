@@ -66,6 +66,59 @@ from muGrid import Field
 from muFFTTO import discretization_library, tensor_operations
 
 
+class ScaledMaterial:
+    """Material data ``C(x) = sum_k s_k(x) C_k`` with scalar scale fields ``s_k`` and constant tensors ``C_k``.
+
+    Avoids storing the full tangent ``C_ijkl`` (elasticity, ``d^4`` values) or ``A_ij`` (conductivity, ``d^2``) per
+    quadrature point when the material is a scalar multiple of fixed tensors, e.g. SIMP with a void material
+    ``C_void = kappa C_0``: ``C(rho) = s(rho) C_0`` -- or, for any void, ``rho^p (C_1 - C_0) + 1 * C_0`` (two terms).
+    Accepted wherever material data is applied (:meth:`Discretization.apply_material_data_mugrid` and the methods
+    built on it: system matrix, right-hand side, homogenized stress, stress field, Jacobi preconditioner).
+
+    Parameters
+    ----------
+    terms : list of (scale, tensor)
+        ``scale``: float, ndarray broadcastable to ``[q, x, y(, z)]``, or a scalar quadrature muGrid Field
+        (``[1, 1, q, x, y(, z)]``, read at use); ``tensor``: ``[d, d, d, d]`` (elasticity) or ``[d, d]`` (conductivity).
+    """
+
+    def __init__(self, terms):
+        self.terms = list(terms)
+
+    @staticmethod
+    def _scale_array(scale):
+        if isinstance(scale, Field):
+            return scale.s[0, 0]
+        return scale
+
+    def apply(self, gradient, transposed=False):
+        """``sum_k s_k (C_k : g)``; ``g``: ``[d, d, q, x, y(, z)]`` (elasticity) or ``[1, d, q, ...]`` (conductivity).
+        ``transposed``: contract the first index pair instead (``g : C_k``)."""
+        xp = tensor_operations.get_array_module(gradient)
+        shape = gradient.shape
+        nc = 2                                    # component axes: (i, j) elasticity, (u, i) conductivity
+        ncomp = shape[0] * shape[1]
+        # points first, components last: muGrid stores the components of a point next to each other, so this is a
+        # view (no copy); the constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
+        g = xp.moveaxis(gradient, (0, 1), (-2, -1)).reshape(shape[nc:] + (ncomp,))
+        out = None
+        for scale, tensor in self.terms:
+            tensor = xp.asarray(tensor)
+            if tensor.ndim == 4:                  # [d,d,d,d]: C_(ij)(kl)
+                matrix = tensor.reshape(ncomp, ncomp)
+            else:                                 # [d,d] acting on [u=1, d]: A_ij
+                matrix = tensor
+            term = g @ (matrix if transposed else matrix.T)
+            scale = self._scale_array(scale)
+            if not np.isscalar(scale):
+                term = term * xp.asarray(scale)[..., None]
+            elif scale != 1.0:
+                term = term * scale
+            out = term if out is None else out + term
+        # back to the component-first layout [i, j, q, x, y(, z)]
+        return xp.moveaxis(out.reshape(shape[nc:] + shape[:nc]), (-2, -1), (0, 1))
+
+
 class PeriodicUnitCell:
     """Physical description of a periodic unit cell (representative volume).
 
@@ -428,7 +481,9 @@ class Discretization:
 
         # fft.coords are fractional coordinates in [0,1) of the local grid points, shape [dim, x, y, z];
         # scale component-wise by the cell size -> physical coordinates of the pixel origins
-        nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
+        # (computed on the host, moved to the device of the field (CPU or GPU) when written)
+        nodal_points_coordinates_ixyz = (self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)]
+                                         * tensor_operations.to_host(self.fft.coords))
         # Coordinates above are already in physical units, so each column of the pixel Jacobian
         # is normalised by its own diagonal entry: that yields a unit diagonal regardless of the
         # element's reference domain ([0,1] for triangles, [-1,1] for quads) and expresses the
@@ -437,6 +492,8 @@ class Discretization:
 
         # x_j = sum_i J_adj[j, i] * x_i   (apply the adjusted Jacobian to every grid point)
         nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
+        xp = tensor_operations.get_array_module(nodal_points_coordinates_inxyz.s)
+        nodal_points_coordinates_ixyz = xp.asarray(nodal_points_coordinates_ixyz)
         if self.nb_nodes_per_pixel == 1:
             nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
         elif self.nb_nodes_per_pixel == 4:
@@ -475,6 +532,65 @@ class Discretization:
             )
 
         return nodal_points_coordinates_inxyz
+
+    def get_domain_boundary_pixel_mask(self, boundaries=None, width=1):
+        """Boolean mask of the pixels on the boundary of the whole (global) domain.
+
+        Pixels are selected by their *global* index, so the mask is correct on
+        every MPI rank (each rank gets the part of its own subdomain). Use it
+        e.g. to set the stiffness of the domain boundary to zero, which cuts the
+        periodic connection to the neighbouring cells.
+
+        Parameters
+        ----------
+        boundaries : str or iterable of str, optional
+            Which boundaries to include: ``'left'`` / ``'right'`` (first / last
+            pixel layer in x), ``'bottom'`` / ``'top'`` (in y) and, in 3D,
+            ``'back'`` / ``'front'`` (in z). Default ``None``: all boundaries.
+        width : int, optional
+            Number of pixel layers per boundary (default 1).
+
+        Returns
+        -------
+        mask_xyz : ndarray of bool [x, y, (z)]
+            ``True`` on boundary pixels of the local subdomain; numpy on the
+            CPU, cupy on the GPU (``device='gpu'``).
+
+        Notes
+        -----
+        The domain is periodic: the ``'right'`` layer (x = N_x - 1) touches the
+        ``'left'`` layer (x = 0) of the next cell, so one of them per direction
+        is enough to cut the connection in that direction.
+        """
+        boundary_axes = {'left': (0, False), 'right': (0, True),
+                         'bottom': (1, False), 'top': (1, True),
+                         'back': (2, False), 'front': (2, True)}
+        dim = self.domain_dimension
+        if boundaries is None:
+            boundaries = [name for name, (axis, _) in boundary_axes.items() if axis < dim]
+        elif isinstance(boundaries, str):
+            boundaries = [boundaries]
+
+        # global pixel indices of the local subdomain [dim, x, y, (z)], numpy also on the GPU
+        icoords = np.asarray(self.fft.icoords)
+        mask_xyz = np.zeros(icoords.shape[1:], dtype=bool)
+        for name in boundaries:
+            if name not in boundary_axes or boundary_axes[name][0] >= dim:
+                valid = [n for n, (axis, _) in boundary_axes.items() if axis < dim]
+                raise ValueError(f"Unknown boundary '{name}' for a {dim}D domain; choose from {valid}")
+            axis, is_upper = boundary_axes[name]
+            nb_pixels = self.nb_of_pixels_global[axis]
+            if not 1 <= width <= nb_pixels:
+                raise ValueError(f"width must be between 1 and {nb_pixels}, got {width}")
+            if is_upper:
+                mask_xyz |= icoords[axis] >= nb_pixels - width
+            else:
+                mask_xyz |= icoords[axis] < width
+
+        if self.device == 'gpu':
+            import cupy
+            return cupy.asarray(mask_xyz)
+        return mask_xyz
 
     def get_nodal_points_coordinates_with_periodic_nodes(self):
         """Calculate coordinates of nodal points including periodic boundary nodes.
@@ -1296,12 +1412,15 @@ class Discretization:
         # compute total strain
         gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
 
-        mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
-        if isinstance(material_data_field_ijklqxyz, np.ndarray):
-            # mat_data_temp.sg[...] = material_data_field_ijklqxyz
-            raise TypeError("NOT YET  does not support ndarray")
+        if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
+            mat_data_temp = material_data_field_ijklqxyz          # applied directly, no full-size copy
         else:
-            mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
+            mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
+            if isinstance(material_data_field_ijklqxyz, np.ndarray):
+                # mat_data_temp.sg[...] = material_data_field_ijklqxyz
+                raise TypeError("NOT YET  does not support ndarray")
+            else:
+                mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
 
         self.apply_material_data_mugrid(material_data=mat_data_temp,
                                         gradient_field=gradient_field_ijqxyz)
@@ -1554,8 +1673,11 @@ class Discretization:
                                                 grad_u_ijqxyz=output_stress_field_ijqxyz)
 
         output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
-        output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
-                                                      output_stress_field_ijqxyz.s)
+        if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
+            output_stress_field_ijqxyz.s[...] = material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s)
+        else:
+            output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
+                                                          output_stress_field_ijqxyz.s)
 
 
     def get_flux_field_mugrid(self,
@@ -1914,6 +2036,9 @@ class Discretization:
         """
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
+        if isinstance(material_data, ScaledMaterial):
+            gradient_field.s[...] = material_data.apply(gradient_field.s)
+            return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
             xp = tensor_operations.get_array_module(gradient_field.s)
@@ -1950,6 +2075,9 @@ class Discretization:
         (``TypeError``); an ndarray with ndim < 4 is silently ignored.
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
+        if isinstance(material_data, ScaledMaterial):
+            gradient_field.s[...] = material_data.apply(gradient_field.s)
+            return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
             xp = tensor_operations.get_array_module(gradient_field.s)
@@ -2138,8 +2266,11 @@ class Discretization:
             # (transpose returns a view, so the in-place inversion below also updates reshaped_matrices)
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)) and not invert_zero_mode:
-                # this core has the zero mode: K_hat(0) is singular -> do not invert it
+                # this core has the zero mode: K_hat(0) is singular -> do not invert it, and set it to exactly zero:
+                # it is only zero up to round-off ~ |C_ref| eps, which for a large reference (e.g. E = 1e10) is
+                # orders of magnitude above the inverted blocks ~ 1/|C_ref| and makes G asymmetric and indefinite
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d)
+                G_batch[0, ...] = 0.0
             else:
                 G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
 
@@ -2704,10 +2835,12 @@ class Discretization:
         """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
+        xp = tensor_operations.get_array_module(stress_field)
+        stress_field = xp.einsum('ijq...,q->ijq...', stress_field, xp.asarray(self.quadrature_weights))
         # TODO change this to muGRID
-        integral = self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-        return integral
+        if xp is np:
+            return self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))
+        return self.sum_over_quad_points_and_pixels(stress_field)     # GPU data: NuMPI cannot reduce it
 
     def integrate_over_cell_mugrid(self, stress_field):
         """Integrate a gradient-shaped muGrid field over the (global) cell.
@@ -3267,7 +3400,11 @@ class Discretization:
         """
         if not self.check_material_symmetry:
             return
-        C = material_data.s if isinstance(material_data, Field) else np.asarray(material_data)
+        if isinstance(material_data, ScaledMaterial):     # scalar scales keep the symmetries of the tensors
+            for k, (_, tensor) in enumerate(material_data.terms):
+                self.assert_material_symmetry(tensor, minor=minor, name=f'{name} (term {k})', rtol=rtol)
+            return
+        C = material_data.s if isinstance(material_data, Field) else (material_data if tensor_operations.get_array_module(material_data) is not np else np.asarray(material_data))
         d = self.domain_dimension
         is_elasticity = self.cell.problem_type == 'elasticity'
 

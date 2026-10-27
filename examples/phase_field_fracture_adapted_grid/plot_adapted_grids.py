@@ -4,6 +4,7 @@ Regular vs adapted grids (muFFTTO.grid_adaptation), side by side, with quality n
     python plot_adapted_grids.py [nnn] [geometry_name] [output.png] [method ...]
 
 Default: 32, sinusoidal_ligaments, methods zecevic and snap; the figure goes to exp_data/grids/.
+NO_TEXT=1 (environment): no titles with the quality numbers (e.g. for slides).
 """
 import os
 import sys
@@ -45,11 +46,12 @@ for ax, (label, d_g, phase, info) in zip(axes, grids):
     ax.contour(centres, centres, exact.T, levels=[0.5], colors='r', linewidths=0.8)
     if 'corners' in info:
         ax.plot(*info['corners'].T, 'o', mfc='none', mec='C2', ms=6)
-    ax.set_title(f'{label} {nnn}$^2$: solid {info["solid_fraction"]:.4f} (exact {info["exact_fraction"]:.4f})\n'
-                 f'misassigned area {info["misassigned_area"]:.4f}, cut elements {info["nb_cut"]}, '
-                 f'min J$_g$/h$^2$ {info["min_gauss_J"]:.2f}', fontsize=10)
+    if os.environ.get('NO_TEXT') != '1':
+        ax.set_title(f'{label} {nnn}$^2$: solid {info["solid_fraction"]:.4f} (exact {info["exact_fraction"]:.4f})\n'
+                     f'misassigned area {info["misassigned_area"]:.4f}, cut elements {info["nb_cut"]}, '
+                     f'min J$_g$/h$^2$ {info["min_gauss_J"]:.2f}', fontsize=10)
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
 fig.tight_layout()
-fig.savefig(output, dpi=110)
+fig.savefig(output, dpi=110, **({'bbox_inches': 'tight', 'pad_inches': 0.05} if os.environ.get('NO_TEXT') == '1' else {}))
 print('wrote', output)

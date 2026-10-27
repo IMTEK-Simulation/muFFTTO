@@ -1,0 +1,94 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}The test problem}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{How CG is stopped.}{1}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{How the error is plotted.}{1}{section*.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The periodic cell at $n_H = 4$: void pixels (white), beam (yellow), clamped nodes (black squares) and the shear load on the right face (red).}}{2}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:setup}{{1}{2}{The periodic cell at $n_H = 4$: void pixels (white), beam (yellow), clamped nodes (black squares) and the shear load on the right face (red)}{figure.caption.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}What we saw: a long stall, then fast convergence}{2}{section.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Left: exact CG error (solid), the stopping estimate (dotted) and the discretisation error of each mesh (dashed). Middle: the residual, which first grows by about $100\times $ and is useless as a stopping test here. Right: estimate divided by exact error. Once CG converges, the estimate is within 1--6\,\% of the exact error. During the stall it badly underestimates, which would matter for a loose tolerance.}}{2}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:cg}{{2}{2}{Left: exact CG error (solid), the stopping estimate (dotted) and the discretisation error of each mesh (dashed). Middle: the residual, which first grows by about $100\times $ and is useless as a stopping test here. Right: estimate divided by exact error. Once CG converges, the estimate is within 1--6\,\% of the exact error. During the stall it badly underestimates, which would matter for a loose tolerance}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}The stall follows the beam length, not the fixed nodes}{2}{section.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Exact CG error at $n_H = 64$. Only panel A (the beam length) moves the stall substantially. In panel D all four load positions stall until about iteration 270.}}{3}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:plateau}{{3}{3}{Exact CG error at $n_H = 64$. Only panel A (the beam length) moves the stall substantially. In panel D all four load positions stall until about iteration 270}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}The spectrum behind it}{3}{section.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces All eigenvalues from a dense computation (grey) and the Ritz values from the CG run (blue). The zero eigenvalues of nodes that touch only void, and of fixed nodes, are left out.}}{3}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:dense}{{4}{3}{All eigenvalues from a dense computation (grey) and the Ritz values from the CG run (blue). The zero eigenvalues of nodes that touch only void, and of fixed nodes, are left out}{figure.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Clamped cantilever with 2 void pixels: CG iterations and the extreme eigenvalues of $M^{-1}K$.}}{3}{table.caption.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces With 2 void pixels: the smallest eigenvalue falls like $h^3$ and the largest grows like $1/h$, so the condition number grows like $h^{-4}$. CG still does much better than $\sqrt  {\kappa }$ would suggest, because the very small eigenvalues are few and isolated; the stall is CG finding them one at a time. Right: the number of eigenvalues below 0.05 doubles each time the beam length doubles (2, 4, 7, 14).}}{4}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:spectrum}{{5}{4}{With 2 void pixels: the smallest eigenvalue falls like $h^3$ and the largest grows like $1/h$, so the condition number grows like $h^{-4}$. CG still does much better than $\sqrt {\kappa }$ would suggest, because the very small eigenvalues are few and isolated; the stall is CG finding them one at a time. Right: the number of eigenvalues below 0.05 doubles each time the beam length doubles (2, 4, 7, 14)}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Fix 1: give the void a fixed physical thickness}{4}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Fixed physical void thickness $t$ against 2 void pixels (dashed). Second panel: $\lambda _{\min }$ is flat in $h$ for every fixed $t$. Right: the tip deflection differs by $10^{-11}$ between void thicknesses.}}{4}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:void}{{6}{4}{Fixed physical void thickness $t$ against 2 void pixels (dashed). Second panel: $\lambda _{\min }$ is flat in $h$ for every fixed $t$. Right: the tip deflection differs by $10^{-11}$ between void thicknesses}{figure.caption.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Fix 2: avoid Dirichlet conditions}{4}{section.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Supports and computed deformation at $n_H = 16$: clamped left face; pin + roller (3 fixed values); a free beam with a balanced load. For the free beam the rigid motion was removed before drawing. The fourth setting, the cantilever loaded by forces only, is described in Section~\ref {sec:traction}.}}{5}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:bcsetup}{{7}{5}{Supports and computed deformation at $n_H = 16$: clamped left face; pin + roller (3 fixed values); a free beam with a balanced load. For the free beam the rigid motion was removed before drawing. The fourth setting, the cantilever loaded by forces only, is described in Section~\ref {sec:traction}}{figure.caption.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Supports study, void thickness 0.4, $n_H = 8 \to 128$.}}{5}{table.caption.12}\protected@file@percent }
+\newlabel{tab:bc}{{2}{5}{Supports study, void thickness 0.4, $n_H = 8 \to 128$}{table.caption.12}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}The cantilever without Dirichlet conditions}{5}{section.7}\protected@file@percent }
+\newlabel{sec:traction}{{7}{5}{The cantilever without Dirichlet conditions}{section.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Top left: CG iterations versus $h$. Top middle: the largest eigenvalue grows like $1/h$ only for the clamped face; it is exactly 1 for the free beam and for the cantilever loaded by forces. Top right: the smallest eigenvalue is constant in $h$ in every case, because the void is now thick enough. Bottom left: CG on the finest mesh ($n_H = 128$). Bottom middle: error of the compliance.}}{6}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:bc}{{8}{6}{Top left: CG iterations versus $h$. Top middle: the largest eigenvalue grows like $1/h$ only for the clamped face; it is exactly 1 for the free beam and for the cantilever loaded by forces. Top right: the smallest eigenvalue is constant in $h$ in every case, because the void is now thick enough. Bottom left: CG on the finest mesh ($n_H = 128$). Bottom middle: error of the compliance}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Check in 3D}{6}{section.8}\protected@file@percent }
+\newlabel{sec:3d}{{8}{6}{Check in 3D}{section.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces 3D beam, $n_H = 4, 8, 16, 32$.}}{6}{table.caption.14}\protected@file@percent }
+\newlabel{tab:3d}{{3}{6}{3D beam, $n_H = 4, 8, 16, 32$}{table.caption.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces 3D beam: CG iterations, largest and smallest eigenvalue versus the voxel size, and CG on the finest mesh ($n_H = 32$). Red: forces only; blue: clamped face. Solid: void 0.2; dashed: 2 void voxels.}}{7}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:3d}{{9}{7}{3D beam: CG iterations, largest and smallest eigenvalue versus the voxel size, and CG on the finest mesh ($n_H = 32$). Red: forces only; blue: clamped face. Solid: void 0.2; dashed: 2 void voxels}{figure.caption.13}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Does the number of fixed nodes matter?}{7}{section.9}\protected@file@percent }
+\newlabel{sec:nodes}{{9}{7}{Does the number of fixed nodes matter?}{section.9}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Largest eigenvalue $\lambda _{\max }$ for $k$ fixed nodes on the left face.}}{7}{table.caption.15}\protected@file@percent }
+\newlabel{tab:nodes}{{4}{7}{Largest eigenvalue $\lambda _{\max }$ for $k$ fixed nodes on the left face}{table.caption.15}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10}A stiff layer instead of the clamp}{8}{section.10}\protected@file@percent }
+\newlabel{sec:stiff}{{10}{8}{A stiff layer instead of the clamp}{section.10}{}}
+\@writefile{toc}{\contentsline {paragraph}{One pixel thick: does not work.}{8}{section*.16}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Left two panels: largest eigenvalue and CG iterations for $k$ fixed nodes on three meshes. Other panels: a stiff layer one pixel thick, held at two nodes: largest eigenvalue, CG iterations, how much softer than the real clamp it is, and CG at $n_H = 64$.}}{8}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:nodes}{{10}{8}{Left two panels: largest eigenvalue and CG iterations for $k$ fixed nodes on three meshes. Other panels: a stiff layer one pixel thick, held at two nodes: largest eigenvalue, CG iterations, how much softer than the real clamp it is, and CG at $n_H = 64$}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {paragraph}{Fixed physical thickness: works as predicted, but costs more than the clamp.}{8}{section*.18}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Stiff layer held at two nodes. Solid: layer 0.05 thick; dashed: one pixel thick. Top: largest and smallest eigenvalue and CG iterations versus $h$. Bottom: how much softer than the real clamp, CG at $n_H = 64$, and the Ritz values at $n_H = 64$ for each $\kappa $ (two clusters).}}{9}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:stiff}{{11}{9}{Stiff layer held at two nodes. Solid: layer 0.05 thick; dashed: one pixel thick. Top: largest and smallest eigenvalue and CG iterations versus $h$. Bottom: how much softer than the real clamp, CG at $n_H = 64$, and the Ritz values at $n_H = 64$ for each $\kappa $ (two clusters)}{figure.caption.19}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Stiff layer 0.05 thick, held at two nodes, void 0.4.}}{9}{table.caption.20}\protected@file@percent }
+\newlabel{tab:stiff}{{5}{9}{Stiff layer 0.05 thick, held at two nodes, void 0.4}{table.caption.20}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {11}Fix 3: the corrected Green for Dirichlet conditions}{9}{section.11}\protected@file@percent }
+\newlabel{sec:corrected}{{11}{9}{Fix 3: the corrected Green for Dirichlet conditions}{section.11}{}}
+\@writefile{toc}{\contentsline {paragraph}{Notation.}{10}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What a preconditioner does.}{10}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The simpler structure of Green.}{10}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What goes wrong with fixed nodes (plain Green).}{10}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What the corrected Green does instead.}{10}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{One more detail: the translation.}{10}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cost.}{11}{section*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why it works.}{11}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Results.}{11}{section*.31}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Plain against corrected Green. The solutions are identical in all printed digits.}}{11}{table.caption.32}\protected@file@percent }
+\newlabel{tab:corrected}{{6}{11}{Plain against corrected Green. The solutions are identical in all printed digits}{table.caption.32}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Plain Green (dashed) against corrected Green (solid). Top: CG iterations, largest and smallest eigenvalue against $h$. Bottom: CG convergence at $n_H = 128$; the largest eigenvalue for partial clamps of 3 and 17 nodes; CG iterations of the stiff layer against its stiffness $\kappa $.}}{12}{figure.caption.33}\protected@file@percent }
+\newlabel{fig:corrected}{{12}{12}{Plain Green (dashed) against corrected Green (solid). Top: CG iterations, largest and smallest eigenvalue against $h$. Bottom: CG convergence at $n_H = 128$; the largest eigenvalue for partial clamps of 3 and 17 nodes; CG iterations of the stiff layer against its stiffness $\kappa $}{figure.caption.33}{}}
+\newlabel{sec:holes}{{11}{12}{A beam with holes, and the cost in time}{section*.34}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Beam with four holes: CG iterations. The solutions of plain and corrected Green are identical in all printed digits.}}{12}{table.caption.36}\protected@file@percent }
+\newlabel{tab:holes}{{7}{12}{Beam with four holes: CG iterations. The solutions of plain and corrected Green are identical in all printed digits}{table.caption.36}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Beam with four holes, void 0.4. Top: the deformed structure; CG iterations; largest and smallest eigenvalue against $h$. Bottom: CG convergence at $n_H = 128$; wall time (setup + CG, and setup alone); time per CG iteration.}}{13}{figure.caption.35}\protected@file@percent }
+\newlabel{fig:holes}{{13}{13}{Beam with four holes, void 0.4. Top: the deformed structure; CG iterations; largest and smallest eigenvalue against $h$. Bottom: CG convergence at $n_H = 128$; wall time (setup + CG, and setup alone); time per CG iteration}{figure.caption.35}{}}
+\@writefile{toc}{\contentsline {paragraph}{Time.}{13}{section*.37}\protected@file@percent }
+\newlabel{sec:hetero}{{11}{13}{Heterogeneous material}{section*.38}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Beam with holes and heterogeneous stiffness, contrast 10. Same panels as Figure~\ref {fig:holes}; the structure is coloured by the stiffness. All runs 6 in parallel, so the times are rough.}}{14}{figure.caption.39}\protected@file@percent }
+\newlabel{fig:het10}{{14}{14}{Beam with holes and heterogeneous stiffness, contrast 10. Same panels as Figure~\ref {fig:holes}; the structure is coloured by the stiffness. All runs 6 in parallel, so the times are rough}{figure.caption.39}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Beam with holes and heterogeneous stiffness: CG iterations.}}{14}{table.caption.41}\protected@file@percent }
+\newlabel{tab:hetero}{{8}{14}{Beam with holes and heterogeneous stiffness: CG iterations}{table.caption.41}{}}
+\newlabel{sec:s_only}{{11}{14}{The correction with $\mathbf {S}$ only}{section*.42}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {15}{\ignorespaces As Figure~\ref {fig:het10}, contrast 100.}}{15}{figure.caption.40}\protected@file@percent }
+\newlabel{fig:het100}{{15}{15}{As Figure~\ref {fig:het10}, contrast 100}{figure.caption.40}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why it still works here.}{15}{section*.43}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{When it would not work.}{15}{section*.44}\protected@file@percent }
+\newlabel{sec:thin_void}{{11}{15}{How thin may the void be? Large grids}{section*.45}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {16}{\ignorespaces Beam with four holes, void thickness $t$ from 0.4 down to 0.00625 on each side. Left: CG iterations against $h$ (corrected Green solid, plain Green dashed, forces only dotted); the thinnest void is run up to $n_H = 1024$ ($h = 1/5120$). Middle: smallest eigenvalue at $n_H = 128$. Right: wall time and number of pixels at $n_H = 128$ (6 runs in parallel, so the times are rough).}}{16}{figure.caption.46}\protected@file@percent }
+\newlabel{fig:thin_void}{{16}{16}{Beam with four holes, void thickness $t$ from 0.4 down to 0.00625 on each side. Left: CG iterations against $h$ (corrected Green solid, plain Green dashed, forces only dotted); the thinnest void is run up to $n_H = 1024$ ($h = 1/5120$). Middle: smallest eigenvalue at $n_H = 128$. Right: wall time and number of pixels at $n_H = 128$ (6 runs in parallel, so the times are rough)}{figure.caption.46}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Beam with holes, clamped face: void thickness $t$ on each side. Pixels and times at $n_H = 128$; the time is setup + CG. $t = 0.00625$ is less than one pixel at $n_H = 16$ and was not run there.}}{16}{table.caption.47}\protected@file@percent }
+\newlabel{tab:thin_void}{{9}{16}{Beam with holes, clamped face: void thickness $t$ on each side. Pixels and times at $n_H = 128$; the time is setup + CG. $t = 0.00625$ is less than one pixel at $n_H = 16$ and was not run there}{table.caption.47}{}}
+\@writefile{toc}{\contentsline {paragraph}{Large grids.}{16}{section*.48}\protected@file@percent }
+\newlabel{sec:large_m}{{11}{17}{Many fixed dofs: a clamped wall in 3D}{section*.49}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {12}Practical rules}{17}{section.12}\protected@file@percent }
+\gdef \@abspage@last{19}

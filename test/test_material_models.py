@@ -428,3 +428,180 @@ def test_NeoHookean_MaterialModelElasticity_(discretization_fixture):
 
 
 # TODO: Add test for symmetricity of the tangent
+
+# ----------------------------------------------------------------------------
+# DecoupledNeoHookean: W = K/2 ln(J)^2 + mu/2 (J^{-2/3} tr C - 3), plane strain in 2D
+# ----------------------------------------------------------------------------
+def _decoupled_neo_hookean_reference(F, K, mu):
+    """Independent numpy reference at every point: (W, P) of the 3D model; a 2D F is embedded with F33 = 1 and the
+    in-plane block of P is returned. F [i, j, ...], K and mu [...]."""
+    dim = F.shape[0]
+    points = F.shape[2:]
+    F3 = np.zeros((3, 3) + points)
+    F3[:dim, :dim] = F
+    for d in range(dim, 3):
+        F3[d, d] = 1.0
+    F3_p = np.moveaxis(F3, (0, 1), (-2, -1))  # [..., 3, 3]
+    J = np.linalg.det(F3_p)
+    trC = np.einsum('...ij,...ij->...', F3_p, F3_p)
+    FinvT = np.moveaxis(np.linalg.inv(F3_p), -1, -2)
+    W = 0.5 * K * np.log(J) ** 2 + 0.5 * mu * (J ** (-2.0 / 3.0) * trC - 3.0)
+    P = (K * np.log(J))[..., None, None] * FinvT + (mu * J ** (-2.0 / 3.0))[..., None, None] * (
+            F3_p - (trC / 3.0)[..., None, None] * FinvT)
+    return W, np.moveaxis(P, (-2, -1), (0, 1))[:dim, :dim]
+
+
+def _decoupled_neo_hookean_setup(discretization, rng, K=None, mu=None):
+    K_field = discretization.get_quad_field_scalar(name='K_temp')
+    mu_field = discretization.get_quad_field_scalar(name='mu_temp')
+    point_shape = K_field.s[0, 0].shape
+    K_field.s[0, 0] = rng.uniform(1.0, 30.0, size=point_shape) if K is None else K
+    mu_field.s[0, 0] = rng.uniform(1.0, 15.0, size=point_shape) if mu is None else mu
+    material = material_models.DecoupledNeoHookean(discretization=discretization, K_1qxyz=K_field,
+                                                   mu_1qxyz=mu_field)
+    return material, K_field, mu_field
+
+
+def _random_F(discretization, rng, scale):
+    dim = discretization.domain_dimension
+    shape = discretization.get_strain_sized_field(name='shape_probe').s.shape
+    identity = np.eye(dim).reshape((dim, dim) + (1,) * (len(shape) - 2))
+    perturbation = rng.normal(0.0, scale, size=shape)
+    for _ in range(20):  # halve the perturbation where F is close to singular, until det F > 0.3 everywhere
+        J = np.linalg.det(np.moveaxis(identity + perturbation, (0, 1), (-2, -1)))
+        if np.all(J > 0.3):
+            break
+        perturbation = np.where(J > 0.3, perturbation, 0.5 * perturbation)
+    return identity + perturbation, shape
+
+
+@discretization_cases
+@pytest.mark.parametrize('scale', [0.05, 0.25])
+def test_DecoupledNeoHookean_stress_and_tangent_FD(discretization_fixture, scale):
+    """P = dW/dF and A = dP/dF by central finite differences, small and large random (non-symmetric) F."""
+    rng = np.random.default_rng(7)
+    dim = discretization_fixture.domain_dimension
+    material, _, _ = _decoupled_neo_hookean_setup(discretization_fixture, rng)
+    F, shape = _random_F(discretization_fixture, rng, scale)
+    J = np.linalg.det(np.moveaxis(F, (0, 1), (-2, -1)))
+    assert np.all(J > 0.2), 'test setup: random F must stay well invertible'
+
+    F_field = discretization_fixture.get_strain_sized_field(name='F_test')
+    P_field = discretization_fixture.get_stress_sized_field(name='P_test')
+    F_field.s[...] = F
+    material.get_stress(F_field, P_field)
+    P = P_field.s[...].copy()
+
+    def energy(F_test):
+        f = discretization_fixture.get_strain_sized_field(name='F_perturbed')
+        f.s[...] = F_test
+        W = discretization_fixture.get_quad_field_scalar(name='W_test')
+        material.get_energy_density(f, W)
+        return W.s[0, 0].copy()
+
+    h = 1e-5
+    P_fd = np.zeros_like(P)
+    for i in range(dim):
+        for j in range(dim):
+            dF = np.zeros_like(F)
+            dF[i, j] = h
+            P_fd[i, j] = (energy(F + dF) - energy(F - dF)) / (2 * h)
+    np.testing.assert_allclose(P, P_fd, rtol=1e-6, atol=1e-7,
+                               err_msg='DecoupledNeoHookean: get_stress does not match dW/dF')
+
+    A_field = discretization_fixture.get_material_data_size_field_mugrid(name='A_test')
+    material.get_algorithmic_tangent(F_field, A_field)
+    for trial in range(3):  # several random directions
+        dF_hat = rng.normal(0.0, 1.0, size=shape)
+        plus = discretization_fixture.get_strain_sized_field(name='F_plus')
+        minus = discretization_fixture.get_strain_sized_field(name='F_minus')
+        P_plus = discretization_fixture.get_stress_sized_field(name='P_plus')
+        P_minus = discretization_fixture.get_stress_sized_field(name='P_minus')
+        plus.s[...] = F + h * dF_hat
+        minus.s[...] = F - h * dF_hat
+        material.get_stress(plus, P_plus)
+        material.get_stress(minus, P_minus)
+        dP_fd = (P_plus.s[...] - P_minus.s[...]) / (2 * h)
+        dF_field = discretization_fixture.get_strain_sized_field(name='dF_hat')
+        dP_field = discretization_fixture.get_stress_sized_field(name='dP_tangent')
+        dF_field.s[...] = dF_hat
+        material.apply_algorithmic_tangent(dF_field, dP_field, A_field)
+        np.testing.assert_allclose(dP_field.s[...], dP_fd, rtol=1e-6, atol=1e-6,
+                                   err_msg='DecoupledNeoHookean: tangent does not match dP/dF in direction dF')
+
+
+@discretization_cases
+def test_DecoupledNeoHookean_major_symmetry(discretization_fixture):
+    """A_ijkl = A_klij (hyperelastic)."""
+    rng = np.random.default_rng(3)
+    material, _, _ = _decoupled_neo_hookean_setup(discretization_fixture, rng)
+    F, _ = _random_F(discretization_fixture, rng, 0.2)
+    F_field = discretization_fixture.get_strain_sized_field(name='F_test')
+    F_field.s[...] = F
+    A_field = discretization_fixture.get_material_data_size_field_mugrid(name='A_test')
+    material.get_algorithmic_tangent(F_field, A_field)
+    A = A_field.s[...]
+    np.testing.assert_allclose(A, np.swapaxes(np.swapaxes(A, 0, 2), 1, 3), rtol=1e-12, atol=1e-12)
+
+
+@discretization_cases
+def test_DecoupledNeoHookean_reference_and_plane_strain(discretization_fixture):
+    """W and P equal an independent evaluation of the 3D formula (in 2D: F embedded with F33 = 1)."""
+    rng = np.random.default_rng(11)
+    material, K_field, mu_field = _decoupled_neo_hookean_setup(discretization_fixture, rng)
+    F, _ = _random_F(discretization_fixture, rng, 0.3)
+    F_field = discretization_fixture.get_strain_sized_field(name='F_test')
+    P_field = discretization_fixture.get_stress_sized_field(name='P_test')
+    W_field = discretization_fixture.get_quad_field_scalar(name='W_test')
+    F_field.s[...] = F
+    material.get_energy_density(F_field, W_field)
+    material.get_stress(F_field, P_field)
+    W_ref, P_ref = _decoupled_neo_hookean_reference(F, K_field.s[0, 0], mu_field.s[0, 0])
+    np.testing.assert_allclose(W_field.s[0, 0], W_ref, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(P_field.s[...], P_ref, rtol=1e-12, atol=1e-12)
+
+
+@discretization_cases
+def test_DecoupledNeoHookean_reference_state_and_linearization(discretization_fixture):
+    """F = I: W = 0, P = 0, and A = isotropic linear elasticity with lambda = K - 2 mu / 3, mu."""
+    rng = np.random.default_rng(5)
+    dim = discretization_fixture.domain_dimension
+    K, mu = 20.0, 10.0
+    material, _, _ = _decoupled_neo_hookean_setup(discretization_fixture, rng, K=K, mu=mu)
+    F_field = discretization_fixture.get_strain_sized_field(name='F_test')
+    F_field.s[...] = np.eye(dim).reshape((dim, dim) + (1,) * (F_field.s.ndim - 2))
+    W_field = discretization_fixture.get_quad_field_scalar(name='W_test')
+    P_field = discretization_fixture.get_stress_sized_field(name='P_test')
+    A_field = discretization_fixture.get_material_data_size_field_mugrid(name='A_test')
+    material.get_energy_density(F_field, W_field)
+    material.get_stress(F_field, P_field)
+    material.get_algorithmic_tangent(F_field, A_field)
+    np.testing.assert_allclose(W_field.s[...], 0.0, atol=1e-13)
+    np.testing.assert_allclose(P_field.s[...], 0.0, atol=1e-13)
+    C_lin = material_models.get_elastic_tensor_from_lame(dim=dim, lam=K - 2.0 * mu / 3.0, mu=mu)
+    C_lin = np.asarray(C_lin).reshape((dim,) * 4 + (1,) * (A_field.s.ndim - 4))
+    np.testing.assert_allclose(A_field.s[...], np.broadcast_to(C_lin, A_field.s.shape), rtol=1e-12, atol=1e-12)
+
+
+@discretization_cases
+def test_DecoupledNeoHookean_rigid_rotation(discretization_fixture):
+    """F = R (rotation, in-plane in 2D): W = 0 and P = 0 (objectivity)."""
+    rng = np.random.default_rng(9)
+    dim = discretization_fixture.domain_dimension
+    material, _, _ = _decoupled_neo_hookean_setup(discretization_fixture, rng)
+    F_field = discretization_fixture.get_strain_sized_field(name='F_test')
+    point_shape = F_field.s.shape[2:]
+    if dim == 2:
+        angle = rng.uniform(-np.pi, np.pi, size=point_shape)
+        R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    else:
+        from scipy.spatial.transform import Rotation
+        R = Rotation.random(int(np.prod(point_shape)), random_state=1).as_matrix()  # [n, 3, 3]
+        R = np.moveaxis(R.reshape(point_shape + (3, 3)), (-2, -1), (0, 1))
+    F_field.s[...] = R
+    W_field = discretization_fixture.get_quad_field_scalar(name='W_test')
+    P_field = discretization_fixture.get_stress_sized_field(name='P_test')
+    material.get_energy_density(F_field, W_field)
+    material.get_stress(F_field, P_field)
+    np.testing.assert_allclose(W_field.s[...], 0.0, atol=1e-12)
+    np.testing.assert_allclose(P_field.s[...], 0.0, atol=1e-12)

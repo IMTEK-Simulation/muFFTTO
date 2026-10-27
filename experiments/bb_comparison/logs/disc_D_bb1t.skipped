@@ -1,0 +1,1 @@
+skipped: dual + BB does not converge on the patch test (50000 BB iterations per load step, step halved to lam 0.0008); see patch_D_bb1.log

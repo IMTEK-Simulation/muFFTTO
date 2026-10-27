@@ -410,6 +410,134 @@ class NeoHookean(MaterialModelElasticity):
                                    + term2_ijklqxyz.s
                                    + term3_ijklqxyz.s)
 
+class DecoupledNeoHookean(MaterialModelElasticity):
+    """
+    Neo-Hookean with a volumetric-isochoric split (e.g. Wriggers, Korelc, Junker, CMAME 436 (2025) 117740, eq. (1)):
+      W = (K/2) ln(J)²  +  (μ/2)(J^{-2/3} tr C - 3)
+      P = K ln(J) F^{-T}  +  μ J^{-2/3} (F - (tr C / 3) F^{-T})
+
+    strain_ijqxyz stores the deformation gradient F, stress_ijqxyz the 1st Piola-Kirchhoff stress P.
+
+    The model is three-dimensional. In 2D it is evaluated in plane strain (F₃₃ = 1): J = det F of the in-plane F
+    and tr C = F:F + 1, so the exponent stays -2/3 and the constant 3 stays 3. Here K is the bulk modulus and μ
+    the shear modulus; for F -> I the model linearises to LinearElastic with λ = K - 2μ/3 and the same μ (in 2D:
+    plane strain). Requires J > 0 (ln J is evaluated).
+    """
+
+    def __init__(self, discretization, K_1qxyz, mu_1qxyz, name: str = 'decoupled_neo_hookean'):
+        """
+        Parameters
+        ----------
+        discretization : muFFTTO.domain.Discretization
+            Used to allocate temporary quadrature fields.
+        K_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Bulk modulus K per quadrature point.
+        mu_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Shear modulus μ per quadrature point.
+        name : str, optional
+        """
+        super().__init__(discretization, name)
+        self.K = K_1qxyz
+        self.mu = mu_1qxyz
+        self.discretization = discretization
+
+    def _kinematics(self, F):
+        """(F^{-T}, J, ln J, J^{-2/3}, tr C) at every quadrature point; tr C includes C₃₃ = 1 in 2D."""
+        dim = F.s.shape[0]
+        Finv_ijqxyz = self.discretization.get_strain_sized_field(name='Finv')
+        FinvT_ijqxyz = self.discretization.get_strain_sized_field(name='FinvT')
+        J_1qxyz = self.discretization.get_quad_field_scalar(name='J')
+        lnJ_1qxyz = self.discretization.get_quad_field_scalar(name='lnJ')
+        inv2(F, Finv_ijqxyz)
+        trans2(Finv_ijqxyz, FinvT_ijqxyz)
+        det2(F, J_1qxyz)
+        log_field(J_1qxyz, lnJ_1qxyz)
+        J = J_1qxyz.s[0, 0]
+        trC = np.einsum('ij...,ij...->...', F.s, F.s) + (3 - dim)
+        return FinvT_ijqxyz.s, J, lnJ_1qxyz.s[0, 0], J ** (-2.0 / 3.0), trC
+
+    def get_energy_density(self, strain_ijqxyz, energy_1qxyz):
+        """
+        Strain-energy density W(F) = (K/2) ln(J)²  +  (μ/2)(J^{-2/3} tr C - 3).
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F.
+        energy_1qxyz : muGrid scalar field [1, 1, q, x, y, z]
+            Output energy density per quadrature point, overwritten in place
+            (not yet integrated/weighted by quadrature weights).
+        """
+        K = self.K.s[0, 0]
+        mu = self.mu.s[0, 0]
+        _, _, lnJ, J23, trC = self._kinematics(strain_ijqxyz)
+        energy_1qxyz.s[0, 0] = 0.5 * K * lnJ ** 2 + 0.5 * mu * (J23 * trC - 3.0)
+
+    def get_stress(self, strain_ijqxyz, stress_ijqxyz):
+        """
+        P = K ln(J) F^{-T}  +  μ J^{-2/3} (F - (tr C / 3) F^{-T})
+
+        From ∂J/∂F = J F^{-T}, ∂J^{-2/3}/∂F = -(2/3) J^{-2/3} F^{-T} and ∂tr C/∂F = 2F.
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F (det F must be positive).
+        stress_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Output 1st Piola-Kirchhoff stress P, overwritten in place.
+
+        Notes
+        -----
+        Uses temporary fields named 'Finv', 'FinvT', 'J', 'lnJ'.
+        """
+        F = strain_ijqxyz
+        K = self.K.s[0, 0]
+        mu = self.mu.s[0, 0]
+        FinvT, _, lnJ, J23, trC = self._kinematics(F)
+        stress_ijqxyz.s[...] = K * lnJ * FinvT + mu * J23 * (F.s - trC / 3.0 * FinvT)
+
+    def get_algorithmic_tangent(self, strain_ijqxyz, tangent_ijklqxyz):
+        """
+        Algorithmic tangent in the standard order A_ijkl = ∂P_ij/∂F_kl, so that dP_ij = A_ijkl dF_kl
+        (``tensor_operations.ddot42``), with G = F^{-T}, a = J^{-2/3}, I₁ = tr C:
+
+          A_ijkl = K G_ij G_kl  -  K ln J G_il G_kj                                     (volumetric)
+                 + μ a [ δ_ik δ_jl - (2/3)(F_ij G_kl + G_ij F_kl)
+                         + (2/9) I₁ G_ij G_kl + (I₁/3) G_il G_kj ]                     (isochoric)
+
+        Derivation: ∂G_ij/∂F_kl = -G_il G_kj, ∂a/∂F_kl = -(2/3) a G_kl, ∂I₁/∂F_kl = 2 F_kl.
+        The tangent has major symmetry A_ijkl = A_klij (hyperelastic material).
+
+        Parameters
+        ----------
+        strain_ijqxyz : muGrid field [i, j, q, x, y, z]
+            Deformation gradient F.
+        tangent_ijklqxyz : muGrid field [i, j, k, l, q, x, y, z]
+            Output tangent A, overwritten in place.
+
+        Notes
+        -----
+        Uses temporary fields 'Finv', 'FinvT', 'J', 'lnJ'.
+        """
+        F = strain_ijqxyz
+        K = self.K.s[0, 0]
+        mu = self.mu.s[0, 0]
+        dim = F.s.shape[0]
+        G, _, lnJ, J23, trC = self._kinematics(F)
+        mu_a = mu * J23
+
+        GG = np.einsum('ij...,kl...->ijkl...', G, G)  # G_ij G_kl
+        GG_cross = np.einsum('il...,kj...->ijkl...', G, G)  # G_il G_kj
+        FG = np.einsum('ij...,kl...->ijkl...', F.s, G)  # F_ij G_kl
+        GF = np.einsum('ij...,kl...->ijkl...', G, F.s)  # G_ij F_kl
+        IsI = get_array_module(mu).asarray(np.einsum('ik,jl->ijkl', np.eye(dim), np.eye(dim)))
+        IsI = IsI[(...,) + (np.newaxis,) * mu.ndim]
+
+        tangent_ijklqxyz.s[...] = (K * GG - K * lnJ * GG_cross
+                                   + mu_a * (IsI - (2.0 / 3.0) * (FG + GF)
+                                             + (2.0 / 9.0) * trC * GG + (trC / 3.0) * GG_cross))
+
+
 # ============================================================================
 # Concrete implementation 3: Third Medium (TMC)
 # ============================================================================

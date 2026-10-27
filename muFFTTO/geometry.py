@@ -291,6 +291,43 @@ def circle_inclusion(coords, radius=None):
     return indicator(~inclusion, coords)
 
 
+def polydisperse_disk_centres_and_radii(dim=2, porosity=0.25, radius_range=(0.05, 0.14), gap=0.04, seed=0,
+                                        max_attempts=100000):
+    """Random sequential addition of non-overlapping periodic balls with radii uniform in ``radius_range``.
+
+    Largest radii are placed first; every pair of balls keeps a solid ligament of at least ``gap``.
+    Balls are added until the (analytic) volume fraction reaches ``porosity`` or no more fit. The result
+    depends only on the arguments, not on the grid or the MPI decomposition.
+    """
+    rng = np.random.default_rng(seed)
+    unit_ball = np.pi if dim == 2 else 4.0 / 3.0 * np.pi
+    radii = []
+    while unit_ball * np.sum(np.array(radii) ** dim) < porosity:
+        radii.append(rng.uniform(*radius_range))
+    centres, placed = [], []
+    for r in sorted(radii, reverse=True):
+        for _ in range(max_attempts):
+            c = rng.uniform(0.0, 1.0, dim)
+            if all(np.linalg.norm((c - c2 + 0.5) % 1.0 - 0.5) >= r + r2 + gap for c2, r2 in zip(centres, placed)):
+                centres.append(c)
+                placed.append(r)
+                break
+    return np.array(centres), np.array(placed)
+
+
+@register('polydisperse_pores')
+def polydisperse_pores(coords, porosity=0.25, radius_range=(0.05, 0.14), gap=0.04, seed=0):
+    """Matrix (1) with non-overlapping disk/ball pores (0) of different sizes, randomly placed (fixed seed).
+
+    See :func:`polydisperse_disk_centres_and_radii`.
+    """
+    centres, radii = polydisperse_disk_centres_and_radii(coords.shape[0], porosity, radius_range, gap, seed)
+    shape = None
+    for c, r in zip(centres, radii):
+        shape = ball(c, r) if shape is None else shape | ball(c, r)
+    return indicator(~shape, coords)
+
+
 @register('random_distribution')
 def random_distribution(coords, seed=None):
     """Independent uniform random value in ``[0, 1)`` in every pixel.

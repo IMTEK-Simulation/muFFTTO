@@ -13,6 +13,16 @@ from muFFTTO import topology_optimization
 from muFFTTO import material_models
 from muFFTTO import io_utils
 from muFFTTO import solvers_nonlinear
+from muFFTTO import tensor_operations
+
+# DEVICE (env): 'cpu' or 'gpu' (muGrid with CUDA). On the GPU the field data (.s) are cupy arrays; the optimizer and
+# its design vector stay on the host, the phase field / gradient are copied at the objective function
+device = os.environ.get('DEVICE', 'cpu')
+if device == 'gpu':
+    import cupy as xp
+else:
+    xp = np
+to_host = tensor_operations.to_host
 
 # Problem Configuration
 problem_type = 'elasticity'
@@ -67,7 +77,8 @@ MPI.COMM_WORLD.Barrier()
 discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
-                                       element_type=element_type)
+                                       element_type=element_type,
+                                       device=device)
 print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
       f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
 
@@ -79,6 +90,7 @@ elastic_C_0 = material_models.get_elastic_material_tensor(dim=discretization.dom
                                                  kind='linear')
 soft_phase = 10 ** (-soft_phase_exponent) if soft_phase_exponent > 0 else 0
 elastic_C_void = elastic_C_0 * soft_phase
+elastic_C_0_dev, elastic_C_void_dev = xp.asarray(elastic_C_0), xp.asarray(elastic_C_void)   # for the field updates
 
 # Preconditioner setup. Reference material: Green and dual C_0; Green-Jacobi 2 mu I (the Jacobi diagonal carries the
 # local magnitude, the Green part only the structure)
@@ -145,7 +157,7 @@ displacement_field_load_case = [discretization.get_unknown_size_field(name=f'u_{
 adjoint_field_load_case = [discretization.get_unknown_size_field(name=f'adj_{i}') for i in range(nb_load_cases)]
 
 p = 2  # SIMP penalty exponent
-double_well_depth_test = 1
+double_well_depth_test = float(os.environ.get('DW_DEPTH', 1))  # weight of the double well rho^2 (1 - rho)^2 / eta
 norms_sigma, norms_pf, norms_adjoint_energy = [], [], []
 
 info_mech = {'num_iteration_adjoint': [], 'residual_rz': []}
@@ -154,15 +166,31 @@ info_adjoint = {'num_iteration_adjoint': [], 'residual_rz': []}
 # Allocation of common fields used in the objective function
 phase_field_1nxyz = discretization.get_scalar_field(name='phase_field')
 phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(name='phase_field_quad')
-material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(name='mat_data_field')
+# SCALED_MATERIAL=1 (default): the SIMP material C(rho) = rho^p (C_0 - C_void) + C_void is kept as a scalar field
+# rho^p times constant tensors (domain.ScaledMaterial) instead of a full C_ijkl per quadrature point (d^4 x less memory,
+# cheaper application); SCALED_MATERIAL=0: the full fields as before (for comparison)
+scaled_material = os.environ.get('SCALED_MATERIAL', '1') == '1'
+if scaled_material:
+    simp_scale_1qxyz = discretization.get_quad_field_scalar(name='simp_scale')            # rho^p at the quad points
+    material_data_field_C_0_rho_ijklqxyz = domain.ScaledMaterial([(simp_scale_1qxyz, elastic_C_0 - elastic_C_void),
+                                                                  (1.0, elastic_C_void)])
+else:
+    material_data_field_C_0_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(name='mat_data_field')
 s_sensitivity_field = discretization.get_scalar_field(name='sensitivity_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field')
 s_stress_and_adjoint_load_case = discretization.get_scalar_field(name='stress_adj_sensitivity')
-dual_material = discretization.get_material_data_size_field_mugrid(name='dual_material')   # C_0 A^-1 C_0 (dual)
+if scaled_material:                                       # C_0 A^-1 C_0 = C_0 / s(x) (dual)
+    dual_scale_1qxyz = discretization.get_quad_field_scalar(name='dual_scale')
+    dual_material = domain.ScaledMaterial([(dual_scale_1qxyz, elastic_C_0)])
+else:
+    dual_material = discretization.get_material_data_size_field_mugrid(name='dual_material')   # C_0 A^-1 C_0 (dual)
 dual_temp_1 = discretization.get_unknown_size_field(name='dual_temp_1')
 dual_temp_2 = discretization.get_unknown_size_field(name='dual_temp_2')
 
 w = weight / nb_load_cases
+phase_field_regularization = True  # gradient + double-well terms in the objective
+quad_point_density = None  # optional map of the interpolated field at the quadrature points to the density, applied
+#                            in the forward and adjoint problems (p = 1 only: dC/drho does not depend on rho)
 
 if MPI.COMM_WORLD.rank == 0:
     print(f'Penalty p: {p}, Weight w: {w}, Eta: {eta}')
@@ -174,31 +202,38 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     Calculates the combined objective (target stress potential + phase field energy)
     and its sensitivity with respect to the phase field.
     """
-    phase_field_1nxyz.s[...] = phase_field_1nxyz_flat.reshape([1, 1, *discretization.nb_of_pixels])
+    phase_field_1nxyz.s[...] = xp.asarray(phase_field_1nxyz_flat).reshape([1, 1, *discretization.nb_of_pixels])
 
     # 1. Project phase field to quadrature points
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
+    if quad_point_density is not None:  # e.g. a sharp threshold of an interpolated level set (reaction-diffusion driver)
+        phase_field_at_quad_poits_1qxyz.s[...] = quad_point_density(phase_field_at_quad_poits_1qxyz.s)
 
     # 2. Update material properties based on phase field (SIMP interpolation)
-    material_data_field_C_0_rho_ijklqxyz.s[...] = (elastic_C_0 - elastic_C_void)[
-                                                      ..., np.newaxis, np.newaxis, np.newaxis] * \
-                                                  np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                                  elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
+    if scaled_material:
+        simp_scale_1qxyz.s[...] = xp.power(phase_field_at_quad_poits_1qxyz.s, p)
+    else:
+        material_data_field_C_0_rho_ijklqxyz.s[...] = (elastic_C_0_dev - elastic_C_void_dev)[
+                                                          ..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                      xp.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                                      elastic_C_void_dev[..., np.newaxis, np.newaxis, np.newaxis]
 
-    # 3. Calculate phase field contribution to objective and its sensitivity
-    f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
-                                                                         phase_field_1nxyz=phase_field_1nxyz,
-                                                                         eta=eta,
-                                                                         double_well_depth=double_well_depth_test)
+    # 3. Calculate phase field contribution to objective and its sensitivity (off for the level-set driver,
+    #    example_2D_elasticity_TO_level_set.py, which regularizes through the velocity instead)
     s_sensitivity_field.s.fill(0)
-
-    topology_optimization.sensitivity_phase_field_term_FE_NEW(
-        discretization=discretization,
-        phase_field_1nxyz=phase_field_1nxyz,
-        p=p,
-        eta=eta,
-        output_array=s_sensitivity_field,
-        double_well_depth=1)
+    f_phase_field = 0.0
+    if phase_field_regularization:
+        f_phase_field = topology_optimization.objective_function_phase_field(discretization=discretization,
+                                                                             phase_field_1nxyz=phase_field_1nxyz,
+                                                                             eta=eta,
+                                                                             double_well_depth=double_well_depth_test)
+        topology_optimization.sensitivity_phase_field_term_FE_NEW(
+            discretization=discretization,
+            phase_field_1nxyz=phase_field_1nxyz,
+            p=p,
+            eta=eta,
+            output_array=s_sensitivity_field,
+            double_well_depth=double_well_depth_test)
 
     objective_function = f_phase_field
     norms_pf.append(objective_function)
@@ -239,8 +274,12 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     elif preconditioner_type == 'dual':
         # P = G K(C_0 A^-1 C_0) G. The SIMP material is A = s(x) C_0, s = rho^p (1 - soft_phase) + soft_phase, so the
         # middle material is exactly C_0 A^-1 C_0 = C_0 / s(x)
-        dual_material.s[...] = elastic_C_0[..., np.newaxis, np.newaxis, np.newaxis] / (
-            np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0] * (1 - soft_phase) + soft_phase)
+        if scaled_material:
+            dual_scale_1qxyz.s[...] = 1.0 / (xp.power(phase_field_at_quad_poits_1qxyz.s, p) * (1 - soft_phase)
+                                             + soft_phase)
+        else:
+            dual_material.s[...] = elastic_C_0_dev[..., np.newaxis, np.newaxis, np.newaxis] / (
+                xp.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0] * (1 - soft_phase) + soft_phase)
 
         def M_fun_dual(x, Px):
             discretization.fft.communicate_ghosts(x)
@@ -286,8 +325,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             norms_cg_mech['residual_rz'] = []
 
         def callback(it, x, r, p, z, stop_crit_norm):
-            norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
-            norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
+            norm_of_rr = discretization.communicator.sum(np.float64(float(np.dot(r.ravel(), r.ravel()))))
+            norm_of_rz = discretization.communicator.sum(np.float64(float(np.dot(r.ravel(), z.ravel()))))
             if MPI.COMM_WORLD.rank == 0:
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
@@ -351,8 +390,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             load_case], adjoint_energies[
             load_case], info_adjoint_current = topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
             discretization=discretization,
-            base_material_data_ijkl=elastic_C_0,
-            void_material_data_ijkl=elastic_C_void,
+            base_material_data_ijkl=elastic_C_0_dev,
+            void_material_data_ijkl=elastic_C_void_dev,
             displacement_field_inxyz=displacement_field_load_case[load_case],
             adjoint_field_inxyz=adjoint_field_load_case[load_case],
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
@@ -365,6 +404,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             p=p,
             weight=w,
             disp=disp,
+            quad_point_density=quad_point_density,
             **cg_setup)
 
         s_sensitivity_field.s[0, 0] += s_stress_and_adjoint_load_case.s[0, 0]
@@ -387,7 +427,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     norms_sigma.append(norm_sigma_step)
     norms_adjoint_energy.append(adjoint_energies_step)
 
-    return objective_function[0], s_sensitivity_field.s[0, 0].reshape(-1)
+    return objective_function[0], to_host(s_sensitivity_field.s[0, 0]).reshape(-1)
 
 
 if __name__ == '__main__':
@@ -412,10 +452,11 @@ if __name__ == '__main__':
                                                                               or cg_mode != 'residual') else '') \
         + f'{preconditioner_type}_eta_{eta}_w_{weight}_{optimizer}' + (
         f'_vol_{volume_fraction}' if volume_fraction is not None else '') + (
-        f'_noise{init_noise_grid}' if init_noise_grid else '')
+        f'_noise{init_noise_grid}' if init_noise_grid else '') + (
+        f'_dw{double_well_depth_test:g}' if double_well_depth_test != 1 else '') + os.environ.get('RUN_SUFFIX', '')
     parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
                   'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
-                  'soft_phase': soft_phase, 'optimizer': optimizer, 'cg_mode': cg_mode,
+                  'soft_phase': soft_phase, 'double_well_depth': double_well_depth_test, 'optimizer': optimizer, 'cg_mode': cg_mode,
                   'volume_fraction': volume_fraction if volume_fraction is not None else -1.0,
                   'target_C_voigt': material_models.compute_Voigt_notation_4order(elastic_C_target)}
 
@@ -440,17 +481,17 @@ if __name__ == '__main__':
         phase_field_0.s[...] += np.random.rand(*phase_field_0.s.shape)
     else:
         np.random.seed(MPI.COMM_WORLD.rank)
-        coords = discretization.fft.coords
-        phase_field_0.s[0, 0] = (np.sin(coords[0] * 4 * np.pi) + np.sin(coords[1] * 4 * np.pi) + 2) / 4
+        coords = to_host(discretization.fft.coords)
+        phase_field_0.s[0, 0] = xp.asarray((np.sin(coords[0] * 4 * np.pi) + np.sin(coords[1] * 4 * np.pi) + 2) / 4)
         noise_grid = init_noise_grid
         if noise_grid:  # the noise of a serial run on noise_grid^2, pixel-replicated: same start on every grid / MPI split
             np.random.seed(0)
             factor = number_of_pixels[0] // noise_grid
             noise = np.kron(np.random.rand(1, 1, noise_grid, noise_grid), np.ones((factor, factor)))
             (x0, y0), (nx, ny) = discretization.fft.subdomain_locations, discretization.fft.nb_subdomain_grid_pts
-            phase_field_0.s[0, 0] += 0.5 * noise[0, 0, x0:x0 + nx, y0:y0 + ny]
+            phase_field_0.s[0, 0] += xp.asarray(0.5 * noise[0, 0, x0:x0 + nx, y0:y0 + ny])
         else:
-            phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
+            phase_field_0.s[...] += xp.asarray(0.5 * np.random.rand(*phase_field_0.s.shape))
 
     iterat = 0
     phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
@@ -486,7 +527,7 @@ if __name__ == '__main__':
         global iterat
         iterat += 1
         if history_writer is not None and (iterat - 1) % history_every == 0:
-            phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
+            phase_field_iterate.s[0, 0] = xp.asarray(x_current).reshape(discretization.nb_of_pixels)
             # the optimizers evaluate the accepted iterate last, so last_f is f(x_current)
             history_writer.write(objective=evaluations['last_f'],
                                  volume_fraction=MPI.COMM_WORLD.allreduce(np.sum(x_current)) / np.prod(
@@ -520,7 +561,7 @@ if __name__ == '__main__':
                          'tr_newton': dict(maxiter=200)}[optimizer]
     xopt_FE_MPI = solvers_nonlinear.minimize(
         fun=counted_objective,
-        x0=phase_field_0.s.ravel(),
+        x0=to_host(phase_field_0.s).ravel(),
         method=optimizer,
         bounds=(0., 1.),
         constraint_weights=a if volume_fraction is not None else None,
@@ -537,18 +578,22 @@ if __name__ == '__main__':
         history_writer.close()
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
-    solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
+    solution_phase.s[...] = xp.asarray(xopt_FE_MPI.x).reshape([1, 1, *discretization.nb_of_pixels])
 
     ######## Postprocess for FE linear solver with NuMPI ########
     solution_phase_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
         name='solution_phase_at_quad_poits_1qxyz')
     discretization.apply_N_operator_mugrid(solution_phase, solution_phase_at_quad_poits_1qxyz)
 
-    material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
-        name='material_data_field_C_0_rho_quad')
-    material_data_field_C_0_rho_quad.s[...] = (elastic_C_0 - elastic_C_void)[..., np.newaxis, np.newaxis, np.newaxis] * \
-                                              np.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
-                                              elastic_C_void[..., np.newaxis, np.newaxis, np.newaxis]
+    if scaled_material:
+        material_data_field_C_0_rho_quad = domain.ScaledMaterial(
+            [(xp.power(solution_phase_at_quad_poits_1qxyz.s[0, 0], p), elastic_C_0 - elastic_C_void), (1.0, elastic_C_void)])
+    else:
+        material_data_field_C_0_rho_quad = discretization.get_material_data_size_field_mugrid(
+            name='material_data_field_C_0_rho_quad')
+        material_data_field_C_0_rho_quad.s[...] = (elastic_C_0_dev - elastic_C_void_dev)[..., np.newaxis, np.newaxis, np.newaxis] * \
+                                                  xp.power(solution_phase_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] + \
+                                                  elastic_C_void_dev[..., np.newaxis, np.newaxis, np.newaxis]
 
     homogenized_stresses = np.zeros([nb_load_cases, dim, dim])
 

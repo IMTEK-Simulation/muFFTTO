@@ -6,6 +6,9 @@ Functions
 plot_field_on_grid
     Plot a pixel-wise constant field on a (possibly deformed) quadrilateral grid
     using ``matplotlib.pyplot.pcolormesh``.
+plot_deformed_solid_two_dim
+    Plot the deformed solid of a 2D cell, leaving out zero-stiffness pixels
+    (voids, a cut domain boundary) and their undefined nodes.
 get_deformed_grid_coords_two_dim
     Compute the node coordinates of a deformed 2D periodic grid (including the
     periodic boundary nodes) from a macroscopic gradient, a displacement
@@ -14,6 +17,7 @@ visualize_voxels
     3D voxel plot of a phase field.
 """
 import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
 
 import numpy as np
 
@@ -24,7 +28,10 @@ def plot_field_on_grid(
         coordinates_for_plot: np.ndarray,
         field_to_plot: np.ndarray,
         name='field',
-        plot_grid: bool = True):
+        plot_grid: bool = True,
+        pixel_mask=None,
+        axis_labels=('x  / L', 'y  / L'),
+        clim=None):
     """
     Function that generates 2D plot with grid lines. Pixel wise constant data
     works with numpy files
@@ -46,6 +53,18 @@ def plot_field_on_grid(
     plot_grid : bool, optional
         If ``True`` (default), cell edges are drawn as thin black lines
         (line width 0.3); otherwise line width 0 (no visible grid).
+    pixel_mask : numpy.ndarray of bool, optional
+        Shape ``(Nx, Ny)``. If given, only pixels where it is ``True`` are drawn,
+        each as its own (deformed) quadrilateral. Use it to hide pixels whose
+        corner nodes are not meaningful, e.g. zero-stiffness pixels (void, a cut
+        domain boundary) whose nodes have undefined displacements, or pixels
+        closed by the periodic copy nodes when the cell is not periodic.
+        Default ``None`` draws all pixels.
+    axis_labels : tuple of str, optional
+        Labels of the x- and y-axis. Default ``('x  / L', 'y  / L')`` for
+        coordinates normalised by the cell size ``L``.
+    clim : tuple of float, optional
+        Colour range ``(vmin, vmax)``. Default ``None``: the range of the whole field.
 
     Returns
     -------
@@ -54,8 +73,7 @@ def plot_field_on_grid(
     Notes
     -----
     Side effect: creates a new figure and calls ``plt.show()`` (blocking in
-    interactive back-ends). Axis labels assume coordinates normalised by the
-    cell size ``L``.
+    interactive back-ends).
     """
 
     # plot def_F in grid
@@ -69,12 +87,27 @@ def plot_field_on_grid(
     field_to_plot = to_host(field_to_plot)
     # 'flat' shading: field_to_plot[i, j] colours the quadrilateral spanned by
     # nodes (i, j), (i+1, j), (i+1, j+1), (i, j+1) -> needs one more node per axis
-    pcm = ax.pcolormesh(coordinates_for_plot[0], coordinates_for_plot[1],
-                        field_to_plot, shading='flat', edgecolors='k',
-                        cmap='coolwarm', lw=grid_lines_width)
+    if pixel_mask is None:
+        pcm = ax.pcolormesh(coordinates_for_plot[0], coordinates_for_plot[1],
+                            field_to_plot, shading='flat', edgecolors='k',
+                            cmap='coolwarm', lw=grid_lines_width)
+    else:
+        # draw only the selected pixels; pcolormesh would still draw edges of masked cells
+        pixels = np.argwhere(to_host(pixel_mask))
+        i, j = pixels[:, 0], pixels[:, 1]
+        corners = np.stack([coordinates_for_plot[:, i, j], coordinates_for_plot[:, i + 1, j],
+                            coordinates_for_plot[:, i + 1, j + 1], coordinates_for_plot[:, i, j + 1]])  # [corner, dim, pixel]
+        pcm = PolyCollection(np.transpose(corners, (2, 0, 1)), array=np.asarray(field_to_plot, dtype=float)[i, j],
+                             cmap='coolwarm', edgecolors='k', linewidths=grid_lines_width)
+        # colour scale of the whole field, as without mask (the drawn pixels alone may be constant)
+        pcm.set_clim(np.min(field_to_plot), np.max(field_to_plot))
+    if clim is not None:
+        pcm.set_clim(*clim)
+        ax.add_collection(pcm)
+        ax.autoscale_view()
     plt.colorbar(pcm, ax=ax)
-    plt.xlabel('x  / L')
-    plt.ylabel('y  / L')
+    plt.xlabel(axis_labels[0])
+    plt.ylabel(axis_labels[1])
     ax.set_aspect('equal')
     ax.set_title(name)
     plt.tight_layout()
@@ -84,7 +117,8 @@ def plot_field_on_grid(
 def get_deformed_grid_coords_two_dim(discretization,
                                      macro_gradient_ij,
                                      displacement_fluctuation,
-                                     grid_nodes_displacement_inxyz=None):
+                                     grid_nodes_displacement_inxyz=None,
+                                     physical_coordinates=False):
     """
     This function calculates deformed grid coordinates.
     It uses original coordinates with periodic extension for plotting.
@@ -116,6 +150,11 @@ def get_deformed_grid_coords_two_dim(discretization,
         Displacement of grid nodes from a grid-adaptation step, ``.s`` of shape
         ``(2, n, Nx, Ny)``. If ``None`` (default), the regular reference grid
         is used.
+    physical_coordinates : bool, optional
+        If ``True``, the reference coordinates are scaled by
+        ``discretization.domain_size`` (physical units, consistent with the
+        displacements for any cell size and aspect ratio). Default ``False``:
+        coordinates normalised to ``[0, 1]``.
 
     Returns
     -------
@@ -132,7 +171,7 @@ def get_deformed_grid_coords_two_dim(discretization,
     Units: the reference coordinates are normalised by the cell size (in
     ``[0, 1]``), while the fluctuation and the grid displacement are in
     physical units, so the result is only consistent for a unit cell
-    (``domain_size = [1, 1]``). The periodic copy nodes (last row/column) do
+    (``domain_size = [1, 1]``), unless ``physical_coordinates=True``. The periodic copy nodes (last row/column) do
     not receive the grid displacement.
     """
 
@@ -141,6 +180,8 @@ def get_deformed_grid_coords_two_dim(discretization,
 
     # Reference coordinates with periodic extension for plotting
     x_plot_inxyz = to_host(discretization.get_nodal_points_coordinates_with_periodic_nodes())
+    if physical_coordinates:
+        x_plot_inxyz *= np.asarray(discretization.domain_size)[:, None, None, None]
     # add deformation  # x_p = x̃_p + ũ_Φ(x̃_p)
     # (only the interior/non-periodic nodes [:-1, :-1] receive the grid
     # displacement; the periodic copies in the last row/column are not shifted)
@@ -168,6 +209,82 @@ def get_deformed_grid_coords_two_dim(discretization,
     x_plot_ixyz[1, -1, -1] += u_fluctuation_inxyz[1, 0, 0, 0]
 
     return x_plot_ixyz
+
+
+def plot_deformed_solid_two_dim(discretization,
+                                macro_gradient_ij,
+                                displacement_fluctuation,
+                                stiffness_field,
+                                field_to_plot=None,
+                                name='deformed solid',
+                                deformation_scale=1.0,
+                                plot_grid: bool = True):
+    """
+    Plot the deformed solid of a 2D cell; pixels with zero stiffness are not drawn.
+
+    Nodes that touch only zero-stiffness pixels (inside a void, on a domain boundary
+    cut by zero-stiffness pixels) have undefined displacements, and the periodic copy
+    nodes used to close the grid repeat the displacement of the first row/column. Both
+    are only corners of zero-stiffness pixels here, so the picture is not distorted.
+
+    Parameters
+    ----------
+    discretization : muFFTTO.domain.Discretization
+    macro_gradient_ij : numpy.ndarray
+        Macroscopic displacement gradient ``E`` of shape ``(2, 2)``.
+    displacement_fluctuation : muGrid.Field
+        Periodic displacement fluctuation; ``.s`` of shape ``(2, n, Nx, Ny)``.
+    stiffness_field : muGrid.Field
+        Scalar quadrature field of a stiffness parameter (e.g. the shear modulus),
+        ``.s`` of shape ``(1, 1, q, Nx, Ny)``. A pixel is drawn if its stiffness is
+        nonzero at any quadrature point.
+    field_to_plot : numpy.ndarray, optional
+        Pixel-wise values ``(Nx, Ny)`` used as colours. Default: the pixel-averaged stiffness.
+    name : str, optional
+        Title of the plot.
+    deformation_scale : float, optional
+        Magnification of the displacement ``E.x + u`` (default 1, true scale).
+    plot_grid : bool, optional
+        Draw pixel edges (default ``True``).
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Serial only (as :func:`get_deformed_grid_coords_two_dim`). Calls ``plt.show()``.
+    Coordinates are physical (scaled by ``discretization.domain_size``), so cells of any
+    size and aspect ratio are drawn to scale.
+    """
+    stiffness_qxy = to_host(stiffness_field.s)[0, 0]
+    solid_pixel_mask = np.any(stiffness_qxy != 0, axis=0)
+    if field_to_plot is None:
+        field_to_plot = stiffness_qxy.mean(axis=0)
+    # colour range of the drawn (solid) pixels only; widened if the field is constant there
+    solid_values = np.asarray(to_host(field_to_plot), dtype=float)[solid_pixel_mask]
+    clim = (solid_values.min(), solid_values.max())
+    if clim[0] == clim[1]:
+        clim = (clim[0] - 0.5 * abs(clim[0]) - 1e-30, clim[1] + 0.5 * abs(clim[1]) + 1e-30)
+
+    # x = x_ref + s (E.x_ref + u)
+    x_ref_ixy = (to_host(discretization.get_nodal_points_coordinates_with_periodic_nodes())[:, 0]
+                 * np.asarray(discretization.domain_size)[:, None, None])
+    x_deformed_ixy = get_deformed_grid_coords_two_dim(discretization,
+                                                      macro_gradient_ij=macro_gradient_ij,
+                                                      displacement_fluctuation=displacement_fluctuation,
+                                                      physical_coordinates=True)
+    x_plot_ixy = x_ref_ixy + deformation_scale * (x_deformed_ixy - x_ref_ixy)
+
+    if deformation_scale != 1:
+        name = f'{name} (displacement x{deformation_scale:g})'
+    plot_field_on_grid(coordinates_for_plot=x_plot_ixy,
+                       field_to_plot=field_to_plot,
+                       name=name,
+                       plot_grid=plot_grid,
+                       pixel_mask=solid_pixel_mask,
+                       axis_labels=('x', 'y'),
+                       clim=clim)
 
 
 def visualize_voxels(phase_field_xyz, figure=None, ax=None):

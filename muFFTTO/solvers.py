@@ -580,8 +580,8 @@ def conjugate_gradients_mugrid_experimental(
 
     norms = dict()
 
-    rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))  # initial residual dot product
-    rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))  # initial residual dot product
+    rr = comm.sum(np.float64(float(np.dot(r.s.ravel(), r.s.ravel()))))  # initial residual dot product
+    rz = comm.sum(np.float64(float(np.dot(r.s.ravel(), z.s.ravel()))))  # initial residual dot product
 
     if norm_metric is not None:
         Pr = fc.real_field(
@@ -590,7 +590,7 @@ def conjugate_gradients_mugrid_experimental(
             sub_pt='nodal_points'  # sub-point type
         )
         norm_metric(r, Pr)
-        stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # initial residual dot product
+        stop_crit = comm.sum(np.float64(float(np.dot(r.s.ravel(), Pr.s.ravel()))))  # initial residual dot product
 
     elif norm_metric is None:
         stop_crit = rr
@@ -691,7 +691,7 @@ def conjugate_gradients_mugrid_experimental(
 
         # Update x (and residual)
         # curvature (p, A p); must be > 0 for an SPD operator
-        pAp = comm.sum(np.dot(p.s.ravel(), Ap.s.ravel()))
+        pAp = comm.sum(np.float64(float(np.dot(p.s.ravel(), Ap.s.ravel()))))
         if pAp <= 0:
             raise RuntimeError("Hessian is not positive definite")
 
@@ -705,11 +705,11 @@ def conjugate_gradients_mugrid_experimental(
         P(r, z)
 
         # Check convergence
-        next_rr = comm.sum(np.dot(r.s.ravel(), r.s.ravel()))
-        next_rz = comm.sum(np.dot(r.s.ravel(), z.s.ravel()))
+        next_rr = comm.sum(np.float64(float(np.dot(r.s.ravel(), r.s.ravel()))))
+        next_rz = comm.sum(np.float64(float(np.dot(r.s.ravel(), z.s.ravel()))))
         if norm_metric is not None:
             norm_metric(r, Pr)
-            stop_crit = comm.sum(np.dot(r.s.ravel(), Pr.s.ravel()))  # current residual in the custom metric, (r, G r)
+            stop_crit = comm.sum(np.float64(float(np.dot(r.s.ravel(), Pr.s.ravel()))))  # current residual in the custom metric, (r, G r)
 
         elif norm_metric is None:
             stop_crit = next_rr

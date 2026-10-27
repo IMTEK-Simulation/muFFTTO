@@ -1061,3 +1061,96 @@ def test_1Q_system_matrix_column_sum_zero():
     col_sums = np.abs(K.sum(axis=0))
     assert np.allclose(col_sums, 0, atol=1e-12), \
         f"Column sums not zero, max: {col_sums.max()}"
+
+
+def _boundary_mask_discretization(nb_pixels, device='cpu'):
+    problem_type = 'elasticity'
+    my_cell = domain.PeriodicUnitCell(domain_size=[1] * len(nb_pixels), problem_type=problem_type)
+    return domain.Discretization(cell=my_cell,
+                                 nb_of_pixels_global=nb_pixels,
+                                 discretization_type='finite_element',
+                                 element_type='bilinear_rectangle' if len(nb_pixels) == 2 else 'trilinear_hexahedron',
+                                 device=device)
+
+
+def _global_boundary_mask(discretization, boundaries, width=1):
+    """Gather the local masks into the global mask (MPI-safe, host)."""
+    from mpi4py import MPI
+    from muFFTTO.tensor_operations import to_host
+    local = to_host(discretization.get_domain_boundary_pixel_mask(boundaries, width=width))
+    global_mask = np.zeros(discretization.nb_of_pixels_global, dtype=int)
+    index = tuple(np.asarray(discretization.fft.icoords).reshape(len(discretization.nb_of_pixels_global), -1))
+    global_mask[index] = local.reshape(-1)
+    return MPI.COMM_WORLD.allreduce(global_mask).astype(bool)
+
+
+@pytest.mark.parametrize('boundaries, width', [
+    (None, 1), ('left', 1), (['right'], 1), (['bottom', 'top'], 1), (['left', 'bottom'], 2), (None, 3)])
+def test_domain_boundary_pixel_mask_2D(boundaries, width):
+    nb_pixels = (8, 6)
+    discretization = _boundary_mask_discretization(nb_pixels)
+    mask = _global_boundary_mask(discretization, boundaries, width)
+
+    expected = np.zeros(nb_pixels, dtype=bool)
+    selected = ['left', 'right', 'bottom', 'top'] if boundaries is None else (
+        [boundaries] if isinstance(boundaries, str) else boundaries)
+    if 'left' in selected:
+        expected[:width, :] = True
+    if 'right' in selected:
+        expected[-width:, :] = True
+    if 'bottom' in selected:
+        expected[:, :width] = True
+    if 'top' in selected:
+        expected[:, -width:] = True
+    np.testing.assert_array_equal(mask, expected)
+
+
+def test_domain_boundary_pixel_mask_3D():
+    nb_pixels = (4, 5, 6)
+    discretization = _boundary_mask_discretization(nb_pixels)
+    mask = _global_boundary_mask(discretization, ['back', 'front'])
+    expected = np.zeros(nb_pixels, dtype=bool)
+    expected[:, :, 0] = expected[:, :, -1] = True
+    np.testing.assert_array_equal(mask, expected)
+    assert _global_boundary_mask(discretization, None).sum() == np.prod(nb_pixels) - np.prod(np.subtract(nb_pixels, 2))
+
+
+def test_domain_boundary_pixel_mask_invalid():
+    discretization = _boundary_mask_discretization((8, 6))
+    with pytest.raises(ValueError):
+        discretization.get_domain_boundary_pixel_mask('front')  # z boundary in 2D
+    with pytest.raises(ValueError):
+        discretization.get_domain_boundary_pixel_mask('middle')
+    with pytest.raises(ValueError):
+        discretization.get_domain_boundary_pixel_mask('left', width=0)
+
+
+def test_domain_boundary_pixel_mask_gpu():
+    cupy = pytest.importorskip('cupy')
+    try:
+        cupy.cuda.runtime.getDeviceCount()
+    except Exception:
+        pytest.skip('no GPU')
+    discretization = _boundary_mask_discretization((8, 6), device='gpu')
+    mask = discretization.get_domain_boundary_pixel_mask(['left', 'top'])
+    assert isinstance(mask, cupy.ndarray)
+    cpu_mask = _boundary_mask_discretization((8, 6)).get_domain_boundary_pixel_mask(['left', 'top'])
+    np.testing.assert_array_equal(mask.get(), cpu_mask)
+
+
+def test_nodal_points_coordinates_gpu_equals_cpu():
+    cupy = pytest.importorskip('cupy')
+    try:
+        cupy.cuda.runtime.getDeviceCount()
+    except Exception:
+        pytest.skip('no GPU')
+    from muFFTTO.tensor_operations import to_host
+    my_cell = domain.PeriodicUnitCell(domain_size=[2, 1], problem_type='elasticity')
+    coordinates = {}
+    for device in ('cpu', 'gpu'):
+        discretization = domain.Discretization(cell=my_cell, nb_of_pixels_global=(8, 6),
+                                               discretization_type='finite_element',
+                                               element_type='bilinear_rectangle', device=device)
+        coordinates[device] = discretization.get_nodal_points_coordinates().s
+    assert isinstance(coordinates['gpu'], cupy.ndarray)
+    np.testing.assert_array_equal(to_host(coordinates['gpu']), coordinates['cpu'])
