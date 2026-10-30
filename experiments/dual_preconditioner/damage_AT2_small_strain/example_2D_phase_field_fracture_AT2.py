@@ -64,9 +64,12 @@ from muFFTTO import tensor_operations
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-domain_size = [1, 1]
-number_of_pixels = (int(os.environ.get('NPIX', 64)),) * 2
-element_type = 'bilinear_rectangle'
+# DIM (env): 2 (default) or 3 (cube, ball pores, output tagged _3D); ELEMENT (env): the element type, default
+# bilinear_rectangle (2D) / trilinear_hexahedron (3D), e.g. trilinear_hexahedron_1Q (one-point, under-integrated)
+dim_problem = int(os.environ.get('DIM', 2))
+domain_size = [1] * dim_problem
+number_of_pixels = (int(os.environ.get('NPIX', 64)),) * dim_problem
+element_type = os.environ.get('ELEMENT', 'bilinear_rectangle' if dim_problem == 2 else 'trilinear_hexahedron')
 # DEVICE (env): 'cpu' or 'gpu' (muGrid with CUDA; field data are cupy arrays, outputs stay the same)
 device = os.environ.get('DEVICE', 'cpu')
 if device == 'gpu':
@@ -90,11 +93,13 @@ if damage_in_pores == 'one':
     pore_contrast = 1.0             # the pore is fully broken matrix, stiffness g(1) C_0 = k C_0 (no double softening)
 run_tag = ('' if microstructure_name == 'circle_inclusion' else '_' + microstructure_name) \
     + ('_poresd1' if damage_in_pores == 'one' else '') \
-    + (f'_l{length_scale:g}' if 'LENGTH_SCALE' in os.environ else '') + os.environ.get('RUN_SUFFIX', '')
+    + (f'_l{length_scale:g}' if 'LENGTH_SCALE' in os.environ else '') \
+    + ('_3D' if dim_problem == 3 else '') + (f'_{element_type}' if 'ELEMENT' in os.environ else '') \
+    + os.environ.get('RUN_SUFFIX', '')
 k_residual = 1e-4                  # residual stiffness in g(d)
 
-macro_strain_direction = np.array([[1.0, 0.0],
-                                   [0.0, 0.0]])            # uniaxial strain E_xx
+macro_strain_direction = np.zeros((dim_problem, dim_problem))
+macro_strain_direction[0, 0] = 1.0                          # uniaxial strain E_xx
 load_steps = np.linspace(0.0, 0.08, 81)[1:]
 staggered_tol = 1e-3               # max |d - d_old| for the staggered loop
 max_staggered_iterations = 10000     # effectively unlimited: an unstable break can need many hundreds
@@ -251,8 +256,14 @@ def from_mandel(M):
     return C
 
 
-M_ref = xp.asarray(to_mandel(C_ref))
-if scaled_material:
+assert scaled_material or dim == 2, 'the full-field dual (Mandel inverse) is 2D only; use SCALED_MATERIAL=1'
+M_ref = xp.asarray(to_mandel(C_ref)) if dim == 2 else None
+# DUAL_INVERSE (scaled material only): 'fly' (default) evaluates 1 / s from the field s of C_d at every application
+# (no stored field); 'stored' keeps 1 / s as a quadrature field, set after every damage update
+dual_inverse = os.environ.get('DUAL_INVERSE', 'fly')
+if scaled_material and dual_inverse == 'fly':
+    C_dual = domain.ScaledMaterial([(lambda: 1.0 / degraded_scale.s[0, 0], C_iso)])
+elif scaled_material:
     dual_scale = disc_u.get_quad_field_scalar(name='dual_scale')         # 1 / s
     C_dual = domain.ScaledMaterial([(dual_scale, C_iso)])
 else:
@@ -263,7 +274,8 @@ dual_temp_2 = disc_u.get_unknown_size_field(name='dual_temp_2')
 
 def update_dual_material():
     if scaled_material:                     # C_iso (s C_iso)^-1 C_iso = C_iso / s
-        dual_scale.s[...] = 1.0 / degraded_scale.s
+        if dual_inverse == 'stored':        # (fly: evaluated inside C_dual at every application)
+            dual_scale.s[...] = 1.0 / degraded_scale.s
         return
     M_d = xp.moveaxis(to_mandel(C_d.s), (0, 1), (-2, -1))
     C_dual.s[...] = from_mandel(xp.moveaxis(M_ref @ xp.linalg.inv(M_d) @ M_ref, (-2, -1), (0, 1)))
@@ -634,8 +646,12 @@ if comm.size == 1:
     axes[0].set_xlabel(r'macroscopic strain $\bar{\varepsilon}_{xx}$')
     axes[0].set_ylabel(r'macroscopic stress $\bar{\sigma}_{xx}$')
     axes[0].set_title('AT2, uniaxial strain')
-    x, y = tensor_operations.to_host(disc_d.fft.coords)
+    x, y = tensor_operations.to_host(disc_d.fft.coords)[:2]
+    if dim == 3:                            # mid-plane z = 1/2
+        x, y = x[..., number_of_pixels[2] // 2], y[..., number_of_pixels[2] // 2]
     for ax, (load, d_xy) in zip(axes[1:], snapshots.items()):
+        if dim == 3:
+            d_xy = d_xy[..., number_of_pixels[2] // 2]
         mesh = ax.pcolormesh(x, y, d_xy, vmin=0, vmax=1, cmap='inferno', shading='auto')
         ax.set_aspect('equal')
         ax.set_title(rf'damage $d$ at $\bar{{\varepsilon}}_{{xx}} = {load:.3f}$')

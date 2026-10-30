@@ -179,7 +179,13 @@ else:
 s_sensitivity_field = discretization.get_scalar_field(name='sensitivity_field')
 rhs_load_case_inxyz = discretization.get_unknown_size_field(name='rhs_field')
 s_stress_and_adjoint_load_case = discretization.get_scalar_field(name='stress_adj_sensitivity')
-if scaled_material:                                       # C_0 A^-1 C_0 = C_0 / s(x) (dual)
+# DUAL_INVERSE (scaled material only): 'fly' (default) evaluates C_0 A^-1 C_0 = C_0 / s(x) from the SIMP field
+# rho^p at every application (no stored field); 'stored' keeps 1 / s(x) as a quadrature field, set once per design
+dual_inverse = os.environ.get('DUAL_INVERSE', 'fly')
+if scaled_material and dual_inverse == 'fly':
+    dual_material = domain.ScaledMaterial(
+        [(lambda: 1.0 / (simp_scale_1qxyz.s[0, 0] * (1 - soft_phase) + soft_phase), elastic_C_0)])
+elif scaled_material:                                     # C_0 A^-1 C_0 = C_0 / s(x) (dual)
     dual_scale_1qxyz = discretization.get_quad_field_scalar(name='dual_scale')
     dual_material = domain.ScaledMaterial([(dual_scale_1qxyz, elastic_C_0)])
 else:
@@ -274,10 +280,11 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     elif preconditioner_type == 'dual':
         # P = G K(C_0 A^-1 C_0) G. The SIMP material is A = s(x) C_0, s = rho^p (1 - soft_phase) + soft_phase, so the
         # middle material is exactly C_0 A^-1 C_0 = C_0 / s(x)
-        if scaled_material:
+        # (DUAL_INVERSE=fly: nothing to set, evaluated inside dual_material at every application)
+        if scaled_material and dual_inverse == 'stored':
             dual_scale_1qxyz.s[...] = 1.0 / (xp.power(phase_field_at_quad_poits_1qxyz.s, p) * (1 - soft_phase)
                                              + soft_phase)
-        else:
+        elif not scaled_material:
             dual_material.s[...] = elastic_C_0_dev[..., np.newaxis, np.newaxis, np.newaxis] / (
                 xp.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0] * (1 - soft_phase) + soft_phase)
 

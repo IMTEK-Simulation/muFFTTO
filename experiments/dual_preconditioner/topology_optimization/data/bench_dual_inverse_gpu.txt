@@ -1,0 +1,36 @@
+N = 32^2  (gpu, q = 2)   max rel diff vs full: full 0.0e+00, stored 3.2e-16, fly 3.2e-16
+  extra stored reals:  full 32768 (16 q N), stored 2048 (q N), fly 0
+  G                  0.251 ms   ( 1.00 x G)
+  K(A)               0.465 ms   ( 1.85 x G)
+  setup full         0.035 ms   ( 0.14 x G)
+  setup stored       0.030 ms   ( 0.12 x G)
+  K(full)            0.247 ms   ( 0.98 x G)
+  P(full)            0.836 ms   ( 3.34 x G)
+  K(stored)          0.370 ms   ( 1.48 x G)
+  P(stored)          0.985 ms   ( 3.93 x G)
+  K(fly)             0.380 ms   ( 1.52 x G)
+  P(fly)             0.979 ms   ( 3.91 x G)
+N = 64^2  (gpu, q = 2)   max rel diff vs full: full 0.0e+00, stored 1.6e-16, fly 1.6e-16
+  extra stored reals:  full 131072 (16 q N), stored 8192 (q N), fly 0
+  G                  0.282 ms   ( 1.00 x G)
+  K(A)               0.507 ms   ( 1.80 x G)
+  setup full         0.038 ms   ( 0.13 x G)
+  setup stored       0.034 ms   ( 0.12 x G)
+  K(full)            0.330 ms   ( 1.17 x G)
+  P(full)            0.934 ms   ( 3.32 x G)
+  K(stored)          0.355 ms   ( 1.26 x G)
+  P(stored)          0.997 ms   ( 3.54 x G)
+  K(fly)             0.367 ms   ( 1.30 x G)
+  P(fly)             0.968 ms   ( 3.44 x G)
+N = 128^2  (gpu, q = 2)   max rel diff vs full: full 0.0e+00, stored 4.0e-16, fly 4.0e-16
+  extra stored reals:  full 524288 (16 q N), stored 32768 (q N), fly 0
+  G                  0.359 ms   ( 1.00 x G)
+  K(A)               0.717 ms   ( 2.00 x G)
+  setup full         0.108 ms   ( 0.30 x G)
+  setup stored       0.030 ms   ( 0.08 x G)
+  K(full)            0.522 ms   ( 1.45 x G)
+  P(full)            1.250 ms   ( 3.48 x G)
+  K(stored)          0.484 ms   ( 1.35 x G)
+  P(stored)          1.264 ms   ( 3.52 x G)
+  K(fly)             0.491 ms   ( 1.36 x G)
+  P(fly)             1.290 ms   ( 3.59 x G)

@@ -1,0 +1,36 @@
+N = 32^2  (cpu, q = 4)   max rel diff vs full: full 0.0e+00, stored 3.0e-16, fly 3.0e-16
+  extra stored reals:  full 65536 (16 q N), stored 4096 (q N), fly 0
+  G                  0.031 ms   ( 1.00 x G)
+  K(A)               0.306 ms   ( 9.98 x G)
+  setup full         0.144 ms   ( 4.71 x G)
+  setup stored       0.005 ms   ( 0.17 x G)
+  K(full)            0.368 ms   (12.02 x G)
+  P(full)            0.437 ms   (14.27 x G)
+  K(stored)          0.292 ms   ( 9.54 x G)
+  P(stored)          0.367 ms   (11.98 x G)
+  K(fly)             0.306 ms   ( 9.99 x G)
+  P(fly)             0.388 ms   (12.67 x G)
+N = 64^2  (cpu, q = 4)   max rel diff vs full: full 0.0e+00, stored 2.4e-16, fly 2.4e-16
+  extra stored reals:  full 262144 (16 q N), stored 16384 (q N), fly 0
+  G                  0.068 ms   ( 1.00 x G)
+  K(A)               1.322 ms   (19.37 x G)
+  setup full         0.496 ms   ( 7.27 x G)
+  setup stored       0.013 ms   ( 0.20 x G)
+  K(full)            1.729 ms   (25.33 x G)
+  P(full)            1.965 ms   (28.78 x G)
+  K(stored)          1.422 ms   (20.83 x G)
+  P(stored)          1.527 ms   (22.36 x G)
+  K(fly)             1.398 ms   (20.48 x G)
+  P(fly)             1.546 ms   (22.64 x G)
+N = 128^2  (cpu, q = 4)   max rel diff vs full: full 0.0e+00, stored 4.0e-16, fly 4.0e-16
+  extra stored reals:  full 1048576 (16 q N), stored 65536 (q N), fly 0
+  G                  0.251 ms   ( 1.00 x G)
+  K(A)               5.538 ms   (22.07 x G)
+  setup full         2.012 ms   ( 8.02 x G)
+  setup stored       0.036 ms   ( 0.14 x G)
+  K(full)            7.041 ms   (28.05 x G)
+  P(full)            7.803 ms   (31.09 x G)
+  K(stored)          5.407 ms   (21.55 x G)
+  P(stored)          6.277 ms   (25.01 x G)
+  K(fly)             5.689 ms   (22.67 x G)
+  P(fly)             5.967 ms   (23.77 x G)
