@@ -37,6 +37,8 @@ New geometries are added with the :func:`register` decorator::
         disks = geometry.ball((0.25, 0.5), radius) | geometry.ball((0.75, 0.5), radius)
         return geometry.indicator(~disks, coords)
 """
+import warnings
+
 import numpy as np
 
 __all__ = ['Shape', 'box', 'ball', 'everywhere', 'periodic_distance_sq', 'indicator', 'pixel_average',
@@ -596,3 +598,40 @@ def sinusoidal_ligaments(coords, amplitude=0.11, thickness=0.14, gap=0.14, verti
             for curve in curves:
                 distance = np.minimum(distance, _distance_to_polyline(x - shift_x, y - shift_y, curve))
     return np.where(distance < thickness / 2.0, 1.0, 0.0)
+
+
+@register('geometry_stefanus')
+def geometry_stefanus(coords, vol_frac=0.75, domain_size=(2.0, np.sqrt(3.0))):
+    """Composite A of Li & Rudykh (2019): 0 = matrix, 1 = void, 2 = stiff inclusion.
+
+    Four circles of equal radius per cell of size ``domain_size = (Lx, Ly)`` (physical units) on a triangular lattice
+    (``Lx / Ly = 2 / sqrt(3)``): voids centred at (0, 0), (1/4, 1/2), (3/4, 1/2) and the stiff inclusion at (1/2, 0),
+    fractional coordinates. ``vol_frac`` is the area fraction of all four circles. The circles are round in physical
+    units (minimum-image distance scaled by Lx, Ly). From the StefanusMichael_Dev branch (microstructure_library).
+    """
+    c = np.asarray(coords)
+    if c.shape[0] != 2:
+        raise NotImplementedError('geometry_stefanus is implemented only in 2D')
+    Lx, Ly = domain_size
+    if not np.isclose(Lx / Ly, 2.0 / np.sqrt(3.0)):
+        warnings.warn(f'geometry_stefanus: Lx/Ly = {Lx / Ly:.4f} != 2/sqrt(3) = 1.1547 '
+                      f'-> lattice is NOT triangular (paper Fig. 1a)')
+    radius = np.sqrt(vol_frac * Lx * Ly / (4 * np.pi))
+    # overlap check against the nearest-neighbour distance (= a on the triangular lattice)
+    d_min = min(0.5 * Lx, np.hypot(0.25 * Lx, 0.5 * Ly))
+    if not (0.0 < vol_frac and 2 * radius < d_min):
+        raise ValueError(f'geometry_stefanus: circles overlap (2r = {2 * radius:.4f} >= {d_min:.4f}); '
+                         f'reduce vol_frac = {vol_frac}')
+
+    def disk(cx, cy):
+        dx = c[0] - cx
+        dy = c[1] - cy
+        dx = (dx - np.round(dx)) * Lx
+        dy = (dy - np.round(dy)) * Ly
+        return dx ** 2 + dy ** 2 <= radius ** 2
+
+    phase = np.zeros(c.shape[1:])
+    for cx, cy in ((0.00, 0.00), (0.25, 0.50), (0.75, 0.50)):
+        phase[disk(cx, cy)] = 1
+    phase[disk(0.50, 0.00)] = 2
+    return phase
