@@ -73,10 +73,12 @@ def test_2D_gradients_linear_conductivity():
         discretization.apply_gradient_operator_mugrid(temperature, temperature_gradient)
 
         # test 1
-        average = np.ndarray.sum(temperature_gradient.s)
+        # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+        # absolute bound would pass any negative sum and depend on the field's scale)
+        average = abs(np.sum(temperature_gradient.s)) / np.sum(np.abs(temperature_gradient.s))
         message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
-        assert average <= 1e-14, message
+        assert average <= 1e-13, message
 
         # test 2
         # compare values of gradient element wise --- without last-- periodic pixel that differs
@@ -131,10 +133,12 @@ def test_2D_mugrid_gradients_linear_conductivity():
         discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
 
         # test 1
-        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+        # absolute bound would pass any negative sum and depend on the field's scale)
+        average = abs(np.sum(grad_u_ijqxyz.s)) / np.sum(np.abs(grad_u_ijqxyz.s))
         message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
-        assert average <= 1e-14, message
+        assert average <= 1e-13, message
         # test 2
         # compare values of gradient element wise --- without last-- periodic pixel that differs
         value_1 = np.all(
@@ -264,7 +268,9 @@ def test_3D_gradients_linear_conductivity():
 
         discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
 
-        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+        # absolute bound would pass any negative sum and depend on the field's scale)
+        average = abs(np.sum(grad_u_ijqxyz.s)) / np.sum(np.abs(grad_u_ijqxyz.s))
         message = "Gradient does not have zero mean !!!! for 3D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
         assert average <= 1e-12, message
@@ -317,7 +323,9 @@ def test_2D_gradients_bilinear_conductivity():
         discretization.apply_gradient_operator_mugrid(u_inxyz, grad_u_ijqxyz)
 
         # test 1
-        average = np.ndarray.sum(grad_u_ijqxyz.s)
+        # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+        # absolute bound would pass any negative sum and depend on the field's scale)
+        average = abs(np.sum(grad_u_ijqxyz.s)) / np.sum(np.abs(grad_u_ijqxyz.s))
         message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
         assert average <= 1e-10, message  ### weaker condition !!!!!
@@ -383,7 +391,9 @@ def test_2D_gradients_linear_elasticity():
 
             for dir in range(domain_size.__len__()):
                 # test 1
-                average = np.ndarray.sum(grad_u_ijqxyz.s)
+                # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+                # absolute bound would pass any negative sum and depend on the field's scale)
+                average = abs(np.sum(grad_u_ijqxyz.s)) / np.sum(np.abs(grad_u_ijqxyz.s))
                 message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(
                     element_type,
                     problem_type)
@@ -448,10 +458,12 @@ def test_2D_gradients_transposed_linear_conductivity():
             apply_weights=False)
 
         # test 1
-        average = np.ndarray.sum(div_flux_inxyz.s)
+        # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+        # absolute bound would pass any negative sum and depend on the field's scale)
+        average = abs(np.sum(div_flux_inxyz.s)) / np.sum(np.abs(div_flux_inxyz.s))
         message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                  problem_type)
-        assert average <= 1e-14, message
+        assert average <= 1e-13, message
 
         if element_type in ['linear_triangles']:
             solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
@@ -525,10 +537,12 @@ def test_2D_gradients_transposed_linear_elasticity():
                 div_u_fnxyz=force_inxyz_mugrid,
                 apply_weights=False)
             # test 1
-            average = np.ndarray.sum(grad_u_ijqxyz.s)
+            # zero mean up to round-off: |sum| relative to the summed magnitudes (signed sum and a fixed
+            # absolute bound would pass any negative sum and depend on the field's scale)
+            average = abs(np.sum(grad_u_ijqxyz.s)) / np.sum(np.abs(grad_u_ijqxyz.s))
             message = "Gradient does not have zero mean !!!! for 2D element {} in {} problem".format(element_type,
                                                                                                      problem_type)
-            assert average <= 1e-14, message
+            assert average <= 1e-13, message
             if element_type in ['linear_triangles']:
                 solution = np.array([[-82.0, -32.0, -32.0, -31.999999999999993, 18.0],
                                      [-50.0, 3.552713678800501e-15, -3.552713678800501e-15, 7.105427357601002e-15,
