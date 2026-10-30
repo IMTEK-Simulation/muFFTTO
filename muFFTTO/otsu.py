@@ -95,6 +95,122 @@ def _validate_odd_positive(name: str, value: int) -> None:
         raise ValueError(f"{name} must be a positive odd integer, got {value}.")
 
 
+def _wrap_pad(image: np.ndarray, pad: int) -> np.ndarray:
+    """Pad a 2D image periodically (wrap mode) by ``pad`` pixels on every side.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Two-dimensional image of shape ``(nx, ny)``.
+    pad : int
+        Non-negative pad width, smaller than ``min(nx, ny)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Padded image of shape ``(nx + 2 * pad, ny + 2 * pad)``.
+    """
+    if pad < 0 or pad >= min(image.shape):
+        raise ValueError(
+            f"[_wrap_pad] pad must satisfy 0 <= pad < min(image.shape)={min(image.shape)}, got {pad}."
+        )
+    if pad == 0:
+        return image.copy()
+    # PERIODIC: the image is treated as one periodic unit cell
+    return np.pad(image, pad, mode="wrap")
+
+
+def _crop(image: np.ndarray, pad: int) -> np.ndarray:
+    """Remove a border of width ``pad`` added by :func:`_wrap_pad`."""
+    if pad == 0:
+        return np.ascontiguousarray(image)
+    return np.ascontiguousarray(image[pad:-pad, pad:-pad])
+
+
+def _periodic_edge_mask(phase_mask_binary: np.ndarray) -> np.ndarray:
+    """One-pixel-wide periodic boundary mask of the foreground.
+
+    A pixel is an edge pixel if it is foreground and at least one of its four
+    periodic neighbours is background. This is the border-pixel definition of
+    ``cv2.findContours`` (8-connected foreground, 4-connected background), but
+    evaluated periodically, so no artificial edges appear on the image boundary.
+    Boundaries of holes inside the foreground are included.
+
+    Parameters
+    ----------
+    phase_mask_binary : numpy.ndarray
+        Binary mask of shape ``(nx, ny)`` with values 0 (background) and 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        uint8 edge mask of shape ``(nx, ny)`` with values 0 and 1.
+    """
+    fg = np.asarray(phase_mask_binary) > 0
+    if fg.ndim != 2:
+        raise ValueError(f"[_periodic_edge_mask] expected a 2D mask, got shape {fg.shape}.")
+    # PERIODIC: neighbours across the image boundary via np.roll
+    bg_neighbour = (
+        ~np.roll(fg, 1, axis=0) | ~np.roll(fg, -1, axis=0)
+        | ~np.roll(fg, 1, axis=1) | ~np.roll(fg, -1, axis=1)
+    )
+    return (fg & bg_neighbour).astype(np.uint8)
+
+
+def _merge_periodic_labels(labels: np.ndarray, connectivity: int) -> tuple[np.ndarray, int]:
+    """Merge connected-component labels that touch across the periodic boundary.
+
+    Labels of foreground pixels on opposite image edges that are neighbours in
+    the periodic sense (including diagonal neighbours for ``connectivity=8``)
+    are merged with a union-find structure and renumbered to ``0, 1, ..., N``.
+    Background stays label 0.
+
+    Parameters
+    ----------
+    labels : numpy.ndarray
+        int32 label image of shape ``(nx, ny)`` from cv2 connected components.
+    connectivity : int
+        4 or 8, the connectivity used for the labeling.
+
+    Returns
+    -------
+    labels_periodic : numpy.ndarray
+        int32 label image of shape ``(nx, ny)``.
+    number_of_regions : int
+        Number of foreground regions (background excluded).
+    """
+    labels = np.asarray(labels, dtype=np.int32)
+    n_labels = int(labels.max()) + 1
+    parent = list(range(n_labels))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    shifts = (0,) if connectivity == 4 else (-1, 0, 1)
+    pairs = []
+    # PERIODIC: last row touches first row, last column touches first column
+    for s in shifts:
+        pairs.append(np.stack((labels[-1, :], np.roll(labels[0, :], s)), axis=1))
+        pairs.append(np.stack((labels[:, -1], np.roll(labels[:, 0], s)), axis=1))
+    pairs = np.concatenate(pairs)
+    pairs = pairs[(pairs[:, 0] > 0) & (pairs[:, 1] > 0)]
+    for a, b in np.unique(pairs, axis=0):
+        root_a, root_b = find(int(a)), find(int(b))
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    roots = np.array([find(a) for a in range(n_labels)], dtype=np.int32)
+    lookup = np.zeros(n_labels, dtype=np.int32)
+    unique_roots = np.unique(roots[1:]) if n_labels > 1 else np.empty(0, dtype=np.int32)
+    for new_id, root in enumerate(unique_roots, start=1):
+        lookup[roots == root] = new_id
+    lookup[0] = 0
+    return lookup[labels], int(unique_roots.size)
+
+
 def otsu_edgeDetection_and_phaseIndicator(
         data: np.ndarray,
         blur_ksize: int = 7,
@@ -105,6 +221,7 @@ def otsu_edgeDetection_and_phaseIndicator(
         regions_label: bool = True,
         connectivity: int = 8,
         return_intermediate: bool = False,
+        periodic: bool = True,
 
 ) -> dict[str, Any]:
     """
@@ -177,6 +294,22 @@ def otsu_edgeDetection_and_phaseIndicator(
         If ``True``, include normalized, blurred, thresholded, and morphology
         intermediate arrays in the returned dictionary.
 
+    periodic : bool, default=True
+        Treat the image as one periodic unit cell.
+
+        - Gaussian blur and morphology use periodic (wrap) padding.
+        - The Otsu threshold is computed on the unpadded image only.
+        - ``edge_mask`` is the periodic boundary of the foreground; no
+          artificial edges appear on the image boundary, and boundaries of
+          holes inside the foreground (background enclosed by foreground)
+          are included.
+        - Region labels touching across the periodic boundary are merged.
+        - ``phase_region_stats`` and ``phase_region_centroids`` (bounding boxes
+          and centroids are undefined for wrapped regions) are replaced by
+          ``phase_region_areas``.
+
+        ``periodic=False`` reproduces the original non-periodic behaviour.
+
     Returns
     -------
     dict[str, Any]
@@ -198,7 +331,13 @@ def otsu_edgeDetection_and_phaseIndicator(
             - If ``regions_label=False``, dtype is ``uint8`` and values are
               ``0`` and ``1``.
 
-        When ``regions_label=True``, the dictionary additionally contains:
+        When ``regions_label=True`` and ``periodic=True``, the dictionary
+        additionally contains ``number_of_phase_regions`` (int) and
+        ``phase_region_areas`` (numpy.ndarray of shape ``(N + 1,)``, pixel
+        count of every label including background label ``0``).
+
+        When ``regions_label=True`` and ``periodic=False``, the dictionary
+        additionally contains:
 
         ``number_of_phase_regions`` : int
             Number of disconnected foreground regions. Background label ``0`` is
@@ -236,16 +375,17 @@ def otsu_edgeDetection_and_phaseIndicator(
         ``otsu_threshold`` : float
             Automatically selected Otsu threshold in uint8 intensity units.
 
-        ``contour_count`` : int
-            Number of external contours detected from ``phase_mask_binary``.
+        ``contour_count`` : int or None
+            Number of external contours detected from ``phase_mask_binary``
+            (``None`` when ``periodic=True``; contours are not used then).
 
     Notes
     -----
-    The function applies standard non-periodic image connectivity. Hence, a
-    physical region crossing a periodic simulation boundary may be assigned
-    separate labels at opposite image edges. Periodic label merging should be
-    implemented before using region labels for periodic material identification or
-    periodic adaptive-grid decisions.
+    With ``periodic=False`` the function applies standard non-periodic image
+    connectivity, so a region crossing the periodic boundary receives separate
+    labels at opposite image edges and ``edge_mask`` contains artificial edges
+    on the image boundary. Use ``periodic=True`` (default) for periodic unit
+    cells and periodic grid adaptation.
 
     The returned ``phase_mask_label`` describes disconnected geometric regions,
     not material classes. In a future extension, regions with similar mean
@@ -274,12 +414,22 @@ def otsu_edgeDetection_and_phaseIndicator(
     # (1) min-max normalization to [0, 1] and 8-bit [0, 255] (required by OpenCV Otsu)
     image_norm, image_u8 = _normalize_to_u8(data)
 
+    # Pad widths for periodic processing: the blur needs blur_ksize // 2,
+    # opening + closing spread by 2 * radius per iteration each.
+    morph_radius = morph_kernel_size // 2
+    pad_blur = blur_ksize // 2 if periodic else 0
+    pad_morph = 2 * morph_radius * (open_iterations + close_iterations) + 1 if periodic else 0
+
     # (2) Gaussian smoothing suppresses pixel noise so that the histogram is
     #     closer to bimodal and the thresholded mask is less ragged
-    image_blur = cv2.GaussianBlur(
-        image_u8,
-        (blur_ksize, blur_ksize),
-        blur_sigma,
+    # PERIODIC: blur a wrap-padded image and crop back to the original size
+    image_blur = _crop(
+        cv2.GaussianBlur(
+            _wrap_pad(image_u8, pad_blur),
+            (blur_ksize, blur_ksize),
+            blur_sigma,
+        ),
+        pad_blur,
     )
 
     # (3) Otsu thresholding: the passed threshold value 0 is ignored, OpenCV
@@ -301,42 +451,51 @@ def otsu_edgeDetection_and_phaseIndicator(
         dtype=np.uint8,
     )
 
-    mask_open_u8 = cv2.morphologyEx(
-        mask_raw_u8,
+    # PERIODIC: opening and closing on a wrap-padded mask, cropped afterwards
+    mask_open_pad_u8 = cv2.morphologyEx(
+        _wrap_pad(mask_raw_u8, pad_morph),
         cv2.MORPH_OPEN,
         kernel,
         iterations=open_iterations,
     )
 
-    mask_clean_u8 = cv2.morphologyEx(
-        mask_open_u8,
+    mask_clean_pad_u8 = cv2.morphologyEx(
+        mask_open_pad_u8,
         cv2.MORPH_CLOSE,
         kernel,
         iterations=close_iterations,
     )
+    mask_open_u8 = _crop(mask_open_pad_u8, pad_morph)
+    mask_clean_u8 = _crop(mask_clean_pad_u8, pad_morph)
 
     # Binary phase indicator: values are always 0 or 1.
     phase_mask_binary = (mask_clean_u8 > 0).astype(np.uint8)
 
-    # Detect edges from the binary phase mask.
-    # RETR_EXTERNAL: only outermost contours (holes inside regions are ignored);
-    # CHAIN_APPROX_SIMPLE compresses straight segments, but drawContours below
-    # re-draws them as continuous 1-pixel-wide polylines.
-    contours, _ = cv2.findContours(
-        (phase_mask_binary * 255).astype(np.uint8),
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE,
-    )
+    if periodic:
+        # PERIODIC: boundary pixels evaluated with periodic neighbours
+        # (includes boundaries of holes, no artificial image-border edges).
+        contours = None
+        edge_mask = _periodic_edge_mask(phase_mask_binary)
+    else:
+        # Detect edges from the binary phase mask.
+        # RETR_EXTERNAL: only outermost contours (holes inside regions are ignored);
+        # CHAIN_APPROX_SIMPLE compresses straight segments, but drawContours below
+        # re-draws them as continuous 1-pixel-wide polylines.
+        contours, _ = cv2.findContours(
+            (phase_mask_binary * 255).astype(np.uint8),
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
 
-    edge_mask = np.zeros_like(phase_mask_binary, dtype=np.uint8)
+        edge_mask = np.zeros_like(phase_mask_binary, dtype=np.uint8)
 
-    cv2.drawContours(
-        edge_mask,
-        contours,
-        contourIdx=-1,
-        color=1,
-        thickness=1,
-    )
+        cv2.drawContours(
+            edge_mask,
+            contours,
+            contourIdx=-1,
+            color=1,
+            thickness=1,
+        )
 
     # Default behavior: label field is the same as the binary mask.
     phase_mask_label = phase_mask_binary.copy()
@@ -481,6 +640,14 @@ def otsu_edgeDetection_and_phaseIndicator(
                 ltype=cv2.CV_32S,
             )
         )
+        if periodic:
+            # PERIODIC: merge regions that continue across the image boundary
+            phase_mask_label, number_of_regions = _merge_periodic_labels(
+                phase_mask_label, connectivity
+            )
+            phase_region_areas = np.bincount(
+                phase_mask_label.ravel(), minlength=number_of_regions + 1
+            )
 
     results: dict[str, Any] = {
         "edge_mask": edge_mask,
@@ -489,7 +656,14 @@ def otsu_edgeDetection_and_phaseIndicator(
     }
 
     # These data exist only when connected-component labeling was requested.
-    if regions_label:
+    if regions_label and periodic:
+        results.update(
+            {
+                "number_of_phase_regions": int(number_of_regions),
+                "phase_region_areas": phase_region_areas,
+            }
+        )
+    elif regions_label:
         results.update(
             {
                 "number_of_phase_regions": int(number_of_labels - 1),
@@ -508,7 +682,7 @@ def otsu_edgeDetection_and_phaseIndicator(
                 "mask_open": (mask_open_u8 > 0).astype(np.uint8),
                 "mask_clean": phase_mask_binary,
                 "otsu_threshold": float(otsu_threshold),
-                "contour_count": int(len(contours)),
+                "contour_count": None if contours is None else int(len(contours)),
             }
         )
 
