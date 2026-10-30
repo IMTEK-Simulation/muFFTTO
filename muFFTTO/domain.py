@@ -78,45 +78,64 @@ class ScaledMaterial:
     Parameters
     ----------
     terms : list of (scale, tensor)
-        ``scale``: float, ndarray broadcastable to ``[q, x, y(, z)]``, or a scalar quadrature muGrid Field
-        (``[1, 1, q, x, y(, z)]``, read at use); ``tensor``: ``[d, d, d, d]`` (elasticity) or ``[d, d]`` (conductivity).
+        ``scale``: float, ndarray broadcastable to ``[q, x, y(, z)]``, a scalar quadrature muGrid Field
+        (``[1, 1, q, x, y(, z)]``, read at use), or a callable returning such an array, evaluated at every application
+        (no stored field, e.g. the dual's ``C_0 A^-1 C_0 = C_0 / s(x)`` computed from the field of ``A = s(x) C_0``);
+        ``tensor``: ``[d, d, d, d]`` (elasticity) or ``[d, d]`` (conductivity).
     """
 
     def __init__(self, terms):
         self.terms = list(terms)
+        # C_ijkl = C_ijlk for every (elasticity) tensor: then C : grad u = C : sym(grad u), and the small-strain
+        # system matrix can skip the symmetrisation of the gradient
+        self.minor_symmetric = all(
+            np.ndim(tensor) == 4
+            and np.allclose(tensor_operations.to_host(tensor), tensor_operations.to_host(tensor).transpose(0, 1, 3, 2))
+            for _, tensor in self.terms)
 
     @staticmethod
     def _scale_array(scale):
+        if callable(scale):
+            scale = scale()
         if isinstance(scale, Field):
             return scale.s[0, 0]
         return scale
 
-    def apply(self, gradient, transposed=False):
+    def apply(self, gradient, transposed=False, out=None):
         """``sum_k s_k (C_k : g)``; ``g``: ``[d, d, q, x, y(, z)]`` (elasticity) or ``[1, d, q, ...]`` (conductivity).
-        ``transposed``: contract the first index pair instead (``g : C_k``)."""
+        ``transposed``: contract the first index pair instead (``g : C_k``).
+        ``out``: array of the shape of ``g`` to write the result to (may be ``g`` itself); a new array if None."""
         xp = tensor_operations.get_array_module(gradient)
         shape = gradient.shape
         nc = 2                                    # component axes: (i, j) elasticity, (u, i) conductivity
         ncomp = shape[0] * shape[1]
-        # points first, components last: muGrid stores the components of a point next to each other, so this is a
-        # view (no copy); the constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
-        g = xp.moveaxis(gradient, (0, 1), (-2, -1)).reshape(shape[nc:] + (ncomp,))
-        out = None
+        # points first, components last, in muGrid's memory order: the components of a point are stored next to
+        # each other with the first index fastest, i.e. as [.., j, i]. Merging (j, i) into one axis is then a view
+        # (no copy), and the constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
+        g = xp.moveaxis(gradient, (1, 0), (-2, -1)).reshape(shape[nc:] + (ncomp,))
+        result = None
         for scale, tensor in self.terms:
             tensor = xp.asarray(tensor)
-            if tensor.ndim == 4:                  # [d,d,d,d]: C_(ij)(kl)
-                matrix = tensor.reshape(ncomp, ncomp)
+            if tensor.ndim == 4:                  # [d,d,d,d]: C_(ij)(kl), rows and columns in the (j, i) order of g
+                matrix = tensor.transpose(1, 0, 3, 2).reshape(ncomp, ncomp)
             else:                                 # [d,d] acting on [u=1, d]: A_ij
                 matrix = tensor
             term = g @ (matrix if transposed else matrix.T)
             scale = self._scale_array(scale)
             if not np.isscalar(scale):
-                term = term * xp.asarray(scale)[..., None]
+                term *= xp.asarray(scale)[..., None]
             elif scale != 1.0:
-                term = term * scale
-            out = term if out is None else out + term
+                term *= scale
+            if result is None:
+                result = term
+            else:
+                result += term
         # back to the component-first layout [i, j, q, x, y(, z)]
-        return xp.moveaxis(out.reshape(shape[nc:] + shape[:nc]), (-2, -1), (0, 1))
+        result = xp.moveaxis(result.reshape(shape[nc:] + (shape[1], shape[0])), (-2, -1), (1, 0))
+        if out is None:
+            return result
+        out[...] = result
+        return out
 
 
 class PeriodicUnitCell:
@@ -1674,7 +1693,7 @@ class Discretization:
 
         output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
         if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
-            output_stress_field_ijqxyz.s[...] = material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s)
+            material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s, out=output_stress_field_ijqxyz.s)
         else:
             output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
                                                           output_stress_field_ijqxyz.s)
@@ -2037,7 +2056,7 @@ class Discretization:
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, ScaledMaterial):
-            gradient_field.s[...] = material_data.apply(gradient_field.s)
+            material_data.apply(gradient_field.s, out=gradient_field.s)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
@@ -2076,7 +2095,7 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, ScaledMaterial):
-            gradient_field.s[...] = material_data.apply(gradient_field.s)
+            material_data.apply(gradient_field.s, out=gradient_field.s)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
@@ -2676,8 +2695,9 @@ class Discretization:
         # allocate temporary fields
         gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
 
-        # g = B u   (or sym(B u))
-        if np.all(formulation == 'small_strain'):
+        # g = B u   (or sym(B u); not needed for a minor-symmetric C, where C : sym(B u) = C : B u)
+        minor_symmetric = isinstance(material_data_field, ScaledMaterial) and material_data_field.minor_symmetric
+        if np.all(formulation == 'small_strain') and not minor_symmetric:
             self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
                                                             grad_u_ijqxyz=gradient_ijqxyz)
 
