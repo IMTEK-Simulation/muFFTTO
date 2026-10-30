@@ -1,0 +1,361 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{xcolor}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\title{Composite A under finite-strain compression:\\
+FFT-based FE simulation with true holes, material simplification,\\ and first steps towards third-medium contact}
+\author{working notes (muFFTTO, branch \texttt{feat/fracture\_and\_contact})}
+\date{29 October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We simulate the uniaxial compression of Composite~A of Li \& Rudykh~\cite{LiRudykh2019} -- a nearly incompressible
+elastomer matrix with circular voids and stiff circular inclusions -- with the FFT-accelerated finite-element solver
+muFFTTO (bilinear pixels with selective reduced integration, trust-region Newton--CG with the Green preconditioner).
+With the voids modelled as true holes, the computed nominal stress--strain curve at 256 pixels per cell width matches
+the experiment of~\cite{LiRudykh2019} up to $\varepsilon_X = 0.2$. We show that the material can be simplified --
+inclusion/matrix stiffness contrast 10 instead of 1000 and matrix $\Lambda/\mu = 100$ instead of 1000 -- with a
+change of the response of 1--3.5\,\% and a reduction of the solver cost by more than an order of magnitude. Filling
+the voids with a third medium (for contact) raises the CG cost per Newton step by a factor 6--25; we trace this to the
+mismatch between the bulk and the shear contrast of the compressible third medium and the nearly incompressible
+matrix, and discuss remedies (augmented Lagrangian, mixed displacement--pressure formulation).
+\end{abstract}
+
+\tableofcontents
+
+%=====================================================================================================================
+\section{Problem}
+
+\paragraph{Geometry.} The periodic primitive cell of Composite~A (\cite{LiRudykh2019}, Fig.~1a) has the size
+$2a \times \sqrt{3}a$ with $a = 6.60$\,mm, i.e.\ $13.2 \times 11.4$\,mm. It contains three voids and one inclusion,
+all of radius $r = 3$\,mm; the area fractions are 56.25\,\% voids, 18.75\,\% inclusion and 25\,\% matrix. The thinnest
+matrix ligament is $0.6$\,mm. The 1\,$\times$\,1 primitive cell cannot show the buckling mode of Composite~A, which is
+1\,$\times$\,2 (\cite{LiRudykh2019}, Sec.~4); we therefore compute a 1\,$\times$\,2 supercell
+($13.2 \times 22.8$\,mm).
+
+\paragraph{Loading.} Uniaxial compression in $X$: the macroscopic stretch $F_{XX} = 1 - \varepsilon$ is prescribed,
+the lateral stretch $F_{YY}$ is an unknown of the energy minimization, which enforces $\langle P_{YY}\rangle = 0$
+(lateral side stress free). The nominal stress is $-\langle P_{XX}\rangle$. The load is applied in increments
+$\Delta\varepsilon = 0.005$ up to $\varepsilon = 0.2$; a random nodal imperfection of $10^{-3}$ pixel triggers the
+buckling.
+
+\paragraph{Material.} All phases are compressible neo-Hookean,
+\begin{equation}
+  W(\bm F) = \frac{\mu}{2}\,(I_1 - 2) - \mu \ln J + \frac{\lambda}{2}\,(\ln J)^2 ,
+  \qquad I_1 = \operatorname{tr}(\bm F^{\mathsf T}\bm F),\; J = \det\bm F ,
+  \label{eq:nh}
+\end{equation}
+in plane strain. Table~\ref{tab:material} lists the parameters of the paper and the simplified set used here
+(Sec.~\ref{sec:simplification}). The voids are true holes (zero energy, stress and tangent).
+
+\begin{table}[h]
+\centering
+\caption{Material parameters. $\nu = \lambda / (2(\lambda+\mu))$ is the plane-strain Poisson ratio.}
+\label{tab:material}
+\begin{tabular}{llrrrr}
+\toprule
+phase & & $\mu$ [MPa] & $\lambda$ [MPa] & $\lambda/\mu$ & $\nu$ \\
+\midrule
+matrix    & paper~\cite{LiRudykh2019} & 0.6 & 600 & 1000 & 0.4995 \\
+          & simplified                & 0.6 & 60  & 100  & 0.495  \\
+inclusion & paper (contrast 1000)     & 600 & 600\,000 & 1000 & 0.4995 \\
+          & simplified (contrast 10)  & 6   & 600 & 100 & 0.495 \\
+voids     & both                      & \multicolumn{4}{c}{true holes} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=====================================================================================================================
+\section{Method}
+
+\paragraph{Discretization.} The cell is discretized by a regular grid of bilinear (Q1) pixels with periodic
+displacement fluctuation $\bm u$, $\bm F = \bar{\bm F} + \nabla\bm u$. Full Q1 integration locks for
+$\Lambda/\mu = 1000$ (about 3$\times$ too stiff in our tests), so we use selective reduced integration (SRI): the
+$\mu$-part of~\eqref{eq:nh} is integrated at the four Gauss points, the volumetric part $\frac{\lambda}{2}(\ln J_0)^2$
+once per pixel with $J_0 = \det\bar{\bm F}_{\text{pixel}}$, the determinant of the pixel mean of $\bm F$. SRI gives the
+same results as F-bar on the same grid and is more accurate per degree of freedom than Q2.
+
+\paragraph{Nonlinear solver.} Equilibrium is the minimum of the total energy over $(\bm u, F_{YY})$. Each load
+increment starts from the last converged state (no predictor) and is solved by trust-region Newton--CG
+(NuMPI \texttt{tr\_newton\_bounded}, Steihaug CG). The Newton iteration stops when the infinity norm of the energy
+gradient is below $10^{-4}\,\mu_m h\,\Delta\varepsilon$ ($h$: pixel size). A failed solve halves the load step.
+
+\paragraph{Linear solver.} The Steihaug CG stops on the Hestenes--Stiefel lower estimate of the energy-norm error
+with a fixed relative tolerance $10^{-6}$ and the adaptive delay of Meurant, Pape\v{z} \& Tich\'y with a minimum
+delay of 10 (added to NuMPI for this study; it reproduces the stopping iteration of muFFTTO's CG exactly).
+The preconditioner is the Green operator of the SRI Hessian at $\bm F = \bm I$ for the matrix material
+(a translation-invariant operator inverted by FFT). All counts below are CG iterations with this setting.
+
+\paragraph{Grids.} $N_X = 32, 64, 128, 256$ pixels per cell width ($32 \times 56$ up to $256 \times 444$ for the
+supercell). At $N_X = 32$ the thinnest ligament spans only 1.4 pixels: the cell buckles at a stress 4$\times$ too low,
+for any element. We use $N_X \ge 64$ for results; $N_X = 128, 256$ run on the GPU.
+
+%=====================================================================================================================
+\section{Material simplification}
+\label{sec:simplification}
+
+The paper's material combines two large ratios: the inclusion is 1000$\times$ stiffer than the matrix, and both are
+nearly incompressible ($\Lambda/\mu = 1000$). Both slow down the CG. We tested whether they matter for the response.
+
+\paragraph{Reasoning.}
+\begin{itemize}
+\item \emph{Inclusion contrast.} The inclusions are isolated (no continuous load path through the cell): the load
+goes through the matrix ligaments around them. Once much stiffer than the matrix, an inclusion moves almost
+rigidly; the effective stiffness saturates as the contrast grows, with a remainder of order $1/\text{contrast}$.
+\item \emph{Matrix compressibility.} The cell deforms by bending and shearing of the thin ligaments, an isochoric
+mode. $\lambda$ only has to be large enough to keep the volume nearly constant; it does not set the stiffness of the
+structure, which is governed by $\mu$.
+\item \emph{Inclusion bulk modulus.} We also set the inclusion bulk modulus equal to its shear modulus
+($\lambda/\mu = 1/3$): no change of the response or the cost (not shown).
+\end{itemize}
+
+\paragraph{Results.} Table~\ref{tab:simplify128} and Fig.~\ref{fig:curves}a compare the simplified materials with
+the paper's material at $N_X = 128$, where the paper's material is within about 15\,\% of~\cite{LiRudykh2019}.
+Contrast 10 with $\Lambda/\mu = 100$ is 3.5\,\% softer before buckling, buckles at the same strain and is within 1\,\%
+after buckling. $\Lambda/\mu = 10$ ($\nu = 0.45$) is 8--12\,\% too soft and changes the post-buckling shape (a stress
+drop after buckling): the matrix is then noticeably compressible.
+
+\begin{table}[h]
+\centering
+\caption{Nominal stress [MPa] at $N_X = 128$, and solver cost to $\varepsilon = 0.05$ (10 increments).
+The paper-material run of 27 Oct used the earlier, looser inexact-Newton CG tolerance; its CG count is an
+indication only.}
+\label{tab:simplify128}
+\begin{tabular}{lccc}
+\toprule
+$\varepsilon$ & paper material & contrast 10, $\Lambda/\mu = 100$ & contrast 10, $\Lambda/\mu = 10$ \\
+\midrule
+0.005 & 0.00172 & 0.00166 ($-3.5\,\%$) & 0.00151 ($-12\,\%$) \\
+0.010 & 0.00341 & 0.00329 ($-3.5\,\%$) & 0.00300 ($-12\,\%$) \\
+0.015 & 0.00464 & 0.00459 ($-1.1\,\%$) & 0.00445 ($-4\,\%$) \\
+0.030 & 0.00489 & 0.00484 ($-1.0\,\%$) & 0.00447 ($-9\,\%$) \\
+0.050 & 0.00524 & 0.00519 ($-1.0\,\%$) & 0.00480 ($-8\,\%$) \\
+\midrule
+CG to $\varepsilon = 0.05$ & $\approx 590\,000$ & 24\,665 & 8\,800 \\
+GPU time & $\approx 7$\,h & 3.8\,min & 2.0\,min \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At $N_X = 32$ we also ran contrast $\{10, 100\}$ $\times$ $\Lambda/\mu$ $\{10, 100\}$ against the paper's material:
+contrast 100 with $\Lambda/\mu = 100$ agrees with the paper's material to 2\,\% at 7$\times$ fewer CG iterations,
+contrast 10 with $\Lambda/\mu = 100$ to 4\,\% at 32$\times$ fewer. (These $N_X = 32$ curves are themselves far from
+the paper because of the under-resolved ligaments; they serve only the relative comparison.)
+
+%=====================================================================================================================
+\section{Results with true holes}
+
+Figure~\ref{fig:curves}b shows the simplified material at $N_X = 256$ up to $\varepsilon = 0.2$
+(40 increments, no failed Newton solve; 469 Newton steps, 211\,760 CG iterations, 1\,h\,52\,min on one GPU).
+
+\begin{itemize}
+\item The initial slope is 0.342\,MPa (paper simulation 0.35\,MPa).
+\item Before buckling the curve lies within 3\,\% of the paper's material on the same grid
+(Table~\ref{tab:256}).
+\item After buckling it follows the \emph{experiment} of~\cite{LiRudykh2019} closely up to $\varepsilon = 0.2$
+(0.0096 vs 0.0094\,MPa), below the paper's periodic simulation (0.0106\,MPa).
+\item Buckling occurs late (overshoot to 0.0067\,MPa at $\varepsilon = 0.02$) because the imperfection is given in
+pixels, i.e.\ it is 4$\times$ smaller in physical size at $N_X = 256$ than at 64. The paper-material run at 256 px
+(other seed) buckled at 0.015. \todo{imperfection in physical units, rerun}
+\item The deformation (Fig.~\ref{fig:snapshots}) shows the 1\,$\times$\,2 pattern: the voids collapse into curved
+slits around the inclusions, alternating between neighbouring rows; compression concentrates in the ligaments. At
+$\varepsilon \approx 0.2$ some slits are nearly closed: beyond this point true holes may overlap and contact is
+required.
+\end{itemize}
+
+\begin{table}[h]
+\centering
+\caption{Nominal stress [MPa], $N_X = 256$.}
+\label{tab:256}
+\small
+\begin{tabular}{lcccc}
+\toprule
+$\varepsilon$ & simplified, 256 px & paper material, 256 px & paper simulation & paper experiment \\
+\midrule
+0.005 & 0.00171 & 0.00177 & & \\
+0.010 & 0.00339 & 0.00352 & & \\
+0.015 & 0.00504 & 0.00513 & 0.0055 ($\varepsilon_{cr} = 0.016$) & \\
+0.020 & 0.00665 (not yet buckled) & 0.00521 & 0.0054 & 0.0056 (peak at 0.018) \\
+0.025 & 0.00525 & 0.00530 & & \\
+0.050 & 0.00570 & & 0.0065 & 0.0051 \\
+0.100 & 0.00673 & & 0.0077 & 0.0066 \\
+0.150 & 0.00801 & & 0.0089 & 0.0079 \\
+0.200 & 0.00960 & & 0.0106 & 0.0094 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_curves.png}
+\caption{Nominal stress--strain curves, compression in $X$, true holes. (a) Material simplification at
+$N_X = 128$. (b) Simplified material (contrast 10, $\Lambda/\mu = 100$) at $N_X = 256$ against the paper's material
+on the same grid (run to $\varepsilon = 0.025$) and against~\cite{LiRudykh2019}, Fig.~4.}
+\label{fig:curves}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_snapshots.png}
+\caption{Deformed configuration, simplified material, $N_X = 256$. The computed 1\,$\times$\,2 cell (black box,
+deformed by $\bar{\bm F}$) is drawn twice side by side. Matrix coloured by $P_{XX}$, inclusions grey, voids white.}
+\label{fig:snapshots}
+\end{figure}
+
+\paragraph{Solver cost.} With true holes the Newton iteration takes 5--6 steps per increment before buckling,
+28--43 in the buckling increment and 10--12 afterwards (Fig.~\ref{fig:cost}, left). Smaller load increments do not
+reduce the per-increment count: the initial residual and the tolerance shrink together. The CG iterations per Newton
+step grow from about 200 to 700 along the load path, almost identically at $N_X = 64$ and 256 (Fig.~\ref{fig:cost},
+right): the Green preconditioner is grid-independent here.
+
+%=====================================================================================================================
+\section{Towards contact: the third medium}
+
+Beyond $\varepsilon \approx 0.15$--$0.2$ the void faces touch. Third-medium contact fills the voids with a very soft
+compressible neo-Hookean material ($\mu_{TM} = k\,\mu_m$, $\lambda_{TM}/\mu_{TM} = 1.5$, i.e.\ $\nu = 0.3$) and a
+regularization $k_r(|\nabla\nabla\bm u|^2 - \tfrac12(\Delta\bm u)^2)$ inside the voids only ($k_r = 10^{-6} L^2 \mu_m$;
+on Q1 pixels $\Delta\bm u$ vanishes, so only the Hessian term acts).
+
+\paragraph{Effect on the response.} Before contact the medium only adds its own stiffness. With $k = 10^{-3}$ the
+curve is 15--23\,\% above true holes after buckling and buckling is delayed: too stiff. With $k = 10^{-4}$ it is
+within 3\,\% of true holes (64 px runs, to $\varepsilon = 0.03$ so far).
+
+\paragraph{Effect on the cost.} The Newton iteration is unaffected (5--6 / 10--15 steps per increment), but the CG
+iterations per Newton step rise from $\approx 450$ (true holes) to $\approx 2\,600$ ($k = 10^{-3}$) and
+$\approx 4\,700$ ($k = 10^{-4}$), i.e.\ 6--25$\times$ (Fig.~\ref{fig:cost}).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{figures/contact_iterations.png}
+\caption{Solver cost over the load path (Green preconditioner, simplified material): trust-region Newton steps per
+increment, CG iterations per increment and CG iterations per Newton step, for true holes ($N_X = 64, 256$) and the
+third medium $k = 10^{-3}, 10^{-4}$ ($N_X = 64$, still running).}
+\label{fig:cost}
+\end{figure}
+
+\paragraph{Diagnosis: bulk/shear mismatch, not total contrast.} To isolate the linear solver we solved one Newton
+system with the Hessian at $\bm F = \bm I$ (positive definite; at the compressed state the stiff inclusion makes the
+Hessian indefinite by initial-stress softening) by plain PCG with the same stopping rule. Table~\ref{tab:linear}
+collects the counts.
+
+\begin{table}[h]
+\centering
+\caption{Linear test: CG iterations for $\bm H(\bm F = \bm I)\,\bm s = -\bm g$, Green preconditioner,
+energy tolerance $10^{-6}$. ``$>$50k'': not converged within 50\,000 iterations.}
+\label{tab:linear}
+\begin{tabular}{llcc}
+\toprule
+material & third medium & $N_X = 32$ & $N_X = 64$ \\
+\midrule
+paper                         & true holes                                     & 1\,686 & 1\,323 \\
+paper                         & $\mu_{TM} = 10^{-3}$, $\lambda_{TM} = 1.5\cdot10^{-3}$ & 28\,565 & 35\,322 \\
+paper                         & $\mu_{TM} = 10^{-3}$, $\lambda_{TM} = 1$ ($\lambda/\mu$ as matrix) & 2\,299 & 2\,368 \\
+paper                         & $\mu_{TM} = 1.5\cdot10^{-6}$, $\lambda_{TM} = 1.5\cdot10^{-3}$ & 43\,057 & \\
+paper                         & $\mu_{TM} = 10^{-5}$, $\lambda_{TM} = 1.5\cdot10^{-5}$ & $>$50k & $>$50k \\
+simplified (10, $\Lambda/\mu$ 100) & true holes                                & & 226 \\
+simplified                    & $k = 10^{-3}$, $\nu = 0.3$                     & & 2\,661 \\
+simplified                    & $k = 10^{-4}$, $\nu = 0.3$                     & & 6\,295 \\
+simplified                    & $k = 10^{-4}$, Green reference $\lambda/\mu = 10$ & & 5\,756 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With the same shear contrast ($\mu_{TM} = 10^{-3}$), raising only the bulk stiffness of the medium to the matrix ratio
+cuts the count 12$\times$; lowering only its shear modulus makes it worse. The cost follows the \emph{worse} of the
+two contrasts, measured against the reference medium in the corresponding mode:
+\begin{equation}
+  \frac{\mu_{TM}}{\mu_m} = k , \qquad
+  \frac{\kappa_{TM}}{\kappa_m} = \frac{\lambda_{TM}+\mu_{TM}}{\lambda_m+\mu_m} \approx \frac{2.5\,k}{\Lambda/\mu} .
+\end{equation}
+For the nearly incompressible matrix the bulk contrast is $\Lambda/\mu$ times worse than the shear contrast. In the
+simple contact benchmarks (patch, punch, Hertz) solids and medium had the same $\nu = 0.3$, so there was only one
+contrast, which is why they were cheap. Moving the Green reference to an intermediate $\lambda/\mu$ does not help
+(Table~\ref{tab:linear}, last row): an isotropic reference cannot match both phases. The inclusion's bulk modulus
+plays no role.
+
+\paragraph{Preconditioners tried.} Green-Jacobi fails inside the trust region at every load step size (its
+$D^{-1/2}$ scaling spans $3\cdot10^{-2}$--$10^{6}$ and the trust region, measured in the preconditioner norm, keeps
+the steps tiny), and is useless in the linear test ($>$50k). The dual preconditioner $G K(C_{\text{ref}}A^{-1}
+C_{\text{ref}}) G$, for SRI exactly an SRI operator with the dual moduli $\mu_m^2/\mu$, $\lambda_m^2/\lambda$,
+needs 3--4$\times$ fewer iterations than Green in the linear test (745 vs 2\,661 at $k = 10^{-3}$), but fails in the
+trust region for the same reason as Green-Jacobi.
+
+%=====================================================================================================================
+\section{Literature and remedies}
+
+We found no work combining third-medium contact with FFT/Green-type solvers. Third-medium contact is used with
+finite elements and direct solvers~\cite{Bluhm2021,Wriggers2025}. For FFT methods, porous media~\cite{Schneider2020}
+and pores combined with rigid inclusions (``infinitely double contrasted media'') are known to be hard, with a
+convergence rate depending strongly on the reference medium. Near-incompressibility is addressed by
+\begin{itemize}
+\item the augmented Lagrangian of Michel, Moulinec \& Suquet~\cite{Michel2000} (fixed-point schemes);
+\item the mixed deformation--pressure FFT-Galerkin formulation of Wang, Zhang \& Chen~\cite{Wang2022}: the pressure
+is an unknown per voxel, the bulk modulus moves from the tangent into a diagonal block $-1/\kappa$, and the iteration
+count stays flat (about 360) up to $\nu = 0.499$, where the standard formulation fails; hybrid incompressible
+($\nu = 0.5$) / fully compressible ($\nu = 0$) foams are computed. The resulting system is a non-symmetric saddle
+point problem, solved by CG without preconditioner and without theory; a preconditioner and inf--sup analysis are
+left open.
+\end{itemize}
+
+\paragraph{Options for our problem.}
+\begin{enumerate}
+\item \emph{Augmented Lagrangian (next step).} Keep a pressure per pixel, but outside the CG: each inner problem is
+an energy minimization with a moderate volumetric stiffness $r \ll \lambda_m$ (symmetric positive definite, our
+trust-region Newton with Green unchanged, Green reference with $\lambda_{\text{ref}} = r$); an outer update of the
+pressure restores the physical bulk modulus. Derivation in Appendix~\ref{app:al}.
+\item \emph{Mixed displacement--pressure with a block preconditioner.} Keep the pressure in the linear system and use
+MINRES with $\operatorname{diag}(G_{\mu}, (1/\mu + 1/\lambda)^{-1})$: Green with a shear-only reference for the
+displacement block and a pointwise weight for the pressure block, robust in $\lambda/\mu$ in theory. Requires a
+saddle-point nonlinear solver.
+\item \emph{Material.} A less incompressible matrix ($\Lambda/\mu = 10$) reduces the mismatch 10$\times$ at an 8--12\,\%
+error in the response.
+\end{enumerate}
+
+%=====================================================================================================================
+\appendix
+\section{Augmented Lagrangian for the volumetric term}
+\label{app:al}
+
+With $\theta = \ln J_0$ per pixel, the volumetric energy is the conjugate
+$\frac{\lambda}{2}\theta^2 = \max_p \big(p\,\theta - \frac{p^2}{2\lambda}\big)$, $p = \lambda\theta$ the pressure.
+The proximal-point (method of multipliers) iteration on $p$ with parameter $r$ gives, for a fixed $p_k$, the inner
+energy
+\begin{equation}
+  \phi_k(\theta) = \max_p \Big( p\,\theta - \frac{p^2}{2\lambda} - \frac{(p - p_k)^2}{2r} \Big)
+  = \frac{\kappa_r}{2}\Big(\theta + \frac{p_k}{r}\Big)^2 + \text{const}, \qquad
+  \kappa_r = \frac{\lambda r}{\lambda + r},
+\end{equation}
+and the update $p_{k+1} = \phi_k'(\theta) = \kappa_r(\theta + p_k/r)$. Its fixed point is $p = \lambda\theta$, the
+original problem. For $r \ll \lambda$ the inner volumetric stiffness is $\kappa_r \approx r$: each inner problem is a
+well-conditioned energy minimization (the same SRI form with $\lambda \to \kappa_r$ and $\ln J_0 \to \ln J_0 + p_k/r$);
+for a soft phase ($\lambda \ll r$, the third medium) $\kappa_r \approx \lambda$ and the phase is left essentially
+unchanged. The outer iteration is the proximal point method on the concave dual and converges for any $r > 0$.
+
+%=====================================================================================================================
+\begin{thebibliography}{9}
+\bibitem{LiRudykh2019} J.~Li, S.~Rudykh, Tunable microstructure transformations and auxetic behavior in 3D-printed
+multiphase composites: the role of inclusion distribution, \emph{Composites Part B} 172 (2019) 352--362.
+\bibitem{Wang2022} M.~Wang, K.~Zhang, C.~Chen, A mixed FFT-Galerkin approach for incompressible or slightly
+compressible hyperelastic solids under finite deformation, \emph{Comput. Methods Appl. Mech. Engrg.} 396 (2022)
+115092.
+\bibitem{Michel2000} J.C.~Michel, H.~Moulinec, P.~Suquet, A computational method based on augmented Lagrangians and
+fast Fourier transforms for composites with high contrast, \emph{CMES} 1 (2000) 79--88.
+\bibitem{Schneider2020} M.~Schneider, Lippmann--Schwinger solvers for the computational homogenization of materials
+with pores, \emph{Int. J. Numer. Methods Engrg.} 121 (2020) 5017--5041.
+\bibitem{Bluhm2021} G.L.~Bluhm, O.~Sigmund, K.~Poulios, Internal contact modeling for finite strain topology
+optimization, \emph{Comput. Mech.} 67 (2021) 1099--1114.
+\bibitem{Wriggers2025} P.~Wriggers, J.~Kore\-lc, P.~Junker, A third medium approach for contact using first and
+second order finite elements (2025).
+\bibitem{Ladecky2025} M.~Ladeck\'y, I.~Pultarov\'a, F.~Bignonnet, I.~J\"odicke, J.~Zeman, L.~Pastewka,
+Jacobi-accelerated FFT-based solver for smooth high-contrast data, arXiv:2508.02613 (2025).
+\end{thebibliography}
+
+\end{document}

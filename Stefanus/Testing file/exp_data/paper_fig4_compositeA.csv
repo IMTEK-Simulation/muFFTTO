@@ -1,0 +1,32 @@
+# Li & Rudykh 2019, Fig. 4 (a) X and (b) Y, Composite A: nominal strain [-], nominal stress [MPa]
+# digitised by hand from the PDF at 300 dpi (accuracy ~ +-3 % of the axis range)
+direction,curve,eps,stress
+X,periodic,0.000,0.0000
+X,periodic,0.016,0.0055
+X,periodic,0.020,0.0054
+X,periodic,0.050,0.0065
+X,periodic,0.100,0.0077
+X,periodic,0.150,0.0089
+X,periodic,0.200,0.0106
+X,experiment,0.000,0.0000
+X,experiment,0.018,0.0056
+X,experiment,0.030,0.0048
+X,experiment,0.050,0.0051
+X,experiment,0.100,0.0066
+X,experiment,0.150,0.0079
+X,experiment,0.200,0.0094
+Y,periodic,0.000,0.0000
+Y,periodic,0.026,0.0121
+Y,periodic,0.050,0.0138
+Y,periodic,0.080,0.0147
+Y,periodic,0.100,0.0149
+Y,periodic,0.150,0.0148
+Y,periodic,0.200,0.0153
+Y,experiment,0.000,0.0000
+Y,experiment,0.026,0.0115
+Y,experiment,0.037,0.0151
+Y,experiment,0.050,0.0132
+Y,experiment,0.070,0.0127
+Y,experiment,0.100,0.0128
+Y,experiment,0.150,0.0139
+Y,experiment,0.200,0.0147
