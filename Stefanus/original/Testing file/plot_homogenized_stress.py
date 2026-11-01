@@ -1,6 +1,7 @@
 """
 Stress-strain response from homogenized_stress.csv of
-stefanus_2D_homogenization_finite_strain_elasticity_NeoHookean_trust_region.py, against Li & Rudykh (2019), Fig. 4.
+stefanus_2D_homogenization_finite_strain_elasticity_NeoHookean_trust_region.py (lateral F prescribed) and
+..._trust_region_lateral_free.py (lateral side stress free), against Li & Rudykh (2019), Fig. 4.
 
 The loaded direction is the diagonal component of F - I that changes most (x: F_00, y: F_11); the nominal strain is
 eps = 1 - F_kk and the nominal stress -<P_kk>. The other diagonal stress <P_ll> is plotted next to it: the paper's test
@@ -20,12 +21,13 @@ MU_M_MPA = 0.6      # matrix shear modulus [MPa]: the CSV holds <P> in units of 
 
 here = os.path.dirname(os.path.abspath(__file__))
 csv_paths = sys.argv[1:] or sorted(glob.glob(os.path.join(          # no arguments: all runs found in exp_data
-    here, 'exp_data', 'stefanus_2D_homogenization_finite_strain_elasticity_NeoHookean_trust_region',
-    '*', 'homogenized_stress.csv')))[:4]
+    here, 'exp_data', 'stefanus_2D_homogenization_finite_strain_elasticity_NeoHookean_trust_region*',
+    '*', 'homogenized_stress.csv')))[:6]
 if not csv_paths:
     sys.exit('no homogenized_stress.csv found: run the trust-region script first, or pass the CSV paths')
 paper_path = os.path.join(here, '..', '..', 'Testing file', 'exp_data', 'paper_fig4_compositeA.csv')
-run_styles = [('tab:green', 'o', '-'), ('tab:blue', 's', '--'), ('tab:purple', '^', ':'), ('tab:orange', 'v', '-.')]
+run_styles = [('tab:green', 'o', '-'), ('tab:blue', 's', '--'), ('tab:purple', '^', ':'), ('tab:orange', 'v', '-.'),
+              ('tab:brown', 'D', '-'), ('tab:olive', 'P', '--')]
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5.6), layout='constrained')
 
@@ -39,7 +41,12 @@ for csv_path, (color, marker, style) in zip(csv_paths, run_styles):
     stress = np.r_[0.0, -data[f'P_{k}{k}'] * MU_M_MPA]
     lateral_stress = np.r_[0.0, data[f'P_{l}{l}'] * MU_M_MPA]
     label = os.path.basename(os.path.dirname(os.path.abspath(csv_path)))   # e.g. Nx=128Ny=111_Green_bilinear_rectangle
-    side = 'free sides (void layer)' if '_void' in label else 'lateral F prescribed'
+    if 'lateral_free' in label:
+        side = 'lateral side stress free'
+    elif '_void' in label:
+        side = 'free sides (void layer)'
+    else:
+        side = 'lateral F prescribed'
     ax1.plot(eps, stress, color=color, marker=marker, ls=style, ms=3, lw=1.8, label=f'{label} ({side})')
     ax2.plot(eps, lateral_stress, color=color, marker=marker, ls=style, ms=3, lw=1.8, label=label)
 
