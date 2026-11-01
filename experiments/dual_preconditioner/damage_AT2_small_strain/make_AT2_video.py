@@ -5,7 +5,7 @@
     right, top    sigma_xx over E_xx: this run in colour (future part light grey), the other grids in grey
     right, bottom elastic CG iterations per elastic solve, mean over the staggered iterations of the load step
                   (from exp_data/..._iterations.csv; older runs without it: the last staggered iteration of the step):
-                  this run in colour, the other preconditioners of the same grid in grey
+                  this run in colour, the other preconditioners of the same grid dashed in their own colours
 
     python make_AT2_video.py [N] [PRECONDITIONER] [TAG]    (default 256 dual)  -> figures/AT2_N<N>_<prec><TAG>.mp4, _final.png
     STRESS_ONLY=1 python make_AT2_video.py ...      slide version: without the CG panel (stress panel alone on the
@@ -199,7 +199,8 @@ colorbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=plt.Normalize(0, 1), c
                         ax=ax_cell, **(dict(location='left', fraction=0.03, pad=0.01, aspect=25, shrink=0.6)
                                        if STRESS_ONLY else dict(orientation='horizontal', fraction=0.04, pad=0.02,
                                                                 aspect=40)))
-colorbar.set_label('damage $d$' if STRESS_ONLY else 'damage $d$ (pore white, cracked pixels transparent; true scale)',
+colorbar.set_label('damage $d$' if STRESS_ONLY else f'damage $d$ ({"inclusions" if "_incl" in TAG else "pore"} white, '
+                   'cracked pixels transparent; true scale)',
                    color=TEXT_2, fontsize=10.5)
 colorbar.outline.set_visible(False)
 colorbar.ax.tick_params(colors=TEXT_2, labelsize=9.5, length=0)
@@ -223,7 +224,7 @@ for p, dash in zip([] if STRESS_ONLY else [q for q in LABELS if q != PREC       
                     and os.path.exists(os.path.join(HERE, 'exp_data', f'AT2_N{N}_{q}{TAG}.nc'))],
                    [(0, (5, 2)), (0, (1, 1.5))]):
     _, l_ref, _, cg_ref, _ = read(N, p)
-    ax_cg.plot(l_ref[:len(cg_ref)], cg_ref, color=REFERENCE_COLOR, lw=1.3, ls=dash,
+    ax_cg.plot(l_ref[:len(cg_ref)], cg_ref, color=COLORS[p], lw=1.5, ls=dash, alpha=0.8,
                label=LABELS[p])
 ax_stress.plot(np.r_[0, load], np.r_[0, stress], color=FUTURE, lw=2)
 stress_line, = ax_stress.plot([], [], color=RUN_COLOR, lw=2.2, label=f'{N}$^2$, this run')

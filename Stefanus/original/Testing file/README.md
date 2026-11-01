@@ -88,9 +88,13 @@ The load, the material parameters and `E_LOAD` are set at the top of each script
   positive definite") and works with its default of 50. The trust-region script is more forgiving.
 - **The trust-region script is the robust one.** It rejects steps that do not lower the energy and picks the CG
   tolerance adaptively.
-- `Stefanus_2D_homogenization_elasticity.py` uses the grid size `NX` set at the top of the script (default 256, slow:
-  more than 5 min). `--px_per_ligament` is currently **not** used for the grid.
-- Expected cost: the trust-region script at 64 px takes about 5-10 min on a laptop CPU; 128 px with Q2 much longer.
+- `Stefanus_2D_homogenization_elasticity.py` uses the grid size `NX` set at the top of the script (default 256). `--px_per_ligament` is currently **not** used for the grid.
+- Expected run times on a laptop CPU (pip-installed muGrid, tested 2026-11-01):
+  trust-region 64 px, 30 increments: ~2 min; trust-region 64 px biquadratic, 10 increments: ~6 min;
+  original Newton 64 px, 50 increments: ~8 min; linear small strain (256 x 222): ~8 min.
+  Twice the pixels per side costs at least 4x.
+- The two original scripts call `plt.show()`: on a desktop a plot window opens and the script **waits until you
+  close it**. To run without windows: `MPLBACKEND=Agg python <script>.py`.
 - Known modelling limits: with the lateral stretch F fixed, the response is about 20 % too stiff compared with the
   paper. With `--void_layer` (free sides, 1 cell wide) it is too soft. The paper's stress-free lateral side
   (<P_xx> = 0) is not implemented yet in this script.

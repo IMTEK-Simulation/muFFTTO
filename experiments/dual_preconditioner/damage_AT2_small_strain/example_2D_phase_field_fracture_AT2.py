@@ -78,8 +78,13 @@ else:
     xp = np
 
 E_young, poisson = 1.0, 0.2        # matrix
-pore_contrast = 1e-3               # stiffness of the pore relative to the matrix
-Gc = 5e-4                          # fracture toughness (critical energy release rate)
+pore_contrast = float(os.environ.get('PORE_CONTRAST', 1e-3))   # stiffness of the pore relative to the matrix (env)
+Gc = float(os.environ.get('GC', 5e-4))                          # fracture toughness (GC env)
+# LAME (env, 'lambda,mu'): the Lame parameters of the matrix directly (e.g. true plane strain), instead of E, nu
+lame_override = [float(v) for v in os.environ['LAME'].split(',')] if 'LAME' in os.environ else None
+# NOTCH (env, 'x0,x1,y'): microstructure replaced by a homogeneous cell with a notch: one row of pore pixels
+# (stiffness PORE_CONTRAST) from x0 to x1 at height y (Schneider & Kaestner 2025, single notch)
+notch = [float(v) for v in os.environ['NOTCH'].split(',')] if 'NOTCH' in os.environ else None
 # LENGTH_SCALE (env): fixed in physical units, the same crack problem on every grid; default l = 2 pixels
 length_scale = float(os.environ['LENGTH_SCALE']) if 'LENGTH_SCALE' in os.environ \
     else 2.0 * domain_size[0] / number_of_pixels[0]
@@ -91,16 +96,36 @@ microstructure_name = os.environ.get('MICROSTRUCTURE', 'circle_inclusion')
 damage_in_pores = os.environ.get('DAMAGE_IN_PORES', 'free')
 if damage_in_pores == 'one':
     pore_contrast = 1.0             # the pore is fully broken matrix, stiffness g(1) C_0 = k C_0 (no double softening)
+# INCLUSION_STIFFNESS (env): the disks are stiff inclusions of this stiffness relative to the matrix instead of pores;
+# the inclusions are tough (their tensile energy does not drive the damage), so only the matrix cracks
+inclusion_stiffness = float(os.environ['INCLUSION_STIFFNESS']) if 'INCLUSION_STIFFNESS' in os.environ else None
+if inclusion_stiffness is not None:
+    pore_contrast = inclusion_stiffness
+# HOLES=1 (env): the pores are true holes: zero stiffness and no damage field (the damage operator is restricted to the
+# matrix pixels, i.e. natural (Neumann) conditions on the hole boundary; d = 0 imposed at the nodes inside the holes).
+# The elastic problem is singular in the holes: Green-Jacobi only.
+# HOLE_STIFFNESS (env, with HOLES=1): the holes keep this stiffness relative to the matrix instead of 0, never degraded
+# (e.g. 1e-4 = k: the pores as broken material without a damage field); then the dual is defined
+holes = os.environ.get('HOLES', '0') == '1'
+hole_stiffness = float(os.environ.get('HOLE_STIFFNESS', 0.0))
+if holes:
+    pore_contrast = hole_stiffness
 run_tag = ('' if microstructure_name == 'circle_inclusion' else '_' + microstructure_name) \
-    + ('_poresd1' if damage_in_pores == 'one' else '') \
+    + (f'_incl{inclusion_stiffness:g}' if inclusion_stiffness is not None else '') \
+    + ('_poresd1' if damage_in_pores == 'one' else '') + ('_holes' if holes else '') \
+    + (f'{hole_stiffness:g}' if holes and hole_stiffness > 0 else '') \
     + (f'_l{length_scale:g}' if 'LENGTH_SCALE' in os.environ else '') \
     + ('_3D' if dim_problem == 3 else '') + (f'_{element_type}' if 'ELEMENT' in os.environ else '') \
+    + (f'_k{float(os.environ["K_RESIDUAL"]):g}' if 'K_RESIDUAL' in os.environ else '') \
     + os.environ.get('RUN_SUFFIX', '')
-k_residual = 1e-4                  # residual stiffness in g(d)
+k_residual = float(os.environ.get('K_RESIDUAL', 1e-4))   # residual stiffness in g(d) (K_RESIDUAL env, default 1e-4)
 
 macro_strain_direction = np.zeros((dim_problem, dim_problem))
-macro_strain_direction[0, 0] = 1.0                          # uniaxial strain E_xx
-load_steps = np.linspace(0.0, 0.08, 81)[1:]
+# LOAD_DIR (env): 'xx' (default) or 'yy'; LOAD_MAX, LOAD_STEPS (env): the load path 0 ... LOAD_MAX in LOAD_STEPS steps
+load_dir = os.environ.get('LOAD_DIR', 'xx')
+macro_strain_direction[(0, 0) if load_dir == 'xx' else (1, 1)] = 1.0     # uniaxial strain
+ic = 0 if load_dir == 'xx' else 1             # the loaded stress component (printed, stop criterion)
+load_steps = np.linspace(0.0, float(os.environ.get('LOAD_MAX', 0.08)), int(os.environ.get('LOAD_STEPS', 80)) + 1)[1:]
 staggered_tol = 1e-3               # max |d - d_old| for the staggered loop
 max_staggered_iterations = 10000     # effectively unlimited: an unstable break can need many hundreds
 # stop the load path once the cell is cut through: sigma_xx below STOP_FRACTION of the peak so far for STOP_STEPS
@@ -111,9 +136,20 @@ stop_steps = int(os.environ.get('STOP_STEPS', 3))
 cg_rtol = 1e-8
 # 'Green': M = G (FFT inverse of the homogeneous reference operator)
 # 'Green_Jacobi': M = D^-1/2 G D^-1/2 with D = diag(K), recomputed when K changes
-# preconditioner of the ELASTIC problem (first argument): 'Green', 'Green_Jacobi' or 'dual' G K(C_ref C_d^-1 C_ref) G;
+# preconditioner of the ELASTIC problem (first argument): 'Green', 'Green_Jacobi', 'dual' G K(C_ref C_d^-1 C_ref) G or
+# 'dual_switch' (below);
 # the damage problem uses Green-Jacobi in every run, so only the elastic solves differ
 preconditioner_type = sys.argv[1] if len(sys.argv) > 1 else 'Green_Jacobi'
+assert not (holes and hole_stiffness == 0 and preconditioner_type in ('dual', 'dual_switch')), \
+    'the dual needs C_d^-1, undefined in a hole (set HOLE_STIFFNESS)'
+# 'dual_switch': the dual, and in a load step with many staggered iterations (the break) whichever of dual and
+# Green-Jacobi needs less work in CG iterations, a dual iteration counted DUAL_COST (env, default 2) Green-Jacobi
+# iterations: after SWITCH_AFTER (env, default 20) staggered iterations of a step one trial solve with the other
+# preconditioner, then the cheaper of the two for the rest of the step, re-tested every SWITCH_RECHECK (env, default
+# 100) staggered iterations; every load step starts with the dual
+switch_after = int(os.environ.get('SWITCH_AFTER', 20))
+switch_recheck = int(os.environ.get('SWITCH_RECHECK', 100))
+dual_cost = float(os.environ.get('DUAL_COST', 2.0))
 damage_preconditioner_type = 'Green_Jacobi'
 cg_tol = 1e-6                      # CG: energy-error estimate <= cg_tol * energy of the solution (warm start, delay 10)
 cg_delay = 10
@@ -154,10 +190,15 @@ if comm.rank == 0:
 phase = microstructure_library.get_geometry(nb_voxels=disc_u.nb_of_pixels,
                                             microstructure_name=microstructure_name,
                                             coordinates=disc_u.fft.coords)   # 1 matrix, 0 pore
+if notch is not None:                                       # a pixel takes the phase of its lower-left node
+    xy = np.asarray(tensor_operations.to_host(disc_u.fft.coords))
+    hy = domain_size[1] / number_of_pixels[1]
+    phase = np.where((xy[0] >= notch[0]) & (xy[0] < notch[1]) & (np.abs(xy[1] - notch[2]) < 0.5 * hy), 0, 1)
 # free damage nodes (1) and nodes with d = 1 imposed (0): a node is the lower-left corner of its pixel, so its four
 # adjacent pixels have their corners at x, x - h e_1, x - h e_2, x - h (e_1 + e_2)
 free_d = None
-if damage_in_pores == 'one':
+d_imposed = 0.0 if holes else 1.0   # value of d at the imposed nodes
+if damage_in_pores == 'one' or holes:
     h = np.array(domain_size) / np.array(number_of_pixels)
     coords = np.asarray(tensor_operations.to_host(disc_d.fft.coords))
     pore_node = np.ones(coords.shape[1:], dtype=bool)
@@ -169,6 +210,8 @@ if damage_in_pores == 'one':
     free_d = xp.asarray(np.where(pore_node, 0.0, 1.0))
 K_0, G_0 = material_models.get_bulk_and_shear_modulus(E=E_young, poisson=poisson)
 lam, mu = material_models.get_lame_parameters_from_bulk_and_shear(K_0, G_0, dim=dim)
+if lame_override is not None:
+    lam, mu = lame_override
 
 lam_11qxyz = disc_u.get_quad_field_scalar(name='lam_first_lame')
 mu_11qxyz = disc_u.get_quad_field_scalar(name='mu_second_lame')
@@ -176,6 +219,10 @@ stiffness = xp.asarray(np.where(tensor_operations.to_host(phase) > 0, 1.0, pore_
 lam_11qxyz.s[0, 0, ...] = lam * stiffness                       # broadcast over q
 mu_11qxyz.s[0, 0, ...] = mu * stiffness
 bulk_qxyz = lam_11qxyz.s[0, 0] + 2.0 * mu_11qxyz.s[0, 0] / dim
+# 1 in the matrix, 0 in the holes: restricts the damage operator to the matrix (HOLES=1)
+damage_domain = xp.asarray(np.where(tensor_operations.to_host(phase) > 0, 1.0, 0.0)) if holes else None
+# 1 where the tensile energy drives the damage, 0 in tough inclusions
+crack_driving = 1.0 if inclusion_stiffness is None else xp.asarray(np.where(tensor_operations.to_host(phase) > 0, 1.0, 0.0))
 
 # matrix and pores are the same isotropic material C_iso, scaled by the stiffness factor of the pixel, so the degraded
 # material is a scalar multiple of one tensor:  C_d = g(d) C_0(x) = s(x) C_iso,  s = g(d) * stiffness(x)
@@ -232,6 +279,11 @@ I_sym = 0.5 * (np.einsum('ik,jl->ijkl', I2, I2) + np.einsum('il,jk->ijkl', I2, I
 green_u = disc_u.get_preconditioner_Green_mugrid(
     reference_material_data_ijkl=2.0 * mu * I_sym if preconditioner_type == 'Green_Jacobi' else C_ref,
     formulation='small_strain')
+# dual_switch: the Green-Jacobi reference as a second Green operator (its own field name)
+green_u_gj = disc_u.get_preconditioner_Green_mugrid(reference_material_data_ijkl=2.0 * mu * I_sym,
+                                                    formulation='small_strain', name='green_u_gj') \
+    if preconditioner_type == 'dual_switch' else green_u
+active_u = 'dual' if preconditioner_type == 'dual_switch' else preconditioner_type   # the one applied by M_u
 
 
 # dual: C_ref C_d^-1 C_ref, C_d = g(d) C_0(x), the inverse taken on the symmetric strains (Mandel). With C_d = s C_iso
@@ -286,7 +338,7 @@ x_scaled_u = disc_u.get_unknown_size_field(name='x_scaled_u')
 
 
 def M_u(x, Px):
-    if preconditioner_type == 'dual':
+    if active_u == 'dual':
         disc_u.fft.communicate_ghosts(x)
         disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u, input_nodal_field_fnxyz=x,
                                            output_nodal_field_fnxyz=dual_temp_1)
@@ -296,9 +348,9 @@ def M_u(x, Px):
         disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u, input_nodal_field_fnxyz=dual_temp_2,
                                            output_nodal_field_fnxyz=Px)
         return
-    if preconditioner_type == 'Green_Jacobi':
+    if active_u == 'Green_Jacobi':
         x_scaled_u.s[...] = jacobi_u.s * x.s
-        disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u,
+        disc_u.apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks=green_u_gj,
                                            input_nodal_field_fnxyz=x_scaled_u, output_nodal_field_fnxyz=Px)
         Px.s[...] *= jacobi_u.s
     else:
@@ -306,17 +358,20 @@ def M_u(x, Px):
                                            input_nodal_field_fnxyz=x, output_nodal_field_fnxyz=Px)
 
 
-def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q):
-    """[Gc l B^T W B + N^T W c N] d  with the reaction coefficient c at quad points."""
+def apply_damage_operator(input_field_inxyz, output_field_inxyz, reaction_q, domain_q=None):
+    """[Gc l B^T W B + N^T W c N] d  with the reaction coefficient c at quad points; domain_q (0/1 per pixel)
+    restricts both integrals to a part of the cell."""
     # diffusion: Gc l B^T W B d
     disc_d.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz, grad_u_ijqxyz=grad_d)
     grad_d.s[...] *= Gc * length_scale
+    if domain_q is not None:
+        grad_d.s[...] *= domain_q
     disc_d.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=grad_d,
                                                      div_u_fnxyz=output_field_inxyz,
                                                      apply_weights=True)
     # reaction: N^T W c N d
     disc_d.apply_N_operator_mugrid(input_field_inxyz, temp_q)
-    temp_q.s[...] *= reaction_q
+    temp_q.s[...] *= reaction_q if domain_q is None else reaction_q * domain_q
     disc_d.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=temp_q, nodal_field_inxyz=temp_n,
                                               apply_weights=True)
     output_field_inxyz.s[...] += temp_n.s
@@ -332,7 +387,7 @@ def K_d(x, Ax):
         apply_damage_operator(x, Ax, reaction.s)
         return
     d_masked.s[...] = free_d * x.s
-    apply_damage_operator(d_masked, Ax, reaction.s)
+    apply_damage_operator(d_masked, Ax, reaction.s, damage_domain)
     Ax.s[...] = free_d * Ax.s + (1.0 - free_d) * x.s
 
 
@@ -390,6 +445,8 @@ def update_degraded_material():
     g_qxyz = (1.0 - damage_q.s[0, 0]) ** 2 + k_residual
     if scaled_material:
         degraded_scale.s[0, 0] = g_qxyz * stiffness                   # stiffness per pixel, broadcast over q
+        if holes:                                                     # the holes are not degraded
+            degraded_scale.s[0, 0] = xp.where(damage_domain > 0, degraded_scale.s[0, 0], stiffness)
     else:
         C_d.s[...] = g_qxyz[np.newaxis, np.newaxis, np.newaxis, np.newaxis] * C_0.s
 
@@ -447,7 +504,7 @@ iterations_file = None if output_file is None else output_file.replace('.nc', '_
 if comm.rank == 0 and iterations_file is not None:
     os.makedirs(os.path.dirname(iterations_file), exist_ok=True)
     with open(iterations_file, 'w') as f:
-        f.write('step,load,staggered_iteration,cg_u,cg_d,time_u,time_d,damage_change\n')
+        f.write('step,load,staggered_iteration,cg_u,cg_d,time_u,time_d,damage_change,precond_u\n')
 nb_not_converged = 0               # load steps that hit max_staggered_iterations
 
 writer = None
@@ -472,7 +529,7 @@ macro_strains, macro_stresses = [0.0], [0.0]
 snapshots = {}
 nb_broken_steps = 0                 # consecutive load steps with sigma_xx < stop_fraction * peak
 if free_d is not None:
-    damage.s[...] = 1.0 - free_d            # d = 1 in the pores from the start
+    damage.s[...] = d_imposed * (1.0 - free_d)    # d imposed in the pores from the start
 
 # RESTART_FROM (env): continue a run (serial), with a RUN_SUFFIX so that the output goes to new files --
 #   an .nc output file: from the converged state of load step RESTART_STEP (default: its last one), or
@@ -514,15 +571,20 @@ for step, load in enumerate(load_steps):
                                            macro_gradient_field_ijqxyz=macro_strain)
     cg_u_step, cg_d_step, time_u_step, time_d_step = 0, 0, 0.0, 0.0      # sums over the staggered iterations
     step_start = time.time()
+    chosen_u, last_work_u, nb_gj_step = 'dual', {}, 0       # dual_switch: the preconditioner kept in this step
     for stagger in range(first_staggered if step == first_step else 0, max_staggered_iterations):
         # 1. elasticity with the current damage (warm start from the last u~)
+        trial_u = preconditioner_type == 'dual_switch' and stagger >= switch_after \
+            and (stagger - switch_after) % switch_recheck == 0
+        if preconditioner_type == 'dual_switch':
+            active_u = ('Green_Jacobi' if chosen_u == 'dual' else 'dual') if trial_u else chosen_u
         t0 = time.time()
         disc_u.get_rhs_mugrid(material_data_field_ijklqxyz=C_d,
                               macro_gradient_field_ijqxyz=macro_strain, rhs_inxyz=rhs_u)
-        if preconditioner_type == 'Green_Jacobi':
+        if active_u == 'Green_Jacobi':
             jacobi_u = disc_u.get_preconditioner_Jacobi_mugrid(material_data_field_ijklqxyz=C_d,
                                                                formulation='small_strain', name='jacobi_u')
-        elif preconditioner_type == 'dual':
+        elif active_u == 'dual':
             update_dual_material()
         counter_u = IterationCounter()
         norms_u = solvers.conjugate_gradients_mugrid_experimental(
@@ -532,9 +594,16 @@ for step, load in enumerate(load_steps):
         counter_u.count = int(norms_u['stop_iteration']['energy_lower_estim'])
         total_cg_u += counter_u.count
         time_u = time.time() - t0
+        if preconditioner_type == 'dual_switch':
+            # a trial replaces the kept one if its solve needed less work than the kept one's last solve
+            work_u = counter_u.count * (dual_cost if active_u == 'dual' else 1.0)
+            if trial_u and chosen_u in last_work_u and work_u < last_work_u[chosen_u]:
+                chosen_u = active_u
+            last_work_u[active_u] = work_u
+            nb_gj_step += active_u == 'Green_Jacobi'
 
         # 2. history field  H = max(H_{n-1}, psi^+)
-        history.s[0, 0] = xp.maximum(history_n.s[0, 0], tensile_energy(total_strain()))
+        history.s[0, 0] = xp.maximum(history_n.s[0, 0], crack_driving * tensile_energy(total_strain()))
 
         # 3. damage:  [Gc l B^T W B + N^T W (Gc/l + 2H) N] d = N^T W 2H
         reaction.s[...] = Gc / length_scale + 2.0 * history.s
@@ -543,8 +612,8 @@ for step, load in enumerate(load_steps):
                                                   apply_weights=True)
         damage_old.s[...] = damage.s
         if free_d is not None:              # d = d_free + d_imposed: rhs of the free block, zero on the imposed nodes
-            d_masked.s[...] = 1.0 - free_d
-            apply_damage_operator(d_masked, K_d_imposed, reaction.s)
+            d_masked.s[...] = d_imposed * (1.0 - free_d)
+            apply_damage_operator(d_masked, K_d_imposed, reaction.s, damage_domain)
             rhs_d.s[...] = free_d * (rhs_d.s - K_d_imposed.s)
             damage.s[...] *= free_d
         t0 = time.time()
@@ -558,7 +627,7 @@ for step, load in enumerate(load_steps):
         counter_d.count = int(norms_d['stop_iteration']['energy_lower_estim'])
         total_cg_d += counter_d.count
         if free_d is not None:
-            damage.s[...] += 1.0 - free_d
+            damage.s[...] += d_imposed * (1.0 - free_d)
         time_d = time.time() - t0
         update_degraded_material()
 
@@ -570,7 +639,7 @@ for step, load in enumerate(load_steps):
         if comm.rank == 0 and iterations_file is not None:
             with open(iterations_file, 'a') as f:
                 f.write(f'{step},{load:.6g},{stagger + 1},{counter_u.count},{counter_d.count},'
-                        f'{time_u:.4g},{time_d:.4g},{change:.4g}\n')
+                        f'{time_u:.4g},{time_d:.4g},{change:.4g},{active_u}\n')
         if checkpoint_file is not None and checkpoint_every and (stagger + 1) % checkpoint_every == 0 \
                 and comm.size == 1:
             # the state to continue from: the next iterate; written to a temporary file first, then renamed
@@ -600,14 +669,15 @@ for step, load in enumerate(load_steps):
                                                     formulation='small_strain')
     d_max = float(disc_d.mpi_reduction.max(np.asarray(float(xp.max(damage.s)))))
     macro_strains.append(load)
-    macro_stresses.append(sigma_ij[0, 0])
+    macro_stresses.append(sigma_ij[ic, ic])
     if comm.rank == 0:
-        print(f'step {step:3d}  E_xx = {load:.4f}  sigma_xx = {sigma_ij[0, 0]:.5e}  '
+        print(f'step {step:3d}  E_xx = {load:.4f}  sigma_xx = {sigma_ij[ic, ic]:.5e}  '
               f'max d = {d_max:.3f}  staggered its = {stagger + 1:3d}  '
               f'CG its (u, d) = ({counter_u.count}, {counter_d.count})  '     # of the last staggered iteration
               f'step CG (u, d) = ({cg_u_step}, {cg_d_step})  '                # sums over the staggered iterations
               f'mean CG u = {cg_u_step / (stagger + 1):.1f}  '
               f'time (u, d, step) = ({time_u_step:.2f}, {time_d_step:.2f}, {time.time() - step_start:.2f}) s'
+              + (f'  Green-Jacobi solves = {nb_gj_step}' if preconditioner_type == 'dual_switch' else '')
               + ('' if converged else f'  NOT CONVERGED (max |d - d_old| = {change:.2e})'))
     plot_live(f'step {step}, E_xx = {load:.4f}')
     if writer is not None:
@@ -615,7 +685,7 @@ for step, load in enumerate(load_steps):
         writer.write(load=load, macro_stress=sigma_ij, step=step, staggered_iteration=stagger + 1,
                      damage_change=change, converged=int(converged), cg_u_step=cg_u_step, cg_d_step=cg_d_step,
                      time_u_step=time_u_step, time_d_step=time_d_step)
-    nb_broken_steps = nb_broken_steps + 1 if sigma_ij[0, 0] < stop_fraction * max(macro_stresses) else 0
+    nb_broken_steps = nb_broken_steps + 1 if sigma_ij[ic, ic] < stop_fraction * max(macro_stresses) else 0
     cell_broken = stop_fraction > 0 and nb_broken_steps >= stop_steps
     if step in (len(load_steps) // 2, len(load_steps) - 1) or cell_broken:
         snapshots[load] = np.copy(tensor_operations.to_host(damage.s[0, 0]))
