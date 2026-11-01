@@ -27,7 +27,7 @@ dependencies = [
     "numpy",
     "scipy",
     "muGrid",
-    "NuMPI",
+    "NuMPI @ git+https://github.com/muSpectre/NuMPI@feat/tr_precond",  # tr_newton_bounded with precond= (not yet released); remove the pin once NuMPI is released with it
     "mpi4py",
     "jax",
     "matplotlib"
