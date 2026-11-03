@@ -74,12 +74,41 @@ CG iterations (dual: work = 2 × iterations); σ_xx/E_xx agrees between the prec
    phase**: here all phases are pixel-wise constant (no smoothed bands) and the grain contrast is only 3; the only
    strong contrast is a sharp void, which Green handles well.
 
+## Stage 2: AT2 crack growth from the pre-crack (`example_2D_phase_field_fracture_AT2.py`, small scale)
+
+Copy of the gypsum AT2 script with `POLYCRYSTAL=1` (grain stiffness E/E_min per pixel, ν = 0.3; pre-crack + void layer
+as pores of stiffness PORE_CONTRAST = 1e-4, damage free there) and `GC_GB=<factor>` (Gc × factor on the 2-pixel
+grain-boundary band, 38 % of the cell). Gc = 1e-5 (units E_min = 1), LOAD_MAX = 6e-3 in 60 steps, damage solver
+Green-Jacobi in every run, CPU serial. Runs: `run_stage2_small.sh 64|128`, `run_stage2_gb.sh 128 0.3`;
+crack path: `plot_stage2_crack_path.py` → `figures/polycrystal_stage2_crack_path.png`.
+
+Total elastic work (CG iterations of the elastic solves over the whole run, dual × 2); all three give the same
+stress-strain curve (6 digits):
+
+| run | l (l/h) | peak σ_xx | Green | Green-Jacobi | dual |
+|---|---|---|---|---|---|
+| 64², constant Gc | 0.031 (2) | 3.80e-3 | **43.7k** | 47.8k | 221.6k |
+| 128², constant Gc | 0.031 (4) | 3.78e-3 | **53.5k** | 65.1k | 198.9k |
+| 128², GB Gc × 0.3 | 0.016 (2) | 3.30e-3 | **66.4k** | 111.3k | 416.4k |
+
+* The crack grows from the tip of the pre-crack down to the bottom (the periodic image of the void layer) and cuts
+  the cell; with constant Gc it is almost straight (the grains differ only in E, contrast 3). Most of the cost is the
+  break step (one step with 136–274 staggered iterations).
+* Weak grain boundaries (Gc × 0.3): the crack zig-zags and breaks in two stages; 61 % of its pixels lie on the
+  boundary band (44 % with constant Gc, 38 % = band fraction): partly intergranular, but still mostly straight –
+  at 128² a grain is only ≈ 8.5 pixels ≈ 4 l, the 2-pixel band is coarse.
+* **Green stays the cheapest in every run**, also with the zig-zag crack; Green-Jacobi 1.1–1.7×, the dual 4–6×.
+  The dual is slow already before any damage (≈ 140 iterations per solve at 64², as in stage 1 with k = 1e-4):
+  the thin void (pre-crack + void layer), not the damage, is what slows it down here. Unlike the gypsum stiff
+  grains, the damage band does not hurt Green here (grain contrast only 3).
+
 ### Possible next steps
 
 * Diagnostic for comment 3 (small, linear): dual with k = 1e-6 and (a) the crack only, no void layer; (b) a thicker
   crack (3–5 pixels) – which of the thin crack / the full-width layer drives the dual's growth.
 * Larger grids (256², 512² ≈ the paper's 35 pixels per grain) – only after agreement (laptop GPU is busy with the gypsum
   queue; NEMO GPUs are in maintenance).
-* Stage 2: AT2 crack growth from the pre-crack through the polycrystal (the AT2 script with a per-pixel stiffness
-  field, optionally Gc per grain / weaker grain boundaries) – here the damage creates smooth soft bands, where Green
-  struggled in the gypsum grains, so the ranking may change again.
+* Clearer intergranular cracking: fewer, larger grains (e.g. 6 × 6) at 128², or 256², and/or GC_GB = 0.1.
+* Literature (Matti Schneider, KIT): Ernesti, Schneider, Böhlke 2020 (CMAME 363, FFT phase-field fracture solvers on
+  heterogeneous microstructures), Ernesti & Schneider 2023 (Arch. Appl. Mech. 93, effective crack energy with weak
+  interfaces), Risthaus & Schneider 2025 (IJNME 126, FFT solvers with voids and pores) – compare once the PDFs are here.
