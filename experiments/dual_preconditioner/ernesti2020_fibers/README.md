@@ -57,6 +57,34 @@ Elastic preconditioners (alternating minimisation, all give the same curve):
 4. The number of staggered iterations of the break step falls with the resolution (264 → 199 → 118) and is the same
    for all preconditioners – the outer scheme, not the preconditioner, sets it (the paper's heavy ball attacks this).
 
+## 8 realisations at 256² (seeds 0–7, Green and dual; `run_fibers_seeds.sh`, gallery `figures/fibers_gallery_N256.png`)
+
+| seed | peak σ_xx (strain) | Green work | dual work | Green / dual | worst step: Green its/solve | dual its/solve |
+|---|---|---|---|---|---|---|
+| 0 | 90.9 MPa (0.8 %) | 104.6k | **83.8k** | 1.25 | 826 | 326 |
+| 1 | 82.2 (0.7) | 237.4k | **232.8k** | 1.02 | 531 | 284 |
+| 2 | 97.2 (0.9) | 202.4k | **163.0k** | 1.24 | 732 | 299 |
+| 3 | 91.0 (0.8) | **178.0k** | 211.3k | 0.84 | 413 | 275 |
+| 4 | 85.6 (0.7) | 199.4k | **144.9k** | 1.38 | 610 | 234 |
+| 5 | 91.2 (0.8) | **212.0k** | 272.7k | 0.78 | 790 | 508 |
+| 6 | 90.0 (0.8) | 111.6k | **63.2k** | 1.77 | 984 | 261 |
+| 7 | 96.8 (0.9) | 228.6k | **123.8k** | 1.85 | 908 | 242 |
+| mean | 90.6 ± 5.0 (0.80 ± 0.08) | 184k ± 50k | **162k ± 73k** | **1.26** | | |
+
+Wall time (14 runs in parallel on 16 cores): Green 6556 s, dual 5785 s on average (dual 12 % faster).
+
+* **The dual is cheaper on 6 of 8 structures** (up to 1.85×), Green on 2 (#3, #5: 0.84, 0.78); on average 12 % less
+  work and wall time.
+* In the expensive load step the dual always needs fewer iterations per solve (1.3–3.8×), but it pays off only when
+  the ratio exceeds 2 (its cost per iteration): #3 and #5 have ratios 1.5 and 1.6.
+* Both preconditioners see the same staggered iterations; the worst load step needs 92k–220k CG iterations with
+  Green and 25k–132k with the dual (the paper's cap was 30 000 per step, with an adaptive inner tolerance – not
+  directly comparable to our fixed 1e-6).
+* Physics: 0.80 ± 0.08 % / 90.6 ± 5.0 MPa vs the paper's 1.29 ± 0.03 % / 114.1 ± 0.8 MPa – lower and with 6× more
+  scatter: our RSA packings (near-touching fibres, visible as damage concentrations in narrow ligaments) differ
+  from the paper's Torquato–Jiao packings. Crack paths are like the paper's Fig. 13 (one winding crack per cell,
+  perpendicular to the load, around the fibres).
+
 ### Open
 * Failure strain 0.9 % vs 1.3 %: packing (Torquato–Jiao-like, larger gaps), trivial split / no history like the paper.
-* More seeds (paper: 8), 512², Green-Jacobi at 256², a dual heavy-ball outer scheme.
+* 512² (on the cluster), Green-Jacobi at 256², a Torquato–Jiao-like packing, a dual heavy-ball outer scheme.
