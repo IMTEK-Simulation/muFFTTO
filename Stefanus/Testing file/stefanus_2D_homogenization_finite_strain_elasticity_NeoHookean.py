@@ -19,11 +19,26 @@ from muFFTTO import visualization_utils
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 50                  # Number of increment for the applied load
+N_inc = 10                 # Number of increment for the applied load
 cg_tol = 1e-6               # CG tolerance, ABSOLUTE on ||b - Ax|| (used as atol, rtol = 0)
 E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = True      # plot the deformed cell after every load increment
+plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
 # ===============================================
+
+# ====================================================================================================================================================
+# Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
+LOAD_MODE = 'manual'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
+LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
+EPS_MAX = {'X': 0.016, 'Y': 0.026}              # final nominal strain = critical strains eps_cr (paper text)
+# Free lateral side, SIMPLE version: lateral macro strain = +nu * compressive strain, with the small-strain
+# Poisson ratio printed as "nu = ..." by the Fig. 4 block of the small-strain script.
+# Use the value for the SAME NX and element_type as this run!
+NU_LAT = {'X': 0.2575, 'Y': 0.2797}             # small strain, NX = 64, bilinear_rectangle
+PAPER_SLOPE_MPA = {'X': {'Exp.': 0.32, 'Sim. periodic': 0.35},   # initial slopes digitised from Fig. 4,
+                   'Y': {'Exp.': 0.46, 'Sim. periodic': 0.50}}   # approx. +-5 %
+# =============================================================================================
+# ====================================================================================================================================================
 
 # ============================================================================
 # argument parsing
@@ -119,9 +134,9 @@ discretization = domain.Discretization(cell=my_cell,
 # ============================================================================
 file_folder_path   = os.path.dirname(os.path.realpath(__file__))
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}/')
 
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
@@ -243,11 +258,25 @@ def M_fun_Green(x, Px):
 
 # ============================================================================
 # macroscopic loading
-# ============================================================================
-load_pattern       = np.zeros((dim, dim))       # total macro gradient F - I for E_LOAD = 1
-load_pattern[0, 1] = 0.03                       # shear
-load_pattern[1, 1] = 0.02                       # stretch in y
+# # ============================================================================
+k, l = (0, 1) if LOAD_DIRECTION == 'X' else (1, 0)   # k = loaded axis, l = free lateral axis
+load_pattern       = np.zeros((dim, dim))       # total macro gradient F - I
+if LOAD_MODE == 'fig4':
+    load_pattern[k, k] = -EPS_MAX[LOAD_DIRECTION]                           # uniaxial compression
+    load_pattern[l, l] = +NU_LAT[LOAD_DIRECTION] * EPS_MAX[LOAD_DIRECTION]  # lateral expansion (free side, simple)
+else:                                           # 'manual': set any components here (index [i, j] = du_i/dx_j)
+    load_pattern[0, 1] = 0.01                   # shear
+    load_pattern[0, 0] = 0.04                   # stretch in x
+    # load_pattern[1, 1] = 0.05                 # stretch in y
 macro_gradient_inc = E_LOAD * load_pattern / float(ninc)
+
+if MPI.COMM_WORLD.rank == 0:
+    if LOAD_MODE == 'fig4':
+        print(f'load: compression in {LOAD_DIRECTION} up to eps = {E_LOAD * EPS_MAX[LOAD_DIRECTION]} in {ninc} increments '
+              f'({E_LOAD * EPS_MAX[LOAD_DIRECTION] / ninc:.2e} per increment), lateral nu = {NU_LAT[LOAD_DIRECTION]}')
+    else:
+        print(f'load (manual): total F - I =\n{E_LOAD * load_pattern}\nin {ninc} increments, '
+              f'largest component per increment = {np.abs(macro_gradient_inc).max():.2e}')
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,
@@ -271,6 +300,22 @@ sum_CG_its      = 0
 sum_Newton_its  = 0
 iteration_total = 0
 start_time      = time.time()
+
+# ====================================================================================================================================================
+P_weighted = discretization.get_displacement_gradient_sized_field(name='P_weighted')
+
+
+def average_P():
+    """volume average of the 1st Piola-Kirchhoff stress P (same averaging as get_homogenized_stress_mugrid)"""
+    P_weighted.s[...] = stress_field.s[...]
+    discretization.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=P_weighted)
+    return discretization.mpi_reduction.sum(P_weighted.s, axis=tuple(range(-dim - 1, 0))) / \
+        discretization.cell.domain_volume
+
+
+# history per increment (index 0 = undeformed state)
+hist = {'eps_nominal': [0.0], 'P_load': [0.0], 'P_lat': [0.0], 'lateral_stretch': [1.0],
+        'H': [np.zeros((dim, dim))], 'P': [np.zeros((dim, dim))]}   # full macro F - I and average P# ====================================================================================================================================================
 
 for inc in range(ninc):
     if discretization.communicator.rank == 0:
@@ -335,8 +380,8 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             prec=M_fun_Green,
-            atol=cg_tol, rtol=0,
-            maxiter=5000,
+            rtol=1e-3, atol=cg_tol,
+            maxiter=10000,
             callback=callback,
         )
 
@@ -414,11 +459,30 @@ for inc in range(ninc):
                 MPI.COMM_WORLD
             )
 
+    # ====================================================================================================================================================
         # convergence check
-        if norm_strain_fluc / En < 1e-8 and iiter > 0:
+        if (norm_strain_fluc / En < 1e-8 or norm_rhs / norm_rhs_0 < 1e-6) and iiter > 0:
             break
         if iiter >= 100:
             break
+
+    # homogenized stress and macro strain of this converged increment
+    total_macro_gradient = (inc + 1) * macro_gradient_inc        # macro F - I
+    P_avg = average_P()
+    hist['eps_nominal'].append(-total_macro_gradient[k, k])      # compression > 0 (paper convention)
+    hist['P_load'].append(P_avg[k, k])
+    hist['P_lat'].append(P_avg[l, l])
+    hist['lateral_stretch'].append(1.0 + total_macro_gradient[l, l])
+    hist['H'].append(total_macro_gradient.copy())
+    hist['P'].append(P_avg.copy())
+    if discretization.communicator.rank == 0:
+        if LOAD_MODE == 'fig4':
+            print(f'  eps = {hist["eps_nominal"][-1]:.5f} | nominal stress = {-P_avg[k, k] * S_REF:.6f} MPa | '
+                  f'lateral stress = {P_avg[l, l] * S_REF:+.2e} MPa ({abs(P_avg[l, l] / P_avg[k, k]):.2%} of axial)')
+        else:
+            print(f'  F - I = {np.array2string(total_macro_gradient.ravel(), precision=5)} | '
+                  f'P [MPa] = {np.array2string(P_avg.ravel() * S_REF, precision=6)}  (order 00, 01, 10, 11)')    # ====================================================================================================================================================
+
     if plot_load_cases and discretization.communicator.size == 1:
         # Plot the first two components of the solution field
         # Calculate total macroscopic gradient (F - I)
@@ -433,7 +497,8 @@ for inc in range(ninc):
         visualization_utils.plot_field_on_grid(
             coordinates_for_plot=x_plot_ixyz,
             field_to_plot=phase_field.s[0, 0],
-            name=f'phase (0 matrix, 1 void, 2 stiff), load increment {inc}')
+            name=(f'compression {LOAD_DIRECTION}: eps = {hist["eps_nominal"][-1]:.4f} ({inc + 1}/{ninc})'
+                  if LOAD_MODE == 'fig4' else f'manual load, increment {inc + 1}/{ninc}'))
 # ============================================================================
 # timing and summary
 # ============================================================================
@@ -454,3 +519,52 @@ if discretization.communicator.rank == 0:
     print(f'Total Newton its : {sum_Newton_its}')
     print(f'Elapsed time     : {elapsed_time:.2f} s  ({elapsed_time / 60:.2f} min)')
     np.savez(data_folder_path + 'info_log_final.npz', **_info)
+
+    # ------------------------------------------------------------------------
+    # all load modes: full macro F - I and average P per increment -> CSV
+    # ------------------------------------------------------------------------
+    H_all = np.array(hist['H']).reshape(-1, dim * dim)
+    P_all = np.array(hist['P']).reshape(-1, dim * dim) * S_REF
+    fname_all = data_folder_path + f'stress_strain_{LOAD_MODE}.csv'
+    np.savetxt(fname_all, np.column_stack([np.arange(len(H_all)), H_all, P_all]), delimiter=',', fmt='%.8f',
+               comments='', header='increment,H00,H01,H10,H11,P00 [MPa],P01 [MPa],P10 [MPa],P11 [MPa]')
+    print(f'saved {fname_all}   (H = F - I macro, P = 1st Piola-Kirchhoff average)')
+
+if discretization.communicator.rank == 0 and LOAD_MODE == 'fig4':
+    # ------------------------------------------------------------------------
+    # Fig. 4 data: nominal strain / nominal stress (compression > 0) -> CSV
+    # ------------------------------------------------------------------------
+    eps_nom    = np.array(hist['eps_nominal'])
+    stress_MPa = -np.array(hist['P_load']) * S_REF               # nominal stress = -P_kk (1st Piola-Kirchhoff)
+    lat_MPa    = np.array(hist['P_lat']) * S_REF                 # should be ~0 (free lateral side)
+    stretch    = np.array(hist['lateral_stretch'])
+    nu_nom     = np.zeros_like(eps_nom)
+    nu_nom[1:] = (stretch[1:] - 1.0) / eps_nom[1:]               # nominal Poisson ratio (here = NU_LAT by construction)
+    fname = data_folder_path + f'Fig4_finite_strain_{LOAD_DIRECTION}.csv'
+    np.savetxt(fname, np.column_stack([eps_nom, stress_MPa, lat_MPa, stretch, nu_nom]),
+               delimiter=',', fmt='%.8f', comments='',
+               header=f'nominal strain eps_{LOAD_DIRECTION} [-],nominal stress [MPa],lateral stress [MPa],'
+                      f'lateral stretch [-],nominal Poisson ratio [-]')
+    print(f'saved {fname}')
+    print(f'initial slope = {stress_MPa[1] / eps_nom[1]:.4f} MPa | secant slope at eps = {eps_nom[-1]:.4f}: '
+          f'{stress_MPa[-1] / eps_nom[-1]:.4f} MPa | max |lateral / axial stress| = '
+          f'{np.max(np.abs(lat_MPa[1:] / stress_MPa[1:])):.2%}')
+
+    if plot_fig4:
+        from matplotlib import pyplot as plt
+        fig, ax = plt.subplots(figsize=(5, 4.2))
+        ax.plot(eps_nom, stress_MPa, 'o-', color='tab:green', ms=3,
+                label=f'muFFTTO finite strain ({number_of_pixels[0]}x{number_of_pixels[1]}, {element_type})')
+        for (name, slope), style in zip(PAPER_SLOPE_MPA[LOAD_DIRECTION].items(), ['k-', 'r-.']):
+            ax.plot(eps_nom, slope * eps_nom, style, lw=1, label=f'paper {name} (initial slope, digitised)')
+        ax.set_xlim(0, eps_nom[-1])
+        ax.set_ylim(bottom=0)
+        ax.set_xlabel(rf'Nominal strain, $\varepsilon_{LOAD_DIRECTION}$')
+        ax.set_ylabel('Nominal stress (MPa)')
+        ax.set_title(f'Fig. 4{"a" if LOAD_DIRECTION == "X" else "b"}: uniaxial compression in {LOAD_DIRECTION} '
+                     f'(up to eps_cr)', fontsize=10)
+        ax.legend(fontsize=7, loc='upper left')
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(figure_folder_path + f'Fig4_finite_strain_{LOAD_DIRECTION}.png', dpi=200)
+        plt.show()
