@@ -1,0 +1,4 @@
+*.pdf
+exp_data/
+logs/
+__pycache__/
