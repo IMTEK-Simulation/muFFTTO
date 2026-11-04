@@ -8,7 +8,7 @@ example_2D_elasticity_TO.py (2026-11-04). Differences to the 2D script:
   - start design (sin 4 pi x + sin 4 pi y + sin 4 pi z + 3) / 6 + noise; INIT_FROM: periodic trilinear interpolation
   - no interactive plots
 Options (environment) as in 2D: NPIX, ETA, SOFT_EXP, CG_MODE, GTOL, MAXITER, HISTORY_EVERY, INIT_FROM, RUN_SUFFIX,
-DEVICE, PF_NORMALIZED, PF_WEIGHT, STRESS_WEIGHT; first argument: Green / Green_Jacobi / dual.
+DEVICE, LOW_MEMORY, PF_NORMALIZED, PF_WEIGHT, STRESS_WEIGHT; first argument: Green / Green_Jacobi / dual.
 """
 import sys
 import os
@@ -103,7 +103,9 @@ discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
                                        element_type=element_type,
-                                       device=device)
+                                       device=device,
+                                       # LOW_MEMORY=1: half the GPU memory (192^3 and larger); see Discretization
+                                       low_memory=os.environ.get('LOW_MEMORY', '0') == '1')
 print(f'{MPI.COMM_WORLD.rank:6} {MPI.COMM_WORLD.size:6} {str(discretization.fft.nb_domain_grid_pts):>15} '
       f'{str(discretization.fft.nb_subdomain_grid_pts):>15} {str(discretization.fft.subdomain_locations):>15}')
 
@@ -642,6 +644,9 @@ if __name__ == '__main__':
     )
     if history_writer is not None:
         history_writer.close()
+    # success False = iteration cap or failed line search; sbatch_TO3D_gpu.sh continues the run then
+    if MPI.COMM_WORLD.rank == 0:
+        print(f'OPTIMIZER success={bool(xopt_FE_MPI.success)} nit={xopt_FE_MPI.nit} message: {xopt_FE_MPI.message}')
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xp.asarray(xopt_FE_MPI.x).reshape([1, 1, *discretization.nb_of_pixels])
@@ -755,6 +760,8 @@ if __name__ == '__main__':
     io_utils.save_fields(output_name + '_final.nc', [solution_phase], attributes={
         **parameters,
         'nb_iterations': iterat,
+        'optimizer_success': int(bool(xopt_FE_MPI.success)),
+        'optimizer_message': str(xopt_FE_MPI.message),
         'elapsed_time': time.time() - start_time,
         'homogenized_C_voigt': material_models.compute_Voigt_notation_4order(homogenized_C_ijkl),
         'target_stresses': target_stresses,

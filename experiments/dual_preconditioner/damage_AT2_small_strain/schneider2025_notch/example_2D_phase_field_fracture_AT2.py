@@ -204,8 +204,9 @@ phase = microstructure_library.get_geometry(nb_voxels=disc_u.nb_of_pixels,
 if geometry_file is not None:
     fine = np.load(geometry_file)
     xy = np.asarray(tensor_operations.to_host(disc_u.fft.coords))
-    idx = [np.clip(np.floor(xy[a] * fine.shape[a] + 1e-9).astype(int), 0, fine.shape[a] - 1) for a in range(2)]
-    phase = fine[idx[0], idx[1]].astype(float)
+    assert fine.ndim == dim_problem, f'GEOMETRY_FILE is {fine.ndim}D, DIM = {dim_problem}'
+    idx = [np.clip(np.floor(xy[a] * fine.shape[a] + 1e-9).astype(int), 0, fine.shape[a] - 1) for a in range(fine.ndim)]
+    phase = fine[tuple(idx)].astype(float)
 if notch is not None:                                       # a pixel takes the phase of its lower-left node
     xy = np.asarray(tensor_operations.to_host(disc_u.fft.coords))
     hy = domain_size[1] / number_of_pixels[1]
