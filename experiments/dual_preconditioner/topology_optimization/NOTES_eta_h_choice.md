@@ -186,3 +186,28 @@ Caveat: Green-Jacobi can break down at the extreme. At 1e5 on 1024² with η = 1
 
 - **Few runs actually converged.** The L-BFGS stop is `GTOL=0` with `xtol = 1e-3` on the phase field, capped at 500 iterations. All η ≤ 2h runs at 1024², and several 4h runs, hit the cap. Their final designs are the iterate at step 500, though they hardly change any more.
 - **Only one family of designs is covered:** one load case set (target stiffness) and one volume fraction. P ≈ 4.5 is specific to this target. For other targets, apply the rule η·P ≲ 0.035 with that design's own perimeter.
+
+## Objective normalisation: phase-field term = perimeter (2026-11-04)
+
+The study above used the raw bracket with weight 1, against a stress term of weight 5/3 per load case:
+
+    f = (5/3) Σ_Γ ‖σ̄ − σ*‖²/‖σ*‖²  +  [η ∫|∇ρ|² + (1/η) ∫ρ²(1−ρ)²]
+
+Here the bracket is ≈ P/3, not P.
+
+muTopOpt (≥ v1.1.0) normalises the phase-field term so that its weight is the penalty per unit relative interface measure:
+
+    f = a Σ_Γ ‖σ̄ − σ*‖²/‖σ*‖²  +  w / (c_W V^((d−1)/d)) · [bracket],   c_W = 1/3
+
+As η → 0 the phase-field term → w · P, where P is the interface length in 2D or the interface area in 3D, in units of the cell size.
+
+`example_2D_elasticity_TO.py` now has this as an option:
+- `PF_NORMALIZED=1` switches it on;
+- `PF_WEIGHT` sets w (default 0.2);
+- `STRESS_WEIGHT` sets a (default 1).
+
+**w = 0.2 with a = 1 has the same minimiser as the old objective**, and its value is 3/5 of the old one. This was checked at 32²: the first objective and gradient are exactly 3/5 of the old values. Runs with the new objective are named `..._pfw<w>_...` instead of `..._w_5.0_...`.
+
+The 2D default stays `PF_NORMALIZED=0` while the old study still runs on NEMO: its launchers and analysis scripts expect the old objective and file names. The 3D script uses the normalised form by default.
+
+muTopOpt's default w = 1 penalises the perimeter 5× more than this study. That gives a smaller P, so the upper bound 0.035/P on η moves up.

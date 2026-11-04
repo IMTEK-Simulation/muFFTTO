@@ -44,7 +44,21 @@ preconditioner_type = sys.argv[1] if len(sys.argv) > 1 else "Green_Jacobi"
 show_plots = os.environ.get('SHOW_PLOTS', '1') == '1'  # phase field figure after every optimizer iteration (serial)
 eta = float(os.environ['ETA']) if 'ETA' in os.environ else max(1 * pixel_size)  # Filter width (ETA: fixed in physical units)
 init_noise_grid = int(os.environ.get('INIT_NOISE_GRID', '0'))  # >0: start noise drawn on this grid (see below)
-weight = 5.  # Weight for the stress match term
+weight = 5.  # Weight for the stress match term (PF_NORMALIZED=0 only)
+# Objective with PF_NORMALIZED=1 (the convention of muTopOpt >= 1.1; default of the 3D script):
+#   f = a * sum_G |sigma_G - sigma*_G|^2 / |sigma*_G|^2  +  w_pf / (c_W V^((d-1)/d)) * [eta int |grad rho|^2 + 1/eta int W]
+# with W = rho^2 (1 - rho)^2 and c_W = 2 int_0^1 sqrt(W) = 1/3: as eta -> 0 the bracket -> c_W * (interface length /
+# area), so the phase-field term -> w_pf * P (P: interface length in units of the cell side, its area in 3D), and
+# w_pf = PF_WEIGHT is the penalty per unit relative interface measure, the same meaning in 2D and 3D and for any cell
+# size. a = STRESS_WEIGHT per load case. PF_WEIGHT = 0.2 with a = 1 has the minimiser of the earlier objective
+# (= 3/5 of it).
+# PF_NORMALIZED=0 (default here until the 2026-11 eta / contrast study on NEMO has finished, whose launchers and
+# analysis scripts expect it): the earlier objective, weight / nb_load_cases per load case and the raw bracket with
+# weight 1 (data files ..._w_5.0_...).
+pf_normalized = os.environ.get('PF_NORMALIZED', '0') == '1'
+pf_weight = float(os.environ.get('PF_WEIGHT', 0.2))
+stress_weight = float(os.environ.get('STRESS_WEIGHT', 1.0))
+C_W = 1.0 / 3.0
 cg_setup = {'cg_tol': 1e-3}
 # CG_MODE='energy': every forward and adjoint solve warm started from the previous solution and stopped on the
 # energy-error estimate relative to the energy of the solution, ||e_k||_K <= 1e-6 ||u||_K (delay 10; see
@@ -194,12 +208,17 @@ dual_temp_1 = discretization.get_unknown_size_field(name='dual_temp_1')
 dual_temp_2 = discretization.get_unknown_size_field(name='dual_temp_2')
 
 w = weight / nb_load_cases
+pf_scale = 1.0                  # multiplier of the raw phase-field bracket
+if pf_normalized:
+    w = stress_weight
+    pf_scale = pf_weight / (C_W * float(np.prod(domain_size)) ** ((dim - 1) / dim))
 phase_field_regularization = True  # gradient + double-well terms in the objective
 quad_point_density = None  # optional map of the interpolated field at the quadrature points to the density, applied
 #                            in the forward and adjoint problems (p = 1 only: dC/drho does not depend on rho)
 
 if MPI.COMM_WORLD.rank == 0:
-    print(f'Penalty p: {p}, Weight w: {w}, Eta: {eta}')
+    print(f'Penalty p: {p}, stress weight per load case: {w}, phase-field multiplier: {pf_scale:g}'
+          + (f' (perimeter weight {pf_weight:g})' if pf_normalized else ' (raw bracket)') + f', Eta: {eta}')
 
 
 def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
@@ -240,6 +259,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             eta=eta,
             output_array=s_sensitivity_field,
             double_well_depth=double_well_depth_test)
+        f_phase_field *= pf_scale             # -> pf_weight * relative interface measure (PF_NORMALIZED=1)
+        s_sensitivity_field.s[...] *= pf_scale
 
     objective_function = f_phase_field
     norms_pf.append(objective_function)
@@ -457,12 +478,16 @@ if __name__ == '__main__':
     cg_tag = 'energy-warm' if cg_mode == 'energy' and cg_setup['cg_warm_start'] else cg_mode
     output_name = data_folder_path + (f'N{n_pix}_soft{soft_phase:g}_{cg_tag}_' if (n_pix != 64 or soft_phase_exponent != 5
                                                                               or cg_mode != 'residual') else '') \
-        + f'{preconditioner_type}_eta_{eta}_w_{weight}_{optimizer}' + (
+        + f'{preconditioner_type}_eta_{eta}_' + (
+        (f'pfw{pf_weight:g}' + (f'_sw{stress_weight:g}' if stress_weight != 1 else '')) if pf_normalized
+        else f'w_{weight}') + f'_{optimizer}' + (
         f'_vol_{volume_fraction}' if volume_fraction is not None else '') + (
         f'_noise{init_noise_grid}' if init_noise_grid else '') + (
         f'_dw{double_well_depth_test:g}' if double_well_depth_test != 1 else '') + os.environ.get('RUN_SUFFIX', '')
     parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
                   'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
+                  'pf_normalized': int(pf_normalized), 'pf_weight': pf_weight, 'stress_weight': stress_weight,
+                  'pf_scale': pf_scale,
                   'soft_phase': soft_phase, 'double_well_depth': double_well_depth_test, 'optimizer': optimizer, 'cg_mode': cg_mode,
                   'volume_fraction': volume_fraction if volume_fraction is not None else -1.0,
                   'target_C_voigt': material_models.compute_Voigt_notation_4order(elastic_C_target)}
@@ -499,6 +524,29 @@ if __name__ == '__main__':
             phase_field_0.s[0, 0] += xp.asarray(0.5 * noise[0, 0, x0:x0 + nx, y0:y0 + ny])
         else:
             phase_field_0.s[...] += xp.asarray(0.5 * np.random.rand(*phase_field_0.s.shape))
+
+    # INIT_FROM=<file>_final.nc: start from a saved design instead (e.g. the converged solution of a coarser grid, for
+    # runs that drifted to a grey mean field from the noisy start); nodal values at x_i = i / n, periodic bilinear
+    # interpolation onto this grid (any grid ratio), clipped to [0, 1]
+    init_from = os.environ.get('INIT_FROM', '')
+    if init_from:
+        # a _final.nc (phase_field_solution) or, to continue a run cut at the time limit, a _history.nc (last iterate)
+        init_fields = io_utils.read_file(init_from).fields
+        init_name = 'phase_field_solution' if 'phase_field_solution' in init_fields else 'phase_field_iterate'
+        coarse = np.asarray(init_fields[init_name][-1]).reshape(-1)
+        nc = int(round(np.sqrt(coarse.size)))
+        coarse = coarse.reshape(nc, nc)
+        coords = to_host(discretization.fft.coords)                     # [dim, nx_sub, ny_sub] in [0, 1)
+        u, v = coords[0] * nc, coords[1] * nc
+        i0, j0 = np.floor(u).astype(int), np.floor(v).astype(int)
+        fu, fv = u - i0, v - j0
+        i0, j0 = i0 % nc, j0 % nc
+        i1, j1 = (i0 + 1) % nc, (j0 + 1) % nc
+        interp = ((1 - fu) * (1 - fv) * coarse[i0, j0] + fu * (1 - fv) * coarse[i1, j0]
+                  + (1 - fu) * fv * coarse[i0, j1] + fu * fv * coarse[i1, j1])
+        phase_field_0.s[0, 0] = xp.asarray(np.clip(interp, 0, 1))
+        if MPI.COMM_WORLD.rank == 0:
+            print(f'Initial design from {init_from} ({nc}^2 -> {n_pix}^2)')
 
     iterat = 0
     phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
@@ -563,7 +611,9 @@ if __name__ == '__main__':
     # GTOL overrides it, e.g. GTOL=0: stop only on the step test (xtol: largest change of the phase < 1e-3) or maxiter
     # -- the max-norm of the gradient does not scale exactly with h^2 (scaled, 128^2 still stopped at 52 evaluations)
     gtol = float(os.environ.get('GTOL', gtol))
-    optimizer_options = {'l_bfgs': dict(xtol=1e-3, maxiter=500, maxcor=20, c1=1e-4, max_halvings=40),
+    # MAXITER: iteration cap (a continued run gets the remainder of the 500 of the original one)
+    max_opt_iterations = int(os.environ.get('MAXITER', 500))
+    optimizer_options = {'l_bfgs': dict(xtol=1e-3, maxiter=max_opt_iterations, maxcor=20, c1=1e-4, max_halvings=40),
                          'mma': dict(xtol=1e-3, maxiter=500),
                          'tr_newton': dict(maxiter=200)}[optimizer]
     xopt_FE_MPI = solvers_nonlinear.minimize(
