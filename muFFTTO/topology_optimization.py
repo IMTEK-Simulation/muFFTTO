@@ -1033,14 +1033,15 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     # int(∂ C/ ∂ rho_i  * (macro_grad + micro_grad)) dx / | domain |
 
     # compute strain field from to displacement and macro gradient
-    strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdofsewpf')
+    # shared scratch (see Discretization.apply_system_matrix_mugrid): nothing below uses it
+    strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='grad_field_temporary')
     discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
                                                               grad_u_ijqxyz=strain_ijqxyz)
-    strain_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    strain_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
 
     # compute stress field
     # dsigma/drho_ij = dC/drho_ijkl eps_kl
-    strain_ijqxyz.s[...] = dmaterial_data_drho.apply(strain_ijqxyz.s)
+    dmaterial_data_drho.apply(strain_ijqxyz.s, out=strain_ijqxyz.s)
     # this is actually stress
 
     # stress difference
@@ -1048,9 +1049,9 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # (Sigma_t - Sigma_h) : dsigma/drho at every quadrature point -> [1, 1, q, x, y(, z)]
     double_contraction_stress_qxyz_FE = discretization.get_quad_field_scalar(name='temp_at_quads')
-    double_contraction_stress_qxyz_FE.s[0, 0] = np.einsum('ij,ijqxy...->qxy...',
-                                                          stress_difference_ij,
-                                                          strain_ijqxyz.s)
+    for q in range(strain_ijqxyz.s.shape[2]):           # one quadrature point at a time (small temporaries)
+        double_contraction_stress_qxyz_FE.s[0, 0, q] = np.einsum('ij,ij...->...', stress_difference_ij,
+                                                                 strain_ijqxyz.s[:, :, q])
     # N^T W [...] : integrate against the nodal shape functions -> nodal field
     dfstress_drho = discretization.get_scalar_field(name='dfstress_drho_output')
     discretization.apply_N_transposed_operator_mugrid(
@@ -1207,7 +1208,8 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
         [(p * phase_field_at_quad_poits_1qxyz.s[0, 0] ** (p - 1), base_material_data_ijkl - void_material_data_ijkl)])
     # compute strain field from to displacement and macro gradient
     # -> stress_ijqxyz = dC/drho : (E + grad^s u)  ("stress derivative")
-    stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='stress_ijqxyz_local_at_pdapwpf')
+    # shared scratch (see Discretization.apply_system_matrix_mugrid); get_stress_field_mugrid writes into it directly
+    stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='grad_field_temporary')
 
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=dmaterial_data_field_drho_ijklqxyz,
@@ -1222,16 +1224,17 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
 
     # gradient of adjoint_field
     adjoint_field_gradient_ijqxyz = discretization.get_displacement_gradient_sized_field(
-        name='adjoint_field_gradient_ijqxyz__pdapwpf')
+        name='grad_field_temporary_2')        # second shared scratch, alive together with the first
     # g = B^T W sigma uses the full gradient operator, so lambda^T dg/drho
     # contracts the full gradient of lambda with dsigma/drho
     discretization.apply_gradient_operator_mugrid(u_inxyz=adjoint_field_inxyz,
                                                   grad_u_ijqxyz=adjoint_field_gradient_ijqxyz)
     # ddot22 = lambda A2, B2:  np.einsum('ijqxyz  ,jiqxyz  ->qxyz    ', A2, B2)
     double_contraction_stress_qxyz = discretization.get_quad_field_scalar(name='double_contraction_stress_qxyz')
-    double_contraction_stress_qxyz.s[0, 0] = np.einsum('ij...,ij...->...',
-                                                       adjoint_field_gradient_ijqxyz.s,
-                                                       stress_ijqxyz.s)  # this is stress, It just cupy the same name
+    for q in range(stress_ijqxyz.s.shape[2]):           # one quadrature point at a time (small temporaries)
+        double_contraction_stress_qxyz.s[0, 0, q] = np.einsum('ij...,ij...->...',
+                                                              adjoint_field_gradient_ijqxyz.s[:, :, q],
+                                                              stress_ijqxyz.s[:, :, q])
 
     output_field_inxyz.s.fill(0)
     discretization.fft.communicate_ghosts(double_contraction_stress_qxyz)
@@ -1440,16 +1443,14 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # and Delta = Sigma_t - Sigma_h:
     #   d f_sigma/du = -2 / (|Omega| |Sigma_t|^2) B^T W (C^T : Delta),
     #   (C^T : Delta)_kl = Delta_ij C_ijkl   (transpose: contract the FIRST index pair)
-    # NOTE: this buffer has the same name as stress_field_ijqxyz below, i.e. the
-    # same memory is reused once the RHS has been assembled.
-    stress_difference_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
+    # Shared scratch 'grad_field_temporary' (see Discretization.apply_system_matrix_mugrid), as is
+    # stress_field_ijqxyz below: free once the RHS is assembled (the adjoint CG overwrites it)
+    stress_difference_ijqxyz = discretization.get_gradient_size_field(name='grad_field_temporary')
     stress_difference_ijqxyz.s[...] = 0.0
     _xp = domain.tensor_operations.get_array_module(stress_difference_ijqxyz.s)     # CPU or GPU field
     stress_difference_ijqxyz.s[...] += _xp.asarray(stress_difference_ij).reshape(
         stress_difference_ij.shape + (1,) * (dim + 1))
-    stress_difference_ijqxyz.s[...] = material_data_field_rho_ijklqxyz.apply(stress_difference_ijqxyz.s,
-                                                                              transposed=True)
+    material_data_field_rho_ijklqxyz.apply(stress_difference_ijqxyz.s, transposed=True, out=stress_difference_ijqxyz.s)
     # minus sign is already there
     df_du_field = discretization.get_unknown_size_field(
         name='adjoint_problem_rhs_in_sensitivity_stress_and_adjoint_FE_NEW')
@@ -1542,8 +1543,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         p=p)
 
     # Diagnostic only: adjoint "energy" lambda^T D^T W sigma (~0 at equilibrium)
-    stress_field_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
+    stress_field_ijqxyz = discretization.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
         displacement_field_inxyz=displacement_field_inxyz,

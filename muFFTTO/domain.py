@@ -104,37 +104,43 @@ class ScaledMaterial:
     def apply(self, gradient, transposed=False, out=None):
         """``sum_k s_k (C_k : g)``; ``g``: ``[d, d, q, x, y(, z)]`` (elasticity) or ``[1, d, q, ...]`` (conductivity).
         ``transposed``: contract the first index pair instead (``g : C_k``).
-        ``out``: array of the shape of ``g`` to write the result to (may be ``g`` itself); a new array if None."""
+        ``out``: array of the shape of ``g`` to write the result to (may be ``g`` itself); a new array if None.
+        Evaluated one quadrature point at a time, so the temporaries are 1/q of a [d, d, q, ...] field (on the GPU
+        they stay in the memory pool: computing all points at once would hold several full-size arrays there)."""
         xp = tensor_operations.get_array_module(gradient)
         shape = gradient.shape
         nc = 2                                    # component axes: (i, j) elasticity, (u, i) conductivity
         ncomp = shape[0] * shape[1]
-        # points first, components last, in muGrid's memory order: the components of a point are stored next to
-        # each other with the first index fastest, i.e. as [.., j, i]. Merging (j, i) into one axis is then a view
-        # (no copy), and the constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
-        g = xp.moveaxis(gradient, (1, 0), (-2, -1)).reshape(shape[nc:] + (ncomp,))
-        result = None
+        if out is None:
+            out = xp.empty_like(gradient)
+        # constant tensors as (ncomp x ncomp) matrices acting on the components of a point, stored in muGrid's
+        # memory order: the first index fastest, i.e. as [.., j, i]
+        matrices = []
         for scale, tensor in self.terms:
             tensor = xp.asarray(tensor)
             if tensor.ndim == 4:                  # [d,d,d,d]: C_(ij)(kl), rows and columns in the (j, i) order of g
                 matrix = tensor.transpose(1, 0, 3, 2).reshape(ncomp, ncomp)
             else:                                 # [d,d] acting on [u=1, d]: A_ij
                 matrix = tensor
-            term = g @ (matrix if transposed else matrix.T)
-            scale = self._scale_array(scale)
-            if not np.isscalar(scale):
-                term *= xp.asarray(scale)[..., None]
-            elif scale != 1.0:
-                term *= scale
-            if result is None:
-                result = term
-            else:
-                result += term
-        # back to the component-first layout [i, j, q, x, y(, z)]
-        result = xp.moveaxis(result.reshape(shape[nc:] + (shape[1], shape[0])), (-2, -1), (1, 0))
-        if out is None:
-            return result
-        out[...] = result
+            matrices.append(matrix if transposed else matrix.T)
+        scales = [self._scale_array(scale) for scale, _ in self.terms]
+        scales = [scale if np.isscalar(scale) else xp.broadcast_to(xp.asarray(scale), shape[nc:]) for scale in scales]
+        for q in range(shape[nc]):
+            # points of quadrature point q first, components last: (j, i) merged into one axis
+            g = xp.moveaxis(gradient[:, :, q], (1, 0), (-2, -1)).reshape(shape[nc + 1:] + (ncomp,))
+            result = None
+            for scale, matrix in zip(scales, matrices):
+                term = g @ matrix
+                if not np.isscalar(scale):
+                    term *= scale[q][..., None]
+                elif scale != 1.0:
+                    term *= scale
+                if result is None:
+                    result = term
+                else:
+                    result += term
+            # back to the component-first layout [i, j, x, y(, z)]; g is fully read before out[:, :, q] is written
+            out[:, :, q] = xp.moveaxis(result.reshape(shape[nc + 1:] + (shape[1], shape[0])), (-2, -1), (1, 0))
         return out
 
 
@@ -788,7 +794,13 @@ class Discretization:
                                             grad_u_ijqxyz=grad_u_ijqxyz)
 
         # 2. symmetrize it
-        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
+        # in place, one (i, j) pair at a time (no full-size temporaries); the diagonal (a + a) / 2 = a is unchanged
+        g = grad_u_ijqxyz.s
+        for i in range(g.shape[0]):
+            for j in range(i + 1, g.shape[1]):
+                sym = (g[i, j] + g[j, i]) / 2
+                g[i, j] = sym
+                g[j, i] = sym
 
     def apply_gradient_transposed_operator_mugrid(self,
                                                   gradient_field_ijqxyz,
@@ -1199,7 +1211,8 @@ class Discretization:
         fields (``.s`` is accessed). The weak form
         ``int grad(v) : C : (E + grad(u)) dx = 0`` for all periodic ``v``
         gives ``K u = -B^T W C E``. The macro gradient is copied into the
-        scratch field ``'stress_temporary_rhs'`` so the input is not modified.
+        shared scratch field ``'grad_field_temporary'`` (see
+        :meth:`apply_system_matrix_mugrid`) so the input is not modified.
         """
 
         # macro_gradient_field    [f,d,q,x,y,z]
@@ -1209,7 +1222,7 @@ class Discretization:
         #  rhs=-Dt*wA*E
 
         self.assert_material_symmetry(material_data_field_ijklqxyz, name='material data in get_rhs')
-        gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
 
         # sigma = C : E   (in place in the scratch field)
@@ -1278,7 +1291,7 @@ class Discretization:
         inv_F = inv_of_deformation_gradient
 
         self.assert_material_symmetry(material_data_field_ijklqxyz, name='material data in get_rhs')
-        gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
 
         # Macro gradient in reference domain
@@ -1418,7 +1431,7 @@ class Discretization:
                                       name='material data in get_homogenized_stress_mugrid')
         self.fft.communicate_ghosts(field=displacement_field_inxyz)
 
-        gradient_field_ijqxyz = self.get_gradient_size_field(name='strain_temp')
+        gradient_field_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
 
         if formulation == 'small_strain':
             self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_inxyz,
@@ -1429,7 +1442,7 @@ class Discretization:
                                                 grad_u_ijqxyz=gradient_field_ijqxyz)
 
         # compute total strain
-        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        gradient_field_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
 
         if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
             mat_data_temp = material_data_field_ijklqxyz          # applied directly, no full-size copy
@@ -1691,7 +1704,7 @@ class Discretization:
             self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
                                                 grad_u_ijqxyz=output_stress_field_ijqxyz)
 
-        output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        output_stress_field_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
         if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
             material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s, out=output_stress_field_ijqxyz.s)
         else:
@@ -1845,7 +1858,8 @@ class Discretization:
         # apply quadrature weights without material data
         # (weights are a numpy array -> move them to the device of the field (CPU or GPU))
         xp = tensor_operations.get_array_module(grad_field.s)
-        grad_field.s[...] = xp.einsum('ijq...,q->ijq...', grad_field.s, xp.asarray(self.quadrature_weights))
+        for q, weight in enumerate(np.asarray(tensor_operations.to_host(self.quadrature_weights)).ravel()):
+            grad_field.s[:, :, q] *= weight          # in place, no full-size temporary
 
     def sum_over_quad_points_and_pixels(self, data_qxyz):
         """Sum over quadrature points and pixels of the whole cell (all MPI ranks).
@@ -2102,7 +2116,10 @@ class Discretization:
             xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                gradient_field.s[...] = xp.einsum('ijkl,kl...->ij...', xp.asarray(material_data), gradient_field.s)
+                # one quadrature point at a time: the temporaries are 1/q of the field (GPU memory pool)
+                material = xp.asarray(material_data)
+                for q in range(gradient_field.s.shape[2]):
+                    gradient_field.s[:, :, q] = xp.einsum('ijkl,kl...->ij...', material, gradient_field.s[:, :, q])
 
             elif material_data.ndim > 4:
                 raise TypeError("apply_material_data_elasticity_mugrid does not support global ndarray")
@@ -2686,6 +2703,11 @@ class Discretization:
         Steps: ``g = B u`` (gradient at quadrature points) ->
         ``sigma = C : g`` -> ``f = B^T W sigma``. Uses the scratch field
         ``'grad_field_temporary'``. Collective MPI operation (ghost exchange).
+
+        ``'grad_field_temporary'`` is a SHARED scratch field (one [d, d, q, x, y(, z)] buffer, the largest field
+        size of a run): it is also used by :meth:`get_rhs_mugrid`, :meth:`get_homogenized_stress_mugrid` and the
+        sensitivity functions of :mod:`muFFTTO.topology_optimization`. Its content is valid only inside one call;
+        never hold it across a call to one of these functions or pass it to them as an argument.
         """
 
         if isinstance(input_field_inxyz, np.ndarray):
