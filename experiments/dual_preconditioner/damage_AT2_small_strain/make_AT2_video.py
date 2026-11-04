@@ -1,8 +1,8 @@
 """Video of one small-strain AT2 run (example_2D_phase_field_fracture_AT2.py), in the layout of the slide videos
 (examples/phase_field_fracture_adapted_grid/make_slide_video.py). One frame per load step:
-    left          deformed cell at true scale, exact pixels: pores white, the solid coloured by the damage (light
+    left          deformed cell at true scale, exact pixels: pores white (inclusions grey), the solid coloured by the damage (light
                   intact -> dark cracked, fading to transparent from d = 0.6 to d = 0.95, so the opened crack is a clean gap)
-    right, top    sigma_xx over E_xx: this run in colour (future part light grey), the other grids in grey
+    right, top    sigma over E in the loaded direction (xx, or yy for LOAD_DIR=yy runs): this run in colour (future part light grey), the other grids in grey
     right, bottom elastic CG iterations per elastic solve, mean over the staggered iterations of the load step
                   (from exp_data/..._iterations.csv; older runs without it: the last staggered iteration of the step):
                   this run in colour, the other preconditioners of the same grid dashed in their own colours
@@ -14,7 +14,9 @@
                                                     panel: mean elastic CG iterations per solve over the grid size,
                                                     all preconditioners (static) -> ..._study.mp4, _final.png
                                                     -> figures/AT2_N<N>_<prec><TAG>_stress.mp4, _final.png
-    TAG e.g. _l0.03125: the series with a fixed physical length scale (32^2-512^2)
+    TILE=2 (env): the periodic cell repeated 2 x 2 times (-> ..._tile2.mp4)
+    TAG e.g. _l0.03125: the series with a fixed physical length scale (32^2-1024^2)
+    GEOMETRY_FILE=<.npy> (env): runs on a phase image (Cahn-Hilliard), the same file as the run
 """
 import os
 import re
@@ -40,13 +42,15 @@ N = int(sys.argv[1]) if len(sys.argv) > 1 else 256
 PREC = sys.argv[2] if len(sys.argv) > 2 else 'dual'
 TAG = sys.argv[3] if len(sys.argv) > 3 else ''
 # reference grids: the finished runs of the series
-GRIDS = [n for n in ((32, 64, 128, 256, 512) if TAG else (64, 128, 256))
+GRIDS = [n for n in ((32, 64, 128, 256, 512, 1024) if TAG else (64, 128, 256))
          if os.path.exists(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{TAG}.log'))
          and 'Elapsed time' in open(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{TAG}.log')).read()]
 DASHES = [(0, (5, 2)), (0, (1, 1.5)), (0, (3, 1, 1, 1)), (0, (8, 2, 1, 2)), (0, (12, 3))]
 FPS = 10
 STRESS_ONLY = os.environ.get('STRESS_ONLY', '0') == '1'
 GRID_STUDY = STRESS_ONLY and os.environ.get('GRID_STUDY', '0') == '1'
+TILE = int(os.environ.get('TILE', 1))  # TILE=2 / 3: the periodic cell repeated TILE x TILE times (each copy shifted by
+                                       # the deformed cell vector, (I + E) times the lattice vector)
 
 SURFACE, TEXT_1, TEXT_2, GRID, AXIS, FUTURE = '#ffffff', '#0b0b0b', '#52514e', '#e6e5e1', '#a3a29c', '#d4d3cd'
 REFERENCE_COLOR = '#b5b4ae'
@@ -119,7 +123,7 @@ def read(n, p):
     else:                                                             # older runs: the last staggered iteration
         cg = [int(m[1]) for m in re.finditer(r'CG its \(u, d\) = \((\d+), \d+\)', log)]
         its = [int(m[1]) for m in re.finditer(r'staggered its = +(\d+)', log)]
-    return (d, np.asarray(d['load'][:]), np.asarray(d['macro_stress'][:, 0, 0]), np.array(cg, dtype=float),
+    return (d, np.asarray(d['load'][:]), np.asarray(d['macro_stress'][:, IC, IC]), np.array(cg, dtype=float),
             np.array(its))
 
 
@@ -139,18 +143,27 @@ def cg_per_solve(n, p):
     return it['cg_u'].mean()
 
 
+# the loaded component: LOAD_DIR=yy runs (macro_strain_direction of the run file); read() needs it before the first run
+with netCDF4.Dataset(os.path.join(HERE, 'exp_data', f'AT2_N{N}_{PREC}{TAG}.nc')) as _d:
+    IC = 1 if np.asarray(_d.macro_strain_direction).ravel()[-1] == 1 and np.asarray(_d.macro_strain_direction).ravel()[0] == 0 else 0
+XX = 'yy' if IC == 1 else 'xx'
 PER_SOLVE = os.path.exists(os.path.join(HERE, 'exp_data', f'AT2_N{N}_{PREC}{TAG}_iterations.csv'))
 d, load, stress, cg, its = read(N, PREC)
 nb_frames = len(load)
 X = np.stack(np.meshgrid(np.arange(N + 1) / N, np.arange(N + 1) / N, indexing='ij'))
 pore = microstructure_library.get_geometry(nb_voxels=(N, N), microstructure_name=getattr(d, 'microstructure', 'circle_inclusion'),
                                            coordinates=X[:, :-1, :-1]) == 0    # same call as the simulation
+if os.environ.get('GEOMETRY_FILE'):     # phase image runs (Cahn-Hilliard): sampled at the lower-left nodes as in the run
+    fine = np.load(os.environ['GEOMETRY_FILE'])
+    idx = [np.clip(np.floor(X[a, :-1, :-1] * fine.shape[a] + 1e-9).astype(int), 0, fine.shape[a] - 1) for a in range(2)]
+    pore = fine[idx[0], idx[1]] == 0
 
 
 def corners(k):
     """deformed pixel corners at true scale: x = X + E X + u(X), u periodic"""
     u = np.pad(np.asarray(d['u_fluctuation'][k, :, 0]), ((0, 0), (0, 1), (0, 1)), mode='wrap')
-    E = np.array([[load[k], 0.0], [0.0, 0.0]])
+    E = np.zeros((2, 2))
+    E[IC, IC] = load[k]
     return X + np.einsum('ij,jxy->ixy', E, X) + u
 
 
@@ -189,8 +202,11 @@ if not STRESS_ONLY:
 header = fig.text(0.03, 0.915, '', fontsize=12.5, color=TEXT_2, visible=not STRESS_ONLY)
 all_corners = [corners(k) for k in range(nb_frames)]
 ax_cell.set_aspect('equal')
-ax_cell.set_xlim(min(c[0].min() for c in all_corners) - 0.02, max(c[0].max() for c in all_corners) + 0.02)
-ax_cell.set_ylim(min(c[1].min() for c in all_corners) - 0.02, max(c[1].max() for c in all_corners) + 0.02)
+stretch = 1.0 + load.max()                     # the largest deformed cell vector in the loaded direction
+ax_cell.set_xlim(min(c[0].min() for c in all_corners) - 0.02 * TILE,
+                 max(c[0].max() for c in all_corners) + (TILE - 1) * (stretch if IC == 0 else 1.0) + 0.02 * TILE)
+ax_cell.set_ylim(min(c[1].min() for c in all_corners) - 0.02 * TILE,
+                 max(c[1].max() for c in all_corners) + (TILE - 1) * (stretch if IC == 1 else 1.0) + 0.02 * TILE)
 ax_cell.axis('off')
 levels = np.linspace(0.0, 1.0, 256)
 faded = damage_colours(levels)
@@ -199,7 +215,7 @@ colorbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=plt.Normalize(0, 1), c
                         ax=ax_cell, **(dict(location='left', fraction=0.03, pad=0.01, aspect=25, shrink=0.6)
                                        if STRESS_ONLY else dict(orientation='horizontal', fraction=0.04, pad=0.02,
                                                                 aspect=40)))
-colorbar.set_label('damage $d$' if STRESS_ONLY else f'damage $d$ ({"inclusions" if "_incl" in TAG else "pore"} white, '
+colorbar.set_label('damage $d$' if STRESS_ONLY else f'damage $d$ ({"inclusions grey" if "_incl" in TAG else "pore white"}, '
                    'cracked pixels transparent; true scale)',
                    color=TEXT_2, fontsize=10.5)
 colorbar.outline.set_visible(False)
@@ -209,11 +225,11 @@ if STRESS_ONLY:        # vertical bar left of the cell: the quantity on top, as 
     colorbar.ax.set_title('damage $d$', fontsize=13, color=TEXT_2, pad=20)
     colorbar.ax.tick_params(labelsize=11)
 
-style(ax_stress, 'Macroscopic stress', r'macroscopic strain $\bar\varepsilon_{xx}$', r'$\bar\sigma_{xx}$')
+style(ax_stress, 'Macroscopic stress', rf'macroscopic strain $\bar\varepsilon_{{{XX}}}$', rf'$\bar\sigma_{{{XX}}}$')
 if not STRESS_ONLY:
     style(ax_cg, 'Elastic CG iterations per solve (mean over the load step)' if PER_SOLVE
           else 'Elastic CG iterations per load step (last staggered iteration)',
-          r'macroscopic strain $\bar\varepsilon_{xx}$', 'CG iterations')
+          rf'macroscopic strain $\bar\varepsilon_{{{XX}}}$', 'CG iterations')
 reference_grids = [g for g in GRIDS if g != N]
 assert len(reference_grids) <= len(DASHES), 'more reference grids than dash patterns'
 # reference grids light (coarse) to dark (fine)
@@ -274,23 +290,32 @@ def draw(k):
     x, y = all_corners[k]
     damage = pixel_damage(k)
     colours = damage_colours(damage)
-    colours[pore, 3] = 0.0
-    mesh = ax_cell.pcolormesh(x, y, damage, shading='flat', rasterized=True, edgecolors='none', linewidth=0,
-                              antialiased=False)
-    mesh.set_array(None)
-    mesh.set_facecolor(colours.reshape(-1, 4))
+    if '_incl' in TAG:                  # second phase (grains, Cahn-Hilliard phase 2) grey: white means cracked only
+        colours[pore, :3] = 0.62          # cracked inclusion pixels (PHASE2_GC runs) fade out as in the matrix
+        colours[pore, 3] = np.clip((FADE_END - damage[pore]) / (FADE_END - FADE_START), 0.0, 1.0)
+    else:
+        colours[pore, 3] = 0.0
+    cell = np.ones(2)
+    cell[IC] += load[k]                         # deformed cell vectors: (I + E) e_1, (I + E) e_2
+    for i in range(TILE):
+        for j in range(TILE):
+            mesh = ax_cell.pcolormesh(x + i * cell[0], y + j * cell[1], damage, shading='flat', rasterized=True,
+                                      edgecolors='none', linewidth=0, antialiased=False)
+            mesh.set_array(None)
+            mesh.set_facecolor(colours.reshape(-1, 4))
     stress_line.set_data(np.r_[0, load[:k + 1]], np.r_[0, stress[:k + 1]])
     stress_dot.set_data(load[k:k + 1], stress[k:k + 1])
     if not STRESS_ONLY:
         cg_line.set_data(load[:min(k + 1, len(cg))], cg[:k + 1])
-    header.set_text(rf'$\bar\varepsilon_{{xx}}$ = {load[k]:.3f}    load step {k + 1} / {nb_frames}    '
-                    rf'$\bar\sigma_{{xx}}$ = {stress[k]:.2e}    max damage {damage[~pore].max():.2f}    '
+    header.set_text(rf'$\bar\varepsilon_{{{XX}}}$ = {load[k]:.3g}    load step {k + 1} / {nb_frames}    '
+                    rf'$\bar\sigma_{{{XX}}}$ = {stress[k]:.2e}    max damage {damage[~pore].max():.2f}    '
                     f'staggered its {its[k] if k < len(its) else 0}'
                     + ('' if STRESS_ONLY else f'    elastic CG per solve {cg[k] if k < len(cg) else 0:.0f}'))
 
 
 os.makedirs(os.path.join(HERE, 'figures'), exist_ok=True)
-out = os.path.join(HERE, 'figures', f'AT2_N{N}_{PREC}{TAG}' + ('_study' if GRID_STUDY else '_stress' if STRESS_ONLY else ''))
+out = os.path.join(HERE, 'figures', f'AT2_N{N}_{PREC}{TAG}' + ('_study' if GRID_STUDY else '_stress' if STRESS_ONLY else '')
+                   + (f'_tile{TILE}' if TILE > 1 else ''))
 frames = list(range(nb_frames)) + [nb_frames - 1] * (2 * FPS)
 writer = animation.FFMpegWriter(fps=FPS, bitrate=6000, codec='libx264', extra_args=['-pix_fmt', 'yuv420p'])
 with writer.saving(fig, out + '.mp4', dpi=100):

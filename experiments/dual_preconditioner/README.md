@@ -23,3 +23,6 @@ dual columns (`get_preconditioner_Green_mugrid` shared one field; it now takes `
 ## Notes
 
 - `notes/finite_strain_tangent_explained.md`: the finite-strain tangent (material and geometric stiffness, rotational stiffness = stress), why single points can have negative stiffness while the structure is stable, and why the dual preconditioner must not invert the rotation part (plain inverse vs |eigenvalue| pseudo-inverse vs symmetric block).
+- `notes/AT2_practical_lh.md`: AT2 fracture at practical l/h = 2-4 (`damage_AT2_small_strain/`): 2D 64^2-512^2 and 3D iterations of Green / Green-Jacobi / dual, when Green and the dual cost the same, the frozen-damage diagnostic of the dual's mesh dependence (residual stiffness k, capped dual, identity reference, nu = 0.49), practical l/h in the literature and the measured damage profile vs exp(-|x|/l).
+- `damage_AT2_small_strain/schneider2025_notch/`: the single-notch problem of Schneider & Kästner (FFEMS 2025, PDF + README there), residual stiffness 1e-6 ... 1e-4 against Green / Green-Jacobi / dual.
+- `damage_AT2_small_strain/gypsum_rve/`: practical application with a physical length scale (3D-printed gypsum of the 2024 Damage Mechanics Challenge, l = 0.5 mm), 25.6 mm RVE, l/h 1.25 - 10 on 64^2 - 512^2; PDFs + README there.
