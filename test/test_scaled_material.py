@@ -64,7 +64,8 @@ def _reference(tensors_and_scales, g, transposed):
 @pytest.mark.parametrize('problem_type', ['elasticity', 'conductivity'])
 @pytest.mark.parametrize('transposed', [False, True])
 @pytest.mark.parametrize('layout', ['contiguous', 'mugrid'])
-def test_apply_matches_einsum(device, dim, element_type, nb_pixels, problem_type, transposed, layout):
+@pytest.mark.parametrize('low_memory', [False, True])
+def test_apply_matches_einsum(device, dim, element_type, nb_pixels, problem_type, transposed, layout, low_memory):
     """Two terms (a field scale and a float scale) with general (non-symmetric) tensors."""
     xp = _xp(device)
     rng = np.random.default_rng(0)
@@ -83,12 +84,14 @@ def test_apply_matches_einsum(device, dim, element_type, nb_pixels, problem_type
     material = domain.ScaledMaterial([(xp.asarray(s_1), C_1), (0.3, C_2)])
     expected = _reference([(s_1, C_1), (0.3, C_2)], g_host, transposed)
 
-    np.testing.assert_allclose(to_host(material.apply(g, transposed=transposed)), expected, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(to_host(material.apply(g, transposed=transposed, low_memory=low_memory)), expected,
+                               rtol=1e-12, atol=1e-12)
 
 
 @pytest.mark.parametrize('device', DEVICES)
 @pytest.mark.parametrize('dim, element_type, nb_pixels', cases)
-def test_apply_out(device, dim, element_type, nb_pixels):
+@pytest.mark.parametrize('low_memory', [False, True])
+def test_apply_out(device, dim, element_type, nb_pixels, low_memory):
     """out= gives the returned result, also when out is the input itself."""
     xp = _xp(device)
     rng = np.random.default_rng(1)
@@ -101,10 +104,10 @@ def test_apply_out(device, dim, element_type, nb_pixels):
     expected = to_host(material.apply(gradient.s))
 
     out = xp.zeros(expected.shape)
-    assert material.apply(gradient.s, out=out) is out
+    assert material.apply(gradient.s, out=out, low_memory=low_memory) is out
     np.testing.assert_allclose(to_host(out), expected, rtol=1e-14, atol=0)
 
-    material.apply(gradient.s, out=gradient.s)                    # in place
+    material.apply(gradient.s, out=gradient.s, low_memory=low_memory)     # in place
     np.testing.assert_allclose(to_host(gradient.s), expected, rtol=1e-14, atol=0)
 
 
@@ -227,3 +230,29 @@ def test_system_matrix_small_strain_not_minor_symmetric(device, dim, element_typ
     discretization.apply_system_matrix_mugrid(domain.ScaledMaterial([(s, C_R)]), u, Ku_R, formulation='finite_strain')
 
     _assert_fields_close(Ku_small, Ku_R)
+
+
+@pytest.mark.parametrize('device', DEVICES)
+@pytest.mark.parametrize('dim, element_type, nb_pixels', cases)
+def test_low_memory_same_system_matrix(device, dim, element_type, nb_pixels):
+    """Discretization(low_memory=True) (one quadrature point at a time) gives the same K u and stress as the default,
+    with a ScaledMaterial and with a single reference tensor."""
+    rng = np.random.default_rng(6)
+    results = []
+    for low_memory in (False, True):
+        cell = domain.PeriodicUnitCell(domain_size=[1.3, 0.7, 1.1][:dim], problem_type='elasticity')
+        discretization = domain.Discretization(cell=cell, nb_of_pixels_global=nb_pixels,
+                                               discretization_type='finite_element', element_type=element_type,
+                                               device=device, low_memory=low_memory)
+        rng = np.random.default_rng(6)
+        C = _isotropic(dim)
+        s = rng.uniform(0.1, 2.0, size=discretization.get_quad_field_scalar(name='test_shape').s.shape[2:])
+        u = discretization.get_unknown_size_field(name='test_u')
+        u.s[...] = _xp(device).asarray(rng.normal(size=u.s.shape))
+        Ku_scaled = discretization.get_unknown_size_field(name='test_Ku_scaled')
+        Ku_ref = discretization.get_unknown_size_field(name='test_Ku_ref')
+        discretization.apply_system_matrix_mugrid(domain.ScaledMaterial([(_xp(device).asarray(s), C)]), u, Ku_scaled)
+        discretization.apply_system_matrix_mugrid(C, u, Ku_ref)
+        results.append((to_host(Ku_scaled.s).copy(), to_host(Ku_ref.s).copy()))
+    for fast, low in zip(*results):
+        np.testing.assert_allclose(low, fast, rtol=1e-13, atol=1e-13 * np.abs(fast).max())

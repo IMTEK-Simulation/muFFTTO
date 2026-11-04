@@ -101,12 +101,12 @@ class ScaledMaterial:
             return scale.s[0, 0]
         return scale
 
-    def apply(self, gradient, transposed=False, out=None):
+    def apply(self, gradient, transposed=False, out=None, low_memory=False):
         """``sum_k s_k (C_k : g)``; ``g``: ``[d, d, q, x, y(, z)]`` (elasticity) or ``[1, d, q, ...]`` (conductivity).
         ``transposed``: contract the first index pair instead (``g : C_k``).
         ``out``: array of the shape of ``g`` to write the result to (may be ``g`` itself); a new array if None.
-        Evaluated one quadrature point at a time, so the temporaries are 1/q of a [d, d, q, ...] field (on the GPU
-        they stay in the memory pool: computing all points at once would hold several full-size arrays there)."""
+        ``low_memory``: evaluate one quadrature point at a time instead of all at once (same result, smaller
+        temporaries, slower); the library passes :attr:`Discretization.low_memory`."""
         xp = tensor_operations.get_array_module(gradient)
         shape = gradient.shape
         nc = 2                                    # component axes: (i, j) elasticity, (u, i) conductivity
@@ -125,9 +125,11 @@ class ScaledMaterial:
             matrices.append(matrix if transposed else matrix.T)
         scales = [self._scale_array(scale) for scale, _ in self.terms]
         scales = [scale if np.isscalar(scale) else xp.broadcast_to(xp.asarray(scale), shape[nc:]) for scale in scales]
-        for q in range(shape[nc]):
-            # points of quadrature point q first, components last: (j, i) merged into one axis
-            g = xp.moveaxis(gradient[:, :, q], (1, 0), (-2, -1)).reshape(shape[nc + 1:] + (ncomp,))
+        for q in quad_point_blocks(shape[nc], low_memory):
+            # points first, components last: (j, i) merged into one axis (a view in muGrid's memory order), so the
+            # constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
+            block_shape = gradient[:, :, q].shape[nc:]
+            g = xp.moveaxis(gradient[:, :, q], (1, 0), (-2, -1)).reshape(block_shape + (ncomp,))
             result = None
             for scale, matrix in zip(scales, matrices):
                 term = g @ matrix
@@ -139,9 +141,24 @@ class ScaledMaterial:
                     result = term
                 else:
                     result += term
-            # back to the component-first layout [i, j, x, y(, z)]; g is fully read before out[:, :, q] is written
-            out[:, :, q] = xp.moveaxis(result.reshape(shape[nc + 1:] + (shape[1], shape[0])), (-2, -1), (1, 0))
+            # back to the component-first layout [i, j, q, x, y(, z)]; g is fully read before out is written
+            out[:, :, q] = xp.moveaxis(result.reshape(block_shape + (shape[1], shape[0])), (-2, -1), (1, 0))
         return out
+
+
+def quad_point_blocks(nb_quad_points, low_memory):
+    """The quadrature points in the blocks an operation on a ``[.., q, x, y(, z)]`` field is evaluated in, as slices
+    of the q axis (the axis is kept, so the same expression serves both modes):
+
+    - ``low_memory=False``: one block with all points -- fastest (few large GPU kernels);
+    - ``low_memory=True``: one point per block -- the temporaries of an expression are 1/q of the field instead of
+      the full field. On the GPU this matters: CuPy's memory pool keeps every temporary's memory reserved, so a few
+      full-size [d, d, q, x, y, z] temporaries roughly double the memory of a large elasticity run.
+
+    See :attr:`Discretization.low_memory`."""
+    if not low_memory:
+        return [slice(None)]
+    return [slice(q, q + 1) for q in range(nb_quad_points)]
 
 
 class PeriodicUnitCell:
@@ -285,7 +302,8 @@ class Discretization:
                  discretization_type='finite_element',
                  element_type='linear_triangles',
                  communicator=muGrid.Communicator(MPI.COMM_WORLD),
-                 device='cpu'):
+                 device='cpu',
+                 low_memory=False):
         """Initialize discretization.
 
         Parameters
@@ -307,6 +325,16 @@ class Discretization:
             Where the fields live: 'cpu' (default) or 'gpu'. Passed to
             ``muGrid.FFTEngine``. For 'gpu', muGrid has to be built with CUDA
             and field data (``.s``) are cupy arrays instead of numpy arrays.
+        low_memory : bool, optional
+            How the material is applied to gradient-sized ``[d, d, q, x, y(, z)]``
+            fields (in every system-matrix product, right-hand side, stress and
+            sensitivity). False (default): all quadrature points at once, the
+            fastest. True: one quadrature point at a time; the temporaries are then
+            1/q of such a field. Same results; about half the GPU memory of a large
+            elasticity run (3D topology optimization: ~4.8 instead of ~9.6 kB per
+            voxel). The speed depends on the GPU: 17-33 % slower on an L40S (AT2,
+            2D 128^2 and 3D 32^3), 10 % faster on a laptop GPU (TO, 3D 64^3). Use it
+            when a grid does not fit on the GPU otherwise. See :func:`quad_point_blocks`.
 
         Raises
         ------
@@ -348,6 +376,7 @@ class Discretization:
                                     # nb_sub_pts=self.nb_nodes_per_pixel
                                     device=device)
         self.device = device
+        self.low_memory = low_memory           # see the docstring and quad_point_blocks()
         self.communicator = communicator
         self.mpi_reduction = Reduction(MPI.COMM_WORLD)
         # Validate the symmetries of material data where it enters a solve
@@ -1706,7 +1735,8 @@ class Discretization:
 
         output_stress_field_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
         if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
-            material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s, out=output_stress_field_ijqxyz.s)
+            material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s, out=output_stress_field_ijqxyz.s,
+                                               low_memory=self.low_memory)
         else:
             output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
                                                           output_stress_field_ijqxyz.s)
@@ -1858,8 +1888,9 @@ class Discretization:
         # apply quadrature weights without material data
         # (weights are a numpy array -> move them to the device of the field (CPU or GPU))
         xp = tensor_operations.get_array_module(grad_field.s)
-        for q, weight in enumerate(np.asarray(tensor_operations.to_host(self.quadrature_weights)).ravel()):
-            grad_field.s[:, :, q] *= weight          # in place, no full-size temporary
+        weights = np.asarray(tensor_operations.to_host(self.quadrature_weights)).ravel()
+        # in place and broadcast over [i, j, q, x, y(, z)]: one kernel, no temporary
+        grad_field.s[...] *= xp.asarray(weights).reshape((1, 1, -1) + (1,) * self.domain_dimension)
 
     def sum_over_quad_points_and_pixels(self, data_qxyz):
         """Sum over quadrature points and pixels of the whole cell (all MPI ranks).
@@ -2070,7 +2101,7 @@ class Discretization:
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, ScaledMaterial):
-            material_data.apply(gradient_field.s, out=gradient_field.s)
+            material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
@@ -2109,17 +2140,16 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, ScaledMaterial):
-            material_data.apply(gradient_field.s, out=gradient_field.s)
+            material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
             xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                # one quadrature point at a time: the temporaries are 1/q of the field (GPU memory pool)
                 material = xp.asarray(material_data)
-                for q in range(gradient_field.s.shape[2]):
-                    gradient_field.s[:, :, q] = xp.einsum('ijkl,kl...->ij...', material, gradient_field.s[:, :, q])
+                for q in quad_point_blocks(gradient_field.s.shape[2], self.low_memory):
+                    gradient_field.s[:, :, q] = xp.einsum('ijkl,klq...->ijq...', material, gradient_field.s[:, :, q])
 
             elif material_data.ndim > 4:
                 raise TypeError("apply_material_data_elasticity_mugrid does not support global ndarray")
