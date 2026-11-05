@@ -11,7 +11,9 @@ no damage, no load predictor.
               t = VOID_T is a PHYSICAL thickness; changing it changes only the void, not the plate (void rule: under refinement the void must keep its physical size,
               else Green's lambda_min -> 0 like a void of a few pixels; void_study.py), t / h and PLATE / h must be integers
     frame   = the pixels outside the plate: void, ZERO stiffness (free plate edges)
-    hole    = pixels of the plate with centre within HOLE_R of HOLE_C: void, zero stiffness, gas pressure p
+    hole    = GEOM=hole (default): pixels of the plate with centre within HOLE_R of HOLE_C;
+              GEOM=channel: a straight horizontal channel of height CH_H through the middle of the plate, from the left
+              to the right face (with CLAMP=1 its end edges lie on the clamped walls); void, zero stiffness, gas pressure p
     energy  Pi(u) = int_solid W(F) dX  -  p int_hole J dX,     p = lam P_MAX (follower pressure)
 
 Void-only nodes (all 4 adjacent pixels void: frame and hole interior) carry no stiffness and are pinned (u = 0); the
@@ -41,7 +43,7 @@ Preconditioners (Green: C_ref = solid tangent at F = I):
 Per load increment: plain trust-region Newton-CG (NuMPI) from the last converged state, inner CG stopped on the
 energy-error estimate (rtol 1e-6, adaptive delay, minimum 10); the step is halved on failure.
 
-Environment: NNN (32, pixels per unit length), PLATE (0.875), P_MAX (30), NB_INC (30), HOLE_R (0.25), VOID_T (1/16), CLAMP (1), PRECOND (G_wall | G_corr | G | GJ | D).
+Environment: NNN (32, pixels per unit length), PLATE (0.875), P_MAX (30), NB_INC (30), GEOM (hole | channel), HOLE_R (0.25), CH_H (0.25), VOID_T (1/16), CLAMP (1), PRECOND (G_wall | G_corr | G | GJ | D).
 Output: runs/hole_<...>/ with run.log and state.npz (u per increment, p, hole area, CG counts).
 """
 import os
@@ -61,6 +63,8 @@ nnn = int(os.environ.get('NNN', 32))
 P_MAX = float(os.environ.get('P_MAX', 30.0))
 NB_INC = int(os.environ.get('NB_INC', 30))
 HOLE_R = float(os.environ.get('HOLE_R', 0.25))
+GEOM = os.environ.get('GEOM', 'hole')
+CH_H = float(os.environ.get('CH_H', 0.25))           # GEOM=channel: channel height
 VOID_T = float(os.environ.get('VOID_T', 1 / 16))      # physical void thickness around the plate
 PLATE = float(os.environ.get('PLATE', 0.875))         # plate side (physical, fixed)
 MARGIN_PX = int(round(VOID_T * nnn))
@@ -91,7 +95,7 @@ disc = domain.Discretization(cell=domain.PeriodicUnitCell(domain_size=[L, L], pr
                              element_type='bilinear_rectangle', device='cpu')
 
 out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'runs',
-                       f'hole_n{nnn}_R{HOLE_R:g}_p{P_MAX:g}_t{VOID_T:g}{"_clampLR" if CLAMP else "_free"}_{PRECOND}_' + time.strftime('%Y%m%d-%H%M%S'))
+                       (f'hole_n{nnn}_R{HOLE_R:g}_' if GEOM == 'hole' else f'channel_n{nnn}_H{CH_H:g}_') + f'p{P_MAX:g}_t{VOID_T:g}{"_clampLR" if CLAMP else "_free"}_{PRECOND}_' + time.strftime('%Y%m%d-%H%M%S'))
 os.makedirs(out_dir)
 log_file = os.path.join(out_dir, 'run.log')
 
@@ -106,7 +110,8 @@ def log(*args):
 coords = np.asarray(disc.fft.coords)                                    # nodes X, [2, x, y]
 centre = coords * L + 0.5 * h                                               # pixel centres
 in_plate = np.all((centre > MARGIN_PX * h) & (centre < L - MARGIN_PX * h), axis=0)
-in_hole = in_plate & (np.hypot(centre[0] - HOLE_C[0], centre[1] - HOLE_C[1]) < HOLE_R)
+in_hole = in_plate & ((np.hypot(centre[0] - HOLE_C[0], centre[1] - HOLE_C[1]) < HOLE_R) if GEOM == 'hole'
+                      else (np.abs(centre[1] - HOLE_C[1]) < 0.5 * CH_H))
 solid_px = in_plate & ~in_hole
 nb_q = disc.nb_quad_points_per_pixel
 solid_q = np.broadcast_to(solid_px, (nb_q, *N))
@@ -391,7 +396,7 @@ def hole_area(x):
 
 
 # ----------------------------------------------------------------------------- load stepping
-log(f'pressurised hole: h 1/{nnn}, cell {ncell}^2 px (L {L:g}), plate {PLATE:g}, R {HOLE_R}, P_MAX {P_MAX}, void t {VOID_T:g} ({MARGIN_PX} px), precond {PRECOND}; '
+log(f'pressurised {GEOM}: h 1/{nnn}, cell {ncell}^2 px (L {L:g}), plate {PLATE:g}, R {HOLE_R}, P_MAX {P_MAX}, void t {VOID_T:g} ({MARGIN_PX} px), precond {PRECOND}; '
     f'solid pixels {int(solid_px.sum())}, hole pixels {int(in_hole.sum())}, pinned void nodes {int(void_node.sum())}, '
     f'free dofs {int(free.sum())}, ' + (f'clamped columns x = {MARGIN_PX}, {ncell - MARGIN_PX} h' if CLAMP else 'free plate')
     + (f'; corrected Green: {corr_setup[0]} fixed dofs, setup {corr_setup[1]:.1f} s' if PRECOND == 'G_corr' else '')

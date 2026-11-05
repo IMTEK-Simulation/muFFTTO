@@ -12,16 +12,18 @@ from matplotlib.collections import PolyCollection  # noqa: E402
 plt.rcParams.update({'font.size': 13})
 run = sys.argv[1]
 d = np.load(os.path.join(run, 'state.npz'))
-N = int(d['nnn'])
-h = 1.0 / N
+N = int(d['ncell']) if 'ncell' in d else int(d['nnn'])          # cell pixels per direction
+h = float(d['h']) if 'h' in d else 1.0 / N
 solid, hole, fixed = d['solid_px'], d['hole_px'], d['fixed']
-CLR = {'GJ': 'tab:blue', 'G': 'tab:green', 'G_corr': 'tab:green', 'D': 'tab:red'}[str(d['precond'])]
+CLR = {'GJ': 'tab:blue', 'G': 'tab:green', 'G_corr': 'tab:green', 'G_wall': 'tab:green', 'D': 'tab:red'}[str(d['precond'])]
 p, area, U = d['p'], d['area'], d['u'].copy()                # U [inc, 2, x, y]
 # DISPLAY ONLY: the hole-interior nodes are pinned (u = 0, they carry nothing); give them the harmonic extension of the
 # hole-boundary displacement so the gas region is drawn as the deformed hole, not as a star of pinned nodes
 _void_node = np.all([np.roll(~solid, (a, b), (0, 1)) for a in (0, 1) for b in (0, 1)], axis=0)
 _hole_node = _void_node & np.any([np.roll(hole, (a, b), (0, 1)) for a in (0, 1) for b in (0, 1)], axis=0)
-for k in range(len(U)):
+if 'clamp_node' in d:                                       # clamped nodes stay where they are
+    _hole_node &= ~d['clamp_node']
+for k in np.unique(np.linspace(0, len(p) - 1, 4).round().astype(int)):   # only the plotted frames
     for _ in range(4 * N * N):
         avg = 0.25 * sum(np.roll(U[k], s, ax) for s in (1, -1) for ax in (1, 2))
         U[k] = np.where(_hole_node, avg, U[k])
@@ -80,8 +82,8 @@ ax.set_xlim(0, None)
 ax.set_ylim(0, None)
 ax.grid(alpha=0.3)
 ax.legend()
-NAMES = {'GJ': 'Green-Jacobi', 'G': 'projected Green', 'G_corr': 'corrected Green', 'D': 'dual'}
-ax.set_title(f'{NAMES[str(d["precond"])]}, {N}$^2$' + (', left + right clamped' if 'clamp_node' in d and d['clamp_node'].any() else ', free'))
+NAMES = {'GJ': 'Green-Jacobi', 'G': 'projected Green', 'G_corr': 'corrected Green (dense)', 'G_wall': 'corrected Green (wall FFT)', 'D': 'dual'}
+ax.set_title(f'{NAMES[str(d["precond"])]}, h = 1/{int(round(1 / h))}' + (', left + right clamped' if 'clamp_node' in d and d['clamp_node'].any() else ', free'))
 out = os.path.join(run, 'pressurized_hole.png')
 fig.savefig(out, dpi=150, bbox_inches='tight')
 print(out)
