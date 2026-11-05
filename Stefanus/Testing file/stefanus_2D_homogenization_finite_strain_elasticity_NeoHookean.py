@@ -18,23 +18,25 @@ from muFFTTO import material_models
 from muFFTTO import visualization_utils
 
 # Numerical settings ============================
-NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 10                 # Number of increment for the applied load
+NX = 128                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
+N_inc = 10                  # Number of increment for the applied load
 cg_tol = 1e-6               # CG tolerance, ABSOLUTE on ||b - Ax|| (used as atol, rtol = 0)
 E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
-plot_load_cases = True      # plot the deformed cell after every load increment
+plot_load_cases = False      # plot the deformed cell after every load increment
 plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-# ===============================================
-
-# ====================================================================================================================================================
+MATERIAL = 'paper'      # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+                            # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
+                            #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
-LOAD_MODE = 'manual'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
-LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.016, 'Y': 0.026}              # final nominal strain = critical strains eps_cr (paper text)
+LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
+LOAD_DIRECTION = 'Y'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
+EPS_MAX = {'X': 0.020, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper text)
+Y_MAX_MPA = {'X': 0.014, 'Y': 0.026}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Free lateral side, SIMPLE version: lateral macro strain = +nu * compressive strain, with the small-strain
 # Poisson ratio printed as "nu = ..." by the Fig. 4 block of the small-strain script.
 # Use the value for the SAME NX and element_type as this run!
-NU_LAT = {'X': 0.2575, 'Y': 0.2797}             # small strain, NX = 64, bilinear_rectangle
+NU_LAT = {'paper':      {'X': 0.2575, 'Y': 0.2797},   # small strain, NX = 64, bilinear_rectangle, paper material
+          'simplified': {'X': 0.3269, 'Y': 0.3933}}[MATERIAL]   # small strain, NX = 64, bilinear, simplified
 PAPER_SLOPE_MPA = {'X': {'Exp.': 0.32, 'Sim. periodic': 0.35},   # initial slopes digitised from Fig. 4,
                    'Y': {'Exp.': 0.46, 'Sim. periodic': 0.50}}   # approx. +-5 %
 # =============================================================================================
@@ -68,8 +70,10 @@ save_per_it =  args.save_per_it
 # Unit Cells input: -- PHYSICAL units ===================
 R_MM         = 3.0              # void & inclusion radius r                      [mm]
 MU_M_MPA     = 0.6              # matrix shear modulus mu^(m) (FLX9860)           [MPa]
-MU_I_MPA     = 600.0            # stiff inclusion shear modulus mu^(i) (VeroWhite) [MPa]
-LAM_OVER_MU  = 1e3              # Lambda / mu, matrix and inclusion (Sec. 3, after Eq. 1) [-]
+# MU_I_MPA     = 600.0            # stiff inclusion shear modulus mu^(i) (VeroWhite) [MPa]
+# LAM_OVER_MU  = 1e3              # Lambda / mu, matrix and inclusion (Sec. 3, after Eq. 1) [-]
+MU_I_MPA     = {'paper': 600.0, 'simplified': 6.0}[MATERIAL]     # inclusion shear modulus mu^(i) [MPa] (paper: 600)
+LAM_OVER_MU  = {'paper': 1e3,   'simplified': 100.0}[MATERIAL]   # Lambda / mu, matrix and inclusion [-] (paper: 1000)
 C_MATRIX     = 0.25             # target matrix volume fraction c^(m) ratio            [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
@@ -134,9 +138,9 @@ discretization = domain.Discretization(cell=my_cell,
 # ============================================================================
 file_folder_path   = os.path.dirname(os.path.realpath(__file__))
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}/')
 
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
@@ -209,6 +213,8 @@ mu_field.s[0, 0,  :, inc_mask]    = mu_inc
 if discretization.communicator.rank == 0:
     print(f'lam min/max : {lam_field.s.min():.4f} / {lam_field.s.max():.4f}')
     print(f'mu  min/max : {mu_field.s.min():.4f}  / {mu_field.s.max():.4f}')
+    print(f'material: {MATERIAL} | contrast mu_i/mu_m = {CONTRAST:g} | Lambda/mu = {LAM_OVER_MU:g} | '
+          f'NU_LAT = {NU_LAT}')
 
 # ============================================================================
 # material model
@@ -464,6 +470,8 @@ for inc in range(ninc):
         if (norm_strain_fluc / En < 1e-8 or norm_rhs / norm_rhs_0 < 1e-6) and iiter > 0:
             break
         if iiter >= 100:
+            if discretization.communicator.rank == 0:
+                print(f'  WARNING: Newton not converged in increment {inc} (norm(rhs)/norm(rhs_0) = {norm_rhs / norm_rhs_0:.1e})')
             break
 
     # homogenized stress and macro strain of this converged increment
@@ -554,11 +562,13 @@ if discretization.communicator.rank == 0 and LOAD_MODE == 'fig4':
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(5, 4.2))
         ax.plot(eps_nom, stress_MPa, 'o-', color='tab:green', ms=3,
-                label=f'muFFTTO finite strain ({number_of_pixels[0]}x{number_of_pixels[1]}, {element_type})')
+                label=f'muFFTTO finite strain ({number_of_pixels[0]}x{number_of_pixels[1]}, {element_type}, {MATERIAL})')
         for (name, slope), style in zip(PAPER_SLOPE_MPA[LOAD_DIRECTION].items(), ['k-', 'r-.']):
             ax.plot(eps_nom, slope * eps_nom, style, lw=1, label=f'paper {name} (initial slope, digitised)')
-        ax.set_xlim(0, eps_nom[-1])
-        ax.set_ylim(bottom=0)
+        ax.set_xlim(0, EPS_MAX[LOAD_DIRECTION])
+        ax.xaxis.set_major_locator(plt.MaxNLocator(5))                       # 0, 0.004, ..., 0.020 (as small strain)
+        ax.yaxis.set_major_locator(plt.MultipleLocator(0.002))               # y ticks every 0.002 MPa (as small strain)
+        ax.set_ylim(0, max(Y_MAX_MPA[LOAD_DIRECTION], 1.05 * stress_MPa.max()))   # fixed top, grows if the curve is higher
         ax.set_xlabel(rf'Nominal strain, $\varepsilon_{LOAD_DIRECTION}$')
         ax.set_ylabel('Nominal stress (MPa)')
         ax.set_title(f'Fig. 4{"a" if LOAD_DIRECTION == "X" else "b"}: uniaxial compression in {LOAD_DIRECTION} '
