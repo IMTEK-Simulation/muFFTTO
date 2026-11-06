@@ -18,13 +18,13 @@ from muFFTTO import material_models
 from muFFTTO import visualization_utils
 
 # Numerical settings ============================
-NX = 128                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
+NX = 64                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
 N_inc = 10                  # Number of increment for the applied load
 cg_tol = 1e-6               # CG tolerance, ABSOLUTE on ||b - Ax|| (used as atol, rtol = 0)
 E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False      # plot the deformed cell after every load increment
 plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'paper'      # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'simplified'      # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============

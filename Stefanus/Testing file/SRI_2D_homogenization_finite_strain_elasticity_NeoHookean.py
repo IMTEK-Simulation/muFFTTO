@@ -18,7 +18,7 @@ from muFFTTO import material_models
 from muFFTTO import visualization_utils
 
 # Numerical settings ============================
-NX = 64                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
+NX = 128                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
 N_inc = 10                  # Number of increment for the applied load
 cg_tol = 1e-9               # CG tolerance
 NEWTON_TOL = 1e-8           # Newton stop: |r| / |r0| of the increment. 1e-6 is NOT safe here: r0 is dominated by the
@@ -26,15 +26,18 @@ NEWTON_TOL = 1e-8           # Newton stop: |r| / |r0| of the increment. 1e-6 is 
 E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False      # plot the deformed cell after every load increment
 plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'paper'          # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
-INTEGRATION = 'sri'         # 'full' = library NeoHookean at the 4 Gauss points (bilinear LOCKS for Lambda/mu = 1000)
+INTEGRATION = 'full'         # 'full' = library NeoHookean at the 4 Gauss points (bilinear LOCKS for Lambda/mu = 1000)
                             # 'sri'  = selective reduced integration: mu part at the 4 Gauss points, lambda part once
                             #          per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
+SRI_TANGENT = 'exact'         # 'exact' = consistent SRI tangent (quadratic Newton, but INDEFINITE under compression for the
+                            #           paper material -> CG fails); 'spd' = without the initial-stress part of the lam term
+                            #           (always positive definite; Newton converges to the SAME solution, residual is exact)
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
-LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
+LOAD_DIRECTION = 'Y'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
 EPS_MAX = {'X': 0.020, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper text)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.026}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Free lateral side, SIMPLE version: lateral macro strain = +nu * compressive strain, nu = small-strain Poisson ratio
@@ -307,7 +310,8 @@ def sri_dP(dF, st):
     """linearised SRI stress dP for the gradient increment dF (2, 2, q, x, y) at the state st"""
     dF0 = dF.mean(axis=2, keepdims=True)
     return (st['mu'] * (dF + A_dBT_C(st['FiT'], dF, st['FiT']))
-            + st['lam'] * (ddot(st['F0iT'], dF0) * st['F0iT'] - st['lnJ0'] * A_dBT_C(st['F0iT'], dF0, st['F0iT'])))
+            + st['lam'] * (ddot(st['F0iT'], dF0) * st['F0iT']
+                           - (st['lnJ0'] * A_dBT_C(st['F0iT'], dF0, st['F0iT']) if SRI_TANGENT == 'exact' else 0.0)))
 
 
 def sri_reference_operator(input_field_inxyz, output_field_inxyz):
@@ -558,7 +562,7 @@ for inc in range(ninc):
             x=displacement_increment_field,
             prec=M_fun_Green,
             rtol=1e-3, atol=cg_tol * norm_rhs_0,  # floor relative to this increment's first residual
-            maxiter=10000,
+            maxiter=50000,
             callback=callback,
         )
 
