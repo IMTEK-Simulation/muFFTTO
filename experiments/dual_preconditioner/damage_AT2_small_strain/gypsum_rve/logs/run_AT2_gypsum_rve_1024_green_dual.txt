@@ -1,0 +1,5 @@
+00:54:39 start gypsum N=1024 pores dual
+09:24:25 done  gypsum N=1024 pores dual (exit 0)
+09:24:25 start gypsum N=1024 pores Green
+18:21:05 done  gypsum N=1024 pores Green (exit 0)
+18:21:05 start gypsum N=1024 grains Green

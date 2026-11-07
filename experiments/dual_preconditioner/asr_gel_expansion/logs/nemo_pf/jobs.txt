@@ -1,0 +1,19 @@
+8658308 2D N=128 czm dual smoke (6 steps, EXTRA_SUFFIX=_smoke)
+8658397 2D N=512 fourel Green
+8658398 2D N=512 fourel Green_Jacobi
+8658399 2D N=512 fourel dual
+8658400 2D N=512 czmR Green
+8658401 2D N=512 czmR Green_Jacobi
+8658402 2D N=512 czmR dual
+8658403 2D N=1024 fourel Green
+8658404 2D N=1024 fourel Green_Jacobi
+8658405 2D N=1024 fourel dual
+8658406 2D N=1024 czmR Green
+8658407 2D N=1024 czmR Green_Jacobi
+8658408 2D N=1024 czmR dual
+8658409 3D N=128 fourel Green
+8658410 3D N=128 fourel Green_Jacobi
+8658411 3D N=128 fourel dual
+8658412 3D N=128 czm Green
+8658413 3D N=128 czm Green_Jacobi
+8658414 3D N=128 czm dual

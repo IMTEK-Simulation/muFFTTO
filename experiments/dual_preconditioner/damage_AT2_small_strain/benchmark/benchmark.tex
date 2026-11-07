@@ -1,0 +1,192 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,enumitem,hyperref}
+\newcommand{\fig}[1]{\includegraphics[width=\textwidth]{#1}}
+\graphicspath{{figures/}}
+
+\title{A periodic phase-field fracture benchmark:\\ porous and particle-reinforced cells under uniaxial strain}
+\author{Draft, \today}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+A small set of fully specified 2D problems for checking and calibrating AT2 phase-field fracture codes. All cases share
+one unit cell, periodic boundary conditions, one load path and one model. They differ only in the microstructure:
+\begin{description}[style=nextline]
+  \item[B0 homogeneous cell] closed-form solution; checks the split, the history field and the degradation.
+  \item[B1 one circular pore] symmetric, one crack; checks the stress concentration and the crack band.
+  \item[B1h one circular hole] B1 with a true hole instead of a soft pore; checks the treatment of the hole.
+  \item[B2 nine pores] several cracks that nucleate one after the other; checks the post-peak path.
+  \item[B3 nine stiff, tough inclusions] one tortuous crack through the matrix; checks a stiff second phase.
+\end{description}
+The reference solutions are converged in the mesh size $h$ at a fixed length scale $\ell$. They also show how far a
+practical resolution ($\ell/h = 2$--$4$) is from the converged values.
+
+\section*{Problem}
+\paragraph{Cell and loading.} $\Omega = [0,1)^2$, periodic. Displacement $u = \bar{\boldsymbol\varepsilon}\,x + \tilde u$
+with periodic fluctuation $\tilde u$ and the macroscopic strain
+\[
+  \bar{\boldsymbol\varepsilon}(t) = t\,\mathbf e_x \otimes \mathbf e_x \qquad\text{(uniaxial strain: } \bar\varepsilon_{yy}
+  = \bar\varepsilon_{xy} = 0\text{)},
+\]
+$t = 0.001, 0.002, \dots, 0.080$ (80 steps). Report the volume average $\bar\sigma_{xx} = \langle \sigma_{xx}\rangle$.
+
+\paragraph{Energy (AT2).}
+\[
+  \Pi(u,d) = \int_\Omega g(d)\,\psi^+(\boldsymbol\varepsilon) + \psi^-(\boldsymbol\varepsilon)\,\mathrm dx
+  + \frac{G_c}{2}\int_\Omega \frac{d^2}{\ell} + \ell\,|\nabla d|^2\,\mathrm dx, \qquad g(d) = (1-d)^2 + k .
+\]
+The Amor volumetric--deviatoric split, with $K = \lambda + \mu$ the 2D bulk modulus, gives
+\[
+  \psi^+ = \tfrac{K}{2}\langle \operatorname{tr}\boldsymbol\varepsilon\rangle_+^2
+  + \mu\,\boldsymbol\varepsilon_{\mathrm{dev}}:\boldsymbol\varepsilon_{\mathrm{dev}},
+  \qquad \boldsymbol\varepsilon_{\mathrm{dev}} = \boldsymbol\varepsilon - \tfrac12(\operatorname{tr}\boldsymbol\varepsilon)\mathbf I .
+\]
+
+\paragraph{Hybrid formulation (Ambati et al.\ 2015).} The elastic problem uses the isotropic degradation
+$\boldsymbol\sigma = g(d)\,\mathbb C\,\boldsymbol\varepsilon$, so it stays linear. Only the tensile energy drives the
+crack, through the history field $H(x,t) = \max_{s\le t}\psi^+(\boldsymbol\varepsilon(x,s))$ of Miehe et al.\ (2010).
+The damage equation is
+\[
+  -G_c\ell\,\Delta d + \Big(\frac{G_c}{\ell} + 2H\Big) d = 2H ,
+\]
+solved on the whole cell, including pores and inclusions.
+
+\paragraph{Staggered scheme.} At each load step, alternate (1) the elastic solve, (2) the update of $H$ from the last
+converged step, and (3) the damage solve. Stop when $\max_x|d - d_{\mathrm{old}}| < 10^{-3}$, with no limit on the
+number of iterations. Do not cut the load step.
+
+\paragraph{Parameters.}
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  matrix & $\lambda = 5/36 \approx 0.138889$, $\mu = 5/12 \approx 0.416667$ & (plane strain, $E = 0.9375$, $\nu = 0.125$) \\
+  toughness, length scale & $G_c = 5\times10^{-4}$, $\ell = 1/32 = 0.03125$ & \\
+  residual stiffness & $k = 10^{-4}$ & \\
+  pores (B1, B2) & $\mathbb C_{\mathrm{pore}} = 10^{-3}\,\mathbb C$, damage solved, driven by its own $\psi^+$ & \\
+  hole (B1h) & no material, no damage field; natural boundary conditions for $u$ and $d$ & \\
+  inclusions (B3) & $\mathbb C_{\mathrm{incl}} = 10\,\mathbb C$, tough: $H = 0$ in the inclusion & \\
+  \bottomrule
+\end{tabular}
+\end{center}
+The degradation multiplies the local stiffness: $g(d)\,\mathbb C_{\mathrm{pore}}$ and $g(d)\,\mathbb C_{\mathrm{incl}}$.
+
+\paragraph{Geometry.} B1, B1h: one disk with centre $(0.5, 0.5)$ and radius $0.2$. B2 and B3: nine disks, listed below
+and in \texttt{data/disks.csv}. Each disk is periodic: parts leaving the cell re-enter on the opposite side. The disks
+cover 28.06\,\% of the cell, and every ligament between two disks is at least $0.04$ wide.
+\begin{center}
+\small
+\begin{tabular}{rrr@{\qquad}rrr@{\qquad}rrr}
+  \toprule
+  $x$ & $y$ & $r$ & $x$ & $y$ & $r$ & $x$ & $y$ & $r$ \\
+  \midrule
+  0.935072 & 0.815854 & 0.132148 & 0.647190 & 0.615385 & 0.107327 & 0.239369 & 0.876484 & 0.074281 \\
+  0.541461 & 0.299712 & 0.123194 & 0.310242 & 0.485835 & 0.104597 & 0.058568 & 0.336117 & 0.053688 \\
+  0.422687 & 0.028320 & 0.115655 & 0.890274 & 0.227158 & 0.098926 & 0.198513 & 0.090753 & 0.051487 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{What to report.}
+\begin{enumerate}[nosep]
+  \item the curve $\bar\sigma_{xx}(t)$ at all 80 steps (or until the cell has broken);
+  \item the peak stress $\max_t \bar\sigma_{xx}$ and the strain $t$ at which it occurs;
+  \item the crack energy of the final, broken state, $\Gamma = \frac{G_c}{2}\int_\Omega d^2/\ell + \ell|\nabla d|^2$,
+        given as the crack length $\Gamma/G_c$;
+  \item a picture of the final damage field;
+  \item $h$ and $\ell/h$, the element type and the quadrature rule.
+\end{enumerate}
+The cell counts as broken once $\bar\sigma_{xx}$ has fallen below 20\,\% of the peak (in all reference runs it then
+keeps less than 7\,\%).
+
+\section*{B0: closed-form solution}
+In a homogeneous cell, the strain stays $\bar{\boldsymbol\varepsilon}$, all of $\psi_0 = \frac{M}{2}t^2$ is tensile
+($M = \lambda + 2\mu = 35/36$), and the damage is uniform:
+\[
+  d = \frac{M t^2}{G_c/\ell + M t^2}, \qquad \bar\sigma_{xx} = \big((1-d)^2 + k\big)\,M\,t .
+\]
+For $k = 0$, the peak is at $t_c = \sqrt{G_c/(3\ell M)} = 0.07407$ with $\sigma_c = \frac{9}{16}\sqrt{M G_c/(3\ell)} =
+4.0505\times10^{-2}$; with $k = 10^{-4}$, $\sigma_c = 4.0512\times10^{-2}$. A code that has the split, the history field
+and the degradation right must reproduce this curve to round-off on any mesh. The homogeneous solution is unstable
+after the peak, so a real code may localize there.
+
+\section*{Reference results}
+Computed with FFT-accelerated finite elements (muFFTTO): bilinear quadrilaterals on a regular $N\times N$ grid with
+$2\times2$ Gauss points, and nodal $d$. Each pixel takes the phase of its lower-left node, so the disk boundaries are
+resolved only to the pixel size. PCG stops on an energy-error estimate (relative $10^{-6}$). Three preconditioners
+gave identical curves to all printed digits. B1h: the stiffness and the damage operator are zero in the hole pixels,
+$d = 0$ at the nodes inside the hole, Green--Jacobi preconditioner; its crack energy is integrated over the matrix.
+
+\begin{center}
+\small
+\begin{tabular}{lrrccc}
+  \toprule
+  case & $N$ & $\ell/h$ & peak $\bar\sigma_{xx}$ & $t$ at peak & $\Gamma/G_c$ (final) \\
+  \midrule
+  B0 & -- & -- & $4.0512\times10^{-2}$ & 0.0741 & -- \\
+  \midrule
+  B1 & 32 & 1 & $2.4524\times10^{-2}$ & 0.049 & 1.131 \\
+     & 64 & 2 & $2.5109\times10^{-2}$ & 0.049 & 0.977 \\
+     & 128 & 4 & $2.4685\times10^{-2}$ & 0.047 & 0.860 \\
+     & 1024 & 32 & $\mathbf{2.4649\times10^{-2}}$ & \textbf{0.047} & \textbf{0.824} \\
+  \midrule
+  B1h & 32 & 1 & $2.2936\times10^{-2}$ & 0.045 & 0.989 \\
+     & 64 & 2 & $2.3585\times10^{-2}$ & 0.045 & 0.869 \\
+     & 128 & 4 & $2.3052\times10^{-2}$ & 0.043 & 0.771 \\
+     & 256 & 8 & $2.2889\times10^{-2}$ & 0.042 & 0.726 \\
+     & 512 & 16 & $\mathbf{2.2922\times10^{-2}}$ & \textbf{0.042} & \textbf{0.731} \\
+  \midrule
+  B2 & 32 & 1 & $1.4044\times10^{-2}$ & 0.043 & 1.023 \\
+     & 64 & 2 & $1.4509\times10^{-2}$ & 0.043 & 0.898 \\
+     & 128 & 4 & $1.4638\times10^{-2}$ & 0.043 & 0.791 \\
+     & 256 & 8 & $1.4844\times10^{-2}$ & 0.043 & 0.733 \\
+     & 512 & 16 & $1.4946\times10^{-2}$ & 0.043 & 0.725 \\
+     & 1024 & 32 & $\mathbf{1.4977\times10^{-2}}$ & \textbf{0.043} & \textbf{0.693} \\
+  \midrule
+  B3 & 64 & 2 & $4.0935\times10^{-2}$ & 0.039 & 1.528 \\
+     & 128 & 4 & $4.0785\times10^{-2}$ & 0.039 & 1.396 \\
+     & 256 & 8 & $4.0794\times10^{-2}$ & 0.040 & 1.333 \\
+     & 512 & 16 & $\mathbf{4.0788\times10^{-2}}$ & \textbf{0.040} & \textbf{1.311} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[h]
+  \fig{benchmark.png}
+  \caption{B1, B1h, B2, B3 from left to right. Top: final damage on the finest grid, disk outlines in cyan. Middle: $\bar\sigma_{xx}(t)$ for all grids, with
+  B0 dotted. Bottom: peak stress and final crack length against $h$.}
+\end{figure}
+
+\paragraph{Observations.}
+\begin{itemize}
+  \item \textbf{The peak stress is the robust quantity.} At $\ell/h = 4$ it is within 2.3\,\% of the finest-grid value
+        (B1 0.15\,\%, B1h 0.6\,\%, B3 0.01\,\%), at $\ell/h = 2$ within 3.1\,\%. The strain at the peak agrees to two load
+        increments (B2 and B3: identical on every grid).
+  \item \textbf{The crack energy converges slowly}, roughly like $1 + c\,h/\ell$. At $\ell/h = 2$--$4$ it is 4--30\,\%
+        above the converged value. This is the known overestimate of the discrete AT2 crack density, so compare
+        $\Gamma$ only at equal $\ell/h$, or extrapolate.
+  \item \textbf{B2's post-peak path} (three load drops at $t \approx 0.044$, $0.052$, $0.067$) agrees from $128^2$ on (on $64^2$ the
+        second drop comes slightly earlier, on $32^2$ the last one later).
+  \item \textbf{The pore model matters at the 7\,\% level.} The true hole (B1h) breaks at a 7.0\,\% lower peak and an
+        earlier strain (0.042 against 0.047) than the soft pore with damage (B1): the low damage inside the soft pore
+        holds the damage at its boundary down and delays the nucleation. Codes must state which model they use.
+  \item $\Gamma/G_c$ exceeds the crack length in the matrix (B1: $0.82$ against $0.6$), because AT2 has no damage
+        threshold: a diffuse band of low damage covers the whole cell.
+\end{itemize}
+
+\section*{Open points before release}
+\begin{itemize}
+  \item The post-peak path depends on the load increment and on the staggered tolerance. A second load increment
+        ($\Delta t = 5\times10^{-4}$) would show by how much.
+\end{itemize}
+
+\section*{Files}
+\texttt{experiments/dual\_preconditioner/damage\_AT2\_small\_strain/}: \texttt{example\_2D\_phase\_field\_fracture\_AT2.py}
+(solver; \texttt{MICROSTRUCTURE=circle\_inclusion|polydisperse\_pores}, \texttt{LENGTH\_SCALE=0.03125},
+\texttt{INCLUSION\_STIFFNESS=10} for B3, \texttt{HOLES=1} for B1h (Green--Jacobi only), \texttt{NPIX}). \texttt{benchmark/make\_benchmark.py} extracts the reference data
+into \texttt{benchmark/data/}: \texttt{disks.csv}, \texttt{B0\_homogeneous.csv}, \texttt{B<k>\_N<n>\_curve.csv},
+\texttt{reference.csv}.
+
+\end{document}

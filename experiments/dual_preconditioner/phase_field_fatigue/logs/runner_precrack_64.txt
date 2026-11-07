@@ -1,0 +1,3 @@
+18:54:25 done N=64 Green (exit 0)
+18:58:25 done N=64 Green_Jacobi (exit 0)
+19:01:37 done N=64 dual (exit 0)

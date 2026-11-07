@@ -1,0 +1,3 @@
+job 8658308 host g3607 start 2026-11-07T10:34:15+01:00 DIM=2 N=128 czm dual log=/work/classic/fr_ml1145-muffto/runs/asr_pf_fourel/logs/ASRpf_czm_N128_dual_smoke.log RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+done 2026-11-07T10:34:40+01:00 exit 0 wall 25 s

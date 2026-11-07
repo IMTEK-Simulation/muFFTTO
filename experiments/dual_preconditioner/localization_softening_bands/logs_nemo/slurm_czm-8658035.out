@@ -1,0 +1,5 @@
+job 8658035 host g3526 partition l40s start 2026-11-07T03:42:37+01:00 specs: 2:256:dual:xx SEG=0 RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+03:44 1128483, 568 MiB  util 36 %
+2026-11-07T03:48:39+01:00 2:256:dual:xx exit 0 wall 361 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N256_dual_xx_b1.5mm_k1e-05.log
+done 2026-11-07T03:48:39+01:00

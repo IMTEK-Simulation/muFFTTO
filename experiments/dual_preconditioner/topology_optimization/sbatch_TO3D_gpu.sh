@@ -19,6 +19,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=40G
 #SBATCH --time=48:00:00
+#SBATCH --exclude=g3606,g3608         # GPU ECC errors (killed TO 128 Green and two 64^3 continuations)
 #SBATCH --output=/work/classic/fr_ml1145-muffto/runs/TO3D/logs/slurm-%j.out
 N=$1; P=$2; ETA=$3; SEG=${4:-1}; DONE=${5:-0}
 MAXSEG=${MAXSEG:-10}; SEG_ITERS=${SEG_ITERS:-500}; BUDGET=${BUDGET:-171000}; HE=${HISTORY_EVERY:-10}
@@ -26,7 +27,8 @@ cd ~/software/muFFTTO/experiments/dual_preconditioner/topology_optimization
 source ~/software/muffto_env_gpu.sh
 export DEVICE=gpu CUDA_PATH=${CUDA_PATH:-${CUDA_HOME:-$CUDA_ROOT}} OMP_NUM_THREADS=1
 SUF=${BASE_SUFFIX:-}$([ "$SEG" -gt 1 ] && echo "_seg$SEG")
-LOG=$MUFFTTO_WS/runs/TO3D/logs/TO3D_N${N}_eta${ETA}_${P}${SUF}.log
+SW=${STRESS_WEIGHT:-1}; SWTAG=$([ "$SW" != 1 ] && echo "_sw$SW")   # as in the data file names (two weights never share a log)
+LOG=$MUFFTTO_WS/runs/TO3D/logs/TO3D_N${N}_eta${ETA}_${P}${SWTAG}${SUF}.log
 mkdir -p "$(dirname "$LOG")"
 echo "start $(date -Is) host $(hostname) job $SLURM_JOB_ID N=$N P=$P ETA=$ETA segment=$SEG iterations_done=$DONE" \
      "INIT_FROM=${INIT_FROM:-}" > "$LOG"
@@ -42,12 +44,12 @@ if grep -q "OPTIMIZER success=True" "$LOG"; then
 fi
 [ "$SEG" -ge "$MAXSEG" ] && { echo "MAXSEG=$MAXSEG reached, not continuing" >> "$LOG"; exit 1; }
 if grep -q "Data saved" "$LOG"; then                     # iteration cap (or failed line search): continue from the design
-    START=$(ls -t data/example_3D_elasticity_TO/N${N}_*_${P}_eta_${ETA}_pfw*_l_bfgs${SUF}_final.nc 2>/dev/null | head -n 1)
+    START=$(ls -t data/example_3D_elasticity_TO/N${N}_*_${P}_eta_${ETA}_pfw*${SWTAG}_l_bfgs${SUF}_final.nc 2>/dev/null | head -n 1)
     NIT=$(grep -oP 'OPTIMIZER success=False nit=\K[0-9]+' "$LOG" | tail -n 1)
     [ -z "$START" ] || [ -z "$NIT" ] && { echo "no final design / iteration count found, not continuing" >> "$LOG"; exit 1; }
     NEW_DONE=$(( DONE + NIT ))
 elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then      # time budget: continue from the last stored iterate
-    START=$(ls -t data/example_3D_elasticity_TO/N${N}_*_${P}_eta_${ETA}_pfw*_l_bfgs${SUF}_history.nc 2>/dev/null | head -n 1)
+    START=$(ls -t data/example_3D_elasticity_TO/N${N}_*_${P}_eta_${ETA}_pfw*${SWTAG}_l_bfgs${SUF}_history.nc 2>/dev/null | head -n 1)
     FRAMES=$(python -c "import netCDF4,sys; print(len(netCDF4.Dataset(sys.argv[1])['phase_field_iterate']))" "$START" 2>/dev/null)
     [ -z "$FRAMES" ] || [ "$FRAMES" -lt 1 ] && { echo "no saved iterate found, not continuing" >> "$LOG"; exit 1; }
     NEW_DONE=$(( DONE + HE * (FRAMES - 1) + 1 ))      # frames are saved at iterations 1, 1+HE, 1+2HE, ...

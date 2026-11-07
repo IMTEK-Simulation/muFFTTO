@@ -1,0 +1,4 @@
+job 8658395 host g3607 start 2026-11-07T10:39:06+01:00 DIM=2 N=512 Green stem=FOUREL_N512_Green_free_k0.0001 log=/work/classic/fr_ml1145-muffto/runs/asr_fourel/logs/FOUREL_N512_Green_free_k0.0001.log RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+10:41 956865, 938 MiB  util 83 %
+10:51 956865, 938 MiB  util 88 %

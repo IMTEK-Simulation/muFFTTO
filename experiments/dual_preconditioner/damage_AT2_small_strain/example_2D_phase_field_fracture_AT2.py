@@ -127,7 +127,7 @@ macro_strain_direction[(0, 0) if load_dir == 'xx' else (1, 1)] = 1.0     # uniax
 ic = 0 if load_dir == 'xx' else 1             # the loaded stress component (printed, stop criterion)
 load_steps = np.linspace(0.0, float(os.environ.get('LOAD_MAX', 0.08)), int(os.environ.get('LOAD_STEPS', 80)) + 1)[1:]
 staggered_tol = 1e-3               # max |d - d_old| for the staggered loop
-max_staggered_iterations = 10000     # effectively unlimited: an unstable break can need many hundreds
+max_staggered_iterations = int(os.environ.get('MAX_STAGGERED', 500))   # cap per load step; on hitting it the step is accepted (logged NOT CONVERGED) and the load continues
 # stop the load path once the cell is cut through: sigma_xx below STOP_FRACTION of the peak so far for STOP_STEPS
 # load steps (the later steps only stretch a broken cell). In the runs so far a broken cell keeps at most 7 % of
 # the peak, a cell that still carries load at least 59 %. STOP_FRACTION=0: the full load path

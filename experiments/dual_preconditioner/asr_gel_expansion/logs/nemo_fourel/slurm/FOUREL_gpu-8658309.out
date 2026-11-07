@@ -1,0 +1,3 @@
+job 8658309 host g4403 start 2026-11-07T09:17:47+01:00 DIM=2 N=128 Green stem=FOUREL_N128_Green_free_k0.0001_smoke log=/work/classic/fr_ml1145-muffto/runs/asr_fourel/logs/FOUREL_N128_Green_free_k0.0001_smoke.log RESTART_FROM=
+NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887 MiB, 615.71.10
+done 2026-11-07T09:18:09+01:00 exit 0 wall 22 s

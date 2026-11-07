@@ -1,0 +1,13 @@
+18:31:20 done N=128 Green_Jacobi (exit 0)
+18:31:52 done N=128 Green (exit 0)
+18:36:43 done N=64 Green_Jacobi (exit 0)
+18:37:06 done N=64 Green (exit 0)
+18:46:39 done N=64 dual (exit 0)
+18:49:06 done N=128 dual (exit 0)
+./run_FAT_cahn_hilliard_notch.sh: line 20: ort: command not found
+Terminated                 systemd-run --user --scope -p MemoryMax=4G -q env NPIX=$1 $PY -u example_2D_phase_field_fatigue_AT2.py $2 > logs/FAT_N$1_$2_amp${AMPLITUDE}_${FATIGUE}.log 2>&1
+18:49:31 done N=128 Green (exit 0)
+Terminated                 systemd-run --user --scope -p MemoryMax=4G -q env NPIX=$1 $PY -u example_2D_phase_field_fatigue_AT2.py $2 > logs/FAT_N$1_$2_amp${AMPLITUDE}_${FATIGUE}.log 2>&1
+Terminated                 systemd-run --user --scope -p MemoryMax=4G -q env NPIX=$1 $PY -u example_2D_phase_field_fatigue_AT2.py $2 > logs/FAT_N$1_$2_amp${AMPLITUDE}_${FATIGUE}.log 2>&1
+18:49:31 done N=128 Green_Jacobi (exit 0)
+18:49:31 done N=128 dual (exit 0)

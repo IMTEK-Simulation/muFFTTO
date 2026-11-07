@@ -1,0 +1,20 @@
+job 8658039 host g3526 partition l40s start 2026-11-07T04:10:23+01:00 specs: 3:32:Green:xx 3:32:Green_Jacobi:xx 3:32:dual:xx 3:64:Green:xx 3:64:Green_Jacobi:xx 3:64:dual:xx SEG=0 RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+04:12 1131604, 642 MiB  util 59 %
+04:22 1131604, 642 MiB  util 46 %
+2026-11-07T04:23:34+01:00 3:32:Green:xx exit 0 wall 791 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM3D_N32_Green_xx_b1.5mm_k1e-05.log
+2026-11-07T04:32:20+01:00 3:32:Green_Jacobi:xx exit 0 wall 526 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM3D_N32_Green_Jacobi_xx_b1.5mm_k1e-05.log
+04:32  util 0 %
+04:42 1133907, 642 MiB  util 63 %
+2026-11-07T04:42:34+01:00 3:32:dual:xx exit 0 wall 614 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM3D_N32_dual_xx_b1.5mm_k1e-05.log
+04:52 1134902, 1942 MiB  util 81 %
+05:02 1134902, 1942 MiB  util 96 %
+05:12 1134902, 1942 MiB  util 97 %
+05:22 1134902, 1942 MiB  util 91 %
+05:32 1134902, 1942 MiB  util 96 %
+05:42 1134902, 1942 MiB  util 96 %
+2026-11-07T05:48:47+01:00 3:64:Green:xx exit 0 wall 3973 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM3D_N64_Green_xx_b1.5mm_k1e-05.log
+05:52 1141248, 1966 MiB  util 97 %
+06:02 1141248, 1966 MiB  util 97 %
+06:12 1141248, 1966 MiB  util 82 %
+06:22 1141248, 1966 MiB  util 93 %

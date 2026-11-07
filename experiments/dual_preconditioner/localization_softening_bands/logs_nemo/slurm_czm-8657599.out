@@ -1,0 +1,7 @@
+job 8657599 host g3609 partition l40s start 2026-11-06T21:07:31+01:00 specs: 2:64:dual:xx 3:32:dual:xx SEG=0 RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+21:09 698012, 448 MiB  util 20 %
+2026-11-06T21:12:05+01:00 2:64:dual:xx exit 0 wall 274 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N64_dual_xx_b1.5mm_k1e-05_smoke.log
+21:19 698892, 642 MiB  util 44 %
+2026-11-06T21:21:45+01:00 3:32:dual:xx exit 0 wall 580 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM3D_N32_dual_xx_b1.5mm_k1e-05_smoke.log
+done 2026-11-06T21:21:45+01:00

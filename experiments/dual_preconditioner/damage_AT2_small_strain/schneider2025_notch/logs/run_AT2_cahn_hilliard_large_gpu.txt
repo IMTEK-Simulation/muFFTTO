@@ -1,0 +1,6 @@
+20:41:31 start N=256 dual
+20:58:53 done  N=256 dual (exit 0)
+20:58:53 start N=256 Green_Jacobi
+21:49:44 done  N=256 Green_Jacobi (exit 0)
+21:49:44 start N=256 Green
+./run_AT2_cahn_hilliard_large_gpu.sh terminated by signal TERM.

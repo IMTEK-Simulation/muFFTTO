@@ -1,0 +1,9 @@
+18:16:26 done N=128 dual xy k=1e-3
+18:17:42 done N=128 Green xy k=1e-3
+18:18:36 done N=64 Green xy k=1e-3
+18:19:57 done N=64 dual xy k=1e-3
+18:20:28 done N=64 Green_Jacobi xy k=1e-3
+18:20:52 done N=32 Green xy k=1e-3
+18:21:19 done N=32 Green_Jacobi xy k=1e-3
+18:21:28 done N=32 dual xy k=1e-3
+18:27:23 done N=128 Green_Jacobi xy k=1e-3

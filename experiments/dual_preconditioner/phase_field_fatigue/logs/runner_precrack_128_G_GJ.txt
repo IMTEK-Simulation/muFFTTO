@@ -1,0 +1,2 @@
+19:16:36 done N=128 Green (exit 0)
+19:33:03 done N=128 Green_Jacobi (exit 0)

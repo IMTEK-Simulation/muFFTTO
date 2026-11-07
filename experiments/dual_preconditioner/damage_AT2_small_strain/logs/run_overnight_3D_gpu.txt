@@ -1,0 +1,15 @@
+20:35:54 start N=32 l=0.0625 incl=10 dual
+20:38:54 done  N=32 l=0.0625 incl=10 dual (exit 0)
+20:38:54 start N=32 l=0.0625 incl=10 Green_Jacobi
+20:42:02 done  N=32 l=0.0625 incl=10 Green_Jacobi (exit 0)
+20:42:02 start N=32 l=0.0625 incl=10 Green
+20:46:01 done  N=32 l=0.0625 incl=10 Green (exit 0)
+20:46:01 start N=64 l=0.03125 incl=10 dual
+00:03:34 done  N=64 l=0.03125 incl=10 dual (exit 0)
+00:03:34 start N=64 l=0.03125 incl=10 Green_Jacobi
+01:39:10 done  N=64 l=0.03125 incl=10 Green_Jacobi (exit 0)
+01:39:10 start N=64 l=0.03125 incl=10 Green
+06:02:00 done  N=64 l=0.03125 incl=10 Green (exit 0)
+06:02:00 start N=64 l=0.03125 incl= Green_Jacobi
+07:32:37 done  N=64 l=0.03125 incl= Green_Jacobi (exit 0)
+07:32:37 start N=64 l=0.03125 incl= dual

@@ -1,0 +1,23 @@
+N  solver  steps  eps_end%  solves  spots  linear_its  unit_its  its/solve  cost_units  wall_s  energy_err_median
+64 Green 79 1.975 4753 4673 1995118 146516 419.8 2141634 6072 3.8e-07
+64 Green_Jacobi 65 1.625 2837 2771 1877936 129584 661.9 2007520 5830 2.6e-07
+64 MS 200 5.000 16641 16440 132746 0 8.0 132746 4350 7.7e-03
+64 MS_tolms1e-06 54 1.350 1928 1873 1625087 0 842.9 1625087 7466 1.1e-04
+64 dual 54 1.350 1844 1789 1073165 80784 582.0 2307898 5893 1.5e-07
+128 Green 35 0.875 764 728 938383 75387 1228.2 1013770 8716 1.9e-07
+128 MS 116 2.900 11543 11426 88137 0 7.6 88137 7140 1.0e-02
+128 MS_tolms1e-06 14 0.350 406 391 465120 0 1145.6 465120 8162 1.0e-04
+128 dual 16 0.400 519 502 534664 14760 1030.2 1098848 8486 1.2e-07
+256 Green 11 0.275 140 128 147987 9004 1057.0 156991 7687 1.3e-07
+256 MS 20 0.500 502 481 59294 0 118.1 59294 6781 6.0e-03
+256 MS_tolms1e-06 8 0.200 74 65 87867 0 1187.4 87867 6723 5.4e-05
+256 dual 8 0.200 74 65 71503 3039 966.3 149084 7541 3.3e-07
+64 Green: first spanning crack at eps_ASR = 0.425 %, max cracks 43, final fragments 70
+64 MS: first spanning crack at eps_ASR = 0.450 %, max cracks 43, final fragments 54
+64 dual: first spanning crack at eps_ASR = 0.425 %, max cracks 43, final fragments 72
+128 Green: first spanning crack at eps_ASR = -, max cracks 27, final fragments 1
+128 MS: first spanning crack at eps_ASR = 1.425 %, max cracks 27, final fragments 8
+128 dual: first spanning crack at eps_ASR = -, max cracks 27, final fragments 1
+256 Green: first spanning crack at eps_ASR = -, max cracks 23, final fragments 1
+256 MS: first spanning crack at eps_ASR = -, max cracks 23, final fragments 1
+256 dual: first spanning crack at eps_ASR = -, max cracks 21, final fragments 1

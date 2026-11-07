@@ -135,7 +135,7 @@ macro_strain_direction[(0, 0) if load_dir == 'xx' else (1, 1)] = 1.0     # uniax
 ic = 0 if load_dir == 'xx' else 1             # the loaded stress component (printed, stop criterion)
 load_steps = np.linspace(0.0, float(os.environ.get('LOAD_MAX', 0.08)), int(os.environ.get('LOAD_STEPS', 80)) + 1)[1:]
 staggered_tol = 1e-3               # max |d - d_old| for the staggered loop
-max_staggered_iterations = 10000     # effectively unlimited: an unstable break can need many hundreds
+max_staggered_iterations = int(os.environ.get('MAX_STAGGERED', 500))   # cap per load step; on hitting it the step is accepted (logged NOT CONVERGED) and the load continues
 # stop the load path once the cell is cut through: sigma_xx below STOP_FRACTION of the peak so far for STOP_STEPS
 # load steps (the later steps only stretch a broken cell). In the runs so far a broken cell keeps at most 7 % of
 # the peak, a cell that still carries load at least 59 %. STOP_FRACTION=0: the full load path
@@ -533,8 +533,11 @@ if output_file is not None:
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
     MPI.COMM_WORLD.Barrier()
     # history (current H) equals history_n at the end of every load step
+    # OUTPUT_FIELDS (env): 'all' (default: damage, u_fluct, history) or 'damage' (12x smaller in 3D, for large grids;
+    # a restart then needs the _checkpoint.npz, RESTART_FROM=<.nc> requires 'all')
+    output_fields = [damage] if os.environ.get('OUTPUT_FIELDS', 'all') == 'damage' else [damage, u_fluct, history]
     writer = io_utils.FieldWriter(
-        output_file, [damage, u_fluct, history],
+        output_file, output_fields,
         attributes={'nb_grid_pts': number_of_pixels, 'domain_size': domain_size, 'E': E_young,
                     'poisson': poisson, 'pore_contrast': pore_contrast, 'Gc': Gc,
                     'length_scale': length_scale, 'k_residual': k_residual,

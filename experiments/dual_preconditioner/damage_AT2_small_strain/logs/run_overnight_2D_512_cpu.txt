@@ -1,0 +1,17 @@
+Running as unit: run-p1486632-i1473389.scope; invocation ID: 0f8d98bca3d144a3810c97072eb49607
+21:32:57 start l=0.00390625 incl= dual
+21:32:57 start l=0.00390625 incl=10 dual
+22:02:16 done  l=0.00390625 incl= dual (exit 0)
+22:02:16 start l=0.00390625 incl= Green
+22:05:08 done  l=0.00390625 incl=10 dual (exit 0)
+22:05:08 start l=0.00390625 incl=10 Green
+22:31:23 done  l=0.00390625 incl= Green (exit 0)
+22:31:23 start l=0.0078125 incl= dual
+00:07:54 done  l=0.00390625 incl=10 Green (exit 0)
+00:07:54 start l=0.0078125 incl=10 dual
+00:12:44 done  l=0.0078125 incl= dual (exit 0)
+00:12:44 start l=0.0078125 incl= Green
+01:58:16 done  l=0.0078125 incl=10 dual (exit 0)
+01:58:16 start l=0.0078125 incl=10 Green
+03:22:08 done  l=0.0078125 incl= Green (exit 0)
+09:33:00 done  l=0.0078125 incl=10 Green (exit 0)

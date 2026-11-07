@@ -1,0 +1,48 @@
+wrote /home/martin/PycharmProjects/muFFTTO/experiments/dual_preconditioner/damage_AT2_small_strain/figures/AT2_contrast_map_2D_pre.png
+grid exponents b, settings in the order: pores = k = 1e-3 | pores 1e-3 + damage, k = 1e-4 | pores = k = 1e-4 | stiff inclusions 10x, k = 1e-4 | stiff inclusions 1000x, k = 1e-4
+sharp  Green         b = -0.08 -0.12 -0.07  0.00 -0.10
+sharp  Green_Jacobi  b =  0.79  0.79  0.80  0.61  0.69
+sharp  dual          b = -0.08 -0.09 -0.08 -0.03 -0.10
+smooth Green         b = -0.05 -0.04 -0.05 -0.01 -0.07
+smooth Green_Jacobi  b =  0.82  0.82  0.83  0.65  0.74
+smooth dual          b = -0.05 -0.08 -0.05 -0.02 -0.09
+
+wrote /home/martin/PycharmProjects/muFFTTO/experiments/dual_preconditioner/damage_AT2_small_strain/figures/AT2_contrast_scaling_2D_pre.png
+crack  setting                          precond           b |    32    64   128 |    256    512   1024 | real 256 real/fit
+sharp  pores = k = 1e-3                 Green         -0.08 |    29    27    26 |     25     23     22 |       25     1.01
+sharp  pores = k = 1e-3                 Green_Jacobi   0.79 |    61   102   183 |    312    539    932 |      nan      nan
+sharp  pores = k = 1e-3                 dual          -0.08 |    57    55    51 |     49     46     44 |       49     1.00 | real 512    47 (1.01)
+sharp  pores 1e-3 + damage, k = 1e-4    Green         -0.12 |    48    44    40 |     37     34     31 |       37     1.00
+sharp  pores 1e-3 + damage, k = 1e-4    Green_Jacobi   0.79 |    61   101   182 |    310    534    922 |      343     1.11
+sharp  pores 1e-3 + damage, k = 1e-4    dual          -0.09 |    55    53    49 |     46     44     41 |       46     1.00
+sharp  pores = k = 1e-4                 Green         -0.07 |    29    28    26 |     25     24     22 |       25     1.00
+sharp  pores = k = 1e-4                 Green_Jacobi   0.80 |    63   106   193 |    332    580   1013 |      347     1.04
+sharp  pores = k = 1e-4                 dual          -0.08 |    67    64    59 |     56     53     50 |       57     1.01 | real 512    54 (1.02)
+sharp  stiff inclusions 10x, k = 1e-4   Green          0.00 |    25    25    25 |     25     25     25 |       23     0.91
+sharp  stiff inclusions 10x, k = 1e-4   Green_Jacobi   0.61 |    47    70   109 |    165    252    384 |      197     1.19
+sharp  stiff inclusions 10x, k = 1e-4   dual          -0.03 |    33    33    32 |     31     31     30 |       31     1.00
+sharp  stiff inclusions 1000x, k = 1e-4 Green         -0.10 |    50    52    44 |     42     39     37 |       40     0.94
+sharp  stiff inclusions 1000x, k = 1e-4 Green_Jacobi   0.69 |   187   294   485 |    774   1246   2006 |      839     1.08
+sharp  stiff inclusions 1000x, k = 1e-4 dual          -0.10 |    44    44    38 |     36     34     32 |       37     1.01 | real 512    36 (1.07)
+smooth pores = k = 1e-3                 Green         -0.05 |    29    28    27 |     26     25     24 |       26     1.00
+smooth pores = k = 1e-3                 Green_Jacobi   0.82 |    61   103   190 |    330    581   1023 |      360     1.09
+smooth pores = k = 1e-3                 dual          -0.05 |    57    56    53 |     52     50     48 |       53     1.01 | real 512    52 (1.04)
+smooth pores 1e-3 + damage, k = 1e-4    Green         -0.04 |    48    48    45 |     45     43     42 |       45     1.01
+smooth pores 1e-3 + damage, k = 1e-4    Green_Jacobi   0.82 |    61   102   190 |    329    580   1023 |      361     1.10
+smooth pores 1e-3 + damage, k = 1e-4    dual          -0.08 |    55    54    49 |     47     44     42 |       48     1.03 | real 512    48 (1.08)
+smooth pores = k = 1e-4                 Green         -0.05 |    29    28    27 |     26     25     24 |       26     1.00
+smooth pores = k = 1e-4                 Green_Jacobi   0.83 |    63   108   201 |    352    627   1117 |      380     1.08
+smooth pores = k = 1e-4                 dual          -0.05 |    67    66    63 |     61     59     57 |       62     1.01 | real 512    61 (1.04)
+smooth stiff inclusions 10x, k = 1e-4   Green         -0.01 |    25    24    24 |     24     24     24 |       24     0.99
+smooth stiff inclusions 10x, k = 1e-4   Green_Jacobi   0.65 |    47    70   116 |    179    282    443 |      208     1.16
+smooth stiff inclusions 10x, k = 1e-4   dual          -0.02 |    33    32    32 |     31     31     31 |       32     1.00 | real 512    31 (1.01)
+smooth stiff inclusions 1000x, k = 1e-4 Green         -0.07 |    50    51    46 |     44     42     40 |       47     1.06
+smooth stiff inclusions 1000x, k = 1e-4 Green_Jacobi   0.74 |   187   301   526 |    869   1455   2438 |      984     1.13
+smooth stiff inclusions 1000x, k = 1e-4 dual          -0.09 |    44    43    39 |     37     35     33 |       39     1.04 | real 512    38 (1.10)
+check  pores 1e-3 + damage, k = 1e-4    Green         real 256:    37  512:    34
+check  pores 1e-3 + damage, k = 1e-4    Green_Jacobi  real 256:   343  512:     0
+check  pores 1e-3 + damage, k = 1e-4    dual          real 256:    46  512:    46
+check  stiff inclusions 10x, k = 1e-4   Green         real 256:    23  512:    22
+check  stiff inclusions 10x, k = 1e-4   Green_Jacobi  real 256:   197  512:     0
+check  stiff inclusions 10x, k = 1e-4   dual          real 256:    31  512:    31
+wrote /home/martin/PycharmProjects/muFFTTO/experiments/dual_preconditioner/damage_AT2_small_strain/figures/AT2_contrast_extrapolation_2D_pre.png

@@ -1,0 +1,15 @@
+18:28:58 start N=128 k=1e-4
+19:01:50 done  N=128 k=1e-4 (exit 0)
+19:01:50 start N=128 k=1e-5
+19:39:54 done  N=128 k=1e-5 (exit 0)
+19:39:54 start N=128 k=1e-6
+19:39:57 done  N=128 k=1e-6 (exit 0)
+19:39:57 start N=64 k=1e-4
+19:40:00 done  N=64 k=1e-4 (exit 0)
+19:40:00 start N=64 k=1e-5
+19:40:03 done  N=64 k=1e-5 (exit 0)
+19:40:03 start N=64 k=1e-6
+19:40:06 done  N=64 k=1e-6 (exit 0)
+19:41:04 start N=128 k=1e-6
+20:39:22 done  N=128 k=1e-6 (exit 0)
+20:39:22 start N=64 k=1e-4

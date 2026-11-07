@@ -1,0 +1,16 @@
+22:54:52 start gypsum N=512 grains dual
+23:44:35 done  gypsum N=512 grains dual (exit 0)
+23:44:35 start gypsum N=512 grains Green_Jacobi
+01:19:13 done  gypsum N=512 grains Green_Jacobi (exit 0)
+01:19:13 start gypsum N=512 grains Green
+06:55:35 done  gypsum N=512 grains Green (exit 0)
+06:55:35 start gypsum N=512 pores dual
+08:59:59 done  gypsum N=512 pores dual (exit 0)
+08:59:59 start gypsum N=512 pores Green
+11:01:01 done  gypsum N=512 pores Green (exit 0)
+11:01:01 start gypsum N=512 pores Green_Jacobi
+14:06:25 done  gypsum N=512 pores Green_Jacobi (exit 0)
+14:06:25 start gypsum N=1024 grains dual
+16:49:59 done  gypsum N=1024 grains dual (exit 0)
+16:49:59 start gypsum N=1024 grains Green_Jacobi
+./run_AT2_gypsum_rve_large_gpu.sh terminated by signal TERM.

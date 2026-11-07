@@ -1,0 +1,37 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Set-up}{1}{section.1}\protected@file@percent }
+\newlabel{sec:setup}{{1}{1}{Set-up}{section.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Geometry.}{1}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Loads.}{1}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fracture.}{1}{section*.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The house at voxel size 12.5\,cm (grid $60 \times 51 \times 76$), with a sample of the wind loads: red windward pressure, blue leeward suction, purple side suction, green roof uplift.}}{2}{figure.caption.3}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:geometry}{{1}{2}{The house at voxel size 12.5\,cm (grid $60 \times 51 \times 76$), with a sample of the wind loads: red windward pressure, blue leeward suction, purple side suction, green roof uplift}{figure.caption.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Load control.}{2}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Solvers.}{2}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Output.}{2}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Results}{2}{section.2}\protected@file@percent }
+\newlabel{sec:results}{{2}{2}{Results}{section.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Left: wind against the controlled eaves displacement; the thin lines are the staggered iterations inside the snaps. Middle: cracked masonry (voxels with mean nodal damage above 0.9). Right: CG iterations per elastic solve over all staggered iterations.}}{3}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:curves}{{2}{3}{Left: wind against the controlled eaves displacement; the thin lines are the staggered iterations inside the snaps. Middle: cracked masonry (voxels with mean nodal damage above 0.9). Right: CG iterations per elastic solve over all staggered iterations}{figure.caption.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{With self-weight}{3}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Without self-weight}{3}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Resolution.}{3}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Videos.}{3}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Which preconditioner for the cracking house?}{3}{section.3}\protected@file@percent }
+\newlabel{sec:precond}{{3}{3}{Which preconditioner for the cracking house?}{section.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces With self-weight, the last frame: deformed house (magnified) from the windward and the leeward side, masonry coloured by the damage; wind against eaves displacement; CG iterations.}}{4}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:last}{{3}{4}{With self-weight, the last frame: deformed house (magnified) from the windward and the leeward side, masonry coloured by the damage; wind against eaves displacement; CG iterations}{figure.caption.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces As Figure~\ref {fig:last}, without self-weight.}}{5}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:last_nograv}{{4}{5}{As Figure~\ref {fig:last}, without self-weight}{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}The bug: Green in physical units}{5}{section.4}\protected@file@percent }
+\newlabel{sec:bug}{{4}{5}{The bug: Green in physical units}{section.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Cause.}{5}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fix.}{5}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Green-Jacobi}{5}{section*.18}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces CG iterations, time per solve and time per iteration, five frozen damage states, 12.5\,cm. Hatched: projected (Dirichlet by $\mathbf  {Q}$); solid: corrected for the clamped foundation. Times taken while the second run shared the GPU.}}{6}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:precond}{{5}{6}{CG iterations, time per solve and time per iteration, five frozen damage states, 12.5\,cm. Hatched: projected (Dirichlet by $\mathbf {Q}$); solid: corrected for the clamped foundation. Times taken while the second run shared the GPU}{figure.caption.15}{}}
+\gdef \@abspage@last{6}

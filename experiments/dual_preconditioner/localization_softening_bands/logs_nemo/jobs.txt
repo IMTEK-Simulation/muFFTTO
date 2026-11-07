@@ -1,0 +1,21 @@
+8657592 smoke test 2:64:dual:xx 3:32:dual:xx (30 min)
+8657599 smoke test 2:64:dual:xx 3:32:dual:xx (30 min), resubmit after 8657592 failed (set -e bug)
+8658030 2026-11-07_00:32 --time=12:00:00 sbatch_czm_gpu.sh 2:32:Green:xx 2:32:Green_Jacobi:xx 2:32:dual:xx 2:64:Green:xx 2:64:Green_Jacobi:xx 2:64:dual:xx 2:128:Green:xx 2:128:Green_Jacobi:xx 2:128:dual:xx
+8658032 2026-11-07_00:32 --time=12:00:00 --export=ALL,LOAD_MAX=6e-3 sbatch_czm_gpu.sh 2:32:Green:xy 2:32:Green_Jacobi:xy 2:32:dual:xy 2:64:Green:xy 2:64:Green_Jacobi:xy 2:64:dual:xy 2:128:Green:xy 2:128:Green_Jacobi:xy 2:128:dual:xy
+8658033 2026-11-07_00:32 sbatch_czm_gpu.sh 2:256:Green:xx
+8658034 2026-11-07_00:32 sbatch_czm_gpu.sh 2:256:Green_Jacobi:xx
+8658035 2026-11-07_00:32 sbatch_czm_gpu.sh 2:256:dual:xx
+8658036 2026-11-07_00:32 sbatch_czm_gpu.sh 2:512:Green:xx
+8658037 2026-11-07_00:32 sbatch_czm_gpu.sh 2:512:Green_Jacobi:xx
+8658038 2026-11-07_00:32 sbatch_czm_gpu.sh 2:512:dual:xx
+8658039 2026-11-07_00:32 sbatch_czm_gpu.sh 3:32:Green:xx 3:32:Green_Jacobi:xx 3:32:dual:xx 3:64:Green:xx 3:64:Green_Jacobi:xx 3:64:dual:xx
+8658040 2026-11-07_00:32 sbatch_czm_gpu.sh 3:128:Green:xx
+8658041 2026-11-07_00:32 sbatch_czm_gpu.sh 3:128:Green_Jacobi:xx
+8658042 2026-11-07_00:32 sbatch_czm_gpu.sh 3:128:dual:xx
+2026-11-07_01:34 cancelled 8658030 8658032 (2D 32-128 bundles): QOS full, run on the laptop CPU instead (CPU = GPU CG counts verified)
+8658120 2026-11-07_03:31 sbatch_czm_gpu.sh 2:1024:dual:xx
+8658121 2026-11-07_03:31 sbatch_czm_gpu.sh 2:1024:Green_Jacobi:xx
+8658122 2026-11-07_03:31 -p h200 --mem=200G sbatch_czm_gpu.sh 3:256:dual:xx
+8658123 2026-11-07_03:31 -p h200 --mem=200G sbatch_czm_gpu.sh 3:256:Green_Jacobi:xx
+8658213 2026-11-07_04:18 sbatch_czm_gpu.sh 2:1024:Green:xx
+8658214 2026-11-07_04:18 --export=ALL,LOAD_MAX=6e-3 sbatch_czm_gpu.sh 2:256:Green:xy 2:256:Green_Jacobi:xy 2:256:dual:xy

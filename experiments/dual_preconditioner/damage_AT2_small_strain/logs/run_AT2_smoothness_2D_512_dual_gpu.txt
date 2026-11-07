@@ -1,0 +1,16 @@
+13:24:20 start poresk4 l=0.00390625
+13:58:46 done  poresk4 l=0.00390625 (exit 0)
+13:58:46 start incl1000 l=0.00390625
+14:29:06 done  incl1000 l=0.00390625 (exit 0)
+14:29:06 start poresk3 l=0.00390625
+16:57:49 done  poresk3 l=0.00390625 (exit 0)
+16:57:49 start poresk4 l=0.0625
+17:35:30 done  poresk4 l=0.0625 (exit 0)
+17:35:30 start incl1000 l=0.0625
+17:43:59 done  incl1000 l=0.0625 (exit 0)
+17:43:59 start poresk3 l=0.0625
+17:57:13 done  poresk3 l=0.0625 (exit 0)
+17:57:13 start pores l=0.0625
+18:10:39 done  pores l=0.0625 (exit 0)
+18:10:39 start incl10 l=0.0625
+18:14:43 done  incl10 l=0.0625 (exit 0)

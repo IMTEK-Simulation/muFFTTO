@@ -1,0 +1,1 @@
+logs/TO_CH_starts/sine.log:Data saved to: /home/martin/PycharmProjects/muFFTTO/experiments/dual_preconditioner/topology_optimization/data/example_2D_elasticity_TO/N128_soft0.0001_energy-warm_Green_Jacobi_eta_0.03125_pfw0.2_l_bfgs_start_sine_final.nc and _history.nc
