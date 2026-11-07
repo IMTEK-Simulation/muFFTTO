@@ -45,6 +45,8 @@ Output: runs/bar3d_<...>/ with run.log, state.npz (u per increment, p, cavity vo
 (sub-point 'pixel') fields solid, cavity, det_F (quadrature mean) and displacement in grid-point units (u / h), with the
 pinned cavity-interior nodes filled by the harmonic extension of the cavity surface (display only; MUEYE_FILL=0: off,
 the gas region then shows the pinned nodes); frame variables pressure, phase (t / T), cavity_volume_ratio, increment.
+QBLOCK=b (0 = all at once): evaluate the material law, the matrix-free stress increment and its state in blocks of b
+quadrature points (same result, temporaries smaller by nb_q / b; needed at h = 1/128 on a 48 GB GPU).
 OUTPUT_EVERY=k (1): store u in state.npz and write the muEye frame only every k-th increment (and the last one).
 """
 import os
@@ -78,6 +80,7 @@ WAVES = float(os.environ.get('WAVES', 1))
 PULSE = os.environ.get('PULSE', '0') == '1'
 MUEYE_NC = os.environ.get('MUEYE_NC', '1') == '1'
 MUEYE_FILL = os.environ.get('MUEYE_FILL', '1') == '1'
+QBLOCK = int(os.environ.get('QBLOCK', 0))      # >0: evaluate material / stress increment in blocks of QBLOCK quad points
 OUTPUT_EVERY = int(os.environ.get('OUTPUT_EVERY', 1))   # store u / write the muEye frame every k-th increment
 PULSE_LEN = float(os.environ.get('PULSE_LEN', 1 / 3))
 PULSE_TRAVEL = float(os.environ.get('PULSE_TRAVEL', 2 / 3))
@@ -205,11 +208,13 @@ def neo_hookean(F, tangent=False):
     return W, P, mu_s * a * A_iso + kappa_s * A_vol
 
 
-def material(F, p, tangent=False):
-    out = list(neo_hookean(xp.where(solid_q, F, I3), tangent))          # F = I in the void (no log of J <= 0)
-    out = [xp.where(solid_q, v, 0.0) for v in out]
+def material(F, p, tangent=False, sq=None, gq=None):
+    sq = solid_q if sq is None else sq
+    gq = gas_q if gq is None else gq
+    out = list(neo_hookean(xp.where(sq, F, I3), tangent))               # F = I in the void (no log of J <= 0)
+    out = [xp.where(sq, v, 0.0) for v in out]
     if p != 0.0:
-        w = p * gas_q
+        w = p * gq
         out[0] = out[0] - w * det3(F)
         out[1] = out[1] - w * cofactor(F)
         if tangent:                                                      # d cof_ij / d F_kl = eps_ikm eps_jln F_mn
@@ -218,26 +223,58 @@ def material(F, p, tangent=False):
     return tuple(out)
 
 
-def stress_increment(st, G, p):
-    """dP = A(F) : G (solid law + gas), from the stored state st = (F, F^-T, J^-2/3, ln J, I1); G = grad v"""
+def qblocks():
+    b = QBLOCK if 0 < QBLOCK < nb_q else nb_q
+    return [slice(q0, q0 + b) for q0 in range(0, nb_q, b)]
+
+
+def material_blocked(F, p):
+    """W, P of material(F, p) evaluated per block of quadrature points (QBLOCK)"""
+    if len(qblocks()) == 1:
+        return material(F, p)
+    W = xp.empty(F.shape[2:])
+    P = xp.empty_like(F)
+    for b in qblocks():
+        W[b], P[:, :, b] = material(F[:, :, b], p, sq=solid_q[b], gq=gas_q[b])
+    return W, P
+
+
+def stress_increment(st, G, p, sq=None, gq=None):
+    """dP = A(F) : G (solid law + gas), from the stored state st = (F, F^-T, J^-2/3, ln J, I1, F); G = grad v"""
+    if sq is None and len(qblocks()) > 1:
+        out = xp.empty_like(G)
+        for b in qblocks():
+            stb = tuple(v[:, :, b] if v.ndim == G.ndim else v[b] for v in st)
+            out[:, :, b] = stress_increment(stb, G[:, :, b], p, sq=solid_q[b], gq=gas_q[b])
+        return out
+    sq = solid_q if sq is None else sq
+    gq = gas_q if gq is None else gq
     F, FiT, a, lnJ, I1 = st[:5]
     trFiG = xp.einsum('ij...,ij...->...', FiT, G)
     trFG = xp.einsum('ij...,ij...->...', F, G)
     M = xp.einsum('il...,kl...,kj...->ij...', FiT, G, FiT)               # F^-T G^T F^-T
     dP = (mu_s * a * (G - 2.0 / 3.0 * F * trFiG - 2.0 / 3.0 * FiT * trFG + 2.0 / 9.0 * I1 * FiT * trFiG
                       + I1 / 3.0 * M) + kappa_s * (FiT * trFiG - lnJ * M))
-    dP = xp.where(solid_q, dP, 0.0)
+    dP = xp.where(sq, dP, 0.0)
     if p != 0.0:                                     # d cof(F)[G] = cof(F + G) - cof(F) - cof(G) (cof is quadratic)
         Fg = st[5]
-        dP = dP - p * gas_q * (cofactor(Fg + G) - cofactor(Fg) - cofactor(G))
+        dP = dP - p * gq * (cofactor(Fg + G) - cofactor(Fg) - cofactor(G))
     return dP
 
 
 def mf_state(F):
     Fs = xp.where(solid_q, F, I3)
-    J = det3(Fs)
-    FiT = cofactor(Fs) / J
-    return (Fs, FiT, J ** (-2.0 / 3.0), xp.log(J), xp.einsum('ij...,ij...->...', Fs, Fs), F)
+    FiT = xp.empty_like(F)
+    a = xp.empty(F.shape[2:])
+    lnJ = xp.empty(F.shape[2:])
+    I1 = xp.empty(F.shape[2:])
+    for b in qblocks():
+        J = det3(Fs[:, :, b])
+        FiT[:, :, b] = cofactor(Fs[:, :, b]) / J
+        a[b] = J ** (-2.0 / 3.0)
+        lnJ[b] = xp.log(J)
+        I1[b] = xp.sum(Fs[:, :, b] * Fs[:, :, b], axis=(0, 1))
+    return (Fs, FiT, a, lnJ, I1, F)
 
 
 # finite-difference check of P = dW/dF and A = dP/dF (solid law and gas term), on the host
@@ -280,7 +317,7 @@ def fun_grad(x):
     F = deformation_gradient(x)
     if not float(xp.min(xp.where(solid_q, det3(F), xp.inf))) > 0.0:
         return INADMISSIBLE, np.zeros(np.shape(x))
-    W, P = material(F, p_current)
+    W, P = material_blocked(F, p_current)
     stress.s[...] = P
     disc.fft.communicate_ghosts(stress)
     disc.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress, div_u_fnxyz=F_['g'],
@@ -309,6 +346,7 @@ def update_tangent(x):
     if cache['x'] is not None and cache['p'] == (p_current, phase_current) and np.array_equal(cache['x'], x):
         return
     if MATRIX_FREE:
+        mf['state'] = None                       # free the old state before building the new one
         mf['state'] = mf_state(deformation_gradient(x))
     else:
         tangent_field.s[...] = material(deformation_gradient(x), p_current, tangent=True)[2]
