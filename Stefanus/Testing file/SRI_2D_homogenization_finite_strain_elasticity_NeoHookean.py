@@ -19,25 +19,32 @@ from muFFTTO import visualization_utils
 
 # Numerical settings ============================
 NX = 64                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 10                  # Number of increment for the applied load
+N_inc =10               # Number of increment for the applied load
 cg_tol = 1e-9               # CG tolerance
-NEWTON_TOL = 5e-7           # Newton stop: |r| / |r0| of the increment. 1e-6 is NOT safe here: r0 is dominated by the
+NEWTON_TOL = 5e-7          # Newton stop: |r| / |r0| of the increment. 1e-6 is NOT safe here: r0 is dominated by the
                             # stiff inclusion, at 1e-6 <P> was still 20-40 % off in a test (1e-8 costs ~4x more CG)
-E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
+E_LOAD = 1                 # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False      # plot the deformed cell after every load increment
 plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'paper'          # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
-INTEGRATION = 'sri'        # 'full' = library NeoHookean at the 4 Gauss points (bilinear LOCKS for Lambda/mu = 1000)
+INTEGRATION = 'sri'         # 'full' = NeoHookean at the 4 Gauss points, code chosen by FULL_IMPL (bilinear LOCKS for Lambda/mu = 1000)
                             # 'sri'  = selective reduced integration: mu part at the 4 Gauss points, lambda part once
                             #          per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
-SRI_TANGENT = 'spd'         # 'exact' = consistent SRI tangent (quadratic Newton, but INDEFINITE under compression for the
-                            #           paper material -> CG fails); 'spd' = without the initial-stress part of the lam term
-                            #           (always positive definite; Newton converges to the SAME solution, residual is exact)
+FULL_IMPL = 'own'           # INTEGRATION = 'full' only: 'own' = the SRI code below with J0 -> J at every Gauss point (same
+                            #   energy as the library NeoHookean, same SRI_TANGENT option -> fair comparison with 'sri');
+                            #   'library' = material_models.NeoHookean (exact tangent, INDEFINITE under compression)
+SRI_TANGENT = 'spd'         # 'exact' = consistent SRI tangent = Martin's (lines 258-263); with plain Newton CG hits
+                            #           negative curvature already in increment 0 -> needs his trust region
+                            #           'spd' = without the initial-stress part of the lam term -> positive definite on the
+                            #           stable path (tested: 64 px, X and Y, up to eps_cr); Newton converges to the SAME
+                            #           solution, the residual is exact -> use this without TR. If CG still reports
+                            #           negative curvature, the cell has become UNSTABLE (e.g. 32 px: only 1.4 px across a
+                            #           ligament, unstable at eps ~ 0.016 in Y) -> refine the mesh or use Martin's TR
 VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
                             # 'soft' = stand-in mu = 1e-4 mu_m, lam = 0
-LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown with <P_ll> = 0 (as Martin): corrected (secant) each time the
+LATERAL     = 'exact'        # 'exact'  = F_ll is an unknown with <P_ll> = 0 (as Martin): corrected (secant) each time the
                             #            fluctuations have converged, until pixel area |<P_ll>| < GTOL mu_m h d_eps
                             # 'simple' = F_ll = 1 + NU_LAT eps (lateral stress up to ~1.6 % of axial, Y, 64 px, SRI)
 NEWTON_STOP = 'martin'      # 'martin'   = max|r| < GTOL mu_m h d_eps (absolute inf-norm of the nodal forces, Martin l. 513)
@@ -46,7 +53,8 @@ GTOL        = 1e-4          # Martin's default --gtol
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'Y'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.020, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper text)
+EPS_MAX = {'X': 0.016, 'Y': 0.026}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+                                                # docstring) = Martin's --eps_max (also sets his gtol via d_eps)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.026}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Free lateral side, SIMPLE version: lateral macro strain = +nu * compressive strain, nu = small-strain Poisson ratio
 # of the cell. NU_MODE = 'auto': nu is computed in this script at F = I (2 linear solves) for exactly this NX,
@@ -106,7 +114,7 @@ S_REF = MU_M_MPA    # stress scale  [MPa] -> stresses / moduli in units of mu^(m
 c_matrix = C_MATRIX
 r = R_MM / L_REF                        # = 1
 CONTRAST = MU_I_MPA / S_REF             # = 1000
-MU_VOID = MU_V_MPA / S_REF              # = 1e-4  (finite strain: 0 is NOT allowed, neo-Hookean needs mu > 0)
+MU_VOID = MU_V_MPA / S_REF              # 'soft': 1e-4; 'hole': 0 (allowed: F = I is set inside the hole)
 incl_vol_frac = 1.0 - c_matrix          # total circle fraction (voids + stiff)
 
 # Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
@@ -277,6 +285,7 @@ for d in range(dim):
 dF_field  = discretization.get_displacement_gradient_sized_field(name='dF_field')     # dF = grad(x) in K_fun
 dP_field  = discretization.get_displacement_gradient_sized_field(name='dP_field')     # dP in K_fun
 sri_state = {}                                                                          # F^-T, F0^-T, ln J0 of the last update
+OWN_CODE  = INTEGRATION == 'sri' or FULL_IMPL == 'own'                                 # use the functions below (else library)
 
 
 def det2(M):
@@ -302,7 +311,7 @@ def A_dBT_C(A, dB, C):
 def sri_update(F_field, P_field, W_field):
     """SRI stress P and energy W at the deformation gradient F_field; keeps what K_fun needs in sri_state"""
     F   = F_field.s                                   # (2, 2, q, x, y)
-    F0  = F.mean(axis=2, keepdims=True)               # (2, 2, 1, x, y): pixel mean of F
+    F0  = F.mean(axis=2, keepdims=True) if INTEGRATION == 'sri' else F   # 'sri': pixel mean of F; 'full': F itself
     J, J0 = det2(F), det2(F0)
     J_min = MPI.COMM_WORLD.allreduce(float(min(J.min(), J0.min())), op=MPI.MIN)
     if J_min <= 0.0:
@@ -316,7 +325,7 @@ def sri_update(F_field, P_field, W_field):
 
 def sri_dP(dF, st):
     """linearised SRI stress dP for the gradient increment dF (2, 2, q, x, y) at the state st"""
-    dF0 = dF.mean(axis=2, keepdims=True)
+    dF0 = dF.mean(axis=2, keepdims=True) if INTEGRATION == 'sri' else dF
     return (st['mu'] * (dF + A_dBT_C(st['FiT'], dF, st['FiT']))
             + st['lam'] * (ddot(st['F0iT'], dF0) * st['F0iT']
                            - (st['lnJ0'] * A_dBT_C(st['F0iT'], dF0, st['F0iT']) if SRI_TANGENT == 'exact' else 0.0)))
@@ -327,7 +336,7 @@ def sri_reference_operator(input_field_inxyz, output_field_inxyz):
     discretization.fft.communicate_ghosts(input_field_inxyz)
     discretization.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz, grad_u_ijqxyz=dF_field)
     dF  = dF_field.s
-    dF0 = dF.mean(axis=2, keepdims=True)
+    dF0 = dF.mean(axis=2, keepdims=True) if INTEGRATION == 'sri' else dF
     dP_field.s[...] = (mu_matrix * (dF + np.swapaxes(dF, 0, 1))
                        + lam_matrix * np.einsum('ii...->...', dF0) * np.eye(dim)[:, :, None, None, None])
     discretization.fft.communicate_ghosts(dP_field)
@@ -339,7 +348,7 @@ def constitutive_update():
     """stress (and the tangent or SRI state for K_fun) and energy at the current total_strain_field"""
     if VOID == 'hole':                              # true hole: F = I inside keeps ln J finite; mu = lam = 0 there,
         total_strain_field.s[..., void_mask] = np.eye(dim)[:, :, None, None]   # so P = 0, W = 0, tangent = 0
-    if INTEGRATION == 'sri':
+    if OWN_CODE:
         sri_update(total_strain_field, stress_field, energy_field)
     else:
         material.get_stress(total_strain_field, stress_field)
@@ -349,7 +358,7 @@ def constitutive_update():
 
 def K_fun(x, Ax):
     """system matrix (Hessian of the energy) at the last constitutive_update, applied to x"""
-    if INTEGRATION == 'sri':
+    if OWN_CODE:
         discretization.fft.communicate_ghosts(x)
         discretization.apply_gradient_operator_mugrid(u_inxyz=x, grad_u_ijqxyz=dF_field)
         dP_field.s[...] = sri_dP(dF_field.s, sri_state)
@@ -371,7 +380,7 @@ def K_fun(x, Ax):
 # ============================================================================
 preconditioner = discretization.get_preconditioner_Green_mugrid(
     reference_material_data_ijkl=ref_mat,
-    operator=sri_reference_operator if INTEGRATION == 'sri' else None    # SRI: Green of the SRI operator
+    operator=sri_reference_operator if OWN_CODE else None    # Green of the operator actually used (SRI or own full)
 )
 
 def M_fun_Green(x, Px):
@@ -428,7 +437,6 @@ def linear_response(E_macro, h=1e-6):
     displacement_increment_field.s.fill(0)
     return response, len(its)
 
-
 # ============================================================================
 # lateral Poisson ratio of the cell (free lateral side, simple version)
 # ============================================================================
@@ -459,12 +467,14 @@ load_pattern       = np.zeros((dim, dim))       # total macro gradient F - I
 if LOAD_MODE == 'fig4':
     load_pattern[k, k] = -EPS_MAX[LOAD_DIRECTION]                           # uniaxial compression
     load_pattern[l, l] = +NU_LAT[LOAD_DIRECTION] * EPS_MAX[LOAD_DIRECTION]  # lateral expansion (free side, simple)
+    # load_pattern[l, k] = 0.1  #introduce shear for buckling
 else:                                           # 'manual': set any components here (index [i, j] = du_i/dx_j)
     load_pattern[0, 1] = 0.01                   # shear
     load_pattern[0, 0] = 0.04                   # stretch in x
     # load_pattern[1, 1] = 0.05                 # stretch in y
 macro_gradient_inc = E_LOAD * load_pattern / float(ninc)
 lat_corr = 0.0                                  # LATERAL = 'exact': correction of F_ll on top of NU_LAT eps
+lat_step_prev = 0.0                             # LATERAL = 'exact': F_ll correction of the last increment (predictor)
 if LATERAL == 'exact' and LOAD_MODE == 'fig4':
     if NU_MODE != 'auto':
         raise ValueError('LATERAL = "exact" needs NU_MODE = "auto" (uses the small-strain stiffness C_dir)')
@@ -490,7 +500,7 @@ _info['norm_strain_fluc_field'] = []
 # initial constitutive evaluation
 constitutive_update()
 
-if discretization.communicator.rank == 0 and INTEGRATION == 'full':
+if discretization.communicator.rank == 0 and not OWN_CODE:
     print(f'tangent min/max : {tangent_field.s.min():.4f} / {tangent_field.s.max():.4f}')
 
 # ============================================================================
@@ -523,6 +533,10 @@ for inc in range(ninc):
 
     # apply macroscopic deformation gradient increment
     total_strain_field.s[...] += macro_gradient_inc_field.s[...]
+    lat_start = lat_corr
+    if LATERAL == 'exact' and LOAD_MODE == 'fig4':  # predictor: repeat the F_ll correction of the last increment
+        total_strain_field.s[l, l] += lat_step_prev
+        lat_corr += lat_step_prev
 
     # constitutive response at new F
     constitutive_update()
@@ -570,16 +584,25 @@ for inc in range(ninc):
 
         displacement_increment_field.s.fill(0)
 
-        Solvers.conjugate_gradients(
-            comm=discretization.communicator,
-            fc=discretization.field_collection,
-            hessp=K_fun,
-            b=rhs_field,
-            x=displacement_increment_field,
-            prec=M_fun_Green,
-            rtol=1e-3, atol=cg_tol * norm_rhs_0 if NEWTON_STOP == 'relative' else min(cg_tol * norm_rhs_0, 0.1 * GTOL_ABS),            maxiter=50000,
-            callback=callback,
-        )
+        try:
+            Solvers.conjugate_gradients(
+                comm=discretization.communicator,
+                fc=discretization.field_collection,
+                hessp=K_fun,
+                b=rhs_field,
+                x=displacement_increment_field,
+                prec=M_fun_Green,
+                rtol=1e-3, atol=cg_tol * norm_rhs_0 if NEWTON_STOP == 'relative' else min(cg_tol * norm_rhs_0, 0.1 * GTOL_ABS),
+                maxiter=50000,
+                callback=callback,
+            )
+        except Exception:
+            if discretization.communicator.rank == 0:
+                print(f'  CG failed in increment {inc}, Newton it {iiter + 1} (eps = {(inc + 1) * EPS_MAX[LOAD_DIRECTION] / ninc:.4f}): '
+                      f'negative curvature = the tangent is indefinite. With SRI_TANGENT = "spd" this means the cell is '
+                      f'unstable (past eps_cr of this mesh) -> refine NX, or use Martin\'s trust-region script; '
+                      f'with SRI_TANGENT = "exact" switch to "spd", with FULL_IMPL = "library" switch to "own"')
+            raise
 
         nb_it_cg    = len(norms['residual_rr'])
         sum_CG_its += nb_it_cg
@@ -688,6 +711,7 @@ for inc in range(ninc):
                 print(f'  WARNING: Newton not converged in increment {inc} (norm(rhs)/norm(rhs_0) = {norm_rhs / norm_rhs_0:.1e})')
             break
 
+    lat_step_prev = lat_corr - lat_start
     # homogenized stress and macro strain of this converged increment
     total_macro_gradient = (inc + 1) * macro_gradient_inc        # macro F - I
     total_macro_gradient[l, l] += lat_corr
@@ -736,7 +760,8 @@ _info['elapsed_time']    = elapsed_time
 
 if discretization.communicator.rank == 0:
     print('=' * 70)
-    print(f'element_type     : {element_type} | integration: {INTEGRATION} | material: {MATERIAL}')
+    print(f'element_type     : {element_type} | integration: {INTEGRATION}{"" if INTEGRATION == "sri" else " (" + FULL_IMPL + ")"} | '
+          f'tangent: {SRI_TANGENT if OWN_CODE else "library"} | material: {MATERIAL}')
     print(f'number_of_pixels : {number_of_pixels}')
     print(f'preconditioner   : {preconditioner_type}')
     print(f'Total CG its     : {sum_CG_its}')
@@ -763,7 +788,7 @@ if discretization.communicator.rank == 0 and LOAD_MODE == 'fig4':
     lat_MPa    = np.array(hist['P_lat']) * S_REF                 # should be ~0 (free lateral side)
     stretch    = np.array(hist['lateral_stretch'])
     nu_nom     = np.zeros_like(eps_nom)
-    nu_nom[1:] = (stretch[1:] - 1.0) / eps_nom[1:]               # nominal Poisson ratio (here = NU_LAT by construction)
+    nu_nom[1:] = (stretch[1:] - 1.0) / eps_nom[1:]               # nominal Poisson ratio ('exact': computed; 'simple': = NU_LAT)
     fname = data_folder_path + f'Fig4_finite_strain_{LOAD_DIRECTION}.csv'
     np.savetxt(fname, np.column_stack([eps_nom, stress_MPa, lat_MPa, stretch, nu_nom]),
                delimiter=',', fmt='%.8f', comments='',
