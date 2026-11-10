@@ -18,23 +18,31 @@ from muFFTTO import material_models
 from muFFTTO import visualization_utils
 
 # Numerical settings ============================
-NX = 128                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
+NX = 64                    # Arbitrary number of pixels (default of -n; NY follows from the cell)
 N_inc = 10                  # Number of increment for the applied load
 cg_tol = 1e-9               # CG tolerance
-NEWTON_TOL = 1e-8           # Newton stop: |r| / |r0| of the increment. 1e-6 is NOT safe here: r0 is dominated by the
+NEWTON_TOL = 5e-7           # Newton stop: |r| / |r0| of the increment. 1e-6 is NOT safe here: r0 is dominated by the
                             # stiff inclusion, at 1e-6 <P> was still 20-40 % off in a test (1e-8 costs ~4x more CG)
 E_LOAD = 1.0                # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False      # plot the deformed cell after every load increment
 plot_fig4 = True            # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'paper'          # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
-INTEGRATION = 'full'         # 'full' = library NeoHookean at the 4 Gauss points (bilinear LOCKS for Lambda/mu = 1000)
+INTEGRATION = 'sri'        # 'full' = library NeoHookean at the 4 Gauss points (bilinear LOCKS for Lambda/mu = 1000)
                             # 'sri'  = selective reduced integration: mu part at the 4 Gauss points, lambda part once
                             #          per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
-SRI_TANGENT = 'exact'         # 'exact' = consistent SRI tangent (quadratic Newton, but INDEFINITE under compression for the
+SRI_TANGENT = 'spd'         # 'exact' = consistent SRI tangent (quadratic Newton, but INDEFINITE under compression for the
                             #           paper material -> CG fails); 'spd' = without the initial-stress part of the lam term
                             #           (always positive definite; Newton converges to the SAME solution, residual is exact)
+VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
+                            # 'soft' = stand-in mu = 1e-4 mu_m, lam = 0
+LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown with <P_ll> = 0 (as Martin): corrected (secant) each time the
+                            #            fluctuations have converged, until pixel area |<P_ll>| < GTOL mu_m h d_eps
+                            # 'simple' = F_ll = 1 + NU_LAT eps (lateral stress up to ~1.6 % of axial, Y, 64 px, SRI)
+NEWTON_STOP = 'martin'      # 'martin'   = max|r| < GTOL mu_m h d_eps (absolute inf-norm of the nodal forces, Martin l. 513)
+                            # 'relative' = |r| / |r0| < NEWTON_TOL
+GTOL        = 1e-4          # Martin's default --gtol
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'Y'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
@@ -88,7 +96,7 @@ LAM_OVER_MU  = {'paper': 1e3,   'simplified': 100.0}[MATERIAL]   # Lambda / mu, 
 C_MATRIX     = 0.25             # target matrix volume fraction c^(m) ratio            [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
-MU_V_MPA     = 1e-4 * MU_M_MPA  # void stand-in shear modulus (arbitrary) [MPa]
+MU_V_MPA     = 1e-4 * MU_M_MPA if VOID == 'soft' else 0.0   # void: stand-in [MPa], or 0 for the true hole
 
 # Reference scales (nondimensionalisation) ====================================================
 L_REF = R_MM        # length scale  [mm]  -> lengths in units of r
@@ -329,6 +337,8 @@ def sri_reference_operator(input_field_inxyz, output_field_inxyz):
 
 def constitutive_update():
     """stress (and the tangent or SRI state for K_fun) and energy at the current total_strain_field"""
+    if VOID == 'hole':                              # true hole: F = I inside keeps ln J finite; mu = lam = 0 there,
+        total_strain_field.s[..., void_mask] = np.eye(dim)[:, :, None, None]   # so P = 0, W = 0, tangent = 0
     if INTEGRATION == 'sri':
         sri_update(total_strain_field, stress_field, energy_field)
     else:
@@ -403,12 +413,12 @@ def linear_response(E_macro, h=1e-6):
         norm_r = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
         if newton_it == 0:
             norm_r0 = norm_r
-        elif norm_r / norm_r0 < 1e-9:
+        elif norm_r / norm_r0 < NEWTON_TOL:
             break
         displacement_increment_field.s.fill(0)
         Solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
                                     hessp=K_fun, b=rhs_field, x=displacement_increment_field, prec=M_fun_Green,
-                                    rtol=1e-8, atol=0.0, maxiter=20000, callback=lambda it, fields: its.append(it))
+                                    rtol=1e-6, atol=0.0, maxiter=50000, callback=lambda it, fields: its.append(it))
         discretization.apply_gradient_operator_mugrid(u_inxyz=displacement_increment_field,
                                                       grad_u_ijqxyz=strain_fluc_field)
         total_strain_field.s[...] += strain_fluc_field.s[...]
@@ -454,6 +464,12 @@ else:                                           # 'manual': set any components h
     load_pattern[0, 0] = 0.04                   # stretch in x
     # load_pattern[1, 1] = 0.05                 # stretch in y
 macro_gradient_inc = E_LOAD * load_pattern / float(ninc)
+lat_corr = 0.0                                  # LATERAL = 'exact': correction of F_ll on top of NU_LAT eps
+if LATERAL == 'exact' and LOAD_MODE == 'fig4':
+    if NU_MODE != 'auto':
+        raise ValueError('LATERAL = "exact" needs NU_MODE = "auto" (uses the small-strain stiffness C_dir)')
+    C_LL = C_dir[l][l, l]                       # d<P_ll>/dF_ll with relaxed fluctuations: step of the F_ll correction
+GTOL_ABS = GTOL * 1.0 * h_x * np.abs(macro_gradient_inc).max()   # Martin: gtol mu_m h d_eps (mu_m = 1)
 
 if MPI.COMM_WORLD.rank == 0:
     if LOAD_MODE == 'fig4':
@@ -537,7 +553,7 @@ for inc in range(ninc):
     # ------------------------------------------------------------------
     iiter    = 0
     norm_rhs = norm_rhs_0
-
+    lat_prev = None                # LATERAL = 'exact': last (lat_corr, <P_ll>) for the secant
     while True:
         # K_fun (full or SRI) is defined above, next to constitutive_update
         norms = {'residual_rr': [], 'residual_rz': []}
@@ -561,8 +577,7 @@ for inc in range(ninc):
             b=rhs_field,
             x=displacement_increment_field,
             prec=M_fun_Green,
-            rtol=1e-3, atol=cg_tol * norm_rhs_0,  # floor relative to this increment's first residual
-            maxiter=50000,
+            rtol=1e-3, atol=cg_tol * norm_rhs_0 if NEWTON_STOP == 'relative' else min(cg_tol * norm_rhs_0, 0.1 * GTOL_ABS),            maxiter=50000,
             callback=callback,
         )
 
@@ -641,7 +656,32 @@ for inc in range(ninc):
 
     # ====================================================================================================================================================
         # convergence check
-        if norm_rhs / norm_rhs_0 < NEWTON_TOL and iiter > 0:  # see NEWTON_TOL in the settings
+        if NEWTON_STOP == 'martin':  # Martin: inf-norm of the residual (nodal forces), absolute
+            r_inf = MPI.COMM_WORLD.allreduce(float(np.abs(rhs_field.s).max()), op=MPI.MAX)
+            converged = r_inf < GTOL_ABS
+        else:
+            converged = norm_rhs / norm_rhs_0 < NEWTON_TOL
+        if converged and LATERAL == 'exact' and LOAD_MODE == 'fig4':
+            # free lateral side, exact (staggered): the fluctuations are converged at this F_ll -> <P_ll> is now
+            # reliable; if not ~0, step F_ll (secant update of the lateral stiffness) and continue the Newton loop
+            P_ll = average_P()[l, l]
+            if h_x * h_y * abs(P_ll) > GTOL_ABS:  # Martin's test for the f unknown: pixel area |<P_ll>| < gtol
+                if lat_prev is not None:
+                    C_LL = (P_ll - lat_prev[1]) / (lat_corr - lat_prev[0])
+                lat_prev = (lat_corr, P_ll)
+                d_f = -P_ll / C_LL
+                total_strain_field.s[l, l] += d_f
+                lat_corr += d_f
+                constitutive_update()
+                discretization.fft.communicate_ghosts(stress_field)
+                discretization.apply_gradient_transposed_operator_mugrid(
+                    gradient_field_ijqxyz=stress_field, div_u_fnxyz=rhs_field, apply_weights=True)
+                rhs_field.s[...] *= -1
+                norm_rhs = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+                converged = False
+                if discretization.communicator.rank == 0:
+                    print(f'  lateral: <P_ll> = {P_ll:.2e} -> F_ll step {d_f:+.2e} (C_LL = {C_LL:.4f})')
+        if converged:
             break
         if iiter >= 100:
             if discretization.communicator.rank == 0:
@@ -650,6 +690,7 @@ for inc in range(ninc):
 
     # homogenized stress and macro strain of this converged increment
     total_macro_gradient = (inc + 1) * macro_gradient_inc        # macro F - I
+    total_macro_gradient[l, l] += lat_corr
     P_avg = average_P()
     hist['eps_nominal'].append(-total_macro_gradient[k, k])      # compression > 0 (paper convention)
     hist['P_load'].append(P_avg[k, k])
@@ -669,6 +710,7 @@ for inc in range(ninc):
         # Plot the first two components of the solution field
         # Calculate total macroscopic gradient (F - I)
         total_macro_gradient = (inc + 1) * macro_gradient_inc
+        total_macro_gradient[l, l] += lat_corr
         # visualization_utils works on a unit cell [0,1]^2 -> same deformation in unit-cell coordinates
         L_cell = np.diag(domain_size)
         u_unit_cell.s[0] = displacement_fluctuation_field.s[0] / domain_size[0]
