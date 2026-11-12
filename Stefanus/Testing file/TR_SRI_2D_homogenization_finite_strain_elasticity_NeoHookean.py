@@ -23,10 +23,10 @@ NEWTON_TOL = 5e-7           # only for the small-strain probe of NU_LAT / E_eff 
 E_LOAD = 1                  # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False     # plot the deformed cell after every load step
 plot_fig4 = True           # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'paper'          # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'simplified'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
-INTEGRATION = 'full'         # 'sri'  = selective reduced integration (Martin --sri): mu part at the 4 Gauss points,
+INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --sri): mu part at the 4 Gauss points,
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
                             #          LOCKS for Lambda/mu = 1000)
@@ -46,10 +46,10 @@ TR_INNER_TAU  = 0.25        # Martin --inner_tau: adaptive delay of the energy-e
 TR_MAXITER    = 500         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
-LOAD_DIRECTION = 'Y'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.016, 'Y': 0.026}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
+EPS_MAX = {'X': 0.020, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
-Y_MAX_MPA = {'X': 0.015, 'Y': 0.026}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
+Y_MAX_MPA = {'X': 0.010, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
 # NU_MODE = 'auto': computed in this script at F = I (2 linear solves) for exactly this NX, element, MATERIAL and
 # INTEGRATION. 'table': the values below (small-strain script: bilinear, full integration only)
@@ -127,7 +127,7 @@ if MPI.COMM_WORLD.rank == 0:
 
 problem_type        = 'elasticity'
 discretization_type = 'finite_element'
-element_type        = 'bilinear_rectangle' #
+element_type        = 'biquadratic_rectangle' #
 formulation         = 'finite_strain'
 preconditioner_type = 'Green'
 
