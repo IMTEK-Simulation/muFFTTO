@@ -171,6 +171,16 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
     `OBJECTIVE=stress`); after ~46 min wall: f 1.62 / 1.15 / 1.48 / 1.03, nu -0.10 / -0.19 / -0.12 / (not printed).
     Logs `logs/fable/mutopopt_*_N128.log`, `vs_mutopopt_stress_N128.log`; still running (4 h limit).
 
+### PRODUCTION SWITCHED 2026-11-14 20:25 (user: "Yes of course use new super fast and efficient version")
+All production now `OPERATOR=fused MG_PRECISION=single`, label `aux_s0.3_fused`, from the 128^3 one-point design:
+* 256^3 **8817470** (1 L40S, running, ~20 s per evaluation) -> 512^3 **8817471** + safety segment **8817511**
+  (4 L40S, 24 h each) -> 1024^3 **8817513, 8817514** (8 H200 = full node, 2 x 24 h, afterok 8817511).
+* 1024^3 full-node test with the new operator: **8817512** (1.5 h limit, 1 iteration) ->
+  `logs/fable/test_fused_N1024_np8.log`. If it fails (memory, MPI), cancel 8817513/14 and fix first.
+* Cancelled (my own jobs): the one-point chain 8817466-69 and the old test 8817006. A partial one-point 256^3
+  checkpoint may exist under the label `aux_s0.3` (not deleted; ignore).
+* Logs `$WS/runs/FABLE/TO3D_N<N>_aux_s0.3_fused.log`, data `$WS/runs/FABLE/data/N<N>_*_aux_s0.3_fused_*`.
+
 ### SUBMITTED 2026-11-14 18:25 (user: "Yes for both" = short 8-GPU 1024^3 test + production chain)
 * 1024^3 full-node test: job **8817006** (`FB_1024_test`, 8 H200, 1.5 h limit, 1 iteration, 6 load cases, host warm
   starts) -> `logs/fable/test_N1024_np8.log`, peak line in `logs/fable/peak.txt` (NEMO clone).
