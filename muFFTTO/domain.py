@@ -113,6 +113,8 @@ class ScaledMaterial:
         ncomp = shape[0] * shape[1]
         if out is None:
             out = xp.empty_like(gradient)
+        if xp is not np and all(np.ndim(tensor) == 4 for _, tensor in self.terms):
+            return self._apply_fused(xp, gradient, transposed, out)       # GPU: one kernel, no temporaries
         # constant tensors as (ncomp x ncomp) matrices acting on the components of a point, stored in muGrid's
         # memory order: the first index fastest, i.e. as [.., j, i]
         matrices = []
@@ -144,6 +146,42 @@ class ScaledMaterial:
             # back to the component-first layout [i, j, q, x, y(, z)]; g is fully read before out is written
             out[:, :, q] = xp.moveaxis(result.reshape(block_shape + (shape[1], shape[0])), (-2, -1), (1, 0))
         return out
+
+    def _apply_fused(self, xp, gradient, transposed, out):
+        """:meth:`apply` on the GPU as one elementwise kernel over the points (elasticity): each point reads its
+        d x d gradient components and writes the d x d result, with the constant tensors compiled into the kernel --
+        no full-size temporaries (the matrix-product path needs two) and one pass over the field."""
+        tensors = [np.asarray(tensor_operations.to_host(tensor), dtype=float) for _, tensor in self.terms]
+        key = (transposed, str(gradient.dtype)) + tuple(tensor.tobytes() for tensor in tensors)
+        if getattr(self, '_fused_key', None) != key:
+            self._fused_kernel, self._fused_key = _fused_tensor_kernel(xp, tensors, transposed), key
+        d = gradient.shape[0]
+        scales = [self._scale_array(scale) for scale, _ in self.terms]
+        scales = [gradient.dtype.type(scale) if np.isscalar(scale) else xp.asarray(scale) for scale in scales]
+        self._fused_kernel(*[gradient[i, j] for i in range(d) for j in range(d)], *scales,
+                           *[out[i, j] for i in range(d) for j in range(d)])
+        return out
+
+
+def _fused_tensor_kernel(xp, tensors, transposed):
+    """CuPy elementwise kernel ``out_ij = sum_t s_t sum_kl C_t[i, j, k, l] g_kl`` (``g_kl C_t[k, l, i, j]`` if
+    transposed) for constant tensors ``C_t``: arguments ``g_00 .. g_dd, s_0 .. s_T, out_00 .. out_dd``. All inputs
+    of a point are read before its outputs are written, so ``out`` may be the gradient itself."""
+    d = tensors[0].shape[0]
+    pairs = [(i, j) for i in range(d) for j in range(d)]
+    inputs = ', '.join([f'T g{i}{j}' for i, j in pairs] + [f'T s{t}' for t in range(len(tensors))])
+    outputs = ', '.join(f'T o{i}{j}' for i, j in pairs)
+    code = [f'T a{k}{l} = g{k}{l};' for k, l in pairs]
+    for i, j in pairs:
+        terms = []
+        for t, tensor in enumerate(tensors):
+            entries = [(tensor[k, l, i, j] if transposed else tensor[i, j, k, l], k, l) for k, l in pairs]
+            contraction = ' + '.join(f'({float(c)!r}) * a{k}{l}' for c, k, l in entries if c != 0)
+            if contraction:
+                terms.append(f's{t} * ({contraction})')
+        code.append(f'T r{i}{j} = ' + (' + '.join(terms) if terms else '0') + ';')
+    code += [f'o{i}{j} = r{i}{j};' for i, j in pairs]
+    return xp.ElementwiseKernel(inputs, outputs, ' '.join(code), 'scaled_material_apply')
 
 
 def quad_point_blocks(nb_quad_points, low_memory):

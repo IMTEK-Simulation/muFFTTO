@@ -141,13 +141,30 @@ class HourglassControl:
         self.operator.apply(nodal_field=lambda_field, quadrature_point_field=self.strain)
         return (self.stiffness(material_derivative) * q_u * self.strain.s).sum(axis=(0, 1))
 
+    def _scale_by_stiffness(self, material):
+        """strain *= eps kappa(material), in place. A one-term ScaledMaterial s(x) C_0 (the usual case) needs no
+        temporary: eps kappa = s(x) times a 3 x 4 constant, applied as two in-place products."""
+        terms = getattr(material, 'terms', None)
+        if terms is not None and len(terms) == 1:
+            xp = tensor_operations.get_array_module(self.strain.s)
+            scale, tensor = terms[0]
+            scale = material._scale_array(scale)
+            constant = self.eps * self._kappa_of_tensor(np.asarray(tensor_operations.to_host(tensor)), np)
+            if np.ndim(scale) == 0:
+                constant = constant * float(scale)
+            else:
+                self.strain.s[...] *= xp.asarray(scale)                 # [q, x, y, z] broadcasts over (i, alpha)
+            self.strain.s[...] *= xp.asarray(constant).reshape(constant.shape + (1,) * (self.strain.s.ndim - 2))
+        else:
+            self.strain.s[...] *= self.stiffness(material)
+
     # ---------------------------------------------------------------- K_hg u
     def add_stiffness(self, material, input_field, output_field):
         """output += H^T (eps kappa(material)) H input   (collective: ghost exchange)"""
         fft = self.discretization.fft
         fft.communicate_ghosts(input_field)
         self.operator.apply(nodal_field=input_field, quadrature_point_field=self.strain)       # q = H u
-        self.strain.s[...] *= self.stiffness(material)                                          # eps kappa q
+        self._scale_by_stiffness(material)                                                      # eps kappa q
         fft.communicate_ghosts(self.strain)
         self.operator.transpose(quadrature_point_field=self.strain, nodal_field=self.force, weights=[1.0])
         fft.communicate_ghosts(self.force)
