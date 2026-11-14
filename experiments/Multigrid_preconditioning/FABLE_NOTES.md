@@ -171,6 +171,18 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
     `OBJECTIVE=stress`); after ~46 min wall: f 1.62 / 1.15 / 1.48 / 1.03, nu -0.10 / -0.19 / -0.12 / (not printed).
     Logs `logs/fable/mutopopt_*_N128.log`, `vs_mutopopt_stress_N128.log`; still running (4 h limit).
 
+### 2026-11-14 21:35: 256^3 stopped early by the user ("geometry no longer changing"), 512^3 started from its checkpoint
+* 256^3 fused run 8817470 cancelled at evaluation 290 (iteration ~240 of 500, f 1.1878, 14-16 s per evaluation on
+  one L40S). No `_final.nc`; the design is `N256_soft0.001_eta0.0078125_energy_aux_s0.3_fused_checkpoint.nc`
+  (iteration 220-240; copy on the laptop in `data/nemo_fable/N256_aux_s0.3_fused_checkpoint.nc`, opened in muEye).
+* New jobs (old dependents 8817471, 8817511, 8817513, 8817514 cancelled): 512^3 **8817830, 8817831** (4 L40S,
+  2 x 24 h, start = that checkpoint) -> 1024^3 **8817832, 8817833** (8 H200, 2 x 24 h). Test 8817512 still queued.
+* Head-to-head with muTopOpt at 128^3 (stress objective, same start, one L40S each): ours fused + float32 multigrid
+  500 iterations in 1187 s, f 0.964, nu -0.19, 2128 MiB; ours one-point 6271 s, f 0.954, nu -0.19, 2984 MiB;
+  muTopOpt trust region single converged after 185 iterations, 6354 s, f 1.109, nu -0.21, 2328 MiB; muTopOpt double
+  runs (trust region, L-BFGS) at f 1.25 / 1.18 after 2 h 19 min, still running. Solve benchmark 256^3: ours fused +
+  float32 multigrid 19 iterations / 1.75 s (sharpened 53.5 / 4.83 s).
+
 ### PRODUCTION SWITCHED 2026-11-14 20:25 (user: "Yes of course use new super fast and efficient version")
 All production now `OPERATOR=fused MG_PRECISION=single`, label `aux_s0.3_fused`, from the 128^3 one-point design:
 * 256^3 **8817470** (1 L40S, running, ~20 s per evaluation) -> 512^3 **8817471** + safety segment **8817511**
