@@ -12,8 +12,8 @@ gradient solver. It is the field-based, MPI-capable successor of ``experiments/M
 * **MPI.** Every level is a ``Discretization`` on the same communicator. muGrid's FFT engine splits the grid into
   slabs along the last axis; as long as every rank keeps an even number of planes the levels are nested and the
   grid transfer (``muGrid.GridTransfer``) is local up to a ghost exchange. When the slabs become too thin the rest
-  of the hierarchy is *agglomerated*: the coarse problem is gathered on rank 0 and solved there by a serial
-  multigrid on the host (class :class:`Multigrid` again, on ``MPI.COMM_SELF``).
+  (or the grid small, ``n_agglomerate``) the rest of the hierarchy is *agglomerated*: the coarse problem is
+  gathered on rank 0 and solved there by a serial multigrid (class :class:`Multigrid` again, on ``MPI.COMM_SELF``).
 
 Hierarchy
 ---------
@@ -99,7 +99,7 @@ class GridTransfer:
         """coarse = P^T fine: per axis, coarse[I] = fine[2I] + (fine[2I - 1] + fine[2I + 1]) / 2"""
         if self._try_kernel(self.kernel.restrict, fine, coarse):
             return
-        if self.dim == 3 and self.use_device_kernel:
+        if self.dim == 3 and self.use_device_kernel and fine.is_on_gpu:
             return self._device_kernel('restrict', fine, coarse)
         source, target = fine.sg, coarse.s
         first = True
@@ -117,7 +117,7 @@ class GridTransfer:
         """fine = P coarse: per axis, fine[2I] = coarse[I], fine[2I + 1] = (coarse[I] + coarse[I + 1]) / 2"""
         if self._try_kernel(self.kernel.prolong, coarse, fine):
             return
-        if self.dim == 3 and self.use_device_kernel:
+        if self.dim == 3 and self.use_device_kernel and fine.is_on_gpu:
             return self._device_kernel('prolong', fine, coarse)
         source, target = coarse.sg, fine.s
         coarse_shape = coarse.s.shape
@@ -188,6 +188,8 @@ class Level:
         self.dim = discretization.domain_dimension
         self.scale = discretization.get_quad_field_scalar(name='mg_scale')
         self.material = domain.ScaledMaterial([(self.scale, C_0)])
+        assert self.material.minor_symmetric, 'C_0 must be minor symmetric (C_ijkl = C_ijlk)'
+        self.stress = discretization.get_gradient_size_field(name='grad_field_temporary')   # the shared scratch
         self.x = discretization.get_unknown_size_field(name='mg_x') if own_solution_fields else None
         self.b = discretization.get_unknown_size_field(name='mg_b') if own_solution_fields else None
         self.r = self.d = self.t = self.dinv = self.power = None
@@ -201,9 +203,18 @@ class Level:
         self.dinv = self.disc.get_unknown_size_field(name='mg_inverse_diagonal')
 
     def apply_K(self, x, y):
-        """y = A x"""
-        self.disc.apply_system_matrix_mugrid(material_data_field=self.material, input_field_inxyz=x,
-                                             output_field_inxyz=y, formulation='small_strain')
+        """y = A x = B^T W s C_0 : B x (+ hourglass control), as ``Discretization.apply_system_matrix_mugrid`` for
+        small strains, with the three ghost exchanges the stencils need (x, the stress, the hourglass strain)
+        instead of six or seven: the ghost layers of y are NOT valid afterwards. Under MPI every exchange is a
+        message, and the cycle applies A ten times per iteration."""
+        disc = self.disc
+        disc.fft.communicate_ghosts(x)
+        disc.gradient_op.apply(nodal_field=x, quadrature_point_field=self.stress)       # C_0 is minor symmetric:
+        disc.apply_material_data_mugrid(self.material, self.stress)                     # C : grad u = C : sym grad u
+        disc.fft.communicate_ghosts(self.stress)
+        disc.gradient_op.transpose(quadrature_point_field=self.stress, nodal_field=y, weights=disc.quadrature_weights)
+        if disc.hourglass_control is not None:
+            disc.hourglass_control.add_stiffness(self.material, x, y, exchange_ghosts=False)
 
     def global_sum(self, local_value):
         return self.disc.communicator.sum(np.float64(float(local_value)))
@@ -230,6 +241,9 @@ class Multigrid:
         hexahedra on the fine level only). ``'trilinear_hexahedron_1Q_hg'``: one-point hexahedra with hourglass
         control on every level -- a coarse voxel takes the mean scale of its 8 fine voxels; 8x fewer quadrature
         points on the coarse levels (level 1 then costs 1/8 of the fine level instead of about as much).
+    n_agglomerate : int
+        MPI only: grids of this size and coarser are solved on rank 0 (serial multigrid on its device). On small
+        grids a ghost exchange is pure message latency; 16 keeps every distributed level at 32^3 or larger.
     power_start : callable, optional
         ``power_start(level_index, shape) -> ndarray``: start vector of the power iteration (serial runs only; used
         by the tests to reproduce ``mg_lib``). Default: seeded random numbers per grid plane, independent of the
@@ -244,13 +258,14 @@ class Multigrid:
     """
 
     def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None,
-                 coarse_element=None):
+                 coarse_element=None, n_agglomerate=16):
         self.degree = degree
         self.alpha = alpha
         self.C_0 = np.asarray(C_0)
         self.n_coarsest = n_coarsest
         self.power_start = power_start
         self.coarse_element = coarse_element
+        self.n_agglomerate = n_agglomerate
         self.dim = discretization.domain_dimension
         self.comm = discretization.communicator                 # muGrid communicator of all levels
         self.mpi = self.comm.mpi4py_comm if self.comm.size > 1 else MPI.COMM_SELF
@@ -282,15 +297,16 @@ class Multigrid:
     def _can_coarsen_distributed(self, disc):
         """True if the next coarser grid is nested on every rank: an even number (>= 4) of planes per rank"""
         local = np.asarray(disc.fft.nb_subdomain_grid_pts)
-        ok = bool(np.all(local % 2 == 0) and np.all(local >= 4)) or self.comm.size == 1
+        ok = (bool(np.all(local % 2 == 0) and np.all(local >= 4)
+                   and disc.nb_of_pixels_global[0] // 2 >= self.n_agglomerate) or self.comm.size == 1)
         return bool(self.mpi.allreduce(ok, op=MPI.LAND)) if self.comm.size > 1 else ok
 
     def _build_tail(self, disc):
-        """agglomeration: the grid of `disc` and all coarser ones as a serial host multigrid on rank 0"""
+        """agglomeration: the grid of `disc` and all coarser ones as a serial multigrid on rank 0 (its device)"""
         if self.comm.rank == 0:
             serial = domain.Discretization(
                 cell=disc.cell, nb_of_pixels_global=disc.nb_of_pixels_global, discretization_type='finite_element',
-                element_type=disc.element_type, communicator=muGrid.Communicator(MPI.COMM_SELF), device='cpu',
+                element_type=disc.element_type, communicator=muGrid.Communicator(MPI.COMM_SELF), device=disc.device,
                 hourglass_eps=getattr(disc.hourglass_control, 'eps', None))
             self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest,
                                   coarse_element=self.coarse_element)
@@ -314,7 +330,7 @@ class Multigrid:
         else:
             scale = self._gather(self.levels[-1].scale)
             if self.comm.rank == 0:
-                self.tail.scale.s[...] = scale
+                self.tail.scale.s[...] = tensor_operations.get_array_module(self.tail.scale.s).asarray(scale)
                 self.tail.setup()
 
     @staticmethod
@@ -411,8 +427,7 @@ class Multigrid:
         """z = V-cycle(r) with zero start: the preconditioner M^-1 r (fields of the fine discretization)"""
         fine = self.levels[0]
         fine.b, fine.x = r, z
-        self._vcycle(0)
-        fine.disc.fft.communicate_ghosts(z)
+        self._vcycle(0)                      # (the ghost layers of z are not valid: exchange before a stencil reads them)
 
     def _vcycle(self, l):
         level = self.levels[l]
@@ -478,9 +493,9 @@ class Multigrid:
         solution = None
         if self.comm.rank == 0:
             tail_level = self.tail.levels[0]
-            tail_level.b.s[...] = rhs
+            tail_level.b.s[...] = tensor_operations.get_array_module(tail_level.b.s).asarray(rhs)
             self.tail.apply(tail_level.b, tail_level.x)
-            solution = tail_level.x.s
+            solution = tensor_operations.to_host(tail_level.x.s)
         self._scatter(solution, level.x)
 
     # ------------------------------------------------------------------ agglomeration: gather / scatter

@@ -167,13 +167,18 @@ class HourglassControl:
             self.strain.s[...] *= self.stiffness(material)
 
     # ---------------------------------------------------------------- K_hg u
-    def add_stiffness(self, material, input_field, output_field):
-        """output += H^T (eps kappa(material)) H input   (collective: ghost exchange)"""
+    def add_stiffness(self, material, input_field, output_field, exchange_ghosts=True):
+        """output += H^T (eps kappa(material)) H input   (collective: ghost exchange)
+
+        ``exchange_ghosts=False``: the caller has just exchanged the ghosts of ``input_field`` and does not read
+        the ghosts of ``output_field`` -- only the exchange of the hourglass strain remains (one instead of three)."""
         fft = self.discretization.fft
-        fft.communicate_ghosts(input_field)
+        if exchange_ghosts:
+            fft.communicate_ghosts(input_field)
         self.operator.apply(nodal_field=input_field, quadrature_point_field=self.strain)       # q = H u
         self._scale_by_stiffness(material)                                                      # eps kappa q
         fft.communicate_ghosts(self.strain)
         self.operator.transpose(quadrature_point_field=self.strain, nodal_field=self.force, weights=[1.0])
-        fft.communicate_ghosts(self.force)
+        if exchange_ghosts:
+            fft.communicate_ghosts(self.force)
         linalg.axpy(1.0, self.force, output_field)

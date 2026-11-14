@@ -188,8 +188,8 @@ class TopologyOptimization:
         return self.comm.sum(np.float64(float(self.xp.sum(array))))
 
     def K(self, x, Kx):
-        self.disc.apply_system_matrix_mugrid(material_data_field=self.material, input_field_inxyz=x,
-                                             output_field_inxyz=Kx, formulation='small_strain')
+        """Kx = B^T W s C_0 : B x + hourglass control (the fine-level operator of the multigrid; ghosts of Kx not set)"""
+        self.mg.levels[0].apply_K(x, Kx)
 
     def assemble_force(self, strain, force, factor):
         """force = factor * B^T W s C_0 : strain   for a uniform strain tensor [3, 3]"""
