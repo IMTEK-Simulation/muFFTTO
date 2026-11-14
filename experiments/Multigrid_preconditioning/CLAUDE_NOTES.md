@@ -1,6 +1,18 @@
 # Multigrid preconditioning study — CLAUDE NOTES
 
-## RESUME HERE (state 2026-11-14 ~07:50, user re-logging to a new account)
+## RESUME HERE (state 2026-11-14 ~08:35, user PAUSED this session; Fable works on 512³/1024³)
+
+**User 2026-11-14 08:35: "keep NEMO free for Fable"** -> submit NO new NEMO jobs. Still running from this session:
+8813561 (64³ MG+Helm scaled, l40s, 12 h limit), 8813562 (128³ MG+Helm scaled, h200 g4402) and 8810501 (128³ GJ,
+h200 g4401), 24 h limits. The two h200 jobs occupy one GPU on each h200 node, so Fable cannot get a full 8-GPU node
+until they end (~19 h left at 08:35). OPEN: ask the user whether to cancel them (128³ result already clear: MG
+19.0 vs GJ 32.4 s/eval, f within 0.03 %).
+Laptop: unit mg-to3dhg (run_TO3D_hg_test.sh 0.3: 32³ TO 8-point then 1Q_hg eps 0.3, logs/TO3D_hg/) still running;
+compare f, evals, s/eval, peak memory (logs/TO3D_hg/peak_memory.txt) and the designs when done.
+Next proposed (NOT approved, needs NEMO): 3D auxetic energy objective at 64³/128³, scales 0.3/0.1, chained.
+The four 32³ prototype designs were opened in muEye for the user (data/nemo_aux3d/).
+
+## (previous) RESUME HERE (state 2026-11-14 ~07:50, user re-logging to a new account)
 
 Read this section first after an interruption; details and all tables are in `README.md` (stages 1-8) and
 `OVERNIGHT_NOTES.md` (overnight + morning results).
@@ -33,6 +45,12 @@ clone, never touch its jobs/units, keep laptop GPU use small while it runs.
   prototype 32³ 8-point, eta 2h, 1e3, MG + Helm c4, nu* -0.5: energy s0.3 8814559, energy s0.1 8814560,
   stress s0.3 8814561, stress s0.1 8814562 (LABEL aux3d_{E,S}_s{0.3,0.1}). Evaluate with
   ../dual_preconditioner/topology_optimization/report_TO3D_nu.py <final.nc>.
+* **3D auxetic prototype RESULTS (32³, 8-point, eta 2h, 1e3, nu* -0.5; designs in data/nemo_aux3d/)**:
+  energy s0.1: nu12/13/23 -0.18/-0.22/-0.13, solid 0.31, C11 0.036 (target 0.029), mu 0.015 (0.019), 477 it;
+  energy s0.3: -0.15/-0.17/-0.16, solid 0.47, mu 0.042 (0.058), 763 it; stress s0.1: -0.055 (all), matches C11
+  and mu; stress s0.3: +0.03/-0.04/0.00. -> energy objective again clearly better, but 3D at 32³ reaches only
+  ~-0.15..-0.2 (2D needed 128² to hit the target) -> resolution study 64³/128³ next.
+* 3D TO memory 1Q_hg 128³: 5334 MiB -> slope 64->128 = 2.5 KiB/voxel (256³ ~41 GiB, 512³ ~325 GiB, 1024³ ~2.6 TiB).
 * H200 on NEMO: partition h200 = 2 nodes x 8 H200 (141 GB), MaxNodes=1 per job, MaxTime 2 days, 1.5 TB host RAM/node
   -> largest job 8 x 141 = 1.13 TB GPU memory.
 * Measured peak GPU memory per process (mem_TO3D_hg.sh, logs/mem_hg/peak.txt): TO 1Q_hg 212 / 876 MiB (32³/64³)
