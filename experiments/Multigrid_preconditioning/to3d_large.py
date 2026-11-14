@@ -442,25 +442,21 @@ class TopologyOptimization:
 # ======================================================================================================
 def interpolate_design(path, disc):
     """nodal design of a saved run (any grid, `_final.nc`, `_checkpoint.nc` or the last frame of a `_history.nc`),
-    periodic trilinear interpolation onto the local nodes of `disc`, clipped to [0, 1]"""
+    periodic trilinear interpolation onto the local nodes of `disc`, clipped to [0, 1].
+    Axis by axis (the interpolation is a tensor product): three passes over arrays that grow to the local grid."""
     fields = io_utils.read_file(path).fields
     name = next(n for n in ('phase_field_solution', 'phase_field_iterate') if n in fields)
     coarse = np.asarray(fields[name][-1]).reshape(-1)
     nc = int(round(coarse.size ** (1 / 3)))
-    coarse = coarse.reshape(nc, nc, nc)
-    if nc == disc.nb_of_pixels_global[0]:
-        location, size = disc.fft.subdomain_locations, disc.fft.nb_subdomain_grid_pts
-        return np.clip(coarse[tuple(slice(int(l), int(l) + int(n)) for l, n in zip(location, size))], 0, 1), nc
-    coords = to_host(disc.fft.coords)
-    position = [coords[a] * nc for a in range(3)]
-    base = [np.floor(x).astype(int) for x in position]
-    fraction = [x - b for x, b in zip(position, base)]
-    result = 0.0
-    for corner in np.ndindex(2, 2, 2):
-        index = tuple((base[a] + corner[a]) % nc for a in range(3))
-        weight = np.prod([fraction[a] if corner[a] else 1 - fraction[a] for a in range(3)], axis=0)
-        result = result + weight * coarse[index]
-    return np.clip(result, 0, 1), nc
+    values = coarse.reshape(nc, nc, nc)
+    n = disc.nb_of_pixels_global[0]
+    for axis, (location, size) in enumerate(zip(disc.fft.subdomain_locations, disc.fft.nb_subdomain_grid_pts)):
+        position = (int(location) + np.arange(int(size))) * (nc / n)          # local nodes in coarse grid units
+        base = np.floor(position).astype(int)
+        fraction = (position - base).reshape([-1 if a == axis else 1 for a in range(3)])
+        values = (np.take(values, base % nc, axis=axis) * (1.0 - fraction)
+                  + np.take(values, (base + 1) % nc, axis=axis) * fraction)
+    return np.clip(values, 0, 1), nc
 
 
 def main():
