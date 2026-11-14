@@ -1,0 +1,17 @@
+geometry,load,cg_Green,cg_Green_Jacobi,cg_dual
+homog,E_xx (across),4,5,4
+band,E_xx (across),18,11,5
+band,E_yy (along),18,11,5
+band,E_xy (shear),18,11,5
+band2ph,E_xx (across),5,13,6
+band2ph,E_yy (along),5,13,6
+band2ph,E_xy (shear),5,13,6
+finite,E_xx (across),62,264,52
+finite,E_yy (along),64,232,49
+finite,E_xy (shear),45,337,42
+cross,E_xx (across),112,680,59
+cross,E_yy (along),112,699,59
+cross,E_xy (shear),48,564,41
+disc,E_xx (across),508,1679,204
+disc,E_yy (along),508,1728,205
+disc,E_xy (shear),368,1642,180

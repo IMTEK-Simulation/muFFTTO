@@ -1,0 +1,12 @@
+job 8658406 host g3526 start 2026-11-07T15:12:04+01:00 DIM=2 N=1024 czmR Green log=/work/classic/fr_ml1145-muffto/runs/asr_pf_fourel/logs/ASRpf_czmR_N1024_Green.log RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+15:14 1196318, 2412 MiB  util 94 %
+15:24 1196318, 2412 MiB  util 94 %
+15:34 1196318, 2412 MiB  util 98 %
+15:44 1196318, 2412 MiB  util 94 %
+15:54 1196318, 2412 MiB  util 99 %
+16:04 1196318, 2412 MiB  util 95 %
+16:14 1196318, 2412 MiB  util 99 %
+16:24 1196318, 2412 MiB  util 88 %
+16:34 1196318, 2412 MiB  util 94 %
+done 2026-11-07T16:38:50+01:00 exit 0 wall 5206 s

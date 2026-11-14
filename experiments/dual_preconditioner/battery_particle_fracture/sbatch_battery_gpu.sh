@@ -6,7 +6,7 @@
 # 1C lithiation (pixel-wise CC -> CV), dt = 22 s, until 4969 s, MAX_STAGGERED 500; diffusion shadow solves (all three
 # diffusion preconditioners) in the dual runs only.
 # Options (environment, via sbatch --export=ALL,...): T_MAX (smoke test), EXTRA_SUFFIX (smoke test: _smoke),
-#   SNAP_EVERY (default 10).
+#   SNAP_EVERY (default 10), SNAP3D_EVERY (3D: full damage + concentration every k steps, default 0 = off).
 # 48 h limit: the run is stopped after BUDGET s (default 47 h 30 min) and the job resubmits itself (SEG+1, RESTART=1)
 # from <output>_checkpoint.npz (written every CHECKPOINT_SECONDS = 1800 s of wall time); at most MAXSEG (3) segments.
 # exp_data and logs -> symlinks into /work/classic/fr_ml1145-muffto/runs/battery/
@@ -31,7 +31,7 @@ SHADOW=0; [ "$P" = dual ] && SHADOW=1
 TAG=""; [ "$D" = 3 ] && TAG=_3D
 export DIM=$D NPIX=$N L_CELL_UM=6 R_CORE_UM=2 H_BAR=0.2 A_BAR=0.3 L_CORE_UM=0.23 L_SHELL_UM=0.27 L_ZETA_UM=0.1 \
        DT=0.02 T_MAX=${T_MAX:-4.5} MATRIX_STIFFNESS=1e-2 MAX_STAGGERED=500 DIFF_SHADOW=$SHADOW \
-       SNAP_EVERY=${SNAP_EVERY:-10} CHECKPOINT_SECONDS=${CHECKPOINT_SECONDS:-1800} RUN_SUFFIX=_tu${EXTRA_SUFFIX:-}
+       SNAP_EVERY=${SNAP_EVERY:-10} SNAP3D_EVERY=${SNAP3D_EVERY:-0} CHECKPOINT_SECONDS=${CHECKPOINT_SECONDS:-1800} RUN_SUFFIX=_tu${EXTRA_SUFFIX:-}
 if [ "$SEG" -gt 0 ]; then export RESTART=1; fi
 SEGTAG=""; if [ "$SEG" -gt 0 ]; then SEGTAG=_r$SEG; fi
 LOG=logs/battery_tu_N${N}_${P}${TAG}${EXTRA_SUFFIX:-}${SEGTAG}.log

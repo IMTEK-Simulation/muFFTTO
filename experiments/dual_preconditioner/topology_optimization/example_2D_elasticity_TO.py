@@ -464,7 +464,7 @@ if __name__ == '__main__':
     data_folder_path = os.path.join(file_folder_path, 'data', script_name) + '/'
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
-    random_init = False
+    random_init = os.environ.get('RANDOM_INIT') == '1'  # RANDOM_INIT=1: rho uniform random in [0, 1] per node, seed 0
     save_history = True  # store the phase field in <output_name>_history.nc ...
     history_every = int(os.environ.get('HISTORY_EVERY', '1'))  # ... of every HISTORY_EVERY-th iteration
 
@@ -510,7 +510,8 @@ if __name__ == '__main__':
     phase_field_0 = discretization.get_scalar_field(name='phase_field_initial')
 
     if random_init:
-        phase_field_0.s[...] += np.random.rand(*phase_field_0.s.shape)
+        np.random.seed(0)
+        phase_field_0.s[...] += xp.asarray(np.random.rand(*phase_field_0.s.shape))
     else:
         np.random.seed(MPI.COMM_WORLD.rank)
         coords = to_host(discretization.fft.coords)
@@ -613,7 +614,9 @@ if __name__ == '__main__':
     gtol = float(os.environ.get('GTOL', gtol))
     # MAXITER: iteration cap (a continued run gets the remainder of the 500 of the original one)
     max_opt_iterations = int(os.environ.get('MAXITER', 500))
-    optimizer_options = {'l_bfgs': dict(xtol=1e-3, maxiter=max_opt_iterations, maxcor=20, c1=1e-4, max_halvings=40),
+    # XTOL (env): L-BFGS step test, largest change of the phase per iteration (default 1e-3)
+    xtol = float(os.environ.get('XTOL', 1e-3))
+    optimizer_options = {'l_bfgs': dict(xtol=xtol, maxiter=max_opt_iterations, maxcor=20, c1=1e-4, max_halvings=40),
                          'mma': dict(xtol=1e-3, maxiter=500),
                          'tr_newton': dict(maxiter=200)}[optimizer]
     xopt_FE_MPI = solvers_nonlinear.minimize(

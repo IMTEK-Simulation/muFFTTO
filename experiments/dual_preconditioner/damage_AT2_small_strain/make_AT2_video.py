@@ -14,6 +14,7 @@
                                                     panel: mean elastic CG iterations per solve over the grid size,
                                                     all preconditioners (static) -> ..._study.mp4, _final.png
                                                     -> figures/AT2_N<N>_<prec><TAG>_stress.mp4, _final.png
+    SLIDE_FONTS=1 (env): fonts readable on a slide (half-size canvas, 2x dpi, fonts x 1.3); FINAL_ONLY=1: _final.png only
     TILE=2 (env): the periodic cell repeated 2 x 2 times (-> ..._tile2.mp4)
     TAG e.g. _l0.03125: the series with a fixed physical length scale (32^2-1024^2)
     GEOMETRY_FILE=<.npy> (env): runs on a phase image (Cahn-Hilliard), the same file as the run
@@ -41,14 +42,33 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 256
 PREC = sys.argv[2] if len(sys.argv) > 2 else 'dual'
 TAG = sys.argv[3] if len(sys.argv) > 3 else ''
+FIXED_LH = os.environ.get('FIXED_LH')   # FIXED_LH=2 / 4: reference grids and CG study of the polydisperse pores series with l = FIXED_LH * h
+
+
+def tag_of(n):
+    """run name tag of grid n: TAG, or for FIXED_LH the run of this grid with l = FIXED_LH h (found under several study names)"""
+    if not FIXED_LH:
+        return TAG
+    for study in ('_lh', '_smooth', ''):
+        tag = f'_polydisperse_pores_l{float(FIXED_LH) / n:.8g}{study}'
+        if os.path.exists(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{tag}.log')):
+            return tag
+    return TAG
+
+
 # reference grids: the finished runs of the series
 GRIDS = [n for n in ((32, 64, 128, 256, 512, 1024) if TAG else (64, 128, 256))
-         if os.path.exists(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{TAG}.log'))
-         and 'Elapsed time' in open(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{TAG}.log')).read()]
+         if os.path.exists(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{tag_of(n)}.log'))
+         and 'Elapsed time' in open(os.path.join(HERE, 'logs', f'AT2_N{n}_{PREC}{tag_of(n)}.log')).read()]
 DASHES = [(0, (5, 2)), (0, (1, 1.5)), (0, (3, 1, 1, 1)), (0, (8, 2, 1, 2)), (0, (12, 3))]
 FPS = 10
 STRESS_ONLY = os.environ.get('STRESS_ONLY', '0') == '1'
 GRID_STUDY = STRESS_ONLY and os.environ.get('GRID_STUDY', '0') == '1'
+STUDY_NO_DUAL = os.environ.get('STUDY_NO_DUAL', '0') == '1'   # GRID_STUDY panel with Green and Green-Jacobi only -> ..._study_nodual
+# SLIDE_FONTS=1: readable on a slide (~9-11 pt at 0.95 x the slide width): half-size canvas at twice the dpi (same pixels,
+# lines and markers relatively 2x), fonts x FS
+SLIDE_FONTS = os.environ.get('SLIDE_FONTS', '0') == '1'
+SC, FS = (2.0, 1.3) if SLIDE_FONTS else (1.0, 1.0)
 TILE = int(os.environ.get('TILE', 1))  # TILE=2 / 3: the periodic cell repeated TILE x TILE times (each copy shifted by
                                        # the deformed cell vector, (I + E) times the lattice vector)
 
@@ -101,7 +121,7 @@ class _JoinedVariable:
 def read(n, p):
     """dataset, load, sigma_xx, elastic CG per solve (step mean) and staggered iterations per load step; a run
     continued after a restart (<run>_restart.*) is joined to its first part"""
-    name = os.path.join(HERE, '{}', f'AT2_N{n}_{p}{TAG}')
+    name = os.path.join(HERE, '{}', f'AT2_N{n}_{p}{tag_of(n)}')
     d = netCDF4.Dataset(name.format('exp_data') + '.nc')
     log = open(name.format('logs') + '.log').read()
     csv = name.format('exp_data') + '_iterations.csv'
@@ -129,8 +149,8 @@ def read(n, p):
 
 def cg_per_solve(n, p):
     """mean elastic CG iterations per elastic solve of a finished run (joined with its restart), None if missing"""
-    name = os.path.join(HERE, 'exp_data', f'AT2_N{n}_{p}{TAG}')
-    log = os.path.join(HERE, 'logs', f'AT2_N{n}_{p}{TAG}')
+    name = os.path.join(HERE, 'exp_data', f'AT2_N{n}_{p}{tag_of(n)}')
+    log = os.path.join(HERE, 'logs', f'AT2_N{n}_{p}{tag_of(n)}')
     if not os.path.exists(name + '_iterations.csv'):
         return None
     restarted = os.path.exists(name + '_restart_iterations.csv')
@@ -174,23 +194,24 @@ def pixel_damage(k):
 
 def style(ax, title, xlabel, ylabel):
     ax.set_facecolor(SURFACE)
-    ax.set_title(title, loc='left', fontsize=12.5, color=TEXT_1, pad=6)
-    ax.set_xlabel(xlabel, color=TEXT_2, fontsize=11)
-    ax.set_ylabel(ylabel, color=TEXT_2, fontsize=11)
+    ax.set_title(title, loc='left', fontsize=12.5 * FS, color=TEXT_1, pad=6)
+    ax.set_xlabel(xlabel, color=TEXT_2, fontsize=11 * FS)
+    ax.set_ylabel(ylabel, color=TEXT_2, fontsize=11 * FS)
     for side in ('top', 'right'):
         ax.spines[side].set_visible(False)
     for side in ('left', 'bottom'):
         ax.spines[side].set_color(AXIS)
-    ax.tick_params(colors=TEXT_2, labelsize=10)
+    ax.tick_params(colors=TEXT_2, labelsize=10 * FS)
     ax.grid(axis='y', color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
 
 
-fig = plt.figure(figsize=(16, 9), dpi=100, facecolor=SURFACE)
+fig = plt.figure(figsize=(8, 3.9) if SLIDE_FONTS else (16, 9), dpi=100 * SC, facecolor=SURFACE)   # slide: no empty band above / below the cell
 if STRESS_ONLY:        # the stress panel alone, centred on the right
     # the cell (square, colour bar on its left) as high as the frame allows: a wider left column
-    gs = fig.add_gridspec(3, 2, width_ratios=[1.6, 1.0], height_ratios=[0.02, 1.0, 0.02], left=0.035, right=0.985,
-                          top=0.98, bottom=0.02, wspace=0.1, hspace=0.0)
+    gs = fig.add_gridspec(3, 2, width_ratios=[1.7, 1.0] if SLIDE_FONTS else [1.6, 1.0], height_ratios=[0.02, 1.0, 0.02],
+                          left=0.075 if SLIDE_FONTS else 0.035, right=0.94 if SLIDE_FONTS else 0.985,
+                          top=0.98, bottom=0.02, wspace=0.3 if SLIDE_FONTS else 0.1, hspace=0.0)
     ax_cell, ax_stress, ax_cg = fig.add_subplot(gs[:, 0]), fig.add_subplot(gs[1, 1]), None
 else:
     gs = fig.add_gridspec(2, 2, width_ratios=[1.1, 1.0], left=0.03, right=0.97, top=0.86, bottom=0.08, wspace=0.16,
@@ -217,13 +238,13 @@ colorbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=plt.Normalize(0, 1), c
                                                                 aspect=40)))
 colorbar.set_label('damage $d$' if STRESS_ONLY else f'damage $d$ ({"inclusions grey" if "_incl" in TAG else "pore white"}, '
                    'cracked pixels transparent; true scale)',
-                   color=TEXT_2, fontsize=10.5)
+                   color=TEXT_2, fontsize=10.5 * FS)
 colorbar.outline.set_visible(False)
-colorbar.ax.tick_params(colors=TEXT_2, labelsize=9.5, length=0)
+colorbar.ax.tick_params(colors=TEXT_2, labelsize=9.5 * FS, length=0)
 if STRESS_ONLY:        # vertical bar left of the cell: the quantity on top, as in the other slide videos
     colorbar.set_label('')
-    colorbar.ax.set_title('damage $d$', fontsize=13, color=TEXT_2, pad=20)
-    colorbar.ax.tick_params(labelsize=11)
+    colorbar.ax.set_title('damage $d$', fontsize=13 * FS, color=TEXT_2, pad=20 / SC)
+    colorbar.ax.tick_params(labelsize=11 * FS)
 
 style(ax_stress, 'Macroscopic stress', rf'macroscopic strain $\bar\varepsilon_{{{XX}}}$', rf'$\bar\sigma_{{{XX}}}$')
 if not STRESS_ONLY:
@@ -250,36 +271,64 @@ if not STRESS_ONLY:
     cg_line, = ax_cg.plot([], [], color=RUN_COLOR, lw=1.8, label=f'{LABELS[PREC]} (this run)')
     ax_cg.set_ylim(0, 1.3 * max(line.get_ydata().max() for line in ax_cg.get_lines() if len(line.get_ydata())))   # room for the legend
 ax_stress.set_ylim(0, 1.08 * max(stress.max(), *[read(n, PREC)[2].max() for n in GRIDS]))
+if os.environ.get('STRESS_OVER_MU'):      # STRESS_OVER_MU=<mu>: stress axis labelled sigma / mu in 10^-3 (the curves stay in sigma)
+    _mu = float(os.environ['STRESS_OVER_MU'])
+    _t = np.arange(0, ax_stress.get_ylim()[1] / _mu * 1e3, 10)
+    ax_stress.set_yticks(_t * _mu * 1e-3, [f'{v:.0f}' for v in _t])
+    ax_stress.set_ylabel(rf'$\bar\sigma_{{{XX}}} / \mu$  [$10^{{-3}}$]')
 for ax in (ax_stress,) if STRESS_ONLY else (ax_stress, ax_cg):
     ax.set_xlim(0, load[-1])
-ax_stress.legend(frameon=False, fontsize=10, loc='upper left')
+if SLIDE_FONTS:        # compact: this run + one entry for the coarser grids, in the empty corner above the rising curve
+    stress_line.set_label(f'{N}$^2$')
+    ax_stress.legend(handles=[stress_line, plt.Line2D([], [], color='0.6', lw=1.8, ls=DASHES[0])],
+                     labels=[f'{N}$^2$', f'{min(reference_grids)}$^2$' + '\u2013' + f'{max(reference_grids)}$^2$'],
+                     frameon=False, fontsize=11.5, loc='lower right', bbox_to_anchor=(0.94, 0.0), handlelength=1.6,
+                     labelspacing=0.25, borderaxespad=0.1)
+else:
+    ax_stress.legend(frameon=False, fontsize=10 * FS, loc='upper left')
 if STRESS_ONLY:        # the stress panel as high as the drawn cell
     fig.canvas.draw()
     # figure coordinates of the cell bottom and top (y = 0, 1), not of its padded axes box
     y0, y1 = fig.transFigure.inverted().transform(ax_cell.transData.transform([[0.0, 0.0], [0.0, 1.0]]))[:, 1]
     box = ax_stress.get_position()
     if GRID_STUDY:     # stress above, iteration count study below, together as high as the cell
-        gap = 0.12         # x labels of the stress panel and the title of the study panel
-        height = (y1 - y0 - gap) / 2
+        gap = 0.12 * (1.9 if SLIDE_FONTS else 1)         # x labels of the stress panel and the title of the study panel
+        bottom = y0 + (0.1 if SLIDE_FONTS else 0.0)     # room for the x label of the study panel
+        height = (y1 - bottom - gap) / 2
         ax_stress.set_position([box.x0, y1 - height, box.width, height])
-        ax_study = fig.add_axes([box.x0, y0, box.width, height])
-        style(ax_study, 'Elastic CG iterations per solve', r'grid $N$ ($N^2$ pixels)', 'CG iterations')
-        for p in LABELS:
+        ax_study = fig.add_axes([box.x0, bottom, box.width, height])
+        if SLIDE_FONTS:    # short title, the legend says dual x 2
+            style(ax_study, 'CG iterations per solve', 'grid size', '')
+        else:
+            style(ax_study, 'Elastic CG iterations per solve', r'grid $N$ ($N^2$ pixels)', r'CG iterations (dual $\times 2$)' if not STUDY_NO_DUAL else 'CG iterations')
+        for p in [q for q in LABELS if not (STUDY_NO_DUAL and q == 'dual')]:
             points = [(n, cg_per_solve(n, p)) for n in (32, 64, 128, 256, 512, 1024)]
             points = [(n, v) for n, v in points if v is not None]
             if not points:
                 continue
             x, y = np.array(points).T
-            ax_study.plot(x, y, color=COLORS[p], lw=2.2, marker='o', ms=7, label=LABELS[p])
+            y = y * (2 if p == 'dual' else 1)                # dual iterations counted x2 (cost)
+            ax_study.plot(x, y, color=COLORS[p], lw=2.2, marker='o', ms=7,
+                          label=LABELS[p] + (r' ($\times 2$)' if p == 'dual' else ''))
+            if SLIDE_FONTS and p == 'Green_Jacobi':       # slide: no room next to the lines / legend; curve ends at 256^2
+                continue
             ax_study.annotate(f'{y[-1]:.0f}', (x[-1], y[-1]), textcoords='offset points',   # Green above, GJ below
                               xytext=(9, {'Green': 6, 'Green_Jacobi': -6}.get(p, 0)),
-                              va='center', fontsize=10, color=TEXT_2)
+                              va='center', fontsize=10 * FS, color=TEXT_2)
         ax_study.set_xscale('log', base=2)
         ax_study.set_xticks([32, 64, 128, 256, 512, 1024], [f'${n}^2$' for n in (32, 64, 128, 256, 512, 1024)])
         ax_study.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
-        ax_study.set_xlim(32 / 1.15, 1024 * 1.3)
-        ax_study.set_ylim(0, 1.15 * ax_study.get_ylim()[1])
-        ax_study.legend(frameon=False, fontsize=10, loc='upper left')
+        if SLIDE_FONTS:
+            ax_study.tick_params(axis='x', labelsize=10)
+            ax_study.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(500))
+        ax_study.set_xlim(*((32 / 1.07, 1024 * 1.07) if SLIDE_FONTS else (32 / 1.15, 1024 * 1.3)))   # slide: wider tick spacing
+        nb_series = len(ax_study.get_lines())
+        ax_study.set_ylim(0, ((2.0 if nb_series < 3 else 2.4) if SLIDE_FONTS else 1.15) * ax_study.get_ylim()[1])   # slide: room for the legend
+        if SLIDE_FONTS:
+            ax_study.legend(frameon=False, fontsize=11.5, loc='upper left', handlelength=1.5, labelspacing=0.2,
+                            borderaxespad=0.1)
+        else:
+            ax_study.legend(frameon=False, fontsize=10 * FS, loc='upper left')
 else:
     ax_cg.legend(frameon=False, fontsize=10, loc='upper left', ncol=2)
 
@@ -315,13 +364,15 @@ def draw(k):
 
 os.makedirs(os.path.join(HERE, 'figures'), exist_ok=True)
 out = os.path.join(HERE, 'figures', f'AT2_N{N}_{PREC}{TAG}' + ('_study' if GRID_STUDY else '_stress' if STRESS_ONLY else '')
+                   + ('_nodual' if GRID_STUDY and STUDY_NO_DUAL else '')
                    + (f'_tile{TILE}' if TILE > 1 else ''))
 frames = list(range(nb_frames)) + [nb_frames - 1] * (2 * FPS)
 writer = animation.FFMpegWriter(fps=FPS, bitrate=6000, codec='libx264', extra_args=['-pix_fmt', 'yuv420p'])
-with writer.saving(fig, out + '.mp4', dpi=100):
-    for k in frames:
-        draw(k)
-        writer.grab_frame(facecolor=SURFACE)
+if os.environ.get('FINAL_ONLY', '0') != '1':      # FINAL_ONLY=1: only the _final.png (layout checks)
+    with writer.saving(fig, out + '.mp4', dpi=100 * SC):
+        for k in frames:
+            draw(k)
+            writer.grab_frame(facecolor=SURFACE)
 draw(nb_frames - 1)
-fig.savefig(out + '_final.png', dpi=130, facecolor=SURFACE)
+fig.savefig(out + '_final.png', dpi=130 * SC, facecolor=SURFACE)
 print(out + '.mp4')

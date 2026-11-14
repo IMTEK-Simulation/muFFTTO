@@ -1,0 +1,14 @@
+job 8658408 host g3612 start 2026-11-07T15:41:04+01:00 DIM=2 N=1024 czmR dual log=/work/classic/fr_ml1145-muffto/runs/asr_pf_fourel/logs/ASRpf_czmR_N1024_dual.log RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+15:43 711385, 2540 MiB  util 94 %
+15:53 711385, 2540 MiB  util 94 %
+16:03 711385, 2540 MiB  util 98 %
+16:13 711385, 2540 MiB  util 97 %
+16:23 711385, 2540 MiB  util 96 %
+16:33 711385, 2540 MiB  util 88 %
+16:43 711385, 2668 MiB  util 99 %
+16:53 711385, 2668 MiB  util 99 %
+17:03 711385, 2668 MiB  util 93 %
+17:13 711385, 2668 MiB  util 93 %
+17:23 711385, 2668 MiB  util 94 %
+done 2026-11-07T17:28:40+01:00 exit 0 wall 6455 s

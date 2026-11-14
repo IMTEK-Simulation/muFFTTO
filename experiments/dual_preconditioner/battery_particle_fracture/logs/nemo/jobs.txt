@@ -29,3 +29,8 @@
 8657745 battery_2D_1024_dual l40s mem=64G submitted 2026-11-06T21:50:20+01:00
 8657746 battery_2D_1024_Green_Jacobi l40s mem=64G submitted 2026-11-06T21:50:22+01:00
 8657765 battery_2D_1024_Green l40s mem=64G submitted 2026-11-06T22:00:26+01:00
+8670849 battery_3D_256_Green h200 mem=200G submitted 2026-11-08T07:50:17+01:00
+8670863 battery_3D_256_Green h200 mem=200G 24h segments (SBATCH_TIMELIMIT, BUDGET 84600, MAXSEG 8) 2026-11-08T07:53:11+01:00
+8672007 bat_smoke3d_r1 continuation of 8671997
+8672013 battery_3D_128_frames 128^3 dual, SNAP3D_EVERY=3 (3D crack-growth video)
+8680275 battery_3D_256_Green_r1 continuation of 8670863

@@ -1,0 +1,24 @@
+job 8658121 host g3609 partition l40s start 2026-11-07T09:40:13+01:00 specs: 2:1024:Green_Jacobi:xx SEG=0 RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+09:42 773320, 2218 MiB  util 95 %
+09:52 773320, 2346 MiB  util 98 %
+10:02 773320, 2346 MiB  util 98 %
+10:12 773320, 2346 MiB  util 98 %
+10:22 773320, 2346 MiB  util 98 %
+10:32 773320, 2346 MiB  util 98 %
+10:42 773320, 2346 MiB  util 97 %
+10:52 773320, 2346 MiB  util 98 %
+11:02 773320, 2346 MiB  util 94 %
+11:12 773320, 2346 MiB  util 98 %
+11:22 773320, 2346 MiB  util 98 %
+11:32 773320, 2346 MiB  util 98 %
+11:42 773320, 2346 MiB  util 98 %
+11:52 773320, 2346 MiB  util 97 %
+12:02 773320, 2346 MiB  util 98 %
+12:12 773320, 2346 MiB  util 98 %
+12:22 773320, 2346 MiB  util 98 %
+12:32 773320, 2346 MiB  util 98 %
+12:42 773320, 2346 MiB  util 98 %
+12:52 773320, 2346 MiB  util 98 %
+2026-11-07T12:54:32+01:00 2:1024:Green_Jacobi:xx exit 0 wall 11659 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N1024_Green_Jacobi_xx_b1.5mm_k1e-05.log
+done 2026-11-07T12:54:32+01:00

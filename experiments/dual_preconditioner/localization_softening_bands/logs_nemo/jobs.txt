@@ -19,3 +19,6 @@
 8658123 2026-11-07_03:31 -p h200 --mem=200G sbatch_czm_gpu.sh 3:256:Green_Jacobi:xx
 8658213 2026-11-07_04:18 sbatch_czm_gpu.sh 2:1024:Green:xx
 8658214 2026-11-07_04:18 --export=ALL,LOAD_MAX=6e-3 sbatch_czm_gpu.sh 2:256:Green:xy 2:256:Green_Jacobi:xy 2:256:dual:xy
+8670851 2026-11-08_07:50 -p h200 --mem=200G sbatch_czm_gpu.sh 3:256:Green:xx
+8670865 2026-11-08_07:53 -p h200 --mem=200G sbatch_czm_gpu.sh 3:256:Green:xx (24h segments)
+8680378 3:256:Green:xx segment 1 (continues 8670865)

@@ -1,0 +1,24 @@
+job 8658214 host g3526 partition l40s start 2026-11-07T10:31:19+01:00 specs: 2:256:Green:xy 2:256:Green_Jacobi:xy 2:256:dual:xy SEG=0 RESTART_FROM=
+NVIDIA L40S, 46068 MiB, 615.71.10
+10:33 1168810, 576 MiB  util 32 %
+10:43 1168810, 576 MiB  util 44 %
+10:53 1168810, 576 MiB  util 45 %
+11:03 1168810, 576 MiB  util 41 %
+11:13 1168810, 576 MiB  util 43 %
+2026-11-07T11:17:06+01:00 2:256:Green:xy exit 0 wall 2746 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N256_Green_xy_b1.5mm_k1e-05.log
+11:23 1173304, 572 MiB  util 45 %
+11:33 1173304, 572 MiB  util 46 %
+11:43 1173304, 572 MiB  util 44 %
+11:53 1173304, 572 MiB  util 40 %
+12:03 1173304, 572 MiB  util 43 %
+12:13 1173304, 572 MiB  util 43 %
+12:23 1173304, 572 MiB  util 41 %
+12:33 1173304, 572 MiB  util 44 %
+12:43 1173304, 572 MiB  util 44 %
+12:53 1173304, 572 MiB  util 40 %
+13:03 1173304, 572 MiB  util 45 %
+2026-11-07T13:07:35+01:00 2:256:Green_Jacobi:xy exit 0 wall 6629 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N256_Green_Jacobi_xy_b1.5mm_k1e-05.log
+13:13 1183857, 568 MiB  util 33 %
+13:23 1183857, 568 MiB  util 52 %
+2026-11-07T13:30:12+01:00 2:256:dual:xy exit 0 wall 1357 s log /work/classic/fr_ml1145-muffto/runs/czm/logs/PFCZM2D_N256_dual_xy_b1.5mm_k1e-05.log
+done 2026-11-07T13:30:12+01:00

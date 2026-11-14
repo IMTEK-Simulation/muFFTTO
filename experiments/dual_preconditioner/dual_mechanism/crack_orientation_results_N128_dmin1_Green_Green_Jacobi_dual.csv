@@ -1,0 +1,10 @@
+geometry,load,cg_Green,cg_Green_Jacobi,cg_dual
+disc,E_xx (across),432,72,184
+disc,E_yy (along),432,73,181
+disc,E_xy (shear),446,58,177
+smooth,E_xx (across),565,24,24
+smooth,E_yy (along),565,24,24
+smooth,E_xy (shear),501,21,20
+wide_disc,E_xx (across),469,48,114
+wide_disc,E_yy (along),469,48,119
+wide_disc,E_xy (shear),470,42,100

@@ -5,6 +5,7 @@
 #   sbatch sbatch_AT2_gpu.sh ch     <N> -            <precond>     -> schneider2025_notch/logs/AT2_N<N>_<P>_incl0.1_l0.03125_k0.0001_ch.log
 #   sbatch sbatch_AT2_gpu.sh ch3D   <N> -            <precond>     -> 3D Cahn-Hilliard (geometry/cahn_hilliard_3D_128.npy), ch settings
 #                                                                     with l = 1/16 (fixed: l/h = 2 / 4 / 8 at 32^3 / 64^3 / 128^3)
+#   sbatch sbatch_AT2_gpu.sh poly2D <N> - <precond>             -> 2D polydisperse pores, l = 1/32 (1024^2 talk video run)
 #   [LS=<l>] sbatch sbatch_AT2_gpu.sh grains3D <N> - <precond>    -> 3D stiff tough grains (polydisperse balls, 10x), defaults of
 #                                                                     run_AT2_3D_fixed_l.sh, l = 1/16 (logs/AT2_N<N>_<P>_..._incl10_l0.0625_3D.log)
 # Options (environment, via sbatch --export=ALL,...):
@@ -69,7 +70,11 @@ case $CASE in
     export DIM=3 MICROSTRUCTURE=polydisperse_pores INCLUSION_STIFFNESS=10 LENGTH_SCALE=$LS \
            ${LOAD_STEPS:+LOAD_STEPS=$LOAD_STEPS} RUN_SUFFIX=${EXTRA_SUFFIX:-}
     LOG=logs/AT2_N${N}_${P}_polydisperse_pores_incl10_l${LS}_3D${EXTRA_SUFFIX:-}.log ;;
-  *) echo "case must be gypsum, ch, chgc2, ch3D or grains3D"; exit 2 ;;
+  poly2D)   # 2D polydisperse pores, l = 1/32 (run_AT2_1024_dual_gpu.sh: the 1024^2 dual video of the GAMM talk)
+    export MICROSTRUCTURE=polydisperse_pores LENGTH_SCALE=0.03125 ${LOAD_STEPS:+LOAD_STEPS=$LOAD_STEPS} \
+           RUN_SUFFIX=${EXTRA_SUFFIX:-}
+    LOG=logs/AT2_N${N}_${P}_polydisperse_pores_l0.03125${EXTRA_SUFFIX:-}.log ;;
+  *) echo "case must be gypsum, ch, chgc2, ch3D, grains3D or poly2D"; exit 2 ;;
 esac
 export NPIX=$N
 echo "job $SLURM_JOB_ID host $(hostname) start $(date -Is) case=$CASE N=$N $S $P log=$PWD/$LOG RESTART_FROM=${RESTART_FROM:-}"

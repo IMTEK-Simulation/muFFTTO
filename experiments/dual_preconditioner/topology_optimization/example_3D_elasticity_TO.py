@@ -150,9 +150,12 @@ if MPI.COMM_WORLD.rank == 0:
 macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
 
 # Target properties (Auxetic behavior)
-poison_target = -0.5
+poison_target = float(os.environ.get('TARGET_NU', -0.5))
+# TARGET_SCALE (env, default 1): scales the whole target stiffness (same nu); < 1 leaves room for void and slender
+# re-entrant members (strongly auxetic designs need a compliant target)
+target_scale = float(os.environ.get('TARGET_SCALE', 1.0))
 E_0 = 9 * K_0 * G_0 / (3 * K_0 + G_0)
-G_target_auxet = (3 / 20) * E_0
+G_target_auxet = target_scale * (3 / 20) * E_0
 E_target = 2 * G_target_auxet * (1 + poison_target)
 K_target, G_target = material_models.get_bulk_and_shear_modulus(E=E_target, poisson=poison_target)
 
@@ -496,6 +499,7 @@ if __name__ == '__main__':
                   'element_type': element_type,
                   'preconditioner_type': preconditioner_type, 'eta': eta, 'weight': weight, 'p': p,
                   'pf_normalized': int(pf_normalized), 'pf_weight': pf_weight, 'stress_weight': stress_weight,
+                  'target_scale': target_scale, 'target_nu': poison_target,
                   'pf_scale': pf_scale,
                   'soft_phase': soft_phase, 'double_well_depth': double_well_depth_test, 'optimizer': optimizer, 'cg_mode': cg_mode,
                   'volume_fraction': volume_fraction if volume_fraction is not None else -1.0,

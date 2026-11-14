@@ -115,6 +115,9 @@ staggered_tol = float(os.environ.get('STAGGERED_TOL', 1e-3))
 diff_precond = os.environ.get('DIFF_PRECOND', 'Green')
 diff_shadow = os.environ.get('DIFF_SHADOW', '1') == '1'
 snap_every = int(os.environ.get('SNAP_EVERY', 10))
+# SNAP3D_EVERY (env, default 0 = off): 3D only, every that many steps (and at the end) write the full damage and
+# concentration fields (float16) to <data>/battery_<run>_frames3D/step<k>.npz (for a 3D crack-growth video)
+snap3d_every = int(os.environ.get('SNAP3D_EVERY', 0))
 cg_tol = 1e-6
 cg_delay = 10
 
@@ -563,6 +566,11 @@ while True:
         np.savez(snap_file, time=np.array(snapshots['time']), damage=np.array(snapshots['damage']),
                  concentration=np.array(snapshots['concentration']), particle=mid_slice(particle_h),
                  core=mid_slice(core_h), h=h, length_scale=l_ref, t_scale=t_scale, L_cell=L_cell)
+    if dim == 3 and snap3d_every > 0 and (step % snap3d_every == 0 or finished):
+        frames_dir = os.path.join(data_folder, f'battery_{run_tag}_frames3D')
+        os.makedirs(frames_dir, exist_ok=True)
+        np.savez(os.path.join(frames_dir, f'step{step:04d}.npz'), step=step, time=t_now, a_c=a_c,
+                 damage=to_h(damage.s[0, 0]).astype(np.float16), conc=to_h(conc.s[0, 0]).astype(np.float16))
     if checkpoint_seconds > 0 and time.time() - last_checkpoint > checkpoint_seconds and not finished:
         np.savez(checkpoint_file + '.tmp.npz', step=step, conc=to_h(conc.s), damage=to_h(damage.s),
                  u_fluct=to_h(u_fluct.s), history_n=to_h(history_n.s), cv_px=to_h(cv_px), stage=stage)

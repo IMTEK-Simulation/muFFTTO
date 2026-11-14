@@ -1,0 +1,11 @@
+geometry,load,cg_Green,cg_Green_Jacobi,cg_dual
+homog,E_xx (across),4,5,4
+disc,E_xx (across),523,592,238
+disc,E_yy (along),523,576,238
+disc,E_xy (shear),495,564,227
+smooth,E_xx (across),567,119,70
+smooth,E_yy (along),567,119,70
+smooth,E_xy (shear),498,120,49
+wide_disc,E_xx (across),491,306,162
+wide_disc,E_yy (along),491,309,166
+wide_disc,E_xy (shear),480,289,149

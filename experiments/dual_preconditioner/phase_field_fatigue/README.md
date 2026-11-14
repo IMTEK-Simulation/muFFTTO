@@ -171,3 +171,18 @@ To collect: the rsync line above, then `python plot_FAT_mesh_study.py`.
 3D so far (all under-resolved, l/h = 0.5 / 1): CG per solve before / during growth 32^3: Green 54 / 76, GJ 53 / 67,
 dual 227 / 240; 64^3: Green 74 / 109, GJ 87 / 116, dual 179 / 191 -- the dual is poor at l/h <= 1 (as in 2D B0 and the
 Ernesti benchmark); the resolved 3D grids (128^3, 256^3: l/h = 2, 4) are the decisive ones.
+
+### 2D 1024^2 and 3D 128^3 results, slide media (2026-11-08)
+
+2D 1024^2 (l/h = 16, l40s): life 174 cycles, growth 55-172, da/dN 65 um/cycle (converged with 512^2: 168 / 68).
+CG per elastic solve pre / growth: Green 278 / 787, Green-Jacobi 502 / 890, dual 27 / 53; work 3519k / 3866k / 479k (x2).
+Wall time (log "Elapsed time"): Green 10.44 h, Green-Jacobi 11.71 h, dual 1.60 h. All three hit MAX_STAGGERED = 500 at
+steps 156 and 171 (break cycles, accepted).
+3D 128^3 (l/h = 2): life 122; growth CG Green 181, Green-Jacobi 202, dual 145 (dual job 8658095 still running at
+cycle 120, 22 h of u-time vs Green 17.9 h: no win at l/h = 2 in 3D). 3D 256^3 dual (8658109, running, 74 cycles): 90 / 101.
+3D 256^3 Green-Jacobi 8658110 was cancelled; 256^3 Green never submitted.
+
+    python make_FAT_slide_video.py      # figures/FAT_slide_video_N1024.mp4 (3600x2160, damage from dual .nc, every 5th cycle)
+    python plot_FAT_3D_crack.py         # figures/FAT_3D_crack_N128.{png,pdf,mp4} (Green run, d = 0.9 isosurface)
+    python plot_slide_fatigue.py        # figures/fatigue_cg_vs_grid_{2D,3D}.pdf, fatigue_walltime_1024.pdf
+Copied to the Nantes talk: movies/movie_fatigue_{2D_N1024,3D_N128}.mp4 (+ _final.png), figures/fatigue_*.pdf.
