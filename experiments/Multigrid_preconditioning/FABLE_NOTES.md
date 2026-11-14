@@ -139,7 +139,20 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
 4. Possible small gains not done: analytic Jacobi diagonal (setup is 4-7 % of a run), merged gradient+hourglass
    stencil (~10 %), one-point coarse levels (7 %, option exists).
 
-### Production recipe (prepared, NOT submitted)
+### SUBMITTED 2026-11-14 18:25 (user: "Yes for both" = short 8-GPU 1024^3 test + production chain)
+* 1024^3 full-node test: job **8817006** (`FB_1024_test`, 8 H200, 1.5 h limit, 1 iteration, 6 load cases, host warm
+  starts) -> `logs/fable/test_N1024_np8.log`, peak line in `logs/fable/peak.txt` (NEMO clone).
+* Production chain `aux_s0.3` (6 load cases, eta 2h, nu* -0.5, scale 0.3, MAXITER 500, HISTORY_EVERY 50):
+  128^3 **8817007** (1 H200, 4 h) -> 256^3 **8817008, 8817009** (1 H200, 2 x 12 h) -> 512^3 **8817010, 8817011**
+  (2 H200, 2 x 24 h). Logs `$WS/runs/FABLE/TO3D_N<N>_aux_s0.3.log`, data `$WS/runs/FABLE/data/N<N>_*_aux_s0.3_*`.
+* TODO when the 1024^3 test has passed: attach the 1024^3 stage to the chain,
+  `sbatch -p h200 --gres=gpu:8 --ntasks=8 --mem=900G --time=24:00:00 -J FB_TO3D_1024 --dependency=afterok:8817011
+  sbatch_TO3D_large.sh 1024 $WS/runs/FABLE/data/N512_soft0.001_eta0.00390625_energy_aux_s0.3_final.nc aux_s0.3`
+  (TIME_BUDGET=84900, HISTORY_EVERY=0; 3 segments, the later ones afterany). If the 512^3 run needs a third
+  segment, submit one more `sbatch_TO3D_large.sh 512 ...` (it continues from the checkpoint).
+* Evaluate finals with `report_TO3D_nu.py` (rsync the _final.nc to the laptop).
+
+### Production recipe
 ```
 cd ~/software/muFFTTO_fable/experiments/Multigrid_preconditioning      # on NEMO, after ./fable_sync_nemo.sh
 DRY_RUN=1 ./submit_TO3D_large_chain.sh aux_s0.3 $PWD/data/CH3D/CH3D_start_bi_s11.nc \
