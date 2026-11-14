@@ -1,9 +1,28 @@
 # Multigrid preconditioning study — CLAUDE NOTES
 
-## RESUME HERE (state 2026-11-14 ~06:40)
+## RESUME HERE (state 2026-11-14 ~07:50, user re-logging to a new account)
 
 Read this section first after an interruption; details and all tables are in `README.md` (stages 1-8) and
-`OVERNIGHT_NOTES.md` (overnight + morning results). Nothing in this folder is committed (`git status`: untracked).
+`OVERNIGHT_NOTES.md` (overnight + morning results).
+
+### COMMITTED 2026-11-14 (user: "commit everything"; branch StefanusMichael_Dev_rebased, NOT pushed)
+a191fbd hourglass element trilinear_hexahedron_1Q_hg (library) | c3572b0 minimize(precond=) | 1ec5049 this folder |
+a028a37 all other experiments (dual_preconditioner, corrected_green, bubble_inflation: scripts, NEMO logs, CSVs).
+NuMPI 6561d66 (feat/tr_precond) committed earlier, not pushed.
+
+### ACTIVE USER REQUEST (not started): "for this set up [1Q_hg + MG], how much memory / how big a problem on H200?"
+Plan: peak GPU memory of the 3D TO (6 load cases, MG + Helmholtz L-BFGS, `ELEMENT=trilinear_hexahedron_1Q_hg`,
+eps 0.3) at 32³ and 64³ on the laptop with MAXITER=2 (nvidia-smi sampling as in `run_TO3D_hg_test.sh`; GPU must be
+otherwise idle) -> slope KB/voxel, vs 8-point MG ~7.4 KB/voxel (128³ ~16 GB, 256³ ~125 GB). Also the static solve
+(64³: 480 MB 1Q_hg vs 1080 MB 8-point incl. ~0.3 GB CUDA context). H200 = 141 GB. MG grids must be 4 x 2^k
+(256, 512, ...). Then confirm the predicted size with one short H200 job (smoke test first, [[smoke-test-before-submit]]).
+
+### RUNNING on the laptop (systemd user unit `mg-to3dhg`, survives the re-login)
+`run_TO3D_hg_test.sh 0.3`: 3D TO 32³, eta 2h, contrast 1e3, MG + Helmholtz c4, bi_s11 start; first 8-point
+(logs/TO3D_hg/TO3D_N32_8pt.log, ~68 evals at 07:50, ~7 s/eval), then 1Q_hg eps 0.3 (TO3D_N32_1Qhg0.3.log); peak
+memory in logs/TO3D_hg/peak_memory.txt. Compare final f, evals, s/eval, memory, design (`design_properties`-like
+3D check or slices). `systemctl --user is-active mg-to3dhg` to check. The session's background watchers of NEMO
+jobs (TO chains) are gone after the re-login -> check NEMO with `squeue` / `./sync_nemo_TO.sh`.
 
 ### What is decided (user decisions in **bold**)
 * Mechanics: CG + **geometric multigrid** V(2,2) (Chebyshev-Jacobi, `mg_lib.py`), coarse grids by averaged material
