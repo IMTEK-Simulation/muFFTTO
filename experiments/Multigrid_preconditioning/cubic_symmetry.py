@@ -8,6 +8,9 @@ projection is the group mean, and because G = (reflections) x (swap x, y) x (cyc
     P = R_x R_y R_z  *  (I + T) / 2  *  (I + C + C^2) / 3
         R_a = (I + reflection_a) / 2,   T: (x, y, z) -> (y, x, z),   C: (C f)(x, y, z) = f(y, z, x)
 
+`chiral_mean`: the same for the 24 proper rotations only (group 432, no mirror planes): the homogenised stiffness
+still has the cubic form (C1111, C1122, C1212), but chiral designs are allowed.
+
 Serial: `cubic_mean` on the array (GPU or host).  MPI (slabs along z, one per rank): R_x, R_y and T act inside a
 slab; C, C^2 and the z-reflection move data between slabs and are done by `SlabRemap` -- every rank sends each other
 rank exactly the block it needs (the whole field crosses the network three times per projection, nothing is
@@ -29,6 +32,37 @@ def cubic_mean(xp, a):
     for axis in range(3):
         a = 0.5 * (a + reflect(xp, a, axis))                                # R_x R_y R_z
     return a
+
+
+def rotation_group():
+    """the 24 proper rotations of the cube (chiral group 432) as (perm, flip): (g f)(t) = f(S(t)),
+    S(t)_m = t[perm[m]], reflected to (N - .) mod N where flip[m]. Proper: sign(perm) * (-1)^(number of flips) = +1"""
+    from itertools import permutations, product
+    elements = []
+    for perm in permutations(range(3)):
+        sign = round(float(np.linalg.det(np.eye(3)[list(perm)])))
+        for flip in product((False, True), repeat=3):
+            if sign * (-1) ** sum(flip) == 1:
+                elements.append((list(perm), flip))
+    return elements
+
+
+def apply_symmetry(xp, a, perm, flip):
+    """(g f)(t) = f(S(t)) for the whole array a[x, y, z] (serial)"""
+    for axis in range(3):
+        if flip[axis]:
+            a = reflect(xp, a, axis)
+    return a.transpose([perm.index(k) for k in range(3)])
+
+
+def chiral_mean(xp, a):
+    """mean of the whole array over the 24 rotations of the cube (serial; numpy or cupy)"""
+    return sum(apply_symmetry(xp, a, perm, flip) for perm, flip in rotation_group()) / 24.0
+
+
+def chiral_mean_distributed(remap, local):
+    """mean of a slab-distributed host array over the 24 rotations (one exchange per rotation: simple, not fast)"""
+    return sum(remap(local, perm, flip) for perm, flip in rotation_group()) / 24.0
 
 
 class SlabRemap:
@@ -91,6 +125,15 @@ if __name__ == '__main__':                                  # mpirun -n 4 python
     reference = cubic_mean(np, field)
     error = comm.allreduce(float(np.abs(projected - reference[:, :, z0:z1]).max()), op=MPI.MAX)
     again = cubic_mean(np, reference)
+    chiral = chiral_mean(np, field)
+    chiral_error = comm.allreduce(float(np.abs(chiral_mean_distributed(remap, field[:, :, z0:z1].copy())
+                                               - chiral[:, :, z0:z1]).max()), op=MPI.MAX)
+    quarter_turn = apply_symmetry(np, chiral, [1, 0, 2], (True, False, False))           # 90 degrees about z
+    if comm.rank == 0:
+        print(f'  chiral (24 rotations): distributed vs serial {chiral_error:.1e}; idempotent '
+              f'{np.abs(chiral_mean(np, chiral) - chiral).max():.1e}; invariant under a quarter turn '
+              f'{np.abs(quarter_turn - chiral).max():.1e}; mirror symmetric: '
+              f'{np.abs(reflect(np, chiral, 0) - chiral).max() < 1e-12}')
     if comm.rank == 0:
         print(f'N {n}, {comm.size} rank(s): distributed vs serial projection, max diff {error:.1e}; '
               f'idempotent {np.abs(again - reference).max():.1e}; invariant under x<->z '

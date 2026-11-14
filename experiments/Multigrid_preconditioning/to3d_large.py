@@ -29,9 +29,10 @@ and new here:
     MG_COARSE_ELEMENT   element of the coarse multigrid levels (default: fully integrated hexahedra;
                    trilinear_hexahedron_1Q_hg: one-point elements on every level, see muFFTTO.multigrid;
                    MG_COARSE_HG_EPS: their hourglass control, default HG_EPS)
-    SYMMETRY       none (default) | cubic: the design keeps the 48 symmetries of the cube about the cell centre
-                   (start design and gradient are projected). The homogenised stiffness is then cubic, and two
-                   load cases (xx and xy) give the whole objective: 3x less work and state per evaluation
+    SYMMETRY       none (default) | cubic | cubic_chiral: the design keeps the 48 symmetries of the cube about the
+                   cell centre (cubic), or only its 24 rotations (cubic_chiral: no mirror planes); start design
+                   and gradient are projected. The homogenised stiffness is then cubic, and two load cases (xx
+                   and xy) give the whole objective: 3x less work and state per evaluation
     DESIGN_OPT     lbfgs_helm (default; NuMPI L-BFGS with the Helmholtz H_0, MPI-capable) | lbfgs_helm_local
                    (design_optimizers.py, serial; the optimizer of the baseline runs)
     OUT_DIR        output folder (default data/to3d_large)
@@ -148,11 +149,12 @@ class TopologyOptimization:
         strains = [unit_strain(i, j) for i, j in LOAD_CASE_STRAINS]
         self.symmetry = symmetry
         self._slab_remap = None
-        if load_cases is None and symmetry == 'cubic':
+        assert symmetry in ('none', 'cubic', 'cubic_chiral'), symmetry
+        if load_cases is None and symmetry != 'none':
             # cubic C_h: C1111 = C2222 = C3333, C1122 = C1133 = C2233, C2323 = C1313 = C1212, so the 9 energy terms
             # below are 3 x (xx; xx), 3 x (xx; yy or zz) and 3 x (xy; xy): two load cases, with these weights
             load_cases = [(0, [(0, 3.0), (1, 1.5), (2, 1.5)]), (5, [(5, 3.0)])]
-            assert objective == 'energy', 'SYMMETRY=cubic is implemented for OBJECTIVE=energy'
+            assert objective == 'energy', 'SYMMETRY is implemented for OBJECTIVE=energy'
         if load_cases is None:                    # the 9 energies C1111 C1122 C1133 | C2222 C2233 | C3333 | 3 shears
             load_cases = [(lc, [(k, 1.0) for k in lefts])
                           for lc, lefts in enumerate([[0, 1, 2], [1, 2], [2], [3], [4], [5]])]
@@ -222,16 +224,18 @@ class TopologyOptimization:
     def symmetrize(self, field):
         """Project a nodal scalar field onto the fields with cubic symmetry (cubic_symmetry.py). Serial: on the
         device. MPI: R_x, R_y and the x-y swap inside the slabs, the three operations that move z between them."""
+        chiral = self.symmetry == 'cubic_chiral'
         if self.comm.size == 1:
-            field.s[0, 0] = cubic_symmetry.cubic_mean(self.xp, field.s[0, 0])
+            mean = cubic_symmetry.chiral_mean if chiral else cubic_symmetry.cubic_mean
+            field.s[0, 0] = mean(self.xp, field.s[0, 0])
             return
         if self._slab_remap is None:
             fft = self.disc.fft
             assert tuple(fft.nb_subdomain_grid_pts[:2]) == (self.n_pix, self.n_pix), 'slabs along z expected'
             self._slab_remap = cubic_symmetry.SlabRemap(self.comm.mpi4py_comm, self.n_pix,
                                                         fft.subdomain_locations[2], fft.nb_subdomain_grid_pts[2])
-        local = cubic_symmetry.cubic_mean_distributed(self._slab_remap, to_host(field.s[0, 0]))
-        field.s[0, 0] = self.xp.asarray(local)
+        mean = cubic_symmetry.chiral_mean_distributed if chiral else cubic_symmetry.cubic_mean_distributed
+        field.s[0, 0] = self.xp.asarray(mean(self._slab_remap, to_host(field.s[0, 0])))
 
     def complete_stresses_by_symmetry(self):
         """homogenised stresses of the load cases that are not solved (cubic symmetry): permutations of xx and xy"""
@@ -272,7 +276,7 @@ class TopologyOptimization:
         disc.apply_N_transposed_operator_mugrid(quad_field_ijqxyz=self.quad_sensitivity,
                                                 nodal_field_inxyz=self.nodal_scratch, apply_weights=True)
         self.sensitivity.s[...] += self.nodal_scratch.s
-        if self.symmetry == 'cubic':
+        if self.symmetry != 'none':
             self.symmetrize(self.sensitivity)             # gradient within the symmetric designs
             self.complete_stresses_by_symmetry()
         self.timing['sensitivity'] += time.time() - t_sens
@@ -472,7 +476,7 @@ def main():
     start, n_start = interpolate_design(init_from, disc)
     if rank0:
         print(f'Initial design from {init_from} ({n_start}^3 -> {n_pix}^3)')
-    if to.symmetry == 'cubic':                             # the start must be symmetric too
+    if to.symmetry != 'none':                              # the start must be symmetric too
         to.rho.s[0, 0] = xp.asarray(start)
         to.symmetrize(to.rho)
         start = to_host(to.rho.s[0, 0])
