@@ -36,29 +36,44 @@ give short status messages from time to time.
   serial run to all 12 printed digits (CUDA-aware MPI and the distributed GPU FFT of the Helmholtz step work).
 * Symmetry: 2-load-case f and projected gradient == 6-load-case ones to 1e-16 (serial, 2 and 4 ranks), FD 1e-10.
 
-### Measurements (reference setup, 1Q_hg, MG, energy objective)
+### Measurements (reference setup, 1Q_hg, MG, energy objective; s/evaluation = steady evaluations after the first two)
 | grid, GPU | code | peak MiB / process | B/voxel all-in | s / evaluation |
 |---|---|---|---|---|
 | 32^3 laptop | baseline | 212 | | 13.95 |
-| 32^3 laptop | lean, 6 load cases | 152 | | 3.56 |
-| 32^3 laptop | lean, cubic (2 load cases) | 144 | | 1.1 |
+| 32^3 laptop | lean, 6 load cases | 140-152 | | 2.2 (first lean version 7.3) |
+| 32^3 laptop | lean, cubic (2 load cases) | 144 | | ~1.0 |
 | 128^3 H200 | baseline | 5824 | 2777 | ~15 |
-| 128^3 H200 | lean, warm starts on device | 3134 | 1494 | ~10 (job leanB) |
-| 256^3 H200 | lean, warm starts on host | 15154 | 947 | ~70 (first version ~120) |
-| 256^3 H200 | lean, cubic, host | 15344 | 959 | ~28 (noisy, shared node) |
-| 256^3 L40S x 1 / 2 / 4 | lean, host | 15013 / 8607 / 4877 per GPU | | 185 / 110 / 87 |
-(256^3 numbers are before the GPU transfer kernels.) 256^3 fields: 825 B/voxel (fine 701, coarse levels 124), CuPy pool
-72-84, context + FFT ~50.
+| 128^3 H200 | lean, warm starts on device | 3134 | 1494 | ~10 (leanB; before lean K / transfer kernels) |
+| 256^3 H200 | lean, host warm starts | 15154 | 947 | 62 (leanC; first lean version 120) |
+| 256^3 L40S x 1 / 2 / 4 | lean, host (strong2) | 15013 / 8619 / 4891 per GPU | | 164 / 90 / 62 (first version 185 / 110 / 87) |
+| **512^3 H200 x 1** | **lean, cubic, host (job 8815590)** | **116172** | **908** | **~105** (2 load cases) |
+512^3 fields: 810 B/voxel (fine level 691, MG level 1 104, rest 15), CuPy pool 84, context + FFT plans 13.
+K on one H200 (fable_time_K.py, job 8815618): 256^3 fine K 28 ms (library K at the start: 54 ms), level-1 (8-point)
+K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the cycle at 128^3, negligible at 512^3).
 
-### Open issues being worked on
-1. **MPI strong scaling is weak** (1.7x on 2, 2.1x on 4 L40S at 256^3). Profiling jobs FB_prof_1 / FB_prof_4
-   (8815571 / 8815572, 128^3, `PROFILE=1`) -> `logs/fable/prof_N128_np{1,4}.log` on NEMO. Suspects: ghost exchanges
-   (6-7 per K, 3 needed) and the small levels under MPI; idea: agglomerate levels below ~32^3 on rank 0's GPU.
-2. **Symmetric start**: the symmetrised CH start is nearly grey and the 32^3 symmetric run stalls at f 6.15, nu +0.06
-   (6 load cases: f 2.94, nu -0.16 after 400 iterations, still improving). Laptop unit `fable-wp3s`
-   (`fable_wp3_starts.sh`) tries cos / product / symmetrised-converged starts -> `logs/fable/wp3_starts_report.txt`.
-3. Then: 512^3 on one H200 (few evaluations), 1/2/4(/8) H200 scaling, sbatch chain 256 -> 512 -> 1024 (WP5), final
-   report. H200 partition is busy (jobs wait).
+### Findings
+* Time is K-bound: one CG iteration = 5 fine K + 4 level-1 K + small levels. What made it faster, in order:
+  CuPy kernels on contiguous buffers instead of strided views (material, hourglass scaling, Jacobi product),
+  a single kernel for the grid transfer, three instead of six-seven ghost exchanges per K (matters under MPI:
+  128^3 on 4 L40S 58825 -> 22043 exchanges per run, 18 s -> 5 s), small levels agglomerated on rank 0's GPU.
+* One-point coarse levels (`MG_COARSE_ELEMENT=trilinear_hexahedron_1Q_hg MG_COARSE_HG_EPS=1`): CG iterations
+  174 -> 185 per evaluation at 32^3 (eps 0.3: 214, eps 3: 202), level-1 work / 8, memory -85 B/voxel. Changes the
+  preconditioner, so f differs at the solver-tolerance level (not the default). H200 256^3 timing: job 8815628.
+* **SYMMETRY=cubic is numerically correct but leads to poor designs so far**: 32^3 from 7 symmetric starts (symmetrised
+  CH, cos, product, symmetrised converged unsymmetric design ...) and 64^3 / 128^3 from the symmetrised CH start all
+  converge (XTOL) to f 6.1-7.0 with nu12 = +0.055..0.066, C11 ~ target, shear 0.012-0.021 (target 0.058): a
+  frame-like non-auxetic basin. Without symmetry: 32^3 f 2.94, nu -0.15..-0.17 after 400 iterations; 64^3 f 2.10
+  after 307 evaluations (job 8815596 running). Laptop unit `fable-wp3r` tries 8 random symmetric starts
+  (`logs/fable/wp3_random_report.txt`). Until a start is found that reaches the auxetic basin, production runs
+  should use 6 load cases.
+* WP5: `sbatch_TO3D_large.sh` + `submit_TO3D_large_chain.sh` smoke-tested on 2 L40S (jobs 8815608-12): time-budget
+  stop, continuation from the checkpoint (3 segments at 32^3), hand-over 32^3 final -> 64^3 start.
+
+### Open
+1. 512^3 with 6 load cases on one H200: job 8815591 running (`logs/fable/full_host_N512.log` on NEMO).
+2. 512^3 cubic on 2 and 4 H200 (8815616, 8815617) pending: per-rank memory and scaling at production load.
+3. 8 GPUs = full node: needs the user's OK (also for a short test). CPU MPI with 8 ranks is validated.
+4. Final report; decide default for MG_COARSE_ELEMENT after 8815628.
 
 ### NEMO jobs of this study (all short, single node)
 8814587 features, 8814588 profile 128, 8814660 smoke, 8814666-69 base/lean 128 + 256, 8814703 time K,
