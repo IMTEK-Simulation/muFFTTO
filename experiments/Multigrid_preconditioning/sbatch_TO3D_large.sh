@@ -10,9 +10,10 @@
 # Env (defaults): ETA_H=2 (interface width in voxels), SYMMETRY=none, WARM_STORE=host, MAXITER=500, CHECKPOINT_EVERY=10,
 #   HISTORY_EVERY=0 (no history file; a frame is N^3 x 8 bytes), TIME_BUDGET=82800 (23 h, for a 24 h job),
 #   MG_COARSE_ELEMENT, TARGET_NU=-0.5, TARGET_SCALE=0.3, SOFT_EXP=3
-# Memory per GPU ~1 kB/voxel/rank-share (see FABLE_NOTES.md): 256^3 16 GB, 512^3 125 GB (1 H200), 1024^3 8 x 125 GB.
-# Host memory (--mem): WARM_STORE=host needs 24 B/voxel per stored field (12 fields with 6 load cases, 4 with
-# SYMMETRY=cubic) + ~0.5 kB/voxel for L-BFGS and I/O: 512^3 ~120 GB (6 load cases), 1024^3 cubic ~700 GB.
+# GPU memory (measured, see FABLE_NOTES.md): ~900 B/voxel all-in + ~4 GiB per rank under MPI: 256^3 15 GiB,
+# 512^3 114 GiB (fits one H200), 2 H200: 61 GiB each; 1024^3 on 8 H200: ~120 GiB each (estimate).
+# Host memory (--mem): WARM_STORE=host needs 24 B/voxel per stored field (12 fields with 6 load cases, 4 with a
+# SYMMETRY) + ~0.4 kB/voxel for L-BFGS and I/O: 512^3 ~120 GB, 1024^3 ~800 GB (6 load cases).
 #SBATCH --job-name=FB_TO3D
 #SBATCH --partition=h200
 #SBATCH --nodes=1

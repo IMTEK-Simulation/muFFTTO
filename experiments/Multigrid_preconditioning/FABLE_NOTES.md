@@ -90,8 +90,28 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
 * Note: `fable_run_TO.sh` always sets DESIGN_OPT=lbfgs_helm = NuMPI's L-BFGS in `to3d_large.py`; the baseline used
   `design_optimizers.py`. The histories agree to 2e-8, i.e. the two optimizers are equivalent as expected.
 
+* 512^3, 6 load cases, one H200 with pinned warm-start buffers (8815826): 377 / 147 / 463 / 105 s per evaluation,
+  solves 984 s for 532 CG iterations (1.85 s per iteration), warm-start transfers 22 s in total (before: ~880 s).
+* MPI on 2 H200 at 512^3 (8815895, 6 load cases, profile): after the first evaluation 84 and 59 s per evaluation,
+  solves 1.14 s per CG iteration (one GPU: 2.0) = 1.75x; per GPU 60.9 GiB (one GPU 113 GiB: +3.6 GiB per rank).
+  Ghost benchmark `fable_time_ghosts.py` on 2 H200 at 512^3 (8815944): exchanges 2.2 / 6.2 / 8.5 ms (nodal, stress,
+  hourglass strain), K 126 ms (one GPU 217), V-cycle 853 ms (1393), multigrid setup 18 s first / 8 s later.
+  **But the first evaluation stalls ~10 min somewhere** (8815895: "MG setup" 626 s; the cubic run 8815616: 640 s
+  before the first evaluation) -- not reproduced by the benchmark. Per-stage timing added (`setup:` lines);
+  tests 8816011 (2 H200) and 8816090 (4 L40S), logs `stall_N512_np{2,4}.log`.
+
+### What 512^3 and 1024^3 need (estimates from the measurements above; 6 load cases, 8-point coarse levels)
+* CG iterations per evaluation over a whole run: ~150 (64^3 run 8815596: 82784 iterations / 553 evaluations).
+* **512^3 on one H200**: 113-115 GiB of 140 GiB; ~2 s per CG iteration -> ~330 s per evaluation -> 500 evaluations
+  ~46 h = two 24 h segments (chain script). On 2 H200: 1.14 s per iteration -> ~27 h. Host RAM ~120 GB.
+* **1024^3 on 8 H200 (one full node)**: per GPU the load of 512^3 on one GPU plus MPI overhead and two 1024^2 ghost
+  planes: ~120 GiB of 140 GiB. Per CG iteration ~2.0 s x (1 + ~25 % exchange) = ~2.5 s -> ~400 s per evaluation ->
+  500 evaluations ~56 h = three 24 h segments. Host RAM: warm starts 310 GB (pinned; `WARM_STORE=host32`: 155 GB)
+  + L-BFGS memory (2 x 20 + ~10 vectors of 8.6 GB) ~430 GB -> ~800 GB of 1.5 TB.
+  Not yet demonstrated: 8 ranks on GPUs (needs a full node = the user's OK), and the first-evaluation stall.
+
 ### Open
-1. MPI speed at 512^3+ (see above): read 8815895, then decide (exchange cost per K is the candidate).
+1. The first-evaluation stall under MPI at 512^3 (see above).
 2. 512^3 cubic on 4 H200 (8815617) pending.
 3. 8 GPUs = full node: needs the user's OK (also for a short test). CPU MPI with 8 ranks is validated.
 4. Final report.
