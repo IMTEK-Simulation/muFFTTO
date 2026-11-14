@@ -40,6 +40,8 @@ Usage
 >>> solve(K=lambda x, Ax: discretization.apply_system_matrix_mugrid(mg.material, x, Ax, 'small_strain'),
 ...       M=mg.apply)                         # mg.apply(r, z): z = V-cycle(r)
 """
+import time
+
 import numpy as np
 import muGrid
 from mpi4py import MPI
@@ -320,12 +322,22 @@ class Multigrid:
     def setup(self):
         """Everything that depends on the material ``self.scale``: coarse materials, Jacobi diagonals, smoothing
         intervals and the coarse factorisation. Call after every change of the scale."""
+        clock = [time.perf_counter()]
+
+        def lap(stage):                                      # wall time per stage of the last setup
+            clock.append(time.perf_counter())
+            self.setup_seconds[stage] = self.setup_seconds.get(stage, 0.0) + clock[-1] - clock[-2]
+
+        self.setup_seconds = {}
         for fine, coarse in zip(self.levels[:-1], self.levels[1:]):
             self._coarsen_scale(fine, coarse)
+        lap('coarse materials')
         for level in self.levels:
             if level.dinv is not None:
                 self._assemble_inverse_diagonal(level)
+                lap('diagonals')
                 self._estimate_lmax(level)
+                lap('power iterations')
         if self.tail is None:
             self._factorise_coarsest()
         else:
@@ -333,6 +345,7 @@ class Multigrid:
             if self.comm.rank == 0:
                 self.tail.scale.s[...] = tensor_operations.get_array_module(self.tail.scale.s).asarray(scale)
                 self.tail.setup()
+        lap('coarse solve / tail')
 
     @staticmethod
     def _coarsen_scale(fine, coarse):

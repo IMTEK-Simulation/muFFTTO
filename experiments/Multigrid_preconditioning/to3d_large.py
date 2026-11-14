@@ -286,8 +286,12 @@ class TopologyOptimization:
         xp.power(s, self.p, out=s)
         s *= 1.0 - self.soft_phase
         s += self.soft_phase
+        t_material = time.time()
         self.mg.setup()
         self.timing['setup'] += time.time() - t_start
+        if self.verbose and self.rank0:
+            print(f'setup: material {t_material - t_start:.1f} s, multigrid '
+                  + ', '.join(f'{stage} {seconds:.1f} s' for stage, seconds in self.mg.setup_seconds.items()), flush=True)
 
         f = self.phase_field_term()                       # writes self.sensitivity
         self.quad_sensitivity.s[...] = 0.0
@@ -505,7 +509,8 @@ def main():
         raise SystemExit('INIT_FROM is required: large runs start from a design, never from noise')
     start, n_start = interpolate_design(init_from, disc)
     if rank0:
-        print(f'Initial design from {init_from} ({n_start}^3 -> {n_pix}^3)')
+        print(f'Initial design from {init_from} ({n_start}^3 -> {n_pix}^3), wall {time.time() - start_time:.1f} s',
+              flush=True)
     if to.symmetry != 'none':                              # the start must be symmetric too
         to.rho.s[0, 0] = xp.asarray(start)
         to.symmetrize(to.rho)
