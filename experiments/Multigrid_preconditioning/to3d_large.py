@@ -81,13 +81,16 @@ class WarmStarts:
 
     ``store`` / ``load`` copy a whole field buffer (ghost layers included). Modes: 'device' (float64 on the device:
     exact), 'device32' (float32 on the device: half the memory; a warm start needs no more than single precision),
-    'host' / 'host32' (host memory: nothing on the device).
+    'host' / 'host32' (host memory: nothing on the device). Every buffer is allocated once and reused; host buffers
+    of a GPU run are page-locked ("pinned") if the system allows it -- transfers at several GB/s instead of the
+    page-fault-bound speed of fresh pageable arrays (a 512^3 field is 3.2 GB, and an evaluation moves 48 of them).
     """
 
     def __init__(self, mode):
         self.on_host = mode.startswith('host')
-        self.dtype = np.float32 if mode.endswith('32') else np.float64
+        self.dtype = np.dtype(np.float32 if mode.endswith('32') else np.float64)
         self.buffers = {}
+        self.seconds = 0.0                         # time spent in store / load
 
     @staticmethod
     def _buffer(field):
@@ -96,23 +99,46 @@ class WarmStarts:
             return field.sg
         return tensor_operations.point_view(field)
 
+    def _host_buffer(self, key, shape, pinned):
+        if key not in self.buffers:
+            if pinned:
+                try:
+                    import cupyx
+                    self.buffers[key] = cupyx.empty_pinned(shape, dtype=self.dtype)
+                except Exception:                  # no page-locked memory available: pageable, still reused
+                    self.buffers[key] = np.empty(shape, dtype=self.dtype)
+            else:
+                self.buffers[key] = np.empty(shape, dtype=self.dtype)
+        return self.buffers[key]
+
     def store(self, key, field):
+        start = time.time()
         data = self._buffer(field)
-        if self.on_host:
-            self.buffers[key] = to_host(data).astype(self.dtype, copy=data is field.sg)      # (to_host copies)
+        on_gpu = data is not field.sg
+        if self.on_host and on_gpu:
+            source = data if data.dtype == self.dtype else data.astype(self.dtype)
+            source.get(out=self._host_buffer(key, data.shape, pinned=True))
+        elif self.on_host:
+            self._host_buffer(key, data.shape, pinned=False)[...] = data
         elif key in self.buffers:
             self.buffers[key][...] = data
         else:
             self.buffers[key] = data.astype(self.dtype, copy=True)
+        self.seconds += time.time() - start
 
     def load(self, key, field):
+        start = time.time()
         data = self._buffer(field)
         if key not in self.buffers:
             data[...] = 0.0
         elif self.on_host and data is not field.sg:
-            data.set(np.ascontiguousarray(self.buffers[key], dtype=data.dtype))
+            if data.dtype == self.dtype:
+                data.set(self.buffers[key])
+            else:
+                data[...] = tensor_operations.get_array_module(data).asarray(self.buffers[key])
         else:
             data[...] = self.buffers[key]
+        self.seconds += time.time() - start
 
 
 class TopologyOptimization:
@@ -586,8 +612,8 @@ def main():
         print(f'Data saved to: {output}_final.nc')
         print(f'TOTAL wall {time.time() - start_time:.1f} s, CG mech {sum(to.cg_iterations["mechanical"])}, '
               f'CG adjoint {sum(to.cg_iterations["adjoint"])}, evaluations {to.nb_evaluations}, '
-              f'MG setup {to.timing["setup"]:.1f} s, solves {to.timing["solve"]:.1f} s, '
-              f'sensitivity {to.timing["sensitivity"]:.1f} s')
+              f'MG setup {to.timing["setup"]:.1f} s, solves {to.timing["solve"]:.1f} s (of which warm-start '
+              f'transfers {to.warm.seconds:.1f} s), sensitivity {to.timing["sensitivity"]:.1f} s')
     if env('MEM_REPORT', '0') == '1' and rank0:
         import fable_memory
         owners = {'TO + MG level 0': disc}
