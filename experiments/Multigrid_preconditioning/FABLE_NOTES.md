@@ -121,7 +121,8 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
 * **The "stall" was the start-design interpolation on the host**, not MPI: timed run 8816168 (2 H200, per-rank
   timing) showed rank 1 arriving ~570 s after rank 0 at the first evaluation; the 8-corner numpy interpolation of
   the start design is memory-heavy and erratically slow on the loaded H200 nodes (one GPU: 218-322 s of start-up).
-  Replaced by a separable (axis-by-axis) interpolation, identical histories; check run 8816779 (`interp_N512_np2.log`).
+  Replaced by a separable (axis-by-axis) interpolation, identical histories. Check run 8816779 (2 H200, 512^3,
+  6 load cases): start-up 7 s, evaluations 217 (cold) / 84 / 269 s (one H200: 377 / 147 / 463), f as on one GPU.
 * 512^3 cubic on 4 H200 (8815617): 0.84 s per CG iteration (1 GPU 2.0, 2 GPUs 1.14 -> speed-up 1.75 / 2.4),
   29.5 GiB per GPU; distributed symmetry projection 14 s per evaluation; Helmholtz by CG 1.5 s per evaluation.
 * Baseline at 256^3 on an H200 (8816167): 40922 MiB, ~120 s per evaluation; lean: 15154 MiB, 62 s.
