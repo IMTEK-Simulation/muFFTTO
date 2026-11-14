@@ -41,6 +41,8 @@ and new here:
                    starts are rebuilt); <output>_final.nc is written when the optimizer stops (converged / MAXITER)
     TIME_BUDGET    seconds; after this wall time the run writes a checkpoint and ends cleanly (exit 0, no final file)
                    so that the next job of a chain continues it (set it below the job's time limit)
+    HELMHOLTZ      fft | cg: how the Helmholtz initial inverse Hessian of L-BFGS is applied (default fft on one
+                   rank, cg under MPI)
     MEM_REPORT=1   print the memory table (fable_memory.py) at the end
     PROFILE=1      print a cProfile table of rank 0 (functions by own time) after the optimisation
 
@@ -218,7 +220,7 @@ class TopologyOptimization:
             self.hourglass_mode = disc.field_collection.real_field(
                 name='hourglass_strain_of_one_component', components=(1, 4), sub_pt='quad_points')
         self.cg_iterations = {'mechanical': [], 'adjoint': []}
-        self.timing = {'setup': 0.0, 'solve': 0.0, 'sensitivity': 0.0}
+        self.timing = {'setup': 0.0, 'solve': 0.0, 'sensitivity': 0.0, 'symmetry': 0.0}
         self.nb_evaluations = 0
 
     # ------------------------------------------------------------------ small helpers
@@ -303,8 +305,10 @@ class TopologyOptimization:
                                                 nodal_field_inxyz=self.nodal_scratch, apply_weights=True)
         self.sensitivity.s[...] += self.nodal_scratch.s
         if self.symmetry != 'none':
+            t_symmetry = time.time()
             self.symmetrize(self.sensitivity)             # gradient within the symmetric designs
             self.complete_stresses_by_symmetry()
+            self.timing['symmetry'] += time.time() - t_symmetry
         self.timing['sensitivity'] += time.time() - t_sens
         self.nb_evaluations += 1
         return f, to_host(self.sensitivity.s[0, 0]).reshape(-1)
@@ -508,20 +512,62 @@ def main():
         start = to_host(to.rho.s[0, 0])
     x0 = np.ascontiguousarray(start, dtype=float).ravel()
 
-    # ---- Helmholtz initial inverse Hessian (I + c eta^2 (-Lap_h))^-1 by FFT (7-point Laplacian symbol)
+    # ---- Helmholtz initial inverse Hessian (I + c eta^2 (-Lap_h))^-1, Lap_h: 7-point Laplacian
+    #      HELMHOLTZ=fft: exact, by FFT (default on one rank); HELMHOLTZ=cg: conjugate gradients on the stencil to a
+    #      relative residual of 1e-10 (default under MPI: the distributed GPU FFT costs far more than the few dozen
+    #      stencil products, and CG needs only ghost exchanges)
     helm_c = float(env('HELM_C', 4.0))
-    helm_hat = disc.ffield_collection.complex_field(name='helmholtz_hat', components=(1,))
     h = 1.0 / n_pix
-    neg_laplace = sum(4 / h ** 2 * np.sin(np.pi * np.asarray(to_host(disc.fft.ifftfreq[a]), dtype=float) / n_pix) ** 2
-                      for a in range(3))
-    helm_symbol = xp.asarray(disc.fft.normalisation / (1.0 + helm_c * eta ** 2 * neg_laplace))
+    helmholtz_mode = env('HELMHOLTZ', 'fft' if mpi.size == 1 else 'cg')
+    seconds = {'helmholtz': 0.0}
+    if helmholtz_mode == 'fft':
+        helm_hat = disc.ffield_collection.complex_field(name='helmholtz_hat', components=(1,))
+        neg_laplace = sum(4 / h ** 2 * np.sin(np.pi * np.asarray(to_host(disc.fft.ifftfreq[a]), dtype=float) / n_pix)
+                          ** 2 for a in range(3))
+        helm_symbol = xp.asarray(disc.fft.normalisation / (1.0 + helm_c * eta ** 2 * neg_laplace))
 
-    def helmholtz(v):
-        to.nodal_scratch.s[0, 0] = xp.asarray(v).reshape(to.nodal_scratch.s.shape[2:])
-        disc.fft.fft(to.nodal_scratch, helm_hat)
-        helm_hat.s[0, 0] *= helm_symbol
-        disc.fft.ifft(helm_hat, to.nodal_scratch)
-        return to_host(to.nodal_scratch.s[0, 0]).ravel()
+        def helmholtz(v):
+            start = time.time()
+            to.nodal_scratch.s[0, 0] = xp.asarray(v).reshape(to.nodal_scratch.s.shape[2:])
+            disc.fft.fft(to.nodal_scratch, helm_hat)
+            helm_hat.s[0, 0] *= helm_symbol
+            disc.fft.ifft(helm_hat, to.nodal_scratch)
+            result = to_host(to.nodal_scratch.s[0, 0]).ravel()
+            seconds['helmholtz'] += time.time() - start
+            return result
+    else:
+        from muGrid import GenericLinearOperator
+        stencil = np.zeros((3, 3, 3))                      # I + c eta^2 (-Lap_h): 1 + 6 a at the node, -a at 6 neighbours
+        a = helm_c * eta ** 2 / h ** 2
+        stencil[1, 1, 1] = 1.0 + 6.0 * a
+        for offset in ((0, 1, 1), (2, 1, 1), (1, 0, 1), (1, 2, 1), (1, 1, 0), (1, 1, 2)):
+            stencil[offset] = -a
+        helmholtz_operator = GenericLinearOperator([-1, -1, -1], stencil[np.newaxis, np.newaxis, np.newaxis])
+        # between two evaluations the design fields are free: used as the CG vectors
+        z, r, p, Ap = to.nodal_scratch, to.rho, to.sensitivity, disc.get_scalar_field(name='phase_field_iterate')
+        dot = lambda u, w: to.comm.sum(np.float64(float(linalg.vecdot(u, w))))
+
+        def helmholtz(v):
+            start = time.time()
+            r.s[0, 0] = xp.asarray(v).reshape(r.s.shape[2:])
+            linalg.copy(r, p)
+            linalg.scal(0.0, z)
+            rr = dot(r, r)
+            target = 1e-20 * rr                            # (relative residual 1e-10)^2
+            for _ in range(1000):
+                if rr <= target:
+                    break
+                disc.fft.communicate_ghosts(p)
+                helmholtz_operator.apply(nodal_field=p, quadrature_point_field=Ap)
+                alpha = rr / dot(p, Ap)
+                linalg.axpy(alpha, p, z)
+                linalg.axpy(-alpha, Ap, r)
+                rr_new = dot(r, r)
+                linalg.axpby(1.0, r, rr_new / rr, p)
+                rr = rr_new
+            result = to_host(z.s[0, 0]).ravel()
+            seconds['helmholtz'] += time.time() - start
+            return result
 
     # ---- output: history (every HISTORY_EVERY-th iterate), checkpoint, evaluation log
     parameters = {'nb_of_pixels': (n_pix,) * 3, 'domain_size': [1, 1, 1], 'domain_lengths': [1.0, 1.0, 1.0],
@@ -613,7 +659,8 @@ def main():
         print(f'TOTAL wall {time.time() - start_time:.1f} s, CG mech {sum(to.cg_iterations["mechanical"])}, '
               f'CG adjoint {sum(to.cg_iterations["adjoint"])}, evaluations {to.nb_evaluations}, '
               f'MG setup {to.timing["setup"]:.1f} s, solves {to.timing["solve"]:.1f} s (of which warm-start '
-              f'transfers {to.warm.seconds:.1f} s), sensitivity {to.timing["sensitivity"]:.1f} s')
+              f'transfers {to.warm.seconds:.1f} s), sensitivity {to.timing["sensitivity"]:.1f} s (of which symmetry '
+              f'{to.timing["symmetry"]:.1f} s), Helmholtz ({helmholtz_mode}) {seconds["helmholtz"]:.1f} s')
     if env('MEM_REPORT', '0') == '1' and rank0:
         import fable_memory
         owners = {'TO + MG level 0': disc}
