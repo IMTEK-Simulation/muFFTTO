@@ -113,14 +113,33 @@ from grid to grid.
 - the power-iteration start vectors are seeded per grid plane, so a run gives the same iteration counts on any
   number of ranks.
 
-## 8. Optional: design symmetry
+## 8. Optional: fused stiffness kernel and single-precision multigrid
+
+`OPERATOR=fused` replaces the element. The mechanics then use trilinear hexahedra with **one material value per
+voxel**, applied by muGrid's fused `IsotropicStiffnessOperator` (the kernel muTopOpt uses). This is muFFTTO's
+8-point `trilinear_hexahedron` with voxel-wise constant material -- verified to round-off for K u, the diagonal,
+the right-hand side and the average stress (`fable_fused_check.py`, `test/test_multigrid.py`) -- but not the
+one-point element of section 1, so objective values differ by a few per cent (2·10⁻³ in a test at 8³).
+
+- Every multigrid level uses the kernel; a coarse voxel takes the mean scale of its 8 fine voxels. The Jacobi
+  diagonal comes from the kernel in one pass (instead of 24 operator products).
+- Right-hand sides, the average stress and the sensitivity contractions also come from the kernel, so there are
+  no gradient or hourglass fields at all: about 530 bytes per voxel on the GPU instead of about 900.
+- `MG_PRECISION=single` runs the multigrid cycle in float32 on its own fields, between the double-precision
+  vectors of CG. A preconditioner need not be exact: the solutions, the stopping test and the objective stay in
+  double precision, and the iteration counts do not change. The design fields and the optimiser are untouched.
+
+Measured (256³, one L40S, 7 evaluations): one-point element 891 s and 15.0 GiB; fused kernel 515 s and 9.1 GiB;
+fused kernel with float32 multigrid 155 s and 8.5 GiB. CG iterations +7 % against the one-point element.
+
+## 9. Optional: design symmetry
 
 `SYMMETRY=cubic` (48 symmetries of the cube) or `cubic_chiral` (its 24 rotations) projects the start design and
 every gradient onto symmetric designs (`cubic_symmetry.py`). The homogenised stiffness is then cubic and two load
 cases (xx and xy) give the whole objective: a third of the work. It is verified numerically, but for the auxetic
 target above every start tried so far converged to a non-auxetic design (ν ≈ +0.05). Not used in production.
 
-## 9. Files
+## 10. Files
 
 | file | role |
 |---|---|
@@ -134,7 +153,7 @@ target above every start tried so far converged to a non-auxetic design (ν ≈ 
 | `fable_check_to3d_large.py`, `fable_check_symmetry.py`, `fable_test_multigrid.py`, `fable_compare.py` | validation against the reference script, `mg_lib` and the baseline histories in `fable_reference/` |
 | `fable_memory.py`, `fable_time_K.py`, `fable_time_ghosts.py` | memory table, timing of K and of ghost exchanges |
 
-## 10. Running it
+## 11. Running it
 
 Settings are environment variables; the full list is in the docstring of `to3d_large.py`.
 
@@ -157,7 +176,7 @@ Poisson ratios and stiffness of a result (copy the `_final.nc` to the laptop fir
 
     python ../dual_preconditioner/topology_optimization/report_TO3D_nu.py <…_final.nc>
 
-## 11. How it was checked
+## 12. How it was checked
 
 - Objective and gradient equal those of `example_3D_elasticity_TO.py` to round-off (4·10⁻¹⁶ / 3·10⁻¹⁶ at 8³), and
   the gradient passes a finite-difference check (10⁻⁸).
@@ -166,4 +185,6 @@ Poisson ratios and stiffness of a result (copy the `_final.nc` to the laptop fir
 - The multigrid equals the study's `mg_lib` to round-off on CPU and GPU.
 - 1, 2 and 4 MPI ranks give identical iteration counts and histories on the CPU; on GPUs the first evaluations
   agree with the single-GPU run to all printed digits.
-- Unit tests of the library: 200 passed.
+- Fused kernel: gradient passes the finite-difference check (10⁻⁸); double- and single-precision multigrid give the
+  same history (8·10⁻¹³) and iteration counts; 1 and 4 MPI ranks agree exactly.
+- Unit tests of the library: 205 passed.

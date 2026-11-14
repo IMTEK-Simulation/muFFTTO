@@ -41,6 +41,8 @@ parser.add_argument('--sharpen', type=float, default=0.0)
 parser.add_argument('--precision', default='double', choices=('double', 'single'))        # muTopOpt only
 parser.add_argument('--element', default=None)   # mufftto: trilinear_hexahedron_1Q_hg | trilinear_hexahedron; mutopopt: q1 | p1
 parser.add_argument('--preconditioner', default='green-jacobi')                           # muTopOpt only
+parser.add_argument('--operator', default='stencil', choices=('stencil', 'fused'))        # muFFTTO only
+parser.add_argument('--mg-precision', default='double', choices=('double', 'single'))     # muFFTTO, fused only
 args = parser.parse_args()
 N, E_SOLID, NU_SOLID, PENALTY, VOID = args.n, 1.0, 0.3, 2.0, 1e-3
 
@@ -104,7 +106,8 @@ else:
     from muGrid import linalg
     from muFFTTO import domain, multigrid, tensor_operations
 
-    element = args.element or 'trilinear_hexahedron_1Q_hg'
+    fused = args.operator == 'fused'      # muGrid's fused q1 kernel on every level: the element of muTopOpt's 'q1'
+    element = 'trilinear_hexahedron_1Q' if fused else (args.element or 'trilinear_hexahedron_1Q_hg')
     K_solid, G_solid = E_SOLID / (3 * (1 - 2 * NU_SOLID)), E_SOLID / (2 * (1 + NU_SOLID))
     identity = np.eye(3)
     C_0 = (K_solid - 2 * G_solid / 3) * np.einsum('ij,kl->ijkl', identity, identity) + G_solid * (
@@ -113,13 +116,14 @@ else:
     disc = domain.Discretization(cell=cell, nb_of_pixels_global=(N, N, N), discretization_type='finite_element',
                                  element_type=element, device='gpu',
                                  hourglass_eps=0.3 if element.endswith('_hg') else None)
-    mg = multigrid.Multigrid(disc, C_0)
+    mg = multigrid.Multigrid(disc, C_0, operator=args.operator, precision=args.mg_precision)
     xp = tensor_operations.get_array_module(mg.scale.s)
     sync = lambda: xp.cuda.Device().synchronize()
-    label = f'muFFTTO {element} multigrid V(2,2) double'
+    label = (f'muFFTTO fused q1, multigrid V(2,2) in {args.mg_precision} precision, CG double' if fused
+             else f'muFFTTO {element} multigrid V(2,2) double')
     u, b = disc.get_unknown_size_field(name='u'), disc.get_unknown_size_field(name='b')
     r, z, p, Kp = (disc.get_unknown_size_field(name=name) for name in ('r', 'z', 'p', 'Kp'))
-    level = mg.levels[0]
+    level = mg.fine_operator
     dot = lambda a, c: float(linalg.vecdot(a, c))
     weight = float(tensor_operations.to_host(disc.quadrature_weights)[0])
 
@@ -128,12 +132,17 @@ else:
         mg.setup()
 
     def solve(E):
-        stress = np.einsum('ijkl,kl->ij', C_0, E)
-        for i in range(3):
-            for j in range(3):
-                xp.multiply(mg.scale.s[0, 0], -stress[i, j], out=level.stress.s[i, j])
-        disc.fft.communicate_ghosts(level.stress)
-        disc.gradient_op.transpose(quadrature_point_field=level.stress, nodal_field=b, weights=disc.quadrature_weights)
+        if fused:
+            level.operator.apply_macro_rhs(level.lam, level.mu, [float(e) for e in E.ravel()], b)
+            linalg.scal(-1.0, b)
+        else:
+            stress = np.einsum('ijkl,kl->ij', C_0, E)
+            for i in range(3):
+                for j in range(3):
+                    xp.multiply(mg.scale.s[0, 0], -stress[i, j], out=level.stress.s[i, j])
+            disc.fft.communicate_ghosts(level.stress)
+            disc.gradient_op.transpose(quadrature_point_field=level.stress, nodal_field=b,
+                                       weights=disc.quadrature_weights)
         linalg.scal(0.0, u)
         linalg.copy(b, r)
         target = args.rtol ** 2 * dot(b, b)
@@ -141,7 +150,7 @@ else:
         linalg.copy(z, p)
         rz = dot(r, z)
         for iteration in range(1, 10000):
-            level.apply_K(p, Kp)
+            mg.apply_K(p, Kp)
             alpha = rz / dot(p, Kp)
             linalg.axpy(alpha, p, u)
             linalg.axpy(-alpha, Kp, r)
@@ -154,6 +163,9 @@ else:
 
     def stress_xx():
         solve(strains[0])
+        if fused:
+            disc.fft.communicate_ghosts(u)
+            return level.operator.average_stress(u, level.lam, level.mu, [float(e) for e in strains[0].ravel()])[0]
         disc.apply_gradient_operator_mugrid(u_inxyz=u, grad_u_ijqxyz=level.stress)
         level.stress.s[...] += xp.asarray(strains[0]).reshape(3, 3, 1, 1, 1, 1)
         mean = np.array([[float(xp.sum(mg.scale.s[0, 0] * level.stress.s[i, j])) for j in range(3)] for i in range(3)])

@@ -3,7 +3,7 @@
 Task: `FABLE_BRIEF.md`. Worktree `/home/martin/PycharmProjects/muFFTTO_fable`, branch `fable/large-3d-to` (base 3a56b48),
 NEMO clone `~/software/muFFTTO_fable`, NEMO runs/logs `$WS/runs/FABLE/`, job names `FB_*`.
 
-## RESUME HERE (state 2026-11-14 ~18:00)
+## RESUME HERE (state 2026-11-14 ~20:15)
 
 User is away until the evening of 2026-11-14 and said: work on autonomously, keep the NEMO rules (own single-node jobs
 <= 24 h; ask before > 24 h, full-node 8-GPU production, deletions in `$WS`); use several GPUs and muGrid's features;
@@ -138,6 +138,38 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
    `IsotropicStiffnessOperator3D` does for tetrahedra) would be the next factor ~2-3; outside this task's rules.
 4. Possible small gains not done: analytic Jacobi diagonal (setup is 4-7 % of a run), merged gradient+hourglass
    stencil (~10 %), one-point coarse levels (7 %, option exists).
+
+### STATE 2026-11-14 20:15 (after the user's "yes for both", the muTopOpt comparison and the fused / float32 request)
+* **128^3 production stage done** (8817007, one H200, 59 min, 545 evaluations, MAXITER): f 1.41,
+  nu12 -0.32 nu21 -0.33 nu13 -0.30 nu23 -0.31, C11 0.0938 (target 0.0868), mu 0.0566 (target 0.0579), solid 0.50.
+  File copied to `data/nemo_fable/`, opened for the user in muEye.
+* h200 allows 8 GPUs per user in total -> the 256^3 / 512^3 stages were moved to l40s (4 GPUs each). First attempt
+  8817132 died on g3606 (uncorrectable GPU ECC error; `SBATCH_EXCLUDE` had no effect) -> chain script got `EXCLUDE=`.
+  Running / queued now:
+  - approved chain `aux_s0.3` (one-point element): 256^3 **8817466, 8817467** (4 L40S, 2 x 12 h) -> 512^3
+    **8817468, 8817469** (4 L40S, 2 x 24 h);
+  - the same from the same 128^3 design with `OPERATOR=fused MG_PRECISION=single`, label `aux_s0.3_fused`:
+    256^3 **8817470** (1 L40S, 12 h) -> 512^3 **8817471** (4 L40S, 24 h).
+  - 1024^3 test 8817006 still queued (needs a whole free H200 node and no other h200 job of the user).
+* **User request 2026-11-14: "keep lbfgs that we have but implement fused kernel and single precision"** -> done:
+  `muFFTTO/multigrid.py` `operator='fused'`, `precision='single'`; `to3d_large.py` `OPERATOR=fused`,
+  `MG_PRECISION=single`; description in `LARGE_3D_TO.md` section 8. Checks: fused kernel == 8-point hexahedron with
+  voxel-wise material to round-off (`fable_fused_check.py`); gradient FD 1e-8 (`fable_check_fused.py`); double vs
+  single multigrid: same iterations, histories equal to 8e-13; MPI 1 vs 4 ranks identical; unit tests 205 passed.
+  256^3 on one L40S, 7 evaluations: one-point element 891 s / 15.0 GiB; fused double 515 s / 9.1 GiB;
+  **fused + float32 multigrid 155 s / 8.5 GiB** (532 B/voxel all-in; CG iterations +7 %).
+  Not decided by the user: whether production switches to it (objective differs by a few per cent: other element).
+* **Comparison with muTopOpt 1.5** (my clone `~/software/muTopOpt_fable`, the user's `~/software/muTopOpt` untouched):
+  - state solve on the same design, rtol 1e-6, one L40S (`fable_bench_vs_mutopopt.py`, results
+    `logs/fable/bench_vs_mutopopt_l40s.txt` on NEMO). 128^3 smooth design: muTopOpt double 643 it / 5.78 s, single
+    764 it / 0.78 s; mine one-point 14.5 it / 1.02 s, fused double 15 it / 0.64 s, fused + float32 MG 15 it / 0.18 s.
+    Sharpened design: 11.9 s / 1.61 s / 2.08 s / 1.45 s / 0.41 s. 256^3 smooth: muTopOpt double 1895 it / 145 s, single
+    not converged in 2000 it (30.7 s); mine one-point 17.5 it / 10.3 s. Memory 128^3: muTopOpt 658 (double) / 486
+    (single) B/voxel, mine 904 / 614 / 570.
+  - full optimisation, same problem (stress objective = muTopOpt's), same start, 128^3, one L40S each, jobs
+    8817298 (muTopOpt trust region double), 8817299 (single), 8817300 (L-BFGS), 8817301 (mine, one-point element,
+    `OBJECTIVE=stress`); after ~46 min wall: f 1.62 / 1.15 / 1.48 / 1.03, nu -0.10 / -0.19 / -0.12 / (not printed).
+    Logs `logs/fable/mutopopt_*_N128.log`, `vs_mutopopt_stress_N128.log`; still running (4 h limit).
 
 ### SUBMITTED 2026-11-14 18:25 (user: "Yes for both" = short 8-GPU 1024^3 test + production chain)
 * 1024^3 full-node test: job **8817006** (`FB_1024_test`, 8 H200, 1.5 h limit, 1 iteration, 6 load cases, host warm

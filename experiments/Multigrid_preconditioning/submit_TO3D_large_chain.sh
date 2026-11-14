@@ -9,7 +9,7 @@
 # Settings of sbatch_TO3D_large.sh (SYMMETRY, ETA_H, MAXITER, ...) are taken from the environment.
 # PARTITION (default h200). AFTER=<job id>: the first job waits for that job (afterok), e.g. the run that writes
 # <start.nc>. DRY_RUN=1 prints the sbatch commands only. Note: h200 allows 8 GPUs per user in total, so a full-node
-# job waits for all other h200 jobs of the user; on l40s set SBATCH_EXCLUDE=g3606,g3608 (GPU ECC errors).
+# job waits for all other h200 jobs of the user; on l40s set EXCLUDE=g3606,g3608 (GPU ECC errors).
 # RULES: jobs > 24 h, full-node (8 GPU) production runs: ask the user first.
 LABEL=$1; START=$2; shift 2
 PARTITION=${PARTITION:-h200}; DEP=${AFTER:+--dependency=afterok:$AFTER}
@@ -18,7 +18,7 @@ for LEVEL in "$@"; do
   set -- $LEVEL; N=$1; G=$2; SEGMENTS=$3; TIME=$4; MEM=$5
   H=$(echo $TIME | awk -F: '{print ($1 * 3600 + $2 * 60 + $3)}')
   for SEGMENT in $(seq $SEGMENTS); do
-    CMD="sbatch --parsable -p $PARTITION --gres=gpu:$G --ntasks=$G --mem=$MEM --time=$TIME -J FB_TO3D_${N} $DEP sbatch_TO3D_large.sh $N $START $LABEL"
+    CMD="sbatch --parsable -p $PARTITION ${EXCLUDE:+--exclude=$EXCLUDE} --gres=gpu:$G --ntasks=$G --mem=$MEM --time=$TIME -J FB_TO3D_${N} $DEP sbatch_TO3D_large.sh $N $START $LABEL"
     BUDGET=${TIME_BUDGET:-$((H - 1500))}                     # stop 25 min before the limit (TIME_BUDGET overrides)
     if [ "${DRY_RUN:-0}" = 1 ]; then echo "TIME_BUDGET=$BUDGET $CMD"; JOB="<job>"
     else JOB=$(TIME_BUDGET=$BUDGET $CMD); echo "N $N segment $SEGMENT: job $JOB ($G GPU, $TIME) start $START"; fi
