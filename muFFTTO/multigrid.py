@@ -238,6 +238,9 @@ class Multigrid:
         hexahedra on the fine level only). ``'trilinear_hexahedron_1Q_hg'``: one-point hexahedra with hourglass
         control on every level -- a coarse voxel takes the mean scale of its 8 fine voxels; 8x fewer quadrature
         points on the coarse levels (level 1 then costs 1/8 of the fine level instead of about as much).
+    coarse_hourglass_eps : float, optional
+        Hourglass control of one-point coarse levels (default: that of the fine level; 1 reproduces the hourglass
+        energy of the fully integrated element).
     n_agglomerate : int
         MPI only: grids of this size and coarser are solved on rank 0 (serial multigrid on its device). On small
         grids a ghost exchange is pure message latency; 16 keeps every distributed level at 32^3 or larger.
@@ -255,13 +258,15 @@ class Multigrid:
     """
 
     def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None,
-                 coarse_element=None, n_agglomerate=16):
+                 coarse_element=None, coarse_hourglass_eps=None, n_agglomerate=16):
         self.degree = degree
         self.alpha = alpha
         self.C_0 = np.asarray(C_0)
         self.n_coarsest = n_coarsest
         self.power_start = power_start
         self.coarse_element = coarse_element
+        self.coarse_hourglass_eps = (coarse_hourglass_eps if coarse_hourglass_eps is not None
+                                     else getattr(discretization.hourglass_control, 'eps', None))
         self.n_agglomerate = n_agglomerate
         self.dim = discretization.domain_dimension
         self.comm = discretization.communicator                 # muGrid communicator of all levels
@@ -280,8 +285,7 @@ class Multigrid:
                 cell=fine.cell, nb_of_pixels_global=tuple(n // 2 for n in fine.nb_of_pixels_global),
                 discretization_type='finite_element', element_type=element, communicator=fine.communicator,
                 device=fine.device, low_memory=fine.low_memory,
-                hourglass_eps=getattr(discretization.hourglass_control, 'eps', None) if element.endswith('_hg')
-                else None)
+                hourglass_eps=self.coarse_hourglass_eps if element.endswith('_hg') else None)
             self.levels.append(Level(coarse, self.C_0, len(self.levels)))
         if self.comm.size > 1:               # the last distributed grid and all coarser ones: serial, on rank 0
             self._build_tail(self.levels[-1].disc)
@@ -306,7 +310,7 @@ class Multigrid:
                 element_type=disc.element_type, communicator=muGrid.Communicator(MPI.COMM_SELF), device=disc.device,
                 hourglass_eps=getattr(disc.hourglass_control, 'eps', None))
             self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest,
-                                  coarse_element=self.coarse_element)
+                                  coarse_element=self.coarse_element, coarse_hourglass_eps=self.coarse_hourglass_eps)
             self.tail.levels[0].x = serial.get_unknown_size_field(name='mg_x')
             self.tail.levels[0].b = serial.get_unknown_size_field(name='mg_b')
         else:

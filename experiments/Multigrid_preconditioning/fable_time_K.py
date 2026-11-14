@@ -57,10 +57,21 @@ timed('gradient_op.transpose', lambda: disc.gradient_op.transpose(
     quadrature_point_field=grad, nodal_field=f, weights=disc.quadrature_weights))
 timed('hourglass: add_stiffness total', lambda: hg.add_stiffness(material, u, f))
 timed('hourglass: H apply', lambda: hg.operator.apply(nodal_field=u, quadrature_point_field=hg.strain))
-timed('hourglass: strain *= stiffness(material)', lambda: hg.strain.s.__imul__(hg.stiffness(material)))
+timed('hourglass: strain *= eps kappa (in place)', lambda: hg._scale_by_stiffness(material))
 timed('hourglass: H^T', lambda: hg.operator.transpose(quadrature_point_field=hg.strain, nodal_field=hg.force,
                                                       weights=[1.0]))
 timed('hourglass: output += force', lambda: f.s.__iadd__(hg.force.s))
+from muFFTTO import multigrid
+mg = multigrid.Multigrid(disc, C_0)
+mg.scale.s[...] = 0.5
+mg.setup()
+timed('multigrid: lean K (fine level)', lambda: mg.levels[0].apply_K(u, f))
+timed('multigrid: K of level 1 (8-point, N/2)', lambda: mg.levels[1].apply_K(mg.levels[1].x, mg.levels[1].b))
+timed('multigrid: restrict', lambda: mg.transfer.restrict(u, mg.levels[1].b))
+timed('multigrid: prolong', lambda: mg.transfer.prolong(mg.levels[1].x, f))
+timed('multigrid: Jacobi product', lambda: mg._jacobi(mg.levels[0], u, f))
+timed('multigrid: V-cycle', lambda: mg.apply(u, f))
+timed('multigrid: setup', lambda: mg.setup(), repeat=2)
 timed('linalg.axpy', lambda: linalg.axpy(0.5, u, f))
 timed('cupy  f.s += 0.5 * u.s', lambda: f.s.__iadd__(0.5 * u.s))
 timed('linalg.vecdot', lambda: linalg.vecdot(u, f))

@@ -27,7 +27,8 @@ TARGET_SCALE, PF_WEIGHT, STRESS_WEIGHT, CG_DELAY, MG_DEGREE, HELM_C, MAXITER, GT
 and new here:
     WARM_STORE     device (default) | device32 | host | host32   where the warm starts of the load cases live
     MG_COARSE_ELEMENT   element of the coarse multigrid levels (default: fully integrated hexahedra;
-                   trilinear_hexahedron_1Q_hg: one-point elements on every level, see muFFTTO.multigrid)
+                   trilinear_hexahedron_1Q_hg: one-point elements on every level, see muFFTTO.multigrid;
+                   MG_COARSE_HG_EPS: their hourglass control, default HG_EPS)
     SYMMETRY       none (default) | cubic: the design keeps the 48 symmetries of the cube about the cell centre
                    (start design and gradient are projected). The homogenised stiffness is then cubic, and two
                    load cases (xx and xy) give the whole objective: 3x less work and state per evaluation
@@ -119,7 +120,7 @@ class TopologyOptimization:
     def __init__(self, n_pix, eta, element='trilinear_hexahedron_1Q_hg', hourglass_eps=0.3, device='cpu',
                  soft_phase=1e-3, p=2, objective='energy', target_nu=-0.5, target_scale=1.0, pf_weight=0.2,
                  stress_weight=1.0, cg_tol=1e-6, cg_delay=0, mg_degree=2, warm_store='device', load_cases=None,
-                 symmetry='none', mg_coarse_element=None, verbose=True):
+                 symmetry='none', mg_coarse_element=None, mg_coarse_hourglass_eps=None, verbose=True):
         self.n_pix, self.eta, self.p, self.soft_phase = n_pix, eta, p, soft_phase
         self.objective, self.cg_tol, self.cg_delay, self.verbose = objective, cg_tol, cg_delay, verbose
         cell = domain.PeriodicUnitCell(domain_size=[1, 1, 1], problem_type='elasticity')
@@ -163,7 +164,8 @@ class TopologyOptimization:
         self.homogenized_stresses = np.zeros((6, 3, 3))
 
         # ---- fields (see the module docstring)
-        self.mg = multigrid.Multigrid(disc, self.C_0, degree=mg_degree, coarse_element=mg_coarse_element)
+        self.mg = multigrid.Multigrid(disc, self.C_0, degree=mg_degree, coarse_element=mg_coarse_element,
+                                      coarse_hourglass_eps=mg_coarse_hourglass_eps)
         self.scale = self.mg.scale                                          # s at the quadrature points
         self.material = self.mg.material                                    # s C_0
         self.rho = disc.get_scalar_field(name='design')
@@ -435,7 +437,8 @@ def main():
         target_nu=float(env('TARGET_NU', -0.5)), target_scale=float(env('TARGET_SCALE', 1.0)),
         pf_weight=float(env('PF_WEIGHT', 0.2)), stress_weight=float(env('STRESS_WEIGHT', 1.0)),
         cg_delay=int(env('CG_DELAY', 0)), mg_degree=int(env('MG_DEGREE', 2)), warm_store=env('WARM_STORE', 'device'),
-        symmetry=env('SYMMETRY', 'none'), mg_coarse_element=env('MG_COARSE_ELEMENT', '') or None)
+        symmetry=env('SYMMETRY', 'none'), mg_coarse_element=env('MG_COARSE_ELEMENT', '') or None,
+        mg_coarse_hourglass_eps=float(env('MG_COARSE_HG_EPS')) if env('MG_COARSE_HG_EPS') else None)
     disc, xp, rank0 = to.disc, to.xp, to.rank0
     mpi = MPI.COMM_WORLD
     if rank0:
