@@ -16,6 +16,12 @@ DONE (2007 evals, 6.7 h, f 2.2252); 64³ MG+Helm scaled 8813561 running (786 eva
 f 2.2377); 128³ H200: MG+Helm scaled 8813562 367 evals 19.3 s/eval f 1.7711 vs GJ 8810501 371 evals 34.0 s/eval
 f 1.7699 -> MG 1.76x faster per evaluation, same f per evaluation. (8813729 TO3D_128_sw25, 8812764 AT1b: other studies.)
 
+### HANDED TO FABLE (2026-11-14): 512³/1024³ engineering (memory diet, cubic symmetry, MPI multigrid)
+Brief `FABLE_BRIEF.md` (commit 3a56b48). Fable works in the worktree /home/martin/PycharmProjects/muFFTTO_fable on
+branch `fable/large-3d-to`, NEMO clone ~/software/muFFTTO_fable, runs $WS/runs/FABLE/, jobs FB_*, laptop units
+fable-*, notes FABLE_NOTES.md in its worktree. **User: do not interfere** -> never edit its worktree/branch/NEMO
+clone, never touch its jobs/units, keep laptop GPU use small while it runs.
+
 ### LARGE 3D AUXETIC RUN (user 2026-11-14: wants 512³ or even 1024³; asked whether Fable could optimise it)
 * 3D energy objective ported (`OBJECTIVE=energy` in example_3D_elasticity_TO.py: C1111/1122/1133, C2222/2233, C3333,
   C2323/1313/1212); FD check 8³ 1.5e-8 (8-point), 1.1e-8 (1Q_hg).
