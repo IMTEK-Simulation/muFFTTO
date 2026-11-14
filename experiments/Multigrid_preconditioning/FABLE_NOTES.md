@@ -3,7 +3,7 @@
 Task: `FABLE_BRIEF.md`. Worktree `/home/martin/PycharmProjects/muFFTTO_fable`, branch `fable/large-3d-to` (base 3a56b48),
 NEMO clone `~/software/muFFTTO_fable`, NEMO runs/logs `$WS/runs/FABLE/`, job names `FB_*`.
 
-## RESUME HERE (state 2026-11-14 ~11:00)
+## RESUME HERE (state 2026-11-14 ~14:00)
 
 User is away until the evening of 2026-11-14 and said: work on autonomously, keep the NEMO rules (own single-node jobs
 <= 24 h; ask before > 24 h, full-node 8-GPU production, deletions in `$WS`); use several GPUs and muGrid's features;
@@ -47,6 +47,9 @@ give short status messages from time to time.
 | 256^3 H200 | lean, host warm starts | 15154 | 947 | 62 (leanC; first lean version 120) |
 | 256^3 L40S x 1 / 2 / 4 | lean, host (strong2) | 15013 / 8619 / 4891 per GPU | | 164 / 90 / 62 (first version 185 / 110 / 87) |
 | **512^3 H200 x 1** | **lean, cubic, host (job 8815590)** | **116172** | **908** | **~105** (2 load cases) |
+| **512^3 H200 x 1** | **lean, 6 load cases, host (job 8815591)** | **114638** | **896** | 550 before the transfer fix |
+| 128^3 H200 | lean, final code, device / host | 3134 / 2510 | 1494 / 1197 | 8.5 |
+| 256^3 H200 | lean, one-point coarse levels | 14076 | 880 | 55 |
 512^3 fields: 810 B/voxel (fine level 691, MG level 1 104, rest 15), CuPy pool 84, context + FFT plans 13.
 K on one H200 (fable_time_K.py, job 8815618): 256^3 fine K 28 ms (library K at the start: 54 ms), level-1 (8-point)
 K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the cycle at 128^3, negligible at 512^3).
@@ -69,11 +72,29 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
 * WP5: `sbatch_TO3D_large.sh` + `submit_TO3D_large_chain.sh` smoke-tested on 2 L40S (jobs 8815608-12): time-budget
   stop, continuation from the checkpoint (3 segments at 32^3), hand-over 32^3 final -> 64^3 start.
 
+* **512^3 with 6 load cases on one H200 works** (job 8815591): peak 114638 MiB (896 B/voxel), 4 evaluations,
+  929 / 373 / 552 / 116 s. Half of that time was warm-start traffic (48 fields of 3.2 GB per evaluation into
+  freshly allocated pageable host arrays) -> now persistent pinned host buffers; rerun 8815826 (`fullB_host_N512`).
+* One-point coarse levels at 256^3 on an H200 (8815628): 1393 vs 1305 CG iterations, 0.211 vs 0.242 s per iteration
+  -> 7 % faster per evaluation, 67 B/voxel less. Not worth a different default: default stays the 8-point coarse
+  levels (reproduces the baseline), option documented.
+* `SYMMETRY=cubic_chiral` (24 rotations, no mirror planes; same cubic stiffness form, same 2 load cases; validated
+  like cubic): 6 starts at 32^3 -> the same basin (f 6.12-6.24, nu +0.05). So with either symmetry the optimiser
+  finds no auxetic design for this target; unsymmetric 64^3: f 2.10 (553 evaluations, job 8815596).
+* **MPI at 512^3 is slow so far**: cubic on 2 H200 (8815616) 169 / 125 / 170 s per evaluation vs 115 / 59 / 105 s on
+  one, plus ~100 s between evaluations (one GPU: 3 s) -> the distributed GPU FFT of the Helmholtz step, the symmetry
+  remap, and probably the ghost exchanges of the big fields. Done: Helmholtz by CG on the 7-point stencil
+  (`HELMHOLTZ=cg`, default under MPI; same history as the FFT to 2e-12), timers for Helmholtz / symmetry / warm
+  transfers in the TOTAL line. Profile job 8815895 (512^3, 2 H200, 6 load cases, `PROFILE=1`) queued.
+* H200 has a per-user GPU limit (QOSMaxGRESPerUser): my jobs queue behind each other.
+* Note: `fable_run_TO.sh` always sets DESIGN_OPT=lbfgs_helm = NuMPI's L-BFGS in `to3d_large.py`; the baseline used
+  `design_optimizers.py`. The histories agree to 2e-8, i.e. the two optimizers are equivalent as expected.
+
 ### Open
-1. 512^3 with 6 load cases on one H200: job 8815591 running (`logs/fable/full_host_N512.log` on NEMO).
-2. 512^3 cubic on 2 and 4 H200 (8815616, 8815617) pending: per-rank memory and scaling at production load.
+1. MPI speed at 512^3+ (see above): read 8815895, then decide (exchange cost per K is the candidate).
+2. 512^3 cubic on 4 H200 (8815617) pending.
 3. 8 GPUs = full node: needs the user's OK (also for a short test). CPU MPI with 8 ranks is validated.
-4. Final report; decide default for MG_COARSE_ELEMENT after 8815628.
+4. Final report.
 
 ### NEMO jobs of this study (all short, single node)
 8814587 features, 8814588 profile 128, 8814660 smoke, 8814666-69 base/lean 128 + 256, 8814703 time K,
