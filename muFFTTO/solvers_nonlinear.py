@@ -453,7 +453,9 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         'newton_cg'.
     precond : callable, optional
         ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded),
-        'newton_cg' and 'bb'.
+        'newton_cg', 'bb' and 'l_bfgs' (box bounds only, no linear constraint): there the initial inverse Hessian
+        of the two-loop recursion, gamma P M P with P the mask of the free components (e.g. a Helmholtz smoother
+        (I + c eta^2 (-Lap))^-1 of the TO design gradient, see experiments/Multigrid_preconditioning).
     callback : callable, optional
         ``callback(x)`` after every accepted iterate.
     comm : MPI communicator, optional
@@ -497,8 +499,10 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
 
     common = dict(callback=callback, disp=disp)
     if method == 'l_bfgs':
-        if precond is not None or hessp is not None:
-            raise ValueError("'l_bfgs' takes neither hessp nor precond")
+        if hessp is not None:
+            raise ValueError("'l_bfgs' takes no hessp")
+        if precond is not None and constrained:
+            raise ValueError("'l_bfgs' takes precond only without the linear constraint (l_bfgs_bounded)")
         if constrained and constraint_type == 'ineq':
             raise ValueError("'l_bfgs' supports only an equality constraint; use method='mma' for <a, x> <= V")
         if constrained:
@@ -507,7 +511,7 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
                                                    comm=comm, **common, **options)
         else:
             result = Optimization.l_bfgs_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi, comm=comm,
-                                                 **common, **options)
+                                                 precond=precond, **common, **options)
     elif method == 'mma':
         if precond is not None or hessp is not None:
             raise ValueError("'mma' takes neither hessp nor precond")

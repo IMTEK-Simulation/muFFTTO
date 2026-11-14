@@ -121,6 +121,25 @@ def test_minimize_box_only_same_minimum(method):
     assert result.fun == pytest.approx(reference.fun, rel=1e-6)
 
 
+def test_minimize_l_bfgs_precond_box():
+    """L-BFGS with a preconditioned initial inverse Hessian, passed through minimize: a mild smoother (I + K)^-1 of
+    the Laplacian-type problem (about 60 % of the components end on the box) reaches the same minimum (fewer
+    iterations, but not fewer evaluations on this bound-dominated problem: more step halvings); unbounded with the
+    exact inverse Hessian it is one Newton step."""
+    n = 200
+    fun = laplacian_quadratic(n)
+    A = laplacian_matrix(n)
+    smoother = np.linalg.inv(np.eye(n) + A - 1e-2 * np.eye(n))
+    plain = minimize(fun, np.full(n, 0.5), method='l_bfgs', bounds=(0., 1.), gtol=1e-8, maxiter=5000)
+    pre = minimize(fun, np.full(n, 0.5), method='l_bfgs', bounds=(0., 1.), precond=lambda v: smoother @ v,
+                   gtol=1e-8, maxiter=5000)
+    assert plain.success and pre.success, (plain.message, pre.message)
+    assert pre.fun == pytest.approx(plain.fun, rel=1e-8)
+    assert pre.nit < plain.nit
+    newton = minimize(fun, np.zeros(n), method='l_bfgs', precond=lambda v: np.linalg.solve(A, v), gtol=1e-8)
+    assert newton.success and newton.nit == 1
+
+
 @pytest.mark.parametrize('method', ['l_bfgs', 'mma'])
 def test_minimize_volume_constraint(method):
     n = 400
@@ -136,6 +155,8 @@ def test_minimize_volume_constraint(method):
     ('tr_newton', {}),                                                     # no hessp
     ('tr_newton', {'constraint_weights': np.ones(4), 'constraint_target': 1., 'hessp': lambda x, v: v}),
     ('l_bfgs', {'constraint_weights': np.ones(4), 'constraint_target': 1., 'constraint_type': 'ineq'}),
+    ('l_bfgs', {'constraint_weights': np.ones(4), 'constraint_target': 1., 'precond': lambda v: v}),
+    ('l_bfgs', {'hessp': lambda x, v: v}),
     ('mma', {'bounds': None}),
     ('newton', {}),
 ])
