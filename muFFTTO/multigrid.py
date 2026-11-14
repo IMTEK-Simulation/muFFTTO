@@ -51,12 +51,40 @@ FULLY_INTEGRATED = {'trilinear_hexahedron_1Q': 'trilinear_hexahedron',
                     'trilinear_hexahedron_1Q_hg': 'trilinear_hexahedron'}
 
 
+# CuPy kernels of the 3D grid transfer for device fields. `i` runs over the buffer of the target field
+# (component, z, y, x with x fastest; ghost points are skipped); `source` is the buffer of the other field.
+_TRANSFER_INDEX = '''
+    long long point = i % points, component = i / points;
+    long long x = point % shape[0] - ghosts[0];
+    long long y = (point / shape[0]) % shape[1] - ghosts[1];
+    long long z = point / (shape[0] * shape[1]) - ghosts[2];
+    if (x >= 0 && x < size[0] && y >= 0 && y < size[1] && z >= 0 && z < size[2]) {
+        const T* values = &source[component * other_points];
+        long long nx = other_shape[0], nxy = other_shape[0] * other_shape[1];
+        T sum = 0;
+'''
+_TRANSFER_KERNELS = {
+    'restrict': _TRANSFER_INDEX + '''
+        long long x0 = other_ghosts[0] + 2 * x, y0 = other_ghosts[1] + 2 * y, z0 = other_ghosts[2] + 2 * z;
+        for (int c = -1; c <= 1; c++) for (int b = -1; b <= 1; b++) for (int a = -1; a <= 1; a++)
+            sum += (a ? 0.5 : 1.0) * (b ? 0.5 : 1.0) * (c ? 0.5 : 1.0) * values[(x0 + a) + nx * (y0 + b) + nxy * (z0 + c)];
+        target[i] = sum;
+    }''',
+    'prolong': _TRANSFER_INDEX + '''
+        int px = x & 1, py = y & 1, pz = z & 1;
+        long long x0 = other_ghosts[0] + x / 2, y0 = other_ghosts[1] + y / 2, z0 = other_ghosts[2] + z / 2;
+        for (int c = 0; c <= pz; c++) for (int b = 0; b <= py; b++) for (int a = 0; a <= px; a++)
+            sum += values[(x0 + a) + nx * (y0 + b) + nxy * (z0 + c)];
+        target[i] = sum / ((1 + px) * (1 + py) * (1 + pz));
+    }'''}
+
+
 class GridTransfer:
     """Multilinear interpolation ``P`` between two nested nodal grids and its transpose ``R = P^T``.
 
-    Host fields use ``muGrid.GridTransfer``. Device fields use the same stencils written as in-place array
-    operations on strided views (27 small updates per transfer, no full-size temporaries) where the muGrid build has
-    no device kernel. The caller exchanges the ghosts of the *input* field first: ``restrict`` reads the left ghost
+    Host fields use ``muGrid.GridTransfer``. Where the muGrid build has no kernel for device fields, 3D device
+    fields use one CuPy kernel per transfer (:data:`_TRANSFER_KERNELS`); the same stencils written as in-place array
+    operations on strided views (27 small updates, no full-size temporaries) remain as the reference and for 2D. The caller exchanges the ghosts of the *input* field first: ``restrict`` reads the left ghost
     layer of the fine field, ``prolong`` the right ghost layer of the coarse field.
     """
 
@@ -64,11 +92,15 @@ class GridTransfer:
         self.dim = dim
         self.kernel = muGrid.GridTransfer(dim)
         self.use_kernel = True
+        self.use_device_kernel = True
+        self._device_kernels = {}
 
     def restrict(self, fine, coarse):
         """coarse = P^T fine: per axis, coarse[I] = fine[2I] + (fine[2I - 1] + fine[2I + 1]) / 2"""
         if self._try_kernel(self.kernel.restrict, fine, coarse):
             return
+        if self.dim == 3 and self.use_device_kernel:
+            return self._device_kernel('restrict', fine, coarse)
         source, target = fine.sg, coarse.s
         first = True
         for shift in np.ndindex(*(3,) * self.dim):                       # shift - 1 in {-1, 0, 1} per axis
@@ -85,6 +117,8 @@ class GridTransfer:
         """fine = P coarse: per axis, fine[2I] = coarse[I], fine[2I + 1] = (coarse[I] + coarse[I + 1]) / 2"""
         if self._try_kernel(self.kernel.prolong, coarse, fine):
             return
+        if self.dim == 3 and self.use_device_kernel:
+            return self._device_kernel('prolong', fine, coarse)
         source, target = coarse.sg, fine.s
         coarse_shape = coarse.s.shape
         for parity in np.ndindex(*(2,) * self.dim):                      # fine nodes 2I + parity
@@ -98,6 +132,31 @@ class GridTransfer:
                     nodes += view
             if len(corners) > 1:
                 nodes *= 1.0 / len(corners)
+
+    def _device_kernel(self, name, fine, coarse):
+        """3D transfer of device fields as one CuPy kernel over the buffer of the target field (one launch instead
+        of 27 strided array updates). Buffers are component by component with x fastest, ghost layers included."""
+        fine_buffer = tensor_operations.point_view(fine).reshape(-1)
+        coarse_buffer = tensor_operations.point_view(coarse).reshape(-1)
+        xp = tensor_operations.get_array_module(fine_buffer)
+        if name not in self._device_kernels:
+            self._device_kernels[name] = xp.ElementwiseKernel(
+                'raw T source, int64 points, int64 other_points, raw int64 shape, raw int64 ghosts, raw int64 size, '
+                'raw int64 other_shape, raw int64 other_ghosts', 'raw T target', _TRANSFER_KERNELS[name],
+                'grid_transfer_' + name)
+        geometry = {}
+        for label, field in (('fine', fine), ('coarse', coarse)):
+            geometry[label] = (xp.asarray(field.sg.shape[-3:], dtype=np.int64),
+                               xp.asarray(field._cpp.collection.nb_ghosts_left, dtype=np.int64),
+                               xp.asarray(field.s.shape[-3:], dtype=np.int64),
+                               int(np.prod(field.sg.shape[-3:])))
+        (target, source), (target_buffer, source_buffer) = (
+            (('coarse', 'fine'), (coarse_buffer, fine_buffer)) if name == 'restrict'
+            else (('fine', 'coarse'), (fine_buffer, coarse_buffer)))
+        shape, ghosts, size, points = geometry[target]
+        other_shape, other_ghosts, _, other_points = geometry[source]
+        self._device_kernels[name](source_buffer, points, other_points, shape, ghosts, size, other_shape,
+                                   other_ghosts, target_buffer, size=target_buffer.size)
 
     def _try_kernel(self, kernel, source, target):
         if self.use_kernel:

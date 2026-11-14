@@ -2838,7 +2838,7 @@ class Discretization:
         self.apply_material_data_mugrid(material_data=material_data_field,
                                         gradient_field=gradient_ijqxyz)
 
-        self.fft.communicate_ghosts(gradient_ijqxyz)
+        # f = B^T W sigma (exchanges the ghosts of the stress before and of the result after)
         self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)

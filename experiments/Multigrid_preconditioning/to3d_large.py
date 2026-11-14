@@ -36,6 +36,7 @@ and new here:
     OUT_DIR        output folder (default data/to3d_large)
     CHECKPOINT_EVERY   write <output>_checkpoint.nc (the current design; restart with INIT_FROM) every n iterations
     MEM_REPORT=1   print the memory table (fable_memory.py) at the end
+    PROFILE=1      print a cProfile table of rank 0 (functions by own time) after the optimisation
 
     python to3d_large.py            (serial)          mpirun -n 4 python to3d_large.py       (one rank per GPU)
 """
@@ -510,6 +511,11 @@ def main():
                 os.replace(output + '_checkpoint_new.nc', output + '_checkpoint.nc')
 
     # ---- optimisation
+    profiler = None
+    if env('PROFILE', '0') == '1' and rank0:              # where does the time go? (rank 0, printed at the end)
+        import cProfile
+        profiler = cProfile.Profile()
+        profiler.enable()
     options = dict(gtol=float(env('GTOL', 0.0)), xtol=1e-3, maxiter=int(env('MAXITER', 500)), maxcor=20, c1=1e-4,
                    max_halvings=40)
     if env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_helm_local':
@@ -520,6 +526,10 @@ def main():
     else:
         result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
                                             precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)
+    if profiler is not None:
+        import pstats
+        profiler.disable()
+        pstats.Stats(profiler).sort_stats('tottime').print_stats(28)
     if history is not None:
         history.close()
     if rank0:
