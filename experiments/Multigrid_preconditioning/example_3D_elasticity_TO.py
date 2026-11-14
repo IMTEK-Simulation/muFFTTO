@@ -187,6 +187,18 @@ for load_case in range(nb_load_cases):
     if MPI.COMM_WORLD.rank == 0:
         print(f'Load case {load_case}: target stress = {target_stresses[load_case].tolist()}')
 
+# OBJECTIVE (env): 'stress' (default: |Sigma_h - Sigma_t|^2 / |Sigma_t|^2 per load case) or 'energy' (2026-11-14, as in
+# the 2D copy, where it reaches the auxetic target and the stress objective does not): match the homogenised energies
+# W_kl = E_k : C_h : E_l of the isotropic target, i.e. C_1111, C_1122, C_1133 (load case xx with left strains xx, yy,
+# zz), C_2222, C_2233 (yy), C_3333 (zz), C_2323, C_1313, C_1212 (the shears): sum_kl (W_kl - W*_kl)^2 / W*_kl^2
+objective_mode = os.environ.get('OBJECTIVE', 'stress')
+left_strains_of_load_case = [[0, 1, 2], [1, 2], [2], [3], [4], [5]]
+energy_terms = [[(macro_gradients[k], float(np.einsum('ij,ijkl,kl->', macro_gradients[k], elastic_C_target,
+                                                     macro_gradients[load_case])))
+                 for k in left_strains_of_load_case[load_case]] for load_case in range(nb_load_cases)]
+if MPI.COMM_WORLD.rank == 0 and objective_mode == 'energy':
+    print('Energy objective: target W* =', [[round(W, 5) for _, W in terms] for terms in energy_terms])
+
 # Optimization state variables
 displacement_field_load_case = [discretization.get_unknown_size_field(name=f'u_{i}') for i in range(nb_load_cases)]
 adjoint_field_load_case = [discretization.get_unknown_size_field(name=f'adj_{i}') for i in range(nb_load_cases)]
@@ -452,9 +464,21 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             formulation='small_strain')
 
-        f_sigmas[load_case] = topology_optimization.compute_stress_equivalence_potential(
-            actual_stress_ij=homogenized_stresses[load_case],
-            target_stress_ij=target_stresses[load_case])
+        if objective_mode == 'energy':
+            # sum over the left strains E_k of this load case of (E_k : (Sigma_t - Sigma_h))^2 / W*_k^2. The adjoint
+            # routine is linear in D = Sigma_t - Sigma_h normalised by |Sigma_t|^2: pass the target
+            # Sigma' = Sigma_h + D_eff, D_eff = sum_k (E_k : D) E_k / W*_k^2, and weight w |Sigma'|^2 -> exact gradient
+            D_case = target_stresses[load_case] - homogenized_stresses[load_case]
+            f_sigmas[load_case] = sum(float(np.einsum('ij,ij->', E_k, D_case)) ** 2 / W_k ** 2
+                                      for E_k, W_k in energy_terms[load_case])
+            D_eff = sum(float(np.einsum('ij,ij->', E_k, D_case)) / W_k ** 2 * E_k for E_k, W_k in energy_terms[load_case])
+            sens_target = homogenized_stresses[load_case] + D_eff
+            sens_weight = w * float(np.sum(sens_target ** 2))
+        else:
+            f_sigmas[load_case] = topology_optimization.compute_stress_equivalence_potential(
+                actual_stress_ij=homogenized_stresses[load_case],
+                target_stress_ij=target_stresses[load_case])
+            sens_target, sens_weight = target_stresses[load_case], w
 
         s_stress_and_adjoint_load_case.s[0, 0], adjoint_field_load_case[
             load_case], adjoint_energies[
@@ -466,13 +490,13 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             adjoint_field_inxyz=adjoint_field_load_case[load_case],
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
             phase_field_1nxyz=phase_field_1nxyz,
-            target_stress_ij=target_stresses[load_case],
+            target_stress_ij=sens_target,
             actual_stress_ij=homogenized_stresses[load_case],
             preconditioner_fun=M_fun,
             system_matrix_fun=K_fun,
             formulation='small_strain',
             p=p,
-            weight=w,
+            weight=sens_weight,
             disp=disp,
             quad_point_density=quad_point_density,
             **cg_setup)

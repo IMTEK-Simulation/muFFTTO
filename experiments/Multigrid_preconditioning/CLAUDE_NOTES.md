@@ -10,7 +10,33 @@ a191fbd hourglass element trilinear_hexahedron_1Q_hg (library) | c3572b0 minimiz
 a028a37 all other experiments (dual_preconditioner, corrected_green, bubble_inflation: scripts, NEMO logs, CSVs).
 NuMPI 6561d66 (feat/tr_precond) committed earlier, not pushed.
 
-### ACTIVE USER REQUEST (not started): "for this set up [1Q_hg + MG], how much memory / how big a problem on H200?"
+### NEMO state 2026-11-14 07:40
+2D 4096² chain 8810349 DONE (8.05 h, 953 evals, f 0.7073, ~13.5 CG/solve). 3D TO bi3d_s11 eta 4h: 64³ GJ 8810500
+DONE (2007 evals, 6.7 h, f 2.2252); 64³ MG+Helm scaled 8813561 running (786 evals / 2.0 h, 9.0 vs GJ 11.9 s/eval,
+f 2.2377); 128³ H200: MG+Helm scaled 8813562 367 evals 19.3 s/eval f 1.7711 vs GJ 8810501 371 evals 34.0 s/eval
+f 1.7699 -> MG 1.76x faster per evaluation, same f per evaluation. (8813729 TO3D_128_sw25, 8812764 AT1b: other studies.)
+
+### LARGE 3D AUXETIC RUN (user 2026-11-14: wants 512³ or even 1024³; asked whether Fable could optimise it)
+* 3D energy objective ported (`OBJECTIVE=energy` in example_3D_elasticity_TO.py: C1111/1122/1133, C2222/2233, C3333,
+  C2323/1313/1212); FD check 8³ 1.5e-8 (8-point), 1.1e-8 (1Q_hg).
+* Synced to NEMO ~/software/muFFTTO (uncommitted there, NEMO checkout is 1ae499b): library files domain.py,
+  topology_optimization.py, discretization_library.py, solvers_nonlinear.py, hourglass_control.py + tests + all
+  study *.py/*.sh (NEMO's previous files were exactly local 35cd0ec / older study copies; backup
+  $WS/runs/tmp_scripts/muFFTTO_bak_20261114/before_hourglass_sync.tgz). sbatch_TO_mg.sh: SOFT_EXP now overridable.
+* NEMO jobs (list $WS/runs/MG_TO/aux3d_jobs.txt): smoke 8814558 (16³ 1Q_hg energy); after it the 3D auxetic
+  prototype 32³ 8-point, eta 2h, 1e3, MG + Helm c4, nu* -0.5: energy s0.3 8814559, energy s0.1 8814560,
+  stress s0.3 8814561, stress s0.1 8814562 (LABEL aux3d_{E,S}_s{0.3,0.1}). Evaluate with
+  ../dual_preconditioner/topology_optimization/report_TO3D_nu.py <final.nc>.
+* H200 on NEMO: partition h200 = 2 nodes x 8 H200 (141 GB), MaxNodes=1 per job, MaxTime 2 days, 1.5 TB host RAM/node
+  -> largest job 8 x 141 = 1.13 TB GPU memory.
+* Measured peak GPU memory per process (mem_TO3D_hg.sh, logs/mem_hg/peak.txt): TO 1Q_hg 212 / 876 MiB (32³/64³)
+  = ~3.0 KiB/voxel; TO 8-point 362 / 1980 MiB = ~7.2 KiB/voxel; static 1Q_hg 148/430/2456 MiB (32/64/128³) = 1.1 KiB.
+  -> 1Q_hg TO: 256³ ~50 GB (1 H200), 512³ ~400 GB (4 H200 with MPI MG), 1024³ ~3.2 TB (does not fit 8 H200).
+  1024³ needs <= ~1 KiB/voxel AND an MPI multigrid on 8 H200. Levers: memory diet (3 KiB = ~128 nodal vectors per
+  voxel: duplicate MG fine Discretization, temporaries, L-BFGS history + warm starts on host), cubic design symmetry
+  (2 load cases instead of 6: 3x less state + work), float32 storage of warm starts.
+
+### ACTIVE USER REQUEST (measuring, unit mg-memhg, mem_TO3D_hg.sh -> logs/mem_hg/peak.txt): "for this set up [1Q_hg + MG], how much memory / how big a problem on H200?"
 Plan: peak GPU memory of the 3D TO (6 load cases, MG + Helmholtz L-BFGS, `ELEMENT=trilinear_hexahedron_1Q_hg`,
 eps 0.3) at 32³ and 64³ on the laptop with MAXITER=2 (nvidia-smi sampling as in `run_TO3D_hg_test.sh`; GPU must be
 otherwise idle) -> slope KB/voxel, vs 8-point MG ~7.4 KB/voxel (128³ ~16 GB, 256³ ~125 GB). Also the static solve
@@ -61,8 +87,11 @@ jobs (TO chains) are gone after the re-login -> check NEMO with `squeue` / `./sy
   Open: how the target should be chosen properly (bounds on attainable (K, mu) for solid/void, resolution, eta).
 * **Energy objective** (user request): `OBJECTIVE=energy` in the 2D TO copy = match the target energies C_1111,
   C_2222, C_1122, C_1212 (sum (W - W*)^2 / W*^2); gradient via the library stress adjoint with a modified target
-  (exact: FD check `check_objective_gradient.py`, rel diff ~1e-7). Prototype `run_auxetic_energy.sh` RUNNING
-  (unit mg-auxE, logs `logs/auxetic_energy/`, designs `*_auxE_nu*_final.nc`) -> compare nu12 with the stress objective.
+  (exact: FD check `check_objective_gradient.py`, rel diff ~1e-7). Prototype `run_auxetic_energy.sh` DONE (128²,
+  eta 2h, 280-420 evals, 12-16 min each). nu12 (plane-strain target nu*/(1-nu*) = -0.33 / -0.41 for nu* -0.5 / -0.7):
+  ENERGY objective s0.1: -0.37 / -0.36, s0.3: -0.35 / -0.39 (= target, isotropic A_Z 0.95, mu = target 0.055),
+  s1: -0.15 / -0.15 (mu 0.126 misses 0.193); STRESS objective s0.1: -0.24 / -0.29, s0.3: -0.26 / -0.30, s1: -0.10 / -0.15.
+  -> energy objective reaches the auxetic target at scale 0.3 / 0.1, the stress objective does not.
 * **Under-integrated 3D elements** (user request, 8x less quadrature memory): `trilinear_hexahedron_1Q` supported in
   mg_lib (fine level 1Q, coarse levels fully integrated) and in the 3D TO copy (`ELEMENT=...`); static test MG only
   (`run_1Q_test.sh`, unit mg-1q2, `logs/1Q/`, CSV `exp_data/scaling3d_1Q`) RUNNING: iterations, C11 accuracy vs 8-point,

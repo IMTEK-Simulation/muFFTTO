@@ -8,7 +8,9 @@
 #      name), MAXITER (default 2000), CG_DELAY (default 0), DESIGN_OPT (default lbfgs = NuMPI; lbfgs_helm, ncg, ncg_helm:
 #      design_optimizers.py, tagged _<DESIGN_OPT> in the log and data names), HELM_C (Helmholtz strength, default
 #      1 = untagged; other values tagged _c<HELM_C>), SCRIPT (default example_2D_elasticity_TO.py;
-#      example_3D_elasticity_TO.py -> 3D, logs TO3D_...)
+#      example_3D_elasticity_TO.py -> 3D, logs TO3D_...), SOFT_EXP (void = 10^-SOFT_EXP, default 4; nice runs: 3),
+#      passed through to the script: ELEMENT (3D: trilinear_hexahedron_1Q_hg = one-point + hourglass control), HG_EPS,
+#      OBJECTIVE (stress | energy), TARGET_NU, TARGET_SCALE, LOW_MEMORY  -- put them into LABEL to keep runs apart
 #SBATCH --job-name=MG_TO
 #SBATCH --partition=l40s
 #SBATCH --gres=gpu:1
@@ -34,7 +36,7 @@ HELM_C=${HELM_C:-1}; [ "$HELM_C" = 1 ] || OPT_TAG="${OPT_TAG}_c${HELM_C}"
 SCRIPT=${SCRIPT:-example_2D_elasticity_TO.py}; PFX=$(case $SCRIPT in *3D*) echo TO3D;; *) echo TO;; esac)
 LOG=$WS/runs/MG_TO/${PFX}_N${N}_${P}_${LABEL}_eta${ETA_H}h${OPT_TAG}${LOG_SUFFIX:-}.log
 { echo "job $SLURM_JOB_ID $(hostname) $(date -Is) P $P N $N init $INIT"; nvidia-smi -L; } >> "$LOG"
-NPIX=$N ETA=$(python -c "print($ETA_H / $N)") SOFT_EXP=4 PF_NORMALIZED=1 PF_WEIGHT=0.2 CG_MODE=energy CG_DELAY=${CG_DELAY:-0} \
+NPIX=$N ETA=$(python -c "print($ETA_H / $N)") SOFT_EXP=${SOFT_EXP:-4} PF_NORMALIZED=1 PF_WEIGHT=0.2 CG_MODE=energy CG_DELAY=${CG_DELAY:-0} \
 GTOL=0 MAXITER=${MAXITER:-2000} HISTORY_EVERY=10 SHOW_PLOTS=0 INIT_FROM=$INIT DESIGN_OPT=$DESIGN_OPT HELM_C=$HELM_C \
 RUN_SUFFIX=_mgTO_${LABEL}${OPT_TAG}${LOG_SUFFIX:-} \
 python -u $SCRIPT $P >> "$LOG" 2>&1
