@@ -26,6 +26,11 @@ Environment (same names as the other TO scripts): NPIX, ETA, SOFT_EXP, ELEMENT, 
 TARGET_SCALE, PF_WEIGHT, STRESS_WEIGHT, CG_DELAY, MG_DEGREE, HELM_C, MAXITER, GTOL, INIT_FROM, HISTORY_EVERY, RUN_SUFFIX,
 and new here:
     WARM_STORE     device (default) | device32 | host | host32   where the warm starts of the load cases live
+    OPERATOR       stencil (default: the element ELEMENT through muFFTTO's stencils) | fused: trilinear hexahedra
+                   with one material value per voxel (= trilinear_hexahedron with voxel-wise constant material)
+                   through muGrid's fused IsotropicStiffnessOperator on every multigrid level; ELEMENT is ignored
+    MG_PRECISION   double (default) | single: the multigrid cycle in float32 (OPERATOR=fused only); CG, the
+                   solutions and the stopping test stay in double precision
     MG_COARSE_ELEMENT   element of the coarse multigrid levels (default: fully integrated hexahedra;
                    trilinear_hexahedron_1Q_hg: one-point elements on every level, see muFFTTO.multigrid;
                    MG_COARSE_HG_EPS: their hourglass control, default HG_EPS)
@@ -149,8 +154,11 @@ class TopologyOptimization:
     def __init__(self, n_pix, eta, element='trilinear_hexahedron_1Q_hg', hourglass_eps=0.3, device='cpu',
                  soft_phase=1e-3, p=2, objective='energy', target_nu=-0.5, target_scale=1.0, pf_weight=0.2,
                  stress_weight=1.0, cg_tol=1e-6, cg_delay=0, mg_degree=2, warm_store='device', load_cases=None,
-                 symmetry='none', mg_coarse_element=None, mg_coarse_hourglass_eps=None, verbose=True):
+                 symmetry='none', mg_coarse_element=None, mg_coarse_hourglass_eps=None, operator='stencil',
+                 mg_precision='double', verbose=True):
         self.n_pix, self.eta, self.p, self.soft_phase = n_pix, eta, p, soft_phase
+        if operator == 'fused':               # trilinear hexahedra, one material value per voxel, muGrid's fused
+            element = 'trilinear_hexahedron_1Q'    # kernel; the discretization provides grid, fields, design operators
         self.objective, self.cg_tol, self.cg_delay, self.verbose = objective, cg_tol, cg_delay, verbose
         cell = domain.PeriodicUnitCell(domain_size=[1, 1, 1], problem_type='elasticity')
         self.disc = disc = domain.Discretization(
@@ -195,7 +203,9 @@ class TopologyOptimization:
 
         # ---- fields (see the module docstring)
         self.mg = multigrid.Multigrid(disc, self.C_0, degree=mg_degree, coarse_element=mg_coarse_element,
-                                      coarse_hourglass_eps=mg_coarse_hourglass_eps)
+                                      coarse_hourglass_eps=mg_coarse_hourglass_eps, operator=operator,
+                                      precision=mg_precision)
+        self.fused = self.mg.fine_operator if operator == 'fused' else None       # its kernel and Lame fields
         self.scale = self.mg.scale                                          # s at the quadrature points
         self.material = self.mg.material                                    # s C_0
         self.rho = disc.get_scalar_field(name='design')
@@ -209,8 +219,12 @@ class TopologyOptimization:
         self.rhs = disc.get_unknown_size_field(name='right_hand_side')
         self.cg_work = tuple(disc.get_unknown_size_field(name=f'cg_{name}')
                              for name in ('residual', 'preconditioned_residual', 'direction', 'product'))
-        self.grad_u = disc.get_gradient_size_field(name='grad_field_temporary')      # the library's shared scratch
-        self.grad_adjoint = disc.get_gradient_size_field(name='grad_field_temporary_2')
+        if self.fused is None:
+            self.grad_u = disc.get_gradient_size_field(name='grad_field_temporary')  # the library's shared scratch
+            self.grad_adjoint = disc.get_gradient_size_field(name='grad_field_temporary_2')
+        else:                                 # per voxel: int eps(u) : eps(lambda) and int tr eps(u) tr eps(lambda)
+            self.g_shear = disc.field_collection.real_field('sensitivity_shear')
+            self.g_volumetric = disc.field_collection.real_field('sensitivity_volumetric')
         self.xp = tensor_operations.get_array_module(self.rho.s)
         self.warm = WarmStarts(warm_store)
         self.hourglass = disc.hourglass_control
@@ -228,11 +242,16 @@ class TopologyOptimization:
         return self.comm.sum(np.float64(float(self.xp.sum(array))))
 
     def K(self, x, Kx):
-        """Kx = B^T W s C_0 : B x + hourglass control (the fine-level operator of the multigrid; ghosts of Kx not set)"""
-        self.mg.levels[0].apply_K(x, Kx)
+        """Kx = K x: the fine-level operator of the multigrid, in double precision (ghosts of Kx not set)"""
+        self.mg.apply_K(x, Kx)
 
     def assemble_force(self, strain, force, factor):
         """force = factor * B^T W s C_0 : strain   for a uniform strain tensor [3, 3]"""
+        if self.fused is not None:
+            self.fused.operator.apply_macro_rhs(self.fused.lam, self.fused.mu, [float(e) for e in strain.ravel()],
+                                                force)
+            linalg.scal(factor, force)
+            return
         stress = np.einsum('ijkl,kl->ij', self.C_0, strain)
         s = self.scale.s[0, 0]
         for i in range(3):
@@ -247,6 +266,50 @@ class TopologyOptimization:
         w = self.xp.asarray(self.weights).reshape(-1, 1, 1, 1)
         local = [[float(self.xp.sum(w * s * gradient.s[i, j])) for j in range(3)] for i in range(3)]
         return np.array([[self.comm.sum(np.float64(value)) for value in row] for row in local])
+
+    def homogenized_stress(self, u, E):
+        """(1 / V) int s C_0 : (E + grad u)   (C_0 is minor symmetric: no symmetrisation needed)"""
+        if self.fused is not None:
+            self.disc.fft.communicate_ghosts(u)
+            local = self.fused.operator.average_stress(u, self.fused.lam, self.fused.mu, [float(e) for e in E.ravel()])
+            return np.array([self.comm.sum(np.float64(value)) for value in local]).reshape(3, 3) / self.volume
+        self.disc.apply_gradient_operator_mugrid(u_inxyz=u, grad_u_ijqxyz=self.grad_u)
+        self.grad_u.s[...] += self.xp.asarray(E).reshape(3, 3, 1, 1, 1, 1)
+        return np.einsum('ijkl,kl->ij', self.C_0, self.scaled_mean(self.grad_u)) / self.volume
+
+    def residual_term(self, u, adjoint, E):
+        """lambda . (K u + B^T W s C_0 : E): the residual of the mechanical problem tested with the adjoint -- zero
+        for an exact solve, part of the objective as in the reference script (keeps f consistent with its gradient)"""
+        product = self.cg_work[3]
+        self.K(u, product)
+        value = self.comm.sum(np.float64(float(linalg.vecdot(adjoint, product))))
+        if self.fused is not None:
+            self.assemble_force(E, product, 1.0)
+            return value + self.comm.sum(np.float64(float(linalg.vecdot(adjoint, product))))
+        self.disc.apply_gradient_operator_mugrid(u_inxyz=adjoint, grad_u_ijqxyz=self.grad_adjoint)
+        C_E = np.einsum('ijkl,kl->ij', self.C_0, E)
+        return value + float(np.sum(C_E * self.scaled_mean(self.grad_adjoint)))
+
+    def add_sensitivity(self, u, adjoint, E, costate_strain):
+        """quad_sensitivity += (grad lambda + costate_strain) : C_0 : (E + grad u)   per quadrature point; the
+        chain rule through s(rho) follows once for all load cases (evaluate)"""
+        if self.fused is not None:            # the kernel integrates over the voxel: divide by its volume
+            operator = self.fused.operator
+            self.disc.fft.communicate_ghosts(u)
+            self.disc.fft.communicate_ghosts(adjoint)
+            operator.compute_sensitivity(u, [float(e) for e in E.ravel()], adjoint,
+                                         [float(e) for e in costate_strain.ravel()], self.g_shear, self.g_volumetric)
+            target = self.quad_sensitivity.s[0, 0, 0]
+            target += (2.0 * self.fused.mu_0 / self.weights[0]) * self.g_shear.p.reshape(target.shape)
+            target += (self.fused.lam_0 / self.weights[0]) * self.g_volumetric.p.reshape(target.shape)
+            return
+        self.disc.apply_gradient_operator_mugrid(u_inxyz=u, grad_u_ijqxyz=self.grad_u)
+        self.grad_u.s[...] += self.xp.asarray(E).reshape(3, 3, 1, 1, 1, 1)
+        self.disc.apply_gradient_operator_mugrid(u_inxyz=adjoint, grad_u_ijqxyz=self.grad_adjoint)
+        self.grad_adjoint.s[...] += self.xp.asarray(costate_strain).reshape(3, 3, 1, 1, 1, 1)
+        self.add_contraction(self.grad_adjoint, self.grad_u, self.quad_sensitivity)
+        if self.hourglass is not None:
+            self.add_hourglass_sensitivity(u, adjoint, self.quad_sensitivity)
 
     # ------------------------------------------------------------------ cubic symmetry
     def symmetrize(self, field):
@@ -337,7 +400,6 @@ class TopologyOptimization:
 
     def load_case_term(self, lc, E, energy_terms):
         """Solve the load case, return its part of the objective and add its part of the quadrature sensitivity."""
-        xp, disc = self.xp, self.disc
         u, adjoint = self.u, self.adjoint
         t_solve = time.time()
 
@@ -348,10 +410,7 @@ class TopologyOptimization:
             self.comm, self.K, self.mg.apply, self.rhs, u, self.cg_work, tol=self.cg_tol, d_min=self.cg_delay))
         self.warm.store(('u', lc), u)
 
-        # total strain E + grad u (C_0 is minor symmetric: no symmetrisation needed) and the homogenised stress
-        disc.apply_gradient_operator_mugrid(u_inxyz=u, grad_u_ijqxyz=self.grad_u)
-        self.grad_u.s[...] += xp.asarray(E).reshape(3, 3, 1, 1, 1, 1)
-        stress = np.einsum('ijkl,kl->ij', self.C_0, self.scaled_mean(self.grad_u)) / self.volume
+        stress = self.homogenized_stress(u, E)
         self.homogenized_stresses[lc] = stress
 
         # objective of the load case and D = d f / d Sigma_h * (-V / 2w): the "stress difference" driving the adjoint
@@ -365,7 +424,7 @@ class TopologyOptimization:
             f_lc, D = float(np.sum(difference ** 2)) / norm, difference / norm
         factor = 2.0 * self.w / self.volume
 
-        # adjoint problem  K lambda = (2 w / V) B^T W s C_0 : D     (grad_u is rebuilt afterwards)
+        # adjoint problem  K lambda = (2 w / V) B^T W s C_0 : D
         self.assemble_force(D, self.rhs, factor)
         self.warm.load(('adjoint', lc), adjoint)
         if float(np.abs(D).max()) == 0.0:
@@ -379,22 +438,9 @@ class TopologyOptimization:
         self.timing['solve'] += time.time() - t_solve
         t_sens = time.time()
 
-        # residual of the mechanical problem tested with the adjoint, lambda . (K u + B^T W s C_0 : E): zero for an
-        # exact solve, part of the objective as in the reference script (keeps f consistent with its gradient)
-        disc.apply_gradient_operator_mugrid(u_inxyz=adjoint, grad_u_ijqxyz=self.grad_adjoint)
-        product = self.cg_work[3]
-        self.K(u, product)
-        C_E = np.einsum('ijkl,kl->ij', self.C_0, E)
-        residual_term = (self.comm.sum(np.float64(float(linalg.vecdot(adjoint, product))))
-                         + float(np.sum(C_E * self.scaled_mean(self.grad_adjoint))))
-
+        residual_term = self.residual_term(u, adjoint, E)
         # sensitivity at the quadrature points: (grad lambda - (2 w / V) D) : C_0 : (E + grad u)  [* ds/drho later]
-        disc.apply_gradient_operator_mugrid(u_inxyz=u, grad_u_ijqxyz=self.grad_u)
-        self.grad_u.s[...] += xp.asarray(E).reshape(3, 3, 1, 1, 1, 1)
-        self.grad_adjoint.s[...] -= xp.asarray(factor * D).reshape(3, 3, 1, 1, 1, 1)
-        self.add_contraction(self.grad_adjoint, self.grad_u, self.quad_sensitivity)
-        if self.hourglass is not None:
-            self.add_hourglass_sensitivity(u, adjoint, self.quad_sensitivity)
+        self.add_sensitivity(u, adjoint, E, -factor * D)
         self.timing['sensitivity'] += time.time() - t_sens
         if self.verbose and self.rank0:
             print(f'load case {lc}: CG mechanical {self.cg_iterations["mechanical"][-1]}, adjoint '
@@ -472,11 +518,14 @@ def main():
         pf_weight=float(env('PF_WEIGHT', 0.2)), stress_weight=float(env('STRESS_WEIGHT', 1.0)),
         cg_delay=int(env('CG_DELAY', 0)), mg_degree=int(env('MG_DEGREE', 2)), warm_store=env('WARM_STORE', 'device'),
         symmetry=env('SYMMETRY', 'none'), mg_coarse_element=env('MG_COARSE_ELEMENT', '') or None,
-        mg_coarse_hourglass_eps=float(env('MG_COARSE_HG_EPS')) if env('MG_COARSE_HG_EPS') else None)
+        mg_coarse_hourglass_eps=float(env('MG_COARSE_HG_EPS')) if env('MG_COARSE_HG_EPS') else None,
+        operator=env('OPERATOR', 'stencil'), mg_precision=env('MG_PRECISION', 'double'))
     disc, xp, rank0 = to.disc, to.xp, to.rank0
     mpi = MPI.COMM_WORLD
     if rank0:
-        print(f'3D TO {n_pix}^3, {disc.element_type}, {mpi.size} rank(s), device {disc.device}, eta {eta}, '
+        print(f'3D TO {n_pix}^3, ' + (f'fused q1 operator, multigrid in {to.mg.precision} precision'
+                                      if to.fused is not None else disc.element_type)
+              + f', {mpi.size} rank(s), device {disc.device}, eta {eta}, '
               f'void {to.soft_phase:g}, objective {to.objective}, warm starts: {env("WARM_STORE", "device")}, '
               f'symmetry {to.symmetry}, load cases {[lc for lc, _, _ in to.load_cases]}')
         print(f'multigrid levels {[level.disc.nb_of_pixels_global[0] for level in to.mg.levels]}'

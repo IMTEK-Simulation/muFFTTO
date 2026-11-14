@@ -179,35 +179,76 @@ class Level:
     ``x``, ``b``: solution and right-hand side of the level's problem ``A x = b``; ``r``, ``d``, ``t``: residual,
     Chebyshev direction and scratch; ``dinv``: 1 / diag(A); ``power``: dominant vector of D^-1 A (warm start of
     the power iteration). The fine level takes ``x`` and ``b`` from the caller.
+
+    The operator ``A`` is either muFFTTO's stencil pipeline of the level's element (gradient, material, divergence,
+    hourglass control), or -- ``fused=True`` -- muGrid's ``IsotropicStiffnessOperator`` for trilinear hexahedra with
+    one material value per voxel: one kernel, no quadrature-point fields, in double or single precision (``dtype``).
     """
 
-    def __init__(self, discretization, C_0, index, own_solution_fields=True):
+    def __init__(self, discretization, C_0, index, own_solution_fields=True, fused=False, dtype=np.float64):
         self.disc = discretization
         self.index = index
         self.dim = discretization.domain_dimension
-        self.scale = discretization.get_quad_field_scalar(name='mg_scale')
-        self.material = domain.ScaledMaterial([(self.scale, C_0)])
-        assert self.material.minor_symmetric, 'C_0 must be minor symmetric (C_ijkl = C_ijlk)'
-        self.stress = discretization.get_gradient_size_field(name='grad_field_temporary')   # the shared scratch
-        self.x = discretization.get_unknown_size_field(name='mg_x') if own_solution_fields else None
-        self.b = discretization.get_unknown_size_field(name='mg_b') if own_solution_fields else None
+        self.fused = fused
+        self.dtype = np.dtype(dtype)
+        self._suffix = '' if self.dtype == np.float64 else '_f32'      # fields of both precisions may coexist
+        collection = discretization.field_collection
+        self.scale = collection.real_field('mg_scale' + self._suffix, (1, 1), 'quad_points', dtype=self.dtype)
+        if fused:
+            lam_0, mu_0 = float(C_0[0, 0, 1, 1]), float(C_0[0, 1, 0, 1])
+            identity = np.eye(self.dim)
+            isotropic = (lam_0 * np.einsum('ij,kl->ijkl', identity, identity) + mu_0 * (
+                np.einsum('ik,jl->ijkl', identity, identity) + np.einsum('il,jk->ijkl', identity, identity)))
+            assert np.allclose(C_0, isotropic), 'the fused operator needs an isotropic C_0'
+            assert self.scale.s.shape[2] == 1, 'the fused operator needs one material value per voxel'
+            self.lam_0, self.mu_0 = lam_0, mu_0
+            self.lam = collection.real_field('mg_lambda' + self._suffix, dtype=self.dtype)       # s lambda_0 per voxel
+            self.mu = collection.real_field('mg_mu' + self._suffix, dtype=self.dtype)            # s mu_0
+            operator = muGrid.IsotropicStiffnessOperator3D if self.dim == 3 else muGrid.IsotropicStiffnessOperator2D
+            self.operator = operator([float(h) for h in discretization.pixel_size], muGrid.FEMElement.q1)
+        else:
+            assert self.dtype == np.float64, 'single precision is implemented for the fused operator'
+            self.material = domain.ScaledMaterial([(self.scale, C_0)])
+            assert self.material.minor_symmetric, 'C_0 must be minor symmetric (C_ijkl = C_ijlk)'
+            self.stress = discretization.get_gradient_size_field(name='grad_field_temporary')   # the shared scratch
+        self.x = self.vector('mg_x') if own_solution_fields else None
+        self.b = self.vector('mg_b') if own_solution_fields else None
         self.r = self.d = self.t = self.dinv = self.power = None
         self.lmax = None
 
+    def vector(self, name):
+        """a nodal vector field of this level, in its precision"""
+        return self.disc.field_collection.real_field(name + self._suffix, (self.dim,), 'nodal_points',
+                                                     dtype=self.dtype)
+
     def allocate_smoother_fields(self):
         """the vectors of a level that is smoothed (all but the coarsest)"""
-        self.r = self.disc.get_unknown_size_field(name='mg_residual')
-        self.d = self.disc.get_unknown_size_field(name='mg_direction')
-        self.t = self.disc.get_unknown_size_field(name='mg_scratch')
-        self.dinv = self.disc.get_unknown_size_field(name='mg_inverse_diagonal')
+        self.r = self.vector('mg_residual')
+        self.d = self.vector('mg_direction')
+        self.t = self.vector('mg_scratch')
+        self.dinv = self.vector('mg_inverse_diagonal')
+
+    def update_material(self):
+        """fused operator: the Lame fields s lambda_0, s mu_0 of the current scale (with ghost values)"""
+        if self.fused:
+            scale = self.scale.s.reshape(self.lam.p.shape)
+            self.lam.p[...] = scale * self.lam_0
+            self.mu.p[...] = scale * self.mu_0
+            self.disc.fft.communicate_ghosts(self.lam)
+            self.disc.fft.communicate_ghosts(self.mu)
 
     def apply_K(self, x, y):
-        """y = A x = B^T W s C_0 : B x (+ hourglass control), as ``Discretization.apply_system_matrix_mugrid`` for
-        small strains, with the three ghost exchanges the stencils need (x, the stress, the hourglass strain)
-        instead of six or seven: the ghost layers of y are NOT valid afterwards. Under MPI every exchange is a
+        """y = A x. The ghost layers of y are NOT valid afterwards.
+
+        Fused: one kernel after the ghost exchange of x.  Stencils: B^T W s C_0 : B x (+ hourglass control), as
+        ``Discretization.apply_system_matrix_mugrid`` for small strains, with the three ghost exchanges the
+        stencils need (x, the stress, the hourglass strain) instead of six or seven. Under MPI every exchange is a
         message, and the cycle applies A ten times per iteration."""
         disc = self.disc
         disc.fft.communicate_ghosts(x)
+        if self.fused:
+            self.operator.apply(x, self.lam, self.mu, y)
+            return
         disc.gradient_op.apply(nodal_field=x, quadrature_point_field=self.stress)       # C_0 is minor symmetric:
         disc.apply_material_data_mugrid(self.material, self.stress)                     # C : grad u = C : sym grad u
         disc.fft.communicate_ghosts(self.stress)
@@ -243,6 +284,17 @@ class Multigrid:
     coarse_hourglass_eps : float, optional
         Hourglass control of one-point coarse levels (default: that of the fine level; 1 reproduces the hourglass
         energy of the fully integrated element).
+    operator : {'stencil', 'fused'}
+        'stencil': muFFTTO's operator of the discretization's element on the fine level (default). 'fused': on every
+        level muGrid's ``IsotropicStiffnessOperator`` for trilinear hexahedra with ONE material value per voxel --
+        identical to ``trilinear_hexahedron`` with a voxel-wise constant scale, but a single kernel without
+        quadrature-point fields (about 5x faster than the 8-point stencils). ``discretization`` then only provides
+        the grid and the fields and must have one quadrature point per voxel (``trilinear_hexahedron_1Q``);
+        ``C_0`` must be isotropic. Coarse voxels take the mean scale of their 8 fine voxels.
+    precision : {'double', 'single'}
+        'single' (fused operator only): the cycle runs in float32 on its own fields, between the caller's double
+        precision vectors. A preconditioner need not be exact, so CG keeps its accuracy and its stopping test; the
+        cycle's vectors take half the memory and its kernels move half the bytes.
     n_agglomerate : int
         MPI only: grids of this size and coarser are solved on rank 0 (serial multigrid on its device). On small
         grids a ghost exchange is pure message latency; 16 keeps every distributed level at 32^3 or larger.
@@ -256,11 +308,14 @@ class Multigrid:
     scale : muGrid Field [1, 1, q, x, y(, z)]
         The fine-level scale ``s`` at the quadrature points: write it, then call :meth:`setup`.
     material : domain.ScaledMaterial
-        ``s C_0`` on the fine level -- the operator the cycle preconditions.
+        ``s C_0`` on the fine level (stencil operator; None for the fused one).
+    apply_K : callable
+        ``apply_K(x, Ax)``: the fine-level operator the cycle preconditions, in double precision.
     """
 
     def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None,
-                 coarse_element=None, coarse_hourglass_eps=None, n_agglomerate=16):
+                 coarse_element=None, coarse_hourglass_eps=None, n_agglomerate=16, operator='stencil',
+                 precision='double'):
         self.degree = degree
         self.alpha = alpha
         self.C_0 = np.asarray(C_0)
@@ -274,7 +329,15 @@ class Multigrid:
         self.comm = discretization.communicator                 # muGrid communicator of all levels
         self.mpi = self.comm.mpi4py_comm if self.comm.size > 1 else MPI.COMM_SELF
         self.transfer = GridTransfer(self.dim)
-        self.levels = [Level(discretization, self.C_0, 0, own_solution_fields=False)]
+        assert operator in ('stencil', 'fused') and precision in ('double', 'single')
+        self.operator, self.precision = operator, precision
+        fused = operator == 'fused'
+        dtype = np.float32 if precision == 'single' else np.float64
+        # the operator the cycle preconditions, in double precision, on the caller's fields ...
+        self.fine_operator = Level(discretization, self.C_0, 0, own_solution_fields=False, fused=fused)
+        # ... and the fine level of the cycle: the same object, or its single-precision twin with its own x and b
+        self.levels = [self.fine_operator if precision == 'double'
+                       else Level(discretization, self.C_0, 0, fused=fused, dtype=dtype)]
         self.tail = None                     # serial multigrid on rank 0 below the last distributed level
         self._tail_slabs = None
         self._coarse_pinv = None
@@ -283,18 +346,21 @@ class Multigrid:
             if not self._can_coarsen_distributed(fine):
                 break
             element = coarse_element or FULLY_INTEGRATED.get(fine.element_type, fine.element_type)
+            if fused:                        # only the grid, the fields and one scale per voxel are used
+                element = 'trilinear_hexahedron_1Q'
             coarse = domain.Discretization(
                 cell=fine.cell, nb_of_pixels_global=tuple(n // 2 for n in fine.nb_of_pixels_global),
                 discretization_type='finite_element', element_type=element, communicator=fine.communicator,
                 device=fine.device, low_memory=fine.low_memory,
                 hourglass_eps=self.coarse_hourglass_eps if element.endswith('_hg') else None)
-            self.levels.append(Level(coarse, self.C_0, len(self.levels)))
+            self.levels.append(Level(coarse, self.C_0, len(self.levels), fused=fused, dtype=dtype))
         if self.comm.size > 1:               # the last distributed grid and all coarser ones: serial, on rank 0
             self._build_tail(self.levels[-1].disc)
         for level in self.levels[:-1]:       # the last level is solved exactly (or handed to the tail)
             level.allocate_smoother_fields()
-        self.scale = self.levels[0].scale
-        self.material = self.levels[0].material
+        self.scale = self.fine_operator.scale
+        self.material = getattr(self.fine_operator, 'material', None)
+        self.apply_K = self.fine_operator.apply_K
 
     # ------------------------------------------------------------------ hierarchy construction
     def _can_coarsen_distributed(self, disc):
@@ -312,9 +378,11 @@ class Multigrid:
                 element_type=disc.element_type, communicator=muGrid.Communicator(MPI.COMM_SELF), device=disc.device,
                 hourglass_eps=getattr(disc.hourglass_control, 'eps', None))
             self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest,
-                                  coarse_element=self.coarse_element, coarse_hourglass_eps=self.coarse_hourglass_eps)
-            self.tail.levels[0].x = serial.get_unknown_size_field(name='mg_x')
-            self.tail.levels[0].b = serial.get_unknown_size_field(name='mg_b')
+                                  coarse_element=self.coarse_element, coarse_hourglass_eps=self.coarse_hourglass_eps,
+                                  operator=self.operator, precision=self.precision)
+            if self.tail.levels[0].x is None:
+                self.tail.levels[0].x = self.tail.levels[0].vector('mg_x')
+                self.tail.levels[0].b = self.tail.levels[0].vector('mg_b')
         else:
             self.tail = 'on rank 0'
 
@@ -329,8 +397,13 @@ class Multigrid:
             self.setup_seconds[stage] = self.setup_seconds.get(stage, 0.0) + clock[-1] - clock[-2]
 
         self.setup_seconds = {}
+        self.fine_operator.update_material()
+        if self.levels[0] is not self.fine_operator:         # single-precision cycle: its copy of the scale
+            self.levels[0].scale.s[...] = self.scale.s
+            self.levels[0].update_material()
         for fine, coarse in zip(self.levels[:-1], self.levels[1:]):
             self._coarsen_scale(fine, coarse)
+            coarse.update_material()
         lap('coarse materials')
         for level in self.levels:
             if level.dinv is not None:
@@ -369,16 +442,19 @@ class Multigrid:
 
     @staticmethod
     def _assemble_inverse_diagonal(level):
-        """level.dinv = 1 / diag(A) by Dirac combs: nodes two pixels apart do not interact, so A applied to a comb
-        of unit impulses on every second node per direction returns the diagonal at the comb nodes"""
-        comb, response = level.d, level.t
-        for component in range(level.dim):
-            for offset in np.ndindex(*(2,) * level.dim):
-                nodes = (component, 0) + tuple(slice(o, None, 2) for o in offset)
-                comb.s[...] = 0.0
-                comb.s[nodes] = 1.0
-                level.apply_K(comb, response)
-                level.dinv.s[nodes] = response.s[nodes]
+        """level.dinv = 1 / diag(A). Stencil operator: by Dirac combs -- nodes two pixels apart do not interact, so A
+        applied to a comb of unit impulses on every second node per direction returns the diagonal at the comb nodes"""
+        if level.fused:                                      # the fused operator assembles its diagonal itself
+            level.operator.assemble_diagonal(level.lam, level.mu, level.dinv)
+        else:
+            comb, response = level.d, level.t
+            for component in range(level.dim):
+                for offset in np.ndindex(*(2,) * level.dim):
+                    nodes = (component, 0) + tuple(slice(o, None, 2) for o in offset)
+                    comb.s[...] = 0.0
+                    comb.s[nodes] = 1.0
+                    level.apply_K(comb, response)
+                    level.dinv.s[nodes] = response.s[nodes]
         diagonal = level.dinv.s
         diagonal[diagonal == 0.0] = 1.0                      # no stiffness at a node: leave it alone
         xp = tensor_operations.get_array_module(diagonal)
@@ -390,7 +466,7 @@ class Multigrid:
         of the previous material (topology optimization: the design changes little per iteration)"""
         xp = tensor_operations.get_array_module(level.dinv.s)
         if level.power is None:
-            level.power = level.disc.get_unknown_size_field(name='mg_power_vector')
+            level.power = level.vector('mg_power_vector')
             level.power.s[...] = xp.asarray(self._power_start_vector(level))
         else:
             iterations = warm_iterations
@@ -434,14 +510,28 @@ class Multigrid:
             level.b.s[entry] = 1.0
             level.apply_K(level.b, level.x)
             A[:, i] = tensor_operations.to_host(level.x.s).ravel()
-        self._coarse_pinv = xp.asarray(np.linalg.pinv(0.5 * (A + A.T), rcond=1e-12, hermitian=True))
+        rcond = 1e-12 if level.dtype == np.float64 else 1e-5         # above the round-off of the assembled matrix
+        self._coarse_pinv = xp.asarray(np.linalg.pinv(0.5 * (A + A.T), rcond=rcond, hermitian=True))
 
     # ------------------------------------------------------------------ the cycle
     def apply(self, r, z):
         """z = V-cycle(r) with zero start: the preconditioner M^-1 r (fields of the fine discretization)"""
         fine = self.levels[0]
-        fine.b, fine.x = r, z
-        self._vcycle(0)                      # (the ghost layers of z are not valid: exchange before a stencil reads them)
+        if fine is self.fine_operator:       # (the ghost layers of z are not valid: exchange before a stencil reads them)
+            fine.b, fine.x = r, z
+            self._vcycle(0)
+        else:                                # single-precision cycle between double-precision vectors
+            self._convert(r, fine.b)
+            self._vcycle(0)
+            self._convert(fine.x, z)
+
+    @staticmethod
+    def _convert(source, target):
+        """target = source for fields of different precision (whole buffers on the GPU)"""
+        if source.is_on_gpu:
+            tensor_operations.point_view(target)[...] = tensor_operations.point_view(source)
+        else:
+            target.s[...] = source.s
 
     def _vcycle(self, l):
         level = self.levels[l]

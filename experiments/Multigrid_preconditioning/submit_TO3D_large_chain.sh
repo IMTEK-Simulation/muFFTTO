@@ -7,10 +7,12 @@
 # the run finished exits at once. The first job of the next grid waits for the last segment (afterok) and starts from
 # this grid's _final.nc -- if the run did not finish, that file is missing and the chain stops there.
 # Settings of sbatch_TO3D_large.sh (SYMMETRY, ETA_H, MAXITER, ...) are taken from the environment.
-# PARTITION (default h200). DRY_RUN=1 prints the sbatch commands only.
+# PARTITION (default h200). AFTER=<job id>: the first job waits for that job (afterok), e.g. the run that writes
+# <start.nc>. DRY_RUN=1 prints the sbatch commands only. Note: h200 allows 8 GPUs per user in total, so a full-node
+# job waits for all other h200 jobs of the user; on l40s set SBATCH_EXCLUDE=g3606,g3608 (GPU ECC errors).
 # RULES: jobs > 24 h, full-node (8 GPU) production runs: ask the user first.
 LABEL=$1; START=$2; shift 2
-PARTITION=${PARTITION:-h200}; DEP=""
+PARTITION=${PARTITION:-h200}; DEP=${AFTER:+--dependency=afterok:$AFTER}
 SOFT=$(awk "BEGIN{printf \"%g\", 10 ^ -${SOFT_EXP:-3}}")
 for LEVEL in "$@"; do
   set -- $LEVEL; N=$1; G=$2; SEGMENTS=$3; TIME=$4; MEM=$5
