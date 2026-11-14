@@ -1,0 +1,8 @@
+N32_soft0.001_eta0.0625_energy_fable_symrnd2_s0_final.nc                         it 74  solid 0.417  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0793 (target 0.0868)  mu 0.0206 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd2_s1_final.nc                         it 210  solid 0.395  nu12 +0.051 nu21 +0.051 nu13 +0.051 nu23 +0.051  C11 0.0813 (target 0.0868)  mu 0.0166 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd2_s2_final.nc                         it 84  solid 0.378  nu12 +0.052 nu21 +0.052 nu13 +0.052 nu23 +0.052  C11 0.0804 (target 0.0868)  mu 0.0155 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd2_s3_final.nc                         it 49  solid 0.414  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0790 (target 0.0868)  mu 0.0204 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd3_s0_final.nc                         it 103  solid 0.416  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0791 (target 0.0868)  mu 0.0209 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd3_s1_final.nc                         it 65  solid 0.415  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0792 (target 0.0868)  mu 0.0205 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd3_s2_final.nc                         it 33  solid 0.379  nu12 +0.053 nu21 +0.053 nu13 +0.053 nu23 +0.053  C11 0.0801 (target 0.0868)  mu 0.0143 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symrnd3_s3_final.nc                         it 96  solid 0.416  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0791 (target 0.0868)  mu 0.0207 (target 0.0579)

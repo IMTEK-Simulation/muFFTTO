@@ -289,8 +289,8 @@ class TopologyOptimization:
         t_material = time.time()
         self.mg.setup()
         self.timing['setup'] += time.time() - t_start
-        if self.verbose and self.rank0:
-            print(f'setup: material {t_material - t_start:.1f} s, multigrid '
+        if self.verbose and (self.rank0 or os.environ.get('TIMING_ALL_RANKS', '0') == '1'):
+            print(f'setup (rank {self.comm.rank}): material {t_material - t_start:.1f} s, multigrid '
                   + ', '.join(f'{stage} {seconds:.1f} s' for stage, seconds in self.mg.setup_seconds.items()), flush=True)
 
         f = self.phase_field_term()                       # writes self.sensitivity

@@ -1,0 +1,6 @@
+N32_soft0.001_eta0.0625_energy_fable_symstart_cos1_final.nc                      it 62  solid 0.416  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0792 (target 0.0868)  mu 0.0204 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symstart_cos2_final.nc                      it 42  solid 0.285  nu12 +0.066 nu21 +0.066 nu13 +0.066 nu23 +0.066  C11 0.0727 (target 0.0868)  mu 0.0127 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symstart_edges_final.nc                     it 52  solid 0.373  nu12 +0.057 nu21 +0.057 nu13 +0.057 nu23 +0.057  C11 0.0785 (target 0.0868)  mu 0.0120 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symstart_fromfull_final.nc                  it 70  solid 0.413  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0790 (target 0.0868)  mu 0.0205 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symstart_fromfull_sharp_final.nc            it 118  solid 0.416  nu12 +0.055 nu21 +0.055 nu13 +0.055 nu23 +0.055  C11 0.0790 (target 0.0868)  mu 0.0206 (target 0.0579)
+N32_soft0.001_eta0.0625_energy_fable_symstart_prod1_final.nc                     it 98  solid 0.286  nu12 +0.066 nu21 +0.066 nu13 +0.066 nu23 +0.066  C11 0.0728 (target 0.0868)  mu 0.0127 (target 0.0579)

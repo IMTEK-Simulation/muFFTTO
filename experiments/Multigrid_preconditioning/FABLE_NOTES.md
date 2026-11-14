@@ -100,6 +100,9 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
   before the first evaluation) -- not reproduced by the benchmark. Per-stage timing added (`setup:` lines);
   tests 8816011 (2 H200) and 8816090 (4 L40S), logs `stall_N512_np{2,4}.log`.
 
+* **512^3 on 4 L40S** (8816090, 6 load cases): no stall (setup 24 s; the stall is an H200-run effect), evaluations
+  316 / 127 / 89 s, solves 1.69 s per CG iteration (one H200: 2.0), 29.4 GiB per GPU (48 GiB cards).
+
 ### What 512^3 and 1024^3 need (estimates from the measurements above; 6 load cases, 8-point coarse levels)
 * CG iterations per evaluation over a whole run: ~150 (64^3 run 8815596: 82784 iterations / 553 evaluations).
 * **512^3 on one H200**: 113-115 GiB of 140 GiB; ~2 s per CG iteration -> ~330 s per evaluation -> 500 evaluations
