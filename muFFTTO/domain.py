@@ -147,19 +147,43 @@ class ScaledMaterial:
             out[:, :, q] = xp.moveaxis(result.reshape(block_shape + (shape[1], shape[0])), (-2, -1), (1, 0))
         return out
 
+    def apply_to_field(self, gradient_field, transposed=False):
+        """:meth:`apply` in place on a whole gradient-sized muGrid field (ghost points included; their values are
+        meaningless until the next ghost exchange). On the GPU, with scales that are muGrid fields or numbers, the
+        kernel runs over the contiguous component vectors of the buffers (:func:`tensor_operations.point_view`) --
+        one pass at memory bandwidth. Otherwise :meth:`apply` on the interior."""
+        xp = tensor_operations.get_array_module(gradient_field.s)
+        scales = [scale() if callable(scale) else scale for scale, _ in self.terms]
+        if (xp is np or not all(np.ndim(tensor) == 4 for _, tensor in self.terms)
+                or not all(isinstance(scale, Field) or np.isscalar(scale) for scale in scales)):
+            return self.apply(gradient_field.s, transposed=transposed, out=gradient_field.s)
+        components = tensor_operations.point_view(gradient_field)             # [d, d, q, points]
+        d = components.shape[0]
+        components = components.reshape(d, d, -1)
+        scales = [components.dtype.type(scale) if np.isscalar(scale)
+                  else tensor_operations.point_view(scale).reshape(-1) for scale in scales]
+        kernel = self._fused_kernel_for(xp, transposed, components.dtype)
+        vectors = [components[i, j] for i in range(d) for j in range(d)]
+        kernel(*vectors, *scales, *vectors)
+        return gradient_field.s
+
+    def _fused_kernel_for(self, xp, transposed, dtype):
+        tensors = [np.asarray(tensor_operations.to_host(tensor), dtype=float) for _, tensor in self.terms]
+        key = (transposed, str(dtype)) + tuple(tensor.tobytes() for tensor in tensors)
+        if getattr(self, '_fused_key', None) != key:
+            self._fused_kernel, self._fused_key = _fused_tensor_kernel(xp, tensors, transposed), key
+        return self._fused_kernel
+
     def _apply_fused(self, xp, gradient, transposed, out):
         """:meth:`apply` on the GPU as one elementwise kernel over the points (elasticity): each point reads its
         d x d gradient components and writes the d x d result, with the constant tensors compiled into the kernel --
         no full-size temporaries (the matrix-product path needs two) and one pass over the field."""
-        tensors = [np.asarray(tensor_operations.to_host(tensor), dtype=float) for _, tensor in self.terms]
-        key = (transposed, str(gradient.dtype)) + tuple(tensor.tobytes() for tensor in tensors)
-        if getattr(self, '_fused_key', None) != key:
-            self._fused_kernel, self._fused_key = _fused_tensor_kernel(xp, tensors, transposed), key
         d = gradient.shape[0]
         scales = [self._scale_array(scale) for scale, _ in self.terms]
         scales = [gradient.dtype.type(scale) if np.isscalar(scale) else xp.asarray(scale) for scale in scales]
-        self._fused_kernel(*[gradient[i, j] for i in range(d) for j in range(d)], *scales,
-                           *[out[i, j] for i in range(d) for j in range(d)])
+        kernel = self._fused_kernel_for(xp, transposed, gradient.dtype)
+        kernel(*[gradient[i, j] for i in range(d) for j in range(d)], *scales,
+               *[out[i, j] for i in range(d) for j in range(d)])
         return out
 
 
@@ -2190,7 +2214,10 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, ScaledMaterial):
-            material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
+            if self.device != 'cpu':
+                material_data.apply_to_field(gradient_field)           # one contiguous pass over the buffer
+            else:
+                material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)

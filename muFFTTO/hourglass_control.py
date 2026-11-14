@@ -47,7 +47,7 @@ the Jacobi diagonal and Green's reference operator, both built from ``apply_syst
 import itertools
 
 import numpy as np
-from muGrid import GenericLinearOperator
+from muGrid import Field, GenericLinearOperator, linalg
 
 from . import tensor_operations
 
@@ -150,11 +150,19 @@ class HourglassControl:
             scale, tensor = terms[0]
             scale = material._scale_array(scale)
             constant = self.eps * self._kappa_of_tensor(np.asarray(tensor_operations.to_host(tensor)), np)
-            if np.ndim(scale) == 0:
-                constant = constant * float(scale)
+            if xp is not np and isinstance(terms[0][0], Field):         # GPU: contiguous component vectors
+                strain = tensor_operations.point_view(self.strain)      # [i, alpha, q = 1, points]
+                scale = tensor_operations.point_view(terms[0][0]).reshape(-1)
+                for i, alpha in np.ndindex(*constant.shape):
+                    component = strain[i, alpha, 0]
+                    xp.multiply(component, scale, out=component)
+                    component *= float(constant[i, alpha])
             else:
-                self.strain.s[...] *= xp.asarray(scale)                 # [q, x, y, z] broadcasts over (i, alpha)
-            self.strain.s[...] *= xp.asarray(constant).reshape(constant.shape + (1,) * (self.strain.s.ndim - 2))
+                if np.ndim(scale) == 0:
+                    constant = constant * float(scale)
+                else:
+                    self.strain.s[...] *= xp.asarray(scale)             # [q, x, y, z] broadcasts over (i, alpha)
+                self.strain.s[...] *= xp.asarray(constant).reshape(constant.shape + (1,) * (self.strain.s.ndim - 2))
         else:
             self.strain.s[...] *= self.stiffness(material)
 
@@ -168,4 +176,4 @@ class HourglassControl:
         fft.communicate_ghosts(self.strain)
         self.operator.transpose(quadrature_point_field=self.strain, nodal_field=self.force, weights=[1.0])
         fft.communicate_ghosts(self.force)
-        output_field.s[...] += self.force.s
+        linalg.axpy(1.0, self.force, output_field)

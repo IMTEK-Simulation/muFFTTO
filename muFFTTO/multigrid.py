@@ -166,6 +166,11 @@ class Multigrid:
         Smoothing interval [lambda_max / alpha, lambda_max].
     n_coarsest : int
         Grid of the exact coarse solve.
+    coarse_element : str, optional
+        Element of the coarse levels. Default: the fully integrated version of the fine element (one-point
+        hexahedra on the fine level only). ``'trilinear_hexahedron_1Q_hg'``: one-point hexahedra with hourglass
+        control on every level -- a coarse voxel takes the mean scale of its 8 fine voxels; 8x fewer quadrature
+        points on the coarse levels (level 1 then costs 1/8 of the fine level instead of about as much).
     power_start : callable, optional
         ``power_start(level_index, shape) -> ndarray``: start vector of the power iteration (serial runs only; used
         by the tests to reproduce ``mg_lib``). Default: seeded random numbers per grid plane, independent of the
@@ -179,12 +184,14 @@ class Multigrid:
         ``s C_0`` on the fine level -- the operator the cycle preconditions.
     """
 
-    def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None):
+    def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None,
+                 coarse_element=None):
         self.degree = degree
         self.alpha = alpha
         self.C_0 = np.asarray(C_0)
         self.n_coarsest = n_coarsest
         self.power_start = power_start
+        self.coarse_element = coarse_element
         self.dim = discretization.domain_dimension
         self.comm = discretization.communicator                 # muGrid communicator of all levels
         self.mpi = self.comm.mpi4py_comm if self.comm.size > 1 else MPI.COMM_SELF
@@ -197,11 +204,13 @@ class Multigrid:
             fine = self.levels[-1].disc
             if not self._can_coarsen_distributed(fine):
                 break
-            fine_element = fine.element_type
+            element = coarse_element or FULLY_INTEGRATED.get(fine.element_type, fine.element_type)
             coarse = domain.Discretization(
                 cell=fine.cell, nb_of_pixels_global=tuple(n // 2 for n in fine.nb_of_pixels_global),
-                discretization_type='finite_element', element_type=FULLY_INTEGRATED.get(fine_element, fine_element),
-                communicator=fine.communicator, device=fine.device, low_memory=fine.low_memory)
+                discretization_type='finite_element', element_type=element, communicator=fine.communicator,
+                device=fine.device, low_memory=fine.low_memory,
+                hourglass_eps=getattr(discretization.hourglass_control, 'eps', None) if element.endswith('_hg')
+                else None)
             self.levels.append(Level(coarse, self.C_0, len(self.levels)))
         if self.comm.size > 1:               # the last distributed grid and all coarser ones: serial, on rank 0
             self._build_tail(self.levels[-1].disc)
@@ -224,7 +233,8 @@ class Multigrid:
                 cell=disc.cell, nb_of_pixels_global=disc.nb_of_pixels_global, discretization_type='finite_element',
                 element_type=disc.element_type, communicator=muGrid.Communicator(MPI.COMM_SELF), device='cpu',
                 hourglass_eps=getattr(disc.hourglass_control, 'eps', None))
-            self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest)
+            self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest,
+                                  coarse_element=self.coarse_element)
             self.tail.levels[0].x = serial.get_unknown_size_field(name='mg_x')
             self.tail.levels[0].b = serial.get_unknown_size_field(name='mg_b')
         else:
@@ -254,6 +264,12 @@ class Multigrid:
         s_fine, s_coarse = fine.scale.s[0, 0], coarse.scale.s[0, 0]
         if fine.dim == 3:
             voxel_mean = s_fine[0] if s_fine.shape[0] == 1 else s_fine.mean(axis=0)
+            if s_coarse.shape[0] == 1:                                          # one-point coarse element
+                s_coarse[0] = 0.0
+                for i, j, k in np.ndindex(2, 2, 2):
+                    s_coarse[0] += voxel_mean[i::2, j::2, k::2]
+                s_coarse[0] *= 0.125
+                return
             for q, (k, j, i) in enumerate(np.ndindex(2, 2, 2)):                 # q = i + 2 j + 4 k
                 s_coarse[q] = voxel_mean[i::2, j::2, k::2]
         else:                                               # linear triangles: q = 0 lower, q = 1 upper triangle
@@ -278,6 +294,7 @@ class Multigrid:
         diagonal[diagonal == 0.0] = 1.0                      # no stiffness at a node: leave it alone
         xp = tensor_operations.get_array_module(diagonal)
         xp.divide(1.0, diagonal, out=diagonal)
+        level.disc.fft.communicate_ghosts(level.dinv)        # the Jacobi product runs over the ghost points too
 
     def _estimate_lmax(self, level, iterations=40, warm_iterations=15, safety=1.1):
         """level.lmax: upper estimate of lambda_max(D^-1 A) by power iteration, warm started from the dominant vector
@@ -292,7 +309,7 @@ class Multigrid:
         xx = level.global_sum(linalg.norm_sq(x))
         for _ in range(iterations):
             level.apply_K(x, level.t)
-            xp.multiply(level.dinv.s, level.t.s, out=y.s)
+            self._jacobi(level, level.t, y)
             yy = level.global_sum(linalg.norm_sq(y))
             lam = np.sqrt(yy / xx)
             linalg.copy(y, x)
@@ -367,7 +384,7 @@ class Multigrid:
         if not x_is_zero:
             level.apply_K(x, t)
             linalg.axpy(-1.0, t, r)
-        xp.multiply(level.dinv.s, r.s, out=d.s)              # d = D^-1 r / theta
+        self._jacobi(level, r, d)                            # d = D^-1 r / theta
         linalg.scal(1.0 / theta, d)
         for k in range(self.degree):
             if k == 0 and x_is_zero:
@@ -379,9 +396,19 @@ class Multigrid:
             level.apply_K(d, t)                              # r -= A d
             linalg.axpy(-1.0, t, r)
             rho_new = 1.0 / (2.0 * sigma - rho)
-            xp.multiply(level.dinv.s, r.s, out=t.s)          # d = rho' rho d + 2 rho' / delta D^-1 r
+            self._jacobi(level, r, t)                        # d = rho' rho d + 2 rho' / delta D^-1 r
             linalg.axpby(2.0 * rho_new / delta, t, rho_new * rho, d)
             rho = rho_new
+
+    @staticmethod
+    def _jacobi(level, r, z):
+        """z = D^-1 r; on the GPU over the whole contiguous buffers (no index arithmetic of strided views)"""
+        if level.disc.device == 'cpu':
+            np.multiply(level.dinv.s, r.s, out=z.s)
+        else:
+            dinv = tensor_operations.point_view(level.dinv)
+            xp = tensor_operations.get_array_module(dinv)
+            xp.multiply(dinv, tensor_operations.point_view(r), out=tensor_operations.point_view(z))
 
     def _solve_coarsest(self, level):
         if self.tail is None:
