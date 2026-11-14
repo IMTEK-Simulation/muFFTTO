@@ -34,7 +34,11 @@ and new here:
     DESIGN_OPT     lbfgs_helm (default; NuMPI L-BFGS with the Helmholtz H_0, MPI-capable) | lbfgs_helm_local
                    (design_optimizers.py, serial; the optimizer of the baseline runs)
     OUT_DIR        output folder (default data/to3d_large)
-    CHECKPOINT_EVERY   write <output>_checkpoint.nc (the current design; restart with INIT_FROM) every n iterations
+    CHECKPOINT_EVERY   write <output>_checkpoint.nc (the current design) every n iterations. A run that finds its
+                   own checkpoint continues from it (iteration count carried on; the L-BFGS memory and the warm
+                   starts are rebuilt); <output>_final.nc is written when the optimizer stops (converged / MAXITER)
+    TIME_BUDGET    seconds; after this wall time the run writes a checkpoint and ends cleanly (exit 0, no final file)
+                   so that the next job of a chain continues it (set it below the job's time limit)
     MEM_REPORT=1   print the memory table (fable_memory.py) at the end
     PROFILE=1      print a cProfile table of rank 0 (functions by own time) after the optimisation
 
@@ -64,6 +68,10 @@ def unit_strain(i, j):
     E = np.zeros((3, 3))
     E[i, j] = E[j, i] = 1.0 if i == j else 0.5
     return E
+
+
+class TimeBudgetReached(Exception):
+    """raised by the iteration callback when TIME_BUDGET is used up (after the checkpoint is written)"""
 
 
 class WarmStarts:
@@ -444,8 +452,18 @@ def main():
     mpi.Barrier()
     output = os.path.join(out_dir, f'N{n_pix}_soft{to.soft_phase:g}_eta{eta:g}_{to.objective}' + env('RUN_SUFFIX', ''))
 
-    # ---- start design
+    # ---- start design: the run's own checkpoint if there is one, else INIT_FROM
     init_from = env('INIT_FROM', '')
+    iterations_done = 0
+    if os.path.exists(output + '_final.nc'):
+        if rank0:
+            print(f'{output}_final.nc exists: this run is finished, nothing to do')
+        return
+    if os.path.exists(output + '_checkpoint.nc'):
+        init_from = output + '_checkpoint.nc'
+        iterations_done = int(np.ravel(io_utils.read_file(init_from).attributes['iteration'])[0])
+        if rank0:
+            print(f'Continuing from the checkpoint of iteration {iterations_done}')
     if not init_from:
         raise SystemExit('INIT_FROM is required: large runs start from a design, never from noise')
     start, n_start = interpolate_design(init_from, disc)
@@ -482,9 +500,11 @@ def main():
     iterate = disc.get_scalar_field(name='phase_field_iterate')
     history_every = int(env('HISTORY_EVERY', 10))
     checkpoint_every = int(env('CHECKPOINT_EVERY', 0))
-    history = io_utils.FieldWriter(output + '_history.nc', [iterate], attributes=parameters, frame_variables={
+    history_name = output + ('_history.nc' if iterations_done == 0 else f'_history_from{iterations_done}.nc')
+    history = io_utils.FieldWriter(history_name, [iterate], attributes=parameters, frame_variables={
         'objective': (), 'volume_fraction': (), 'nb_evaluations': ()}) if history_every > 0 else None
-    state = {'iteration': 0, 'f': np.nan}
+    state = {'iteration': iterations_done, 'f': np.nan}
+    time_budget = float(env('TIME_BUDGET', 0))
 
     def objective(x):
         t = time.time()
@@ -499,7 +519,8 @@ def main():
         state['iteration'] += 1
         it = state['iteration']
         write_history = history is not None and (it - 1) % history_every == 0
-        write_checkpoint = checkpoint_every > 0 and it % checkpoint_every == 0
+        out_of_time = time_budget > 0 and time.time() - start_time > time_budget
+        write_checkpoint = (checkpoint_every > 0 and it % checkpoint_every == 0) or out_of_time
         if write_history or write_checkpoint:
             iterate.s[0, 0] = xp.asarray(x).reshape(iterate.s.shape[2:])
         if write_history:
@@ -509,6 +530,8 @@ def main():
             io_utils.save_fields(output + '_checkpoint_new.nc', [iterate], attributes={**parameters, 'iteration': it})
             if rank0:
                 os.replace(output + '_checkpoint_new.nc', output + '_checkpoint.nc')
+        if out_of_time:
+            raise TimeBudgetReached
 
     # ---- optimisation
     profiler = None
@@ -516,16 +539,24 @@ def main():
         import cProfile
         profiler = cProfile.Profile()
         profiler.enable()
-    options = dict(gtol=float(env('GTOL', 0.0)), xtol=1e-3, maxiter=int(env('MAXITER', 500)), maxcor=20, c1=1e-4,
-                   max_halvings=40)
-    if env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_helm_local':
-        import design_optimizers
-        assert mpi.size == 1, 'design_optimizers.py is serial'
-        result = design_optimizers.l_bfgs_bounded_precond(objective, x0, precond=helmholtz, bounds_lo=0.0,
-                                                          bounds_hi=1.0, callback=callback, disp=True, **options)
-    else:
-        result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
-                                            precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)
+    options = dict(gtol=float(env('GTOL', 0.0)), xtol=1e-3, maxiter=int(env('MAXITER', 500)) - iterations_done,
+                   maxcor=20, c1=1e-4, max_halvings=40)
+    try:
+        if env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_helm_local':
+            import design_optimizers
+            assert mpi.size == 1, 'design_optimizers.py is serial'
+            result = design_optimizers.l_bfgs_bounded_precond(objective, x0, precond=helmholtz, bounds_lo=0.0,
+                                                              bounds_hi=1.0, callback=callback, disp=True, **options)
+        else:
+            result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
+                                                precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)
+    except TimeBudgetReached:
+        if history is not None:
+            history.close()
+        if rank0:
+            print(f'TIME BUDGET reached at iteration {state["iteration"]} (f {state["f"]:.8e}, wall '
+                  f'{time.time() - start_time:.0f} s): checkpoint written, continue with the same command')
+        return
     if profiler is not None:
         import pstats
         profiler.disable()
