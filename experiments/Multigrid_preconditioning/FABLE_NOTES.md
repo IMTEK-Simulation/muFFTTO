@@ -3,7 +3,7 @@
 Task: `FABLE_BRIEF.md`. Worktree `/home/martin/PycharmProjects/muFFTTO_fable`, branch `fable/large-3d-to` (base 3a56b48),
 NEMO clone `~/software/muFFTTO_fable`, NEMO runs/logs `$WS/runs/FABLE/`, job names `FB_*`.
 
-## RESUME HERE (state 2026-11-14 ~14:00)
+## RESUME HERE (state 2026-11-14 ~18:00)
 
 User is away until the evening of 2026-11-14 and said: work on autonomously, keep the NEMO rules (own single-node jobs
 <= 24 h; ask before > 24 h, full-node 8-GPU production, deletions in `$WS`); use several GPUs and muGrid's features;
@@ -44,11 +44,16 @@ give short status messages from time to time.
 | 32^3 laptop | lean, cubic (2 load cases) | 144 | | ~1.0 |
 | 128^3 H200 | baseline | 5824 | 2777 | ~15 |
 | 128^3 H200 | lean, warm starts on device | 3134 | 1494 | ~10 (leanB; before lean K / transfer kernels) |
+| 256^3 H200 | baseline (8816167) | 40922 | 2438 | ~120 |
 | 256^3 H200 | lean, host warm starts | 15154 | 947 | 62 (leanC; first lean version 120) |
 | 256^3 L40S x 1 / 2 / 4 | lean, host (strong2) | 15013 / 8619 / 4891 per GPU | | 164 / 90 / 62 (first version 185 / 110 / 87) |
 | **512^3 H200 x 1** | **lean, cubic, host (job 8815590)** | **116172** | **908** | **~105** (2 load cases) |
 | **512^3 H200 x 1** | **lean, 6 load cases, host (job 8815591)** | **114638** | **896** | 550 before the transfer fix |
 | 128^3 H200 | lean, final code, device / host | 3134 / 2510 | 1494 / 1197 | 8.5 |
+| 512^3 H200 x 1 | lean, 6 load cases, pinned host buffers (8815826) | 114638 | 896 | 377 cold / 147 / 463 (2.0 s per CG iteration) |
+| 512^3 H200 x 2 | lean, 6 load cases (8815895, 8816168) | 57319-60875 per GPU | | 84 / 59 after the first (1.14 s per CG iteration) |
+| 512^3 H200 x 4 | lean, cubic (8815617) | 29527 per GPU | | 44-78 (0.84 s per CG iteration) |
+| 512^3 L40S x 4 | lean, 6 load cases (8816090) | 29393 per GPU | | 316 cold / 127 / 89 (1.69 s per CG iteration) |
 | 256^3 H200 | lean, one-point coarse levels | 14076 | 880 | 55 |
 512^3 fields: 810 B/voxel (fine level 691, MG level 1 104, rest 15), CuPy pool 84, context + FFT plans 13.
 K on one H200 (fable_time_K.py, job 8815618): 256^3 fine K 28 ms (library K at the start: 54 ms), level-1 (8-point)
@@ -113,11 +118,35 @@ K 13 ms, V-cycle 185 ms; 128^3: 3.7 / 2.1 / 30 ms (small levels are ~25 % of the
   + L-BFGS memory (2 x 20 + ~10 vectors of 8.6 GB) ~430 GB -> ~800 GB of 1.5 TB.
   Not yet demonstrated: 8 ranks on GPUs (needs a full node = the user's OK), and the first-evaluation stall.
 
+* **The "stall" was the start-design interpolation on the host**, not MPI: timed run 8816168 (2 H200, per-rank
+  timing) showed rank 1 arriving ~570 s after rank 0 at the first evaluation; the 8-corner numpy interpolation of
+  the start design is memory-heavy and erratically slow on the loaded H200 nodes (one GPU: 218-322 s of start-up).
+  Replaced by a separable (axis-by-axis) interpolation, identical histories; check run 8816779 (`interp_N512_np2.log`).
+* 512^3 cubic on 4 H200 (8815617): 0.84 s per CG iteration (1 GPU 2.0, 2 GPUs 1.14 -> speed-up 1.75 / 2.4),
+  29.5 GiB per GPU; distributed symmetry projection 14 s per evaluation; Helmholtz by CG 1.5 s per evaluation.
+* Baseline at 256^3 on an H200 (8816167): 40922 MiB, ~120 s per evaluation; lean: 15154 MiB, 62 s.
+* Unit tests after all library changes: 200 passed (192 + 8 new); reference gradient checks unchanged.
+
 ### Open
-1. The first-evaluation stall under MPI at 512^3 (see above).
-2. 512^3 cubic on 4 H200 (8815617) pending.
-3. 8 GPUs = full node: needs the user's OK (also for a short test). CPU MPI with 8 ranks is validated.
-4. Final report.
+1. 8 GPUs = full node: needs the user's OK (also for a short test). CPU MPI with 8 ranks is validated; GPU MPI
+   validated with 2 and 4 ranks (L40S and H200).
+2. Design symmetry gives non-auxetic designs for this target (15 mirror-symmetric + 6 chiral starts at 32^3, plus
+   64^3 / 128^3): the 3x saving is available but not useful until a start / target is found that works.
+3. Speed is bound by muGrid's stencil passes (fine K 28 ms at 256^3 on an H200: gradient 4, divergence 6,
+   hourglass H 5.5 + H^T 8.6, material + scaling ~3). A fused hexahedron stiffness kernel inside muGrid (as its
+   `IsotropicStiffnessOperator3D` does for tetrahedra) would be the next factor ~2-3; outside this task's rules.
+4. Possible small gains not done: analytic Jacobi diagonal (setup is 4-7 % of a run), merged gradient+hourglass
+   stencil (~10 %), one-point coarse levels (7 %, option exists).
+
+### Production recipe (prepared, NOT submitted)
+```
+cd ~/software/muFFTTO_fable/experiments/Multigrid_preconditioning      # on NEMO, after ./fable_sync_nemo.sh
+DRY_RUN=1 ./submit_TO3D_large_chain.sh aux_s0.3 $PWD/data/CH3D/CH3D_start_bi_s11.nc \
+    "128 1 1 04:00:00 32G" "256 1 1 12:00:00 64G" "512 1 2 24:00:00 160G" "1024 8 3 24:00:00 900G"
+```
+(remove DRY_RUN=1 to submit; the 1024^3 stage is a full node for 3 x 24 h -> ask the user first; a 512^3 stage on
+4 H200 instead of 1: "512 4 1 24:00:00 160G"). Evaluate a result with
+`python ../dual_preconditioner/topology_optimization/report_TO3D_nu.py <..._final.nc>`.
 
 ### NEMO jobs of this study (all short, single node)
 8814587 features, 8814588 profile 128, 8814660 smoke, 8814666-69 base/lean 128 + 256, 8814703 time K,
