@@ -85,8 +85,15 @@ class WarmStarts:
         self.dtype = np.float32 if mode.endswith('32') else np.float64
         self.buffers = {}
 
+    @staticmethod
+    def _buffer(field):
+        """the whole buffer of the field: on the GPU as a contiguous view (direct device <-> host copies)"""
+        if tensor_operations.get_array_module(field.sg) is np:
+            return field.sg
+        return tensor_operations.point_view(field)
+
     def store(self, key, field):
-        data = field.sg
+        data = self._buffer(field)
         if self.on_host:
             self.buffers[key] = to_host(data).astype(self.dtype, copy=True)
         elif key in self.buffers:
@@ -95,11 +102,13 @@ class WarmStarts:
             self.buffers[key] = data.astype(self.dtype, copy=True)
 
     def load(self, key, field):
+        data = self._buffer(field)
         if key not in self.buffers:
-            field.sg[...] = 0.0
+            data[...] = 0.0
+        elif self.on_host and data is not field.sg:
+            data.set(np.ascontiguousarray(self.buffers[key], dtype=data.dtype))
         else:
-            xp = tensor_operations.get_array_module(field.sg)
-            field.sg[...] = xp.asarray(self.buffers[key])
+            data[...] = self.buffers[key]
 
 
 class TopologyOptimization:
