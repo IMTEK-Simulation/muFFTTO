@@ -391,7 +391,8 @@ class Discretization:
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)
-        if MPI.COMM_WORLD.size > 1:
+        if communicator.size > 1:               # (a discretization on a serial communicator, e.g. MPI.COMM_SELF for
+            # an agglomerated coarse grid on one rank of a parallel run, must not enter collective calls)
             # adjust the number of points
             # NOTE: currently a no-op (the "- 2" correction is commented out)
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
