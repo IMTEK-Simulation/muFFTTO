@@ -303,7 +303,8 @@ class Discretization:
                  element_type='linear_triangles',
                  communicator=muGrid.Communicator(MPI.COMM_WORLD),
                  device='cpu',
-                 low_memory=False):
+                 low_memory=False,
+                 hourglass_eps=None):
         """Initialize discretization.
 
         Parameters
@@ -335,6 +336,10 @@ class Discretization:
             voxel). The speed depends on the GPU: 17-33 % slower on an L40S (AT2,
             2D 128^2 and 3D 32^3), 10 % faster on a laptop GPU (TO, 3D 64^3). Use it
             when a grid does not fit on the GPU otherwise. See :func:`quad_point_blocks`.
+        hourglass_eps : float, optional
+            Only for ``element_type='trilinear_hexahedron_1Q_hg'`` (one-point hexahedron with Flanagan-Belytschko
+            hourglass control, see :mod:`muFFTTO.hourglass_control`): strength of the control as a fraction of the
+            hourglass stiffness of the fully integrated element (default 0.3).
 
         Raises
         ------
@@ -499,6 +504,12 @@ class Discretization:
             # material_data_field     [d,d,q,x,y,z] - conductivity
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
+
+        # One-point hexahedron with hourglass control: K u = B^T W C B u + H^T eps kappa H u (muFFTTO.hourglass_control)
+        self.hourglass_control = None
+        if element_type == 'trilinear_hexahedron_1Q_hg' and discretization_type == 'finite_element':
+            from .hourglass_control import HourglassControl
+            self.hourglass_control = HourglassControl(self, eps=hourglass_eps)
 
     def get_nodal_points_coordinates(self):
         """Calculate spatial coordinates of nodal points scaled to domain size.
@@ -2765,6 +2776,9 @@ class Discretization:
         self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)
+
+        if self.hourglass_control is not None:          # one-point hexahedron: + H^T eps kappa H u
+            self.hourglass_control.add_stiffness(material_data_field, input_field_inxyz, output_field_inxyz)
 
     def apply_system_matrix_mugrid_deformed_grid(self,
                                                  material_data_field,

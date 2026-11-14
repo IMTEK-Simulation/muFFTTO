@@ -1236,6 +1236,15 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
                                                               adjoint_field_gradient_ijqxyz.s[:, :, q],
                                                               stress_ijqxyz.s[:, :, q])
 
+    # one-point hexahedron with hourglass control: + the hourglass part of lambda^T (dK/drho_q) u (its energy carries no
+    # quadrature weight, hence / w_q, since N^T W below applies the weights)
+    if getattr(discretization, 'hourglass_control', None) is not None:
+        hourglass_qxyz = discretization.hourglass_control.design_derivative(
+            dmaterial_data_field_drho_ijklqxyz, displacement_field_fnxyz, adjoint_field_inxyz)
+        xp = domain.tensor_operations.get_array_module(hourglass_qxyz)
+        w_q = np.asarray(domain.tensor_operations.to_host(discretization.quadrature_weights)).reshape(-1, *([1] * dim))
+        double_contraction_stress_qxyz.s[0, 0] += hourglass_qxyz / xp.asarray(w_q)
+
     output_field_inxyz.s.fill(0)
     discretization.fft.communicate_ghosts(double_contraction_stress_qxyz)
 
@@ -1556,6 +1565,16 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         discretization=discretization,
         stress_field_ijqxyz=stress_field_ijqxyz,
         adjoint_field_inxyz=adjoint_field_inxyz)
+
+    # one-point hexahedron with hourglass control: the equilibrium residual is B^T W sigma + K_hg u, so the diagnostic
+    # lambda^T (residual) needs the hourglass force too (otherwise it is not ~0 and depends on the design)
+    if getattr(discretization, 'hourglass_control', None) is not None:
+        hourglass_force = discretization.get_unknown_size_field(name='hourglass_force_in_adjoint_energy')
+        hourglass_force.s.fill(0)
+        discretization.hourglass_control.add_stiffness(material_data_field_rho_ijklqxyz, displacement_field_inxyz,
+                                                       hourglass_force)
+        adjoint_energy += _global_sum(discretization,
+                                      np.einsum('i...,i...->...', adjoint_field_inxyz.s, hourglass_force.s))
 
     return weight * dstress_drho.s + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy, info_adjoint_
 
