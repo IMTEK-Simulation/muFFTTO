@@ -97,7 +97,7 @@ class WarmStarts:
     def store(self, key, field):
         data = self._buffer(field)
         if self.on_host:
-            self.buffers[key] = to_host(data).astype(self.dtype, copy=True)
+            self.buffers[key] = to_host(data).astype(self.dtype, copy=data is field.sg)      # (to_host copies)
         elif key in self.buffers:
             self.buffers[key][...] = data
         else:

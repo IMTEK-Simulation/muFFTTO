@@ -55,24 +55,24 @@ FULLY_INTEGRATED = {'trilinear_hexahedron_1Q': 'trilinear_hexahedron',
 # (component, z, y, x with x fastest; ghost points are skipped); `source` is the buffer of the other field.
 _TRANSFER_INDEX = '''
     long long point = i % points, component = i / points;
-    long long x = point % shape[0] - ghosts[0];
-    long long y = (point / shape[0]) % shape[1] - ghosts[1];
-    long long z = point / (shape[0] * shape[1]) - ghosts[2];
-    if (x >= 0 && x < size[0] && y >= 0 && y < size[1] && z >= 0 && z < size[2]) {
+    long long x = point % shape_x - ghost_x;
+    long long y = (point / shape_x) % shape_y - ghost_y;
+    long long z = point / (shape_x * shape_y) - ghost_z;
+    if (x >= 0 && x < size_x && y >= 0 && y < size_y && z >= 0 && z < size_z) {
         const T* values = &source[component * other_points];
-        long long nx = other_shape[0], nxy = other_shape[0] * other_shape[1];
+        long long nx = other_shape_x, nxy = other_shape_x * other_shape_y;
         T sum = 0;
 '''
 _TRANSFER_KERNELS = {
     'restrict': _TRANSFER_INDEX + '''
-        long long x0 = other_ghosts[0] + 2 * x, y0 = other_ghosts[1] + 2 * y, z0 = other_ghosts[2] + 2 * z;
+        long long x0 = other_ghost_x + 2 * x, y0 = other_ghost_y + 2 * y, z0 = other_ghost_z + 2 * z;
         for (int c = -1; c <= 1; c++) for (int b = -1; b <= 1; b++) for (int a = -1; a <= 1; a++)
             sum += (a ? 0.5 : 1.0) * (b ? 0.5 : 1.0) * (c ? 0.5 : 1.0) * values[(x0 + a) + nx * (y0 + b) + nxy * (z0 + c)];
         target[i] = sum;
     }''',
     'prolong': _TRANSFER_INDEX + '''
         int px = x & 1, py = y & 1, pz = z & 1;
-        long long x0 = other_ghosts[0] + x / 2, y0 = other_ghosts[1] + y / 2, z0 = other_ghosts[2] + z / 2;
+        long long x0 = other_ghost_x + x / 2, y0 = other_ghost_y + y / 2, z0 = other_ghost_z + z / 2;
         for (int c = 0; c <= pz; c++) for (int b = 0; b <= py; b++) for (int a = 0; a <= px; a++)
             sum += values[(x0 + a) + nx * (y0 + b) + nxy * (z0 + c)];
         target[i] = sum / ((1 + px) * (1 + py) * (1 + pz));
@@ -141,22 +141,19 @@ class GridTransfer:
         xp = tensor_operations.get_array_module(fine_buffer)
         if name not in self._device_kernels:
             self._device_kernels[name] = xp.ElementwiseKernel(
-                'raw T source, int64 points, int64 other_points, raw int64 shape, raw int64 ghosts, raw int64 size, '
-                'raw int64 other_shape, raw int64 other_ghosts', 'raw T target', _TRANSFER_KERNELS[name],
-                'grid_transfer_' + name)
-        geometry = {}
-        for label, field in (('fine', fine), ('coarse', coarse)):
-            geometry[label] = (xp.asarray(field.sg.shape[-3:], dtype=np.int64),
-                               xp.asarray(field._cpp.collection.nb_ghosts_left, dtype=np.int64),
-                               xp.asarray(field.s.shape[-3:], dtype=np.int64),
-                               int(np.prod(field.sg.shape[-3:])))
-        (target, source), (target_buffer, source_buffer) = (
-            (('coarse', 'fine'), (coarse_buffer, fine_buffer)) if name == 'restrict'
-            else (('fine', 'coarse'), (fine_buffer, coarse_buffer)))
-        shape, ghosts, size, points = geometry[target]
-        other_shape, other_ghosts, _, other_points = geometry[source]
-        self._device_kernels[name](source_buffer, points, other_points, shape, ghosts, size, other_shape,
-                                   other_ghosts, target_buffer, size=target_buffer.size)
+                'raw T source, int64 points, int64 other_points, int64 shape_x, int64 shape_y, int64 ghost_x, '
+                'int64 ghost_y, int64 ghost_z, int64 size_x, int64 size_y, int64 size_z, int64 other_shape_x, '
+                'int64 other_shape_y, int64 other_ghost_x, int64 other_ghost_y, int64 other_ghost_z',
+                'raw T target', _TRANSFER_KERNELS[name], 'grid_transfer_' + name)
+        target, source = (coarse, fine) if name == 'restrict' else (fine, coarse)
+        target_buffer, source_buffer = ((coarse_buffer, fine_buffer) if name == 'restrict'
+                                        else (fine_buffer, coarse_buffer))
+        shape, other_shape = target.sg.shape[-3:], source.sg.shape[-3:]
+        ghosts, other_ghosts = target._cpp.collection.nb_ghosts_left, source._cpp.collection.nb_ghosts_left
+        self._device_kernels[name](
+            source_buffer, int(np.prod(shape)), int(np.prod(other_shape)), shape[0], shape[1], *ghosts,
+            *target.s.shape[-3:], other_shape[0], other_shape[1], *other_ghosts, target_buffer,
+            size=target_buffer.size)
 
     def _try_kernel(self, kernel, source, target):
         if self.use_kernel:
