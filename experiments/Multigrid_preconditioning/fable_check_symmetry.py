@@ -13,6 +13,7 @@ import numpy as np
 from mpi4py import MPI
 
 import to3d_large
+from cubic_symmetry import cubic_mean
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 8
 mpi = MPI.COMM_WORLD
@@ -29,7 +30,7 @@ def symmetric_field(seed, smooth):
     if smooth:                                       # a few neighbour averages (periodic)
         for _ in range(3):
             values = sum(np.roll(values, shift, axis) for axis in range(3) for shift in (-1, 1)) / 6
-    return to3d_large.cubic_mean(np, values)
+    return cubic_mean(np, values)
 
 
 design = symmetric_field(1, smooth=True)

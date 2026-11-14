@@ -51,6 +51,7 @@ from mpi4py import MPI
 from muGrid import linalg
 
 from muFFTTO import domain, io_utils, material_models, multigrid, solvers_nonlinear, tensor_operations
+import cubic_symmetry
 from cg_energy import conjugate_gradients_energy
 
 to_host = tensor_operations.to_host
@@ -62,14 +63,6 @@ def unit_strain(i, j):
     E = np.zeros((3, 3))
     E[i, j] = E[j, i] = 1.0 if i == j else 0.5
     return E
-
-
-def cubic_mean(xp, a):
-    """mean of the nodal array a[x, y, z] over the 48 cube symmetries (reflections i -> (N - i) mod N, permutations)"""
-    for axis in range(3):
-        a = 0.5 * (a + xp.roll(xp.flip(a, axis), 1, axis))
-    return (a + a.transpose(1, 0, 2) + a.transpose(0, 2, 1) + a.transpose(2, 1, 0)
-            + a.transpose(1, 2, 0) + a.transpose(2, 0, 1)) / 6.0
 
 
 class WarmStarts:
@@ -144,6 +137,7 @@ class TopologyOptimization:
         self.pf_scale = pf_weight / (C_W * self.volume ** (2 / 3))
         strains = [unit_strain(i, j) for i, j in LOAD_CASE_STRAINS]
         self.symmetry = symmetry
+        self._slab_remap = None
         if load_cases is None and symmetry == 'cubic':
             # cubic C_h: C1111 = C2222 = C3333, C1122 = C1133 = C2233, C2323 = C1313 = C1212, so the 9 energy terms
             # below are 3 x (xx; xx), 3 x (xx; yy or zz) and 3 x (xy; xy): two load cases, with these weights
@@ -215,22 +209,18 @@ class TopologyOptimization:
 
     # ------------------------------------------------------------------ cubic symmetry
     def symmetrize(self, field):
-        """Project a nodal scalar field onto the fields invariant under the 48 symmetries of the cube about the cell
-        centre: the mean over the 3 reflections (node i -> (N - i) mod N on the periodic grid) and the 6 permutations
-        of the axes. Serial: on the device. MPI: the slabs are gathered on rank 0 (the permutations are not local)."""
+        """Project a nodal scalar field onto the fields with cubic symmetry (cubic_symmetry.py). Serial: on the
+        device. MPI: R_x, R_y and the x-y swap inside the slabs, the three operations that move z between them."""
         if self.comm.size == 1:
-            field.s[0, 0] = cubic_mean(self.xp, field.s[0, 0])
+            field.s[0, 0] = cubic_symmetry.cubic_mean(self.xp, field.s[0, 0])
             return
-        mpi, fft = self.comm.mpi4py_comm, self.disc.fft
-        slab = tuple(slice(int(l), int(l) + int(n)) for l, n in zip(fft.subdomain_locations, fft.nb_subdomain_grid_pts))
-        pieces = mpi.gather((slab, to_host(field.s[0, 0])), root=0)
-        if self.rank0:
-            full = np.empty((self.n_pix,) * 3)
-            for piece_slab, piece in pieces:
-                full[piece_slab] = piece
-            full = cubic_mean(np, full)
-            pieces = [full[piece_slab] for piece_slab, _ in pieces]
-        field.s[0, 0] = self.xp.asarray(mpi.scatter(pieces if self.rank0 else None, root=0))
+        if self._slab_remap is None:
+            fft = self.disc.fft
+            assert tuple(fft.nb_subdomain_grid_pts[:2]) == (self.n_pix, self.n_pix), 'slabs along z expected'
+            self._slab_remap = cubic_symmetry.SlabRemap(self.comm.mpi4py_comm, self.n_pix,
+                                                        fft.subdomain_locations[2], fft.nb_subdomain_grid_pts[2])
+        local = cubic_symmetry.cubic_mean_distributed(self._slab_remap, to_host(field.s[0, 0]))
+        field.s[0, 0] = self.xp.asarray(local)
 
     def complete_stresses_by_symmetry(self):
         """homogenised stresses of the load cases that are not solved (cubic symmetry): permutations of xx and xy"""
