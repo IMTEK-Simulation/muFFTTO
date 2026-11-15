@@ -41,6 +41,10 @@ and new here:
     DESIGN_OPT     lbfgs_helm (default; NuMPI L-BFGS with the Helmholtz H_0, MPI-capable) | lbfgs_helm_local
                    (design_optimizers.py, serial; the optimizer of the baseline runs)
     OUT_DIR        output folder (default data/to3d_large)
+    MAX_STEP       > 0: a trial design of the line search whose MEAN change from the last accepted design exceeds
+                   this is rejected without solving (the line search halves the step). Guards against a wild
+                   L-BFGS direction on the plateau, whose trial design costs a very long CG solve. 0 (default): off.
+                   Every evaluation prints the max and mean change of its trial design ("TRIAL design").
     CHECKPOINT_EVERY   write <output>_checkpoint.nc (the current design) every n iterations. A run that finds its
                    own checkpoint continues from it (iteration count carried on; the L-BFGS memory and the warm
                    starts are rebuilt); <output>_final.nc is written when the optimizer stops (converged / MAXITER)
@@ -656,12 +660,24 @@ def main():
         'objective': (), 'volume_fraction': (), 'nb_evaluations': ()}) if history_every > 0 else None
     state = {'iteration': iterations_done, 'f': np.nan, 'misfit': np.nan, 'x': None, 'history': [], 'measures': None,
              'stiffness_history': []}
+    state['accepted'] = None
+    max_step = float(env('MAX_STEP', 0))
     energy_tol = float(env('ENERGY_TOL', 0))
     time_budget = float(env('TIME_BUDGET', 0))
     ftol, ftol_window, misfit_tol = float(env('FTOL', 0)), int(env('FTOL_WINDOW', 10)), float(env('MISFIT_TOL', 0))
 
     def objective(x):
         t = time.time()
+        if state['accepted'] is not None:                 # how far is this trial design from the last accepted one?
+            change = np.abs(np.asarray(x, dtype=float).ravel() - state['accepted'])
+            largest = mpi.allreduce(float(change.max()), op=MPI.MAX)
+            mean = mpi.allreduce(float(change.sum())) / n_pix ** 3
+            rejected = max_step > 0 and mean > max_step
+            if rank0:
+                print(f'TRIAL design: change from the last accepted design max {largest:.3e}, mean {mean:.3e}'
+                      + (f' > MAX_STEP {max_step:g}: rejected without solving' if rejected else ''), flush=True)
+            if rejected:                                  # the line search halves the step
+                return np.inf, np.zeros_like(np.asarray(x, dtype=float))
         f, gradient = to.evaluate(x)
         state['f'], state['misfit'], state['measures'] = f, to.misfit, np.array(to.stiffness_measures)
         if rank0:
@@ -671,6 +687,7 @@ def main():
 
     def callback(x):
         state['iteration'] += 1
+        state['accepted'] = np.array(x, dtype=float).ravel()
         it = state['iteration']
         write_history = history is not None and (it - 1) % history_every == 0
         out_of_time = time_budget > 0 and time.time() - start_time > time_budget
