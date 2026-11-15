@@ -377,3 +377,11 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   MG_PRECISION=single DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu LBFGS_FIRST_STEP=0.05 STEP_GROWTH=20 ENERGY_TOL=1e-3
   MAXITER=100000 HISTORY_EVERY=50`. Purpose: wall time of a direct 512^3 optimisation from a sharp CH start
   (compare: chain 11.4 h to f 1.082; blurred-CH direct run 8820185 f 1.333 after ~14.5 h).
+
+- 22:45 CORRECTION (user: run the Cahn-Hilliard EVOLUTION equation with the TO's interface parameter to generate the
+  start, not a relaxation of bi_s11): `make_CH512_start.py` now evolves from noise (as bi_s11: amplitude 0.05, mean 0,
+  seed 11, dt 0.0625 eps^2, T 250 eps^2) at N^3 with eps = sqrt(2) eta (same interface width as the TO; EPS_ETA env).
+  Structure ~3.6x finer than bi_s11. 128^3 test 28 s (figures/CH128_start_s11_eta2h.png). NEMO: CH job 8826536 ->
+  `$WS/runs/FABLE/data/CH512_start_s11_eta2h.nc`; TO 8826537 + 8826538 (label `ch512evo_s0.3`, same settings as
+  above, afterok 8826536 and 8826405). 8826509/10 cancelled; the relaxed file CH512_start_bi_s11_eta2h.nc (job
+  8826508) is unused.
