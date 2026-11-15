@@ -17,7 +17,8 @@ For each: the iteration at which it would have stopped, the share of the full ru
 how far the design then is from the final one (nu12, energies, mean |rho - rho_final|).
 
     TARGET_SCALE=0.3 python stop_criterion_2D.py     -> logs/stop_criterion/N<N>_nu<nu>_s<scale>.{npz,txt}
-Environment: NPIX (128), TARGET_NU (-0.5), TARGET_SCALE (0.3), MAXITER (600).
+Environment: NPIX (128), TARGET_NU (-0.5), TARGET_SCALE (0.3), MAXITER (600), ETA (2 / NPIX), TAG and OUT_NAME
+(suffix of the output name, folder under logs/; used by run_mesh_independence_2D.sh).
 """
 import os
 import sys
@@ -25,7 +26,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 N = int(os.environ.get('NPIX', 128))
-os.environ.update({'NPIX': str(N), 'ETA': str(2 / N), 'SOFT_EXP': '3', 'PF_NORMALIZED': '1', 'PF_WEIGHT': '0.2',
+ETA = float(os.environ.get('ETA', 2 / N))                 # interface width; default 2 h
+os.environ.update({'NPIX': str(N), 'ETA': str(ETA), 'SOFT_EXP': '3', 'PF_NORMALIZED': '1', 'PF_WEIGHT': '0.2',
                    'CG_MODE': 'energy', 'CG_DELAY': '0', 'SHOW_PLOTS': '0', 'JAX_PLATFORMS': 'cpu',
                    'OBJECTIVE': 'energy', 'TARGET_NU': os.environ.get('TARGET_NU', '-0.5'),
                    'TARGET_SCALE': os.environ.get('TARGET_SCALE', '0.3')})
@@ -39,8 +41,8 @@ from muFFTTO import io_utils
 
 WINDOW = 10
 max_iterations = int(os.environ.get('MAXITER', 600))
-tag = f'N{N}_nu{os.environ["TARGET_NU"]}_s{os.environ["TARGET_SCALE"]}'
-out = HERE / 'logs' / 'stop_criterion'
+tag = f'N{N}_nu{os.environ["TARGET_NU"]}_s{os.environ["TARGET_SCALE"]}' + os.environ.get('TAG', '')
+out = HERE / 'logs' / os.environ.get('OUT_NAME', 'stop_criterion')
 out.mkdir(parents=True, exist_ok=True)
 
 # ---- start design: the Cahn-Hilliard pattern of the 2D study, periodic bilinear interpolation (axis by axis)
@@ -58,16 +60,17 @@ x0 = np.clip(start, 0, 1).ravel()
 disc = TO.discretization
 helm_in = disc.get_scalar_field(name='helmholtz_in')
 helm_hat = disc.ffield_collection.complex_field(name='helmholtz_hat', components=(1,))
-symbol = 1.0 / (1.0 + 4.0 * TO.eta ** 2 * sum(
-    4 * N ** 2 * np.sin(np.pi * np.asarray(disc.fft.ifftfreq[a], dtype=float) / N) ** 2 for a in range(2)))
+to_host = (lambda a: a.get()) if TO.device == 'gpu' else np.asarray        # DEVICE=gpu: field data are cupy arrays
+symbol = TO.xp.asarray(1.0 / (1.0 + 4.0 * TO.eta ** 2 * sum(
+    4 * N ** 2 * np.sin(np.pi * np.asarray(disc.fft.ifftfreq[a], dtype=float) / N) ** 2 for a in range(2))))
 
 
 def helmholtz(v):
-    helm_in.s[0, 0] = v.reshape(N, N)
+    helm_in.s[0, 0] = TO.xp.asarray(v.reshape(N, N))
     disc.fft.fft(helm_in, helm_hat)
     helm_hat.s[0, 0] *= symbol
     disc.fft.ifft(helm_hat, helm_in)
-    return (helm_in.s[0, 0] * disc.fft.normalisation).ravel()
+    return to_host(helm_in.s[0, 0] * disc.fft.normalisation).ravel()
 
 
 # ---- the energies of the objective: (load case, left strain, target) -> name
@@ -108,7 +111,7 @@ settled = np.full(len(W), np.inf)
 settled[WINDOW:] = (np.abs(W[WINDOW:] - W[:-WINDOW]) / np.abs(targets)).max(axis=1)
 f_settled = np.full(len(W), np.inf)
 f_settled[WINDOW:] = (data['f'][:-WINDOW] - data['f'][WINDOW:]) / data['f'][WINDOW:]
-np.savez(out / f'{tag}.npz', targets=targets, nu=nu, close=close, settled=settled, f_settled=f_settled, **data)
+np.savez(out / f'{tag}.npz', eta=ETA, final=final.reshape(N, N), targets=targets, nu=nu, close=close, settled=settled, f_settled=f_settled, **data)
 
 lines = [f'2D TO {N}^2, energy objective, target nu* {os.environ["TARGET_NU"]} scale {os.environ["TARGET_SCALE"]}: '
          f'{len(W)} iterations, {state["evaluations"]} evaluations',
