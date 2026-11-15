@@ -39,7 +39,7 @@ post-processing, and one open optimiser question (section 5).
 | job | what | state at 08:40 | settings |
 |---|---|---|---|
 | 8817512 | 1024^3 full-node test, 8 H200, 1.5 h | pending, est. start 14:47 | - |
-| 8820095, 8820096 | 1024^3 PRODUCTION, 8 H200, 2 x 24 h, label `aux_s0.3_fused` | pending (afterok 8817512) | `ENERGY_TOL=3e-4 STEP_GROWTH=20`, start = 512^3 checkpoint of iteration 370 |
+| 8820336, 8820337 | 1024^3 PRODUCTION, 8 H200, 2 x 24 h, label `aux_s0.3_fused` | pending (afterok 8817512) | `ENERGY_TOL=3e-4 STEP_GROWTH=20 LBFGS_FIRST_STEP=0.05`, start = 512^3 checkpoint of iteration 370 |
 | 8820185, 8820186 | user's test: 512^3 directly from the Cahn-Hilliard start, label `fromCH_s0.3_fused`, 4 L40S, 2 x 24 h | pending | `ENERGY_TOL=1e-3 STEP_GROWTH=20 MAXITER=100000`, continues from its checkpoint (iteration 20) |
 | 8820129 | video rerun 128^3, label `video_s0.3`, 1 L40S | running (iteration ~200 after 10 min) | `HISTORY_EVERY=2 ENERGY_TOL=1e-3 STEP_GROWTH=20` |
 | 8820130 | video rerun 256^3 (afterok 8820129) | pending | `HISTORY_EVERY=2`, same tests |
@@ -65,7 +65,7 @@ starts from `<...>_final.nc`, which is only written when a run ends by itself (s
 1. **Watch the jobs.** Healthy log: `EVAL` lines every 30-50 s at 512^3, `ITER` lines, CG counts around 10-20 per
    solve, `TRIAL design` lines with small mean change. Signs of trouble: no new line for > 10 min; a traceback with
    "ECC" (bad node: cancel, add the node to `EXCLUDE`, resubmit); many `rejected without solving` lines per iteration.
-2. **1024^3 test 8817512.** If it fails, cancel 8820095/8820096, fix, and tell the user. If it passes, the production
+2. **1024^3 test 8817512.** If it fails, cancel 8820336/8820337, fix, and tell the user. If it passes, the production
    starts by itself. First 1024^3 evaluation and memory: note them in `FABLE_NOTES.md`.
 3. **Smooth video** (the user asked for more frames). When the `video_s0.3` stages finish, render on NEMO:
    `OUT=$WS/runs/FABLE/video/video_s0.3 HISTORY_EVERY=2 HOLD=3 sbatch sbatch_render_TO3D_multigrid.sh <N128
