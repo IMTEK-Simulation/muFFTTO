@@ -436,3 +436,9 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
 - Wall 595.5 s vs 678.0 s; mean gap between evaluations after accepted steps 3.3 s vs 9.0 s;
   L-BFGS vector work 37.8 s total of which Helmholtz (cg) 36.6 s -> pure L-BFGS vector work ~0.1 s/iteration on GPU.
 - Dependents released: ch512evo_s0.3 (8826537) RUNNING on g3611 since 23:54; 1024³ test 8826562 pending (Resources).
+
+## 2026-11-16 00:42 — ch512evo_s0.3 (TO from 512³ CH evolution start, 8826537): NO collapse
+- ITER 1/10/20/40: f 59.59 / 5.79 / 4.71 / 3.49, misfit 54.96 / 1.07 / 0.577 / 0.331 (steadily decreasing);
+  interface part f - misfit 3.16 at it 40 (fromCH_s0.3 128³-CH start at it 40: f 2.005, misfit 0.324, interface 1.68:
+  same misfit, ~2x interface because the 512³ CH structure is ~3.6x finer).
+- Pace ~1.1 min/iteration (eval 50-60 s), 40 its in 45 min. Plan B not needed; backup CH start stays unused unless it stalls.
