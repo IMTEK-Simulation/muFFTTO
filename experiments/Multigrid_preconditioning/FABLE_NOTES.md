@@ -249,3 +249,17 @@ Peak per process: 212 / 876 MiB (32³ / 64³, laptop), 5452 MiB (128³, L40S) = 
 
 Essential state (float64): u/λ of the active load case 48, CG 4 vectors 96, rhs 24, MG fine 5 vectors 120, one
 gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + stored warm starts.
+
+## 2026-11-15 06:15  stopping test on the energies; 512^3 progress
+
+- 2D prototype `stop_criterion_2D.py` (128^2, 600 iterations, scale 0.3 and 1; `logs/stop_criterion/`,
+  `figures/stop_criterion_2D.png`): "energies close to target" fires too early (it 18-43, design diffuse) or never
+  (unreachable target). "Energies settled" (max change of an energy / its target over 10 iterations) is robust:
+  1e-3 -> ~20 % of the run, nu within 0.005 of final; 3e-4 -> 40-50 %, design within 1-3 % of final. The step test
+  (xtol 1e-3) fires at 45-55 %.
+- `to3d_large.py`: `ENERGY_TOL`, `FTOL`, `MISFIT_TOL`, `FTOL_WINDOW` (all off by default; history unchanged). Each
+  iteration prints an `ITER` line with these measures. Commit 801cc17, synced to NEMO.
+- Thresholds for production NOT yet chosen by the user (suggested: 1e-3 intermediate grids, 3e-4 final grid).
+- 512^3 `aux_s0.3_fused` (job 8817830, 4 L40S, g3611, old code without ENERGY_TOL): 06:13 eval 467 / iteration 371,
+  f 1.0822 (1.1142 @50, 1.0999 @200, 1.0871 @300, 1.0835 @400), ~35 s per evaluation, no errors. Time limit 21:31.
+- 1024^3 full-node test 8817512 still pending (Resources), estimated start 14:47 on 15 Nov.
