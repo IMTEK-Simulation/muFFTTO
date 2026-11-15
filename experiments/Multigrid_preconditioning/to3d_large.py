@@ -649,6 +649,24 @@ def main():
             seconds['helmholtz'] += time.time() - start
             return result
 
+    # LBFGS_FIRST_STEP > 0 (NuMPI path): H_0 = c M with c fixed at the first call so that the first step changes the
+    # design by at most LBFGS_FIRST_STEP. NuMPI's gamma = <s,y>/<y,H_0 y> makes later directions independent of c; only
+    # steps with an empty memory change. Unscaled (c = 1), the first step after a (re)start is ~1e5x too small on a
+    # plateau, its curvature pair is CG noise and the next directions go wild (128^3 restart test, 2026-11-15).
+    first_step = float(env('LBFGS_FIRST_STEP', 0))
+    if first_step > 0 and env('DESIGN_OPT', 'lbfgs_helm') != 'lbfgs_helm_local':
+        helmholtz_unscaled, h0_scale = helmholtz, {}
+
+        def helmholtz(v):
+            z = helmholtz_unscaled(v)
+            if 'c' not in h0_scale:
+                largest = mpi.allreduce(float(np.max(np.abs(z))), op=MPI.MAX)
+                h0_scale['c'] = first_step / largest if largest > 0 else 1.0
+                if rank0:
+                    print(f'LBFGS_FIRST_STEP: H_0 = {h0_scale["c"]:.3e} x Helmholtz (first step changes the design by '
+                          f'at most {first_step:g})', flush=True)
+            return h0_scale['c'] * z
+
     # ---- output: history (every HISTORY_EVERY-th iterate), checkpoint, evaluation log
     parameters = {'nb_of_pixels': (n_pix,) * 3, 'domain_size': [1, 1, 1], 'domain_lengths': [1.0, 1.0, 1.0],
                   'element_type': disc.element_type, 'preconditioner_type': 'MG', 'eta': eta, 'p': to.p,
@@ -751,7 +769,8 @@ def main():
             assert mpi.size == 1, 'design_optimizers.py is serial'
             result = design_optimizers.l_bfgs_bounded_precond(
                 objective, x0, precond=helmholtz, bounds_lo=0.0, bounds_hi=1.0, callback=callback, disp=True,
-                gamma0=float(env('LBFGS_GAMMA0', 1.0)), cos_min=float(env('LBFGS_COS_MIN', 0.0)), **options)
+                gamma0=float(env('LBFGS_GAMMA0', 1.0)), cos_min=float(env('LBFGS_COS_MIN', 0.0)),
+                first_step=float(env('LBFGS_FIRST_STEP', 0.0)), **options)
         else:
             result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
                                                 precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)

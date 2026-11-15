@@ -55,11 +55,14 @@ class _Counted:
 
 def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, gtol=1e-5, xtol=0.0, maxiter=500,
                            maxcor=20, c1=1e-4, max_halvings=40, callback=None, disp=False, gamma0=1.0, cos_min=0.0,
-                           info=None):
+                           info=None, first_step=0.0):
     """gamma0: scale of H_0 while the memory is empty (start, restart, after a memory reset); afterwards the last
     computed gamma is used for an empty memory. 1.0 = NuMPI's behaviour.
     cos_min: a curvature pair is kept only if cos(s, y) >= cos_min (cautious update); 0.0 = NuMPI's behaviour.
-    info: optional dict, receives 'gamma' (current H_0 scale) after every iteration (to carry it over a restart)."""
+    info: optional dict, receives 'gamma' (current H_0 scale) after every iteration (to carry it over a restart).
+    first_step: > 0: the line search of the first iteration starts at the step whose LARGEST design change is
+    first_step (instead of alpha = 1 with the unscaled H_0, whose step is far too small on a plateau, so that the first
+    curvature pair is CG noise and blows up the next directions; seen at 128^3 / 512^3 after restarts, 2026-11-15)."""
     shape = np.asarray(x0).shape
     gamma_last = float(gamma0)
     fg = _Counted(fun, shape)
@@ -98,7 +101,9 @@ def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, 
             S.clear(); Y.clear(); RHO.clear()
             d = -gamma_last * H0(r, mask)
             gd = np.sum(r * d)
-        alpha_init = 1.0 if (quasi_newton or precond is not None) else 1.0
+        alpha_init = 1.0
+        if first_step > 0 and it == 1 and not quasi_newton:
+            alpha_init = first_step / max(float(np.max(np.abs(d))), 1e-300)
         step = _armijo(fg, x, d, phi, gd, project, c1=c1, max_halvings=max_halvings, alpha_init=alpha_init)
         if step is None:
             S.clear(); Y.clear(); RHO.clear()
