@@ -442,3 +442,5 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
   interface part f - misfit 3.16 at it 40 (fromCH_s0.3 128³-CH start at it 40: f 2.005, misfit 0.324, interface 1.68:
   same misfit, ~2x interface because the 512³ CH structure is ~3.6x finer).
 - Pace ~1.1 min/iteration (eval 50-60 s), 40 its in 45 min. Plan B not needed; backup CH start stays unused unless it stalls.
+- 00:56 backup CH start done (8826573, 6383 s on 1 L40S, T 12000 eps², dt 0.25 eps²): grey fraction 0.125, stiff 0.500;
+  `$WS/runs/FABLE/data/CH512_start_s11_eta2h_coarse.nc`, figure `figures/CH512_start_s11_eta2h_coarse.png`. Kept in reserve.
