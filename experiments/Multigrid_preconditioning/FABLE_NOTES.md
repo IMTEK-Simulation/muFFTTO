@@ -319,3 +319,26 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
 - Video: renderer takes `HISTORY_EVERY=2,2,5` (one value per file). 128^3 dense preview (render job 8820289,
   8 min, 250 designs): `figures/video/video_s0.3_N128_preview.mp4`. The video rerun 128^3 ended at MAXITER 500,
   f 1.5007 (the fused chain run reached 1.412: a different path / local optimum).
+
+## 2026-11-15 20:00  1024^3 test timed out; video stages done; from-CH fixed; 2D noise-start test
+
+- 1024^3 full-node test 8817512 (g4401, 14:47-16:18) TIMED OUT at 1.5 h: EVAL 1 268 s (CG 16 per solve, fine),
+  then ~2500 s before EVAL 2 (between the evaluations = the first L-BFGS direction: Helmholtz H_0 in 'cg' mode with
+  MPI, host arrays?) and EVAL 2 557 s with "material 303 s" (first eval: 9.7 s). Production 8820336/37 was
+  DependencyNeverSatisfied -> cancelled. TODO: find what is slow outside the solves at 1024^3 / 8 ranks (Helmholtz
+  CG? host warm starts / memory?), small reproduction first; a new full-node test needs the user's OK.
+- Video stages finished by themselves: 256^3 (8820130, 54 it, f 1.261, it survived one wild trial at it 4 that cost
+  ~1.5 h) and 512^3 (8820131, 56 it, ENERGY_TOL 1e-3, f 1.1706). Smooth render: job 8826297
+  (`HISTORY_EVERY=2,2,5 HOLD=3,3,8`, OUT `$WS/runs/FABLE/video/video_s0.3_smooth`). Note: sbatch --export splits
+  at commas -> export list-valued variables in the shell, then plain sbatch.
+- From-CH test 8820185: hung ~1.5 h on a wild trial at it 23, then recovered; at 19:55 it 289, f 1.3865, misfit
+  0.087, ~42 s per evaluation. User: fix it -> segment 2 resubmitted as 8826299 (afterany 8820185, same settings
+  incl. HISTORY_EVERY=50, + LBFGS_FIRST_STEP=0.05); 8820186 cancelled.
+- 2D noise-start test (`noise_start_2D.py`, `plot_noise_start_2D.py`, figures/noise_start_2D_*.png; all with the
+  first-step fix, which made no difference at 256^2: both variants collapsed within 20 iterations):
+  white noise on the grid: 64^2 ok (nu -0.26), 128^2 ok (-0.30), 256^2 and 512^2 collapse to a uniform design;
+  the 64^2 noise interpolated: 256^2 ok (-0.316, f 0.682 = the CH start), 512^2 ok (-0.317), 1024^2 collapses (it 88).
+  Cause: the interface penalty of the start scales with N at eta = 2h (white noise: 104 / 207 / 412 at
+  256 / 512 / 1024 vs misfit ~40; a smooth but GREY start still pays W(rho) / eta ~ N). Once it dominates the
+  misfit, the optimiser removes it by making the design uniform. Not an L-BFGS problem. Remedies to test: a
+  near-binary start (thresholded smooth noise / CH), eta continuation, or the grid chain (what production does).

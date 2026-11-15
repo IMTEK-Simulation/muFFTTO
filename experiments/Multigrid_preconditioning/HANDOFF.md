@@ -39,7 +39,7 @@ post-processing, and one open optimiser question (section 5).
 | job | what | state at 08:40 | settings |
 |---|---|---|---|
 | 8817512 | 1024^3 full-node test, 8 H200, 1.5 h | pending, est. start 14:47 | - |
-| 8820336, 8820337 | 1024^3 PRODUCTION, 8 H200, 2 x 24 h, label `aux_s0.3_fused` | pending (afterok 8817512) | `ENERGY_TOL=3e-4 STEP_GROWTH=20 LBFGS_FIRST_STEP=0.05`, start = 512^3 checkpoint of iteration 370 |
+| (cancelled) | 1024^3 production 8820336/37: test 8817512 timed out (see FABLE_NOTES 20:00) | - | - |
 | 8820185, 8820186 | user's test: 512^3 directly from the Cahn-Hilliard start, label `fromCH_s0.3_fused`, 4 L40S, 2 x 24 h | pending | `ENERGY_TOL=1e-3 STEP_GROWTH=20 MAXITER=100000`, continues from its checkpoint (iteration 20) |
 | 8820129 | video rerun 128^3, label `video_s0.3`, 1 L40S | running (iteration ~200 after 10 min) | `HISTORY_EVERY=2 ENERGY_TOL=1e-3 STEP_GROWTH=20` |
 | 8820130 | video rerun 256^3 (afterok 8820129) | pending | `HISTORY_EVERY=2`, same tests |
