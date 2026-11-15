@@ -299,6 +299,23 @@ wall time is evaluations and 39 % is outside them, mostly NuMPI's L-BFGS vector 
 **Energy** (GPUs only, at their rated power H200 700 W / L40S 350 W, i.e. an upper bound; a realistic load of ~60 %
 gives about 60 % of it; CPUs and node not included): chain ≤ 13.5 kWh.
 
+**The run shown in the video** (`video_s0.3`: 128³ → 256³ → 512³, dense history, `ENERGY_TOL=1e-3` at 256³ / 512³,
+NuMPI L-BFGS; `figures/video/video_s0.3_smooth.mp4`)
+
+| stage | job | hardware | wall time | iterations | evaluations | CG iterations (mech + adj) | final f | misfit | host memory per rank |
+|---|---|---|---|---|---|---|---|---|---|
+| 128³ | 8820129 | 1 L40S | 24 min | 500 | 556 | 96.1 k | 1.501 | 0.204 | 7.5 GB |
+| 256³ | 8820130 | 1 L40S | 2 h 48 min | 54 | 68 | 106.4 k | 1.261 | 0.090 | 19.4 GB |
+| 512³ | 8820131 | 4 L40S | 2 h 20 min | 56 | 87 | 20.2 k | 1.171 | 0.050 | 46.6 GB |
+| render | 8826297 | 1 L40S | 11 min | | | | | | |
+| total | | | 5 h 43 min | 610 | 711 | 223 k | | | |
+
+12.7 L40S-h, ≤ 4.4 kWh GPU energy at rated power (≈ 2.7 kWh at 60 % load). Waste in it: at 256³ ONE wild trial design
+(evaluation 13, iteration 4) took 8678 s = 2 h 25 min of the 2 h 48 min (its solves needed thousands of CG
+iterations; no `LBFGS_FIRST_STEP` in that run); at 512³ two wild trials took 222 s and 296 s, and ~40 % of the wall
+time is NuMPI's host-side vector work. Without the stall and with `lbfgs_xp` on the GPU the same video run would take
+roughly 2 h 15 min and ~6 L40S-h.
+
 **Other runs of 15 Nov**: 512³ restarts lost to wild steps 7.7 L40S-h; cancelled 256³ attempts 2.3 L40S-h; 1024³
 full-node test 8817512 (timed out, section 18) 12 H200-h ≈ 8 kWh at rated power; dense-history video rerun 128³ /
 256³ / 512³ (0.4 + 2.8 + 9.3 L40S-h, the 256³ stage includes a 1.5 h wild-step stall) and renders 0.3 L40S-h;
