@@ -749,8 +749,9 @@ def main():
         if env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_helm_local':
             import design_optimizers
             assert mpi.size == 1, 'design_optimizers.py is serial'
-            result = design_optimizers.l_bfgs_bounded_precond(objective, x0, precond=helmholtz, bounds_lo=0.0,
-                                                              bounds_hi=1.0, callback=callback, disp=True, **options)
+            result = design_optimizers.l_bfgs_bounded_precond(
+                objective, x0, precond=helmholtz, bounds_lo=0.0, bounds_hi=1.0, callback=callback, disp=True,
+                gamma0=float(env('LBFGS_GAMMA0', 1.0)), cos_min=float(env('LBFGS_COS_MIN', 0.0)), **options)
         else:
             result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
                                                 precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)

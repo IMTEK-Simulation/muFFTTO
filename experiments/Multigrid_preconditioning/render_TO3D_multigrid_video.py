@@ -9,7 +9,8 @@ Adapted from experiments/dual_preconditioner/topology_optimization/render_TO3D_v
 Files: `_history.nc` of to3d_large.py (all frames; one every HISTORY_EVERY iterations) or `_checkpoint.nc` / `_final.nc`
 (one design; its objective is taken from OBJECTIVES). A history whose first frame is the interpolated design of the
 previous grid shows that frame too (it is the start of the stage).
-Environment: OUT (figures/TO3D_multigrid_video), TEST=1 (three stills instead of the video), TITLE, HISTORY_EVERY (50),
+Environment: OUT (figures/TO3D_multigrid_video), TEST=1 (three stills instead of the video), TITLE, HISTORY_EVERY (50; or a
+             comma list, one value per file, the last repeats, e.g. 2,2,5),
              OBJECTIVES="<file index>:<objective>,..." for single-design files, HOLD (video frames per design, 45).
 Runs headless on NEMO (VTK EGL) with ~/software/render-venv (pyvista, vtk, scikit-image, netCDF4, imageio-ffmpeg):
 sbatch_render_TO3D_multigrid.sh.
@@ -31,7 +32,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FILES = sys.argv[1:]
 OUT = os.environ.get('OUT', os.path.join(HERE, 'figures', 'TO3D_multigrid_video'))
 TEST = os.environ.get('TEST') == '1'
-EVERY = int(os.environ.get('HISTORY_EVERY', 50))
+EVERY_LIST = [int(v) for v in os.environ.get('HISTORY_EVERY', '50').split(',')]   # one per file, last one repeats
+EVERY_OF = lambda index: EVERY_LIST[min(index, len(EVERY_LIST) - 1)]
 HOLD = int(os.environ.get('HOLD', 45))
 GIVEN = {int(k): float(v) for k, v in (item.split(':') for item in os.environ.get('OBJECTIVES', '').split(',') if item)}
 W, H = 3600, 2024
@@ -50,6 +52,7 @@ for index, name in enumerate(FILES):
         n = field.shape[-1]
         if n != previous_grid:
             offset, grid_iteration, previous_grid = offset + grid_iteration, 0, n
+        EVERY = EVERY_OF(index)
         if 'objective' in data.variables:                               # history: frame k is iteration k * EVERY
             objectives = np.array(data['objective'][:])
             for k in range(field.shape[0]):

@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
 #SBATCH --time=03:00:00
-#SBATCH --exclude=g3606,g3608
+#SBATCH --exclude=g3606,g3608,g3610
 #SBATCH --output=/work/classic/fr_ml1145-muffto/runs/FABLE/logs/%x-%j.out
 set -e
 cd ~/software/muFFTTO_fable/experiments/Multigrid_preconditioning
