@@ -297,3 +297,25 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   interface penalty and nu agree between 64^2 and 128^2; eta = 2h -> a different problem per grid (nu -0.21, -0.27,
   -0.30 at 32^2, 64^2, 128^2). 256^2 runs on the laptop GPU (unit fable-meshindep-gpu) pending.
 - `fable_sync_nemo.sh` now excludes `data/nemo_fable` (it had started to upload the downloaded histories).
+
+## 2026-11-15 09:15  Opus 5.5 took over (Fable closed); cause of the wild L-BFGS steps found and fixed
+
+- Cause: after a (re)start the L-BFGS memory is empty and NuMPI uses H_0 = Helmholtz with scale 1, but the true
+  scale (gamma = s.y / y.H_0 y) is ~6e3 at 128^3 (grows with the grid). The first step is ~1e5x too small (128^3
+  restart: mean change 9e-8; 512^3: f change 4e-10), its curvature pair is CG noise (pair gamma 0.22 instead of
+  ~6e3; cos(s, y) 0.08 looks normal, so a cautious cos test does not catch it), and the next directions blow up
+  (mean change 0.11 at 128^3, 0.13 at 512^3). Afterwards the line search can fail completely (128^3: 40 halvings,
+  accepted step 1e-13, then the XTOL test ended the run after 4 iterations and 49 evaluations).
+- Test `plot_lbfgs_restart.py` -> `figures/lbfgs_restart_128.png`: 128^3 restart from the converged chain design,
+  logs `logs/fable/rst_<tag>_N128.log`: base 4 it / 49 evals (stuck); H_0 scale carried over (LBFGS_GAMMA0=6000,
+  local optimiser) 15 it / 22 evals, f 1.4165 -> 1.4077; first step capped at a largest change of 0.05 (local
+  `LBFGS_FIRST_STEP` and production NuMPI path) 15 it / 22 evals, identical iterates in both paths.
+- Fix `LBFGS_FIRST_STEP=<x>` in `to3d_large.py` (off by default): H_0 = c x Helmholtz with c fixed at the first
+  call so that the first step changes the design by at most x. NuMPI's gamma makes all later directions independent
+  of c. User approved it for the 1024^3 production: resubmitted as **8820336 + 8820337** (same settings as
+  8820095/96 + `LBFGS_FIRST_STEP=0.05`: `OPERATOR=fused MG_PRECISION=single HISTORY_EVERY=50 ENERGY_TOL=3e-4
+  STEP_GROWTH=20`, afterok the test 8817512); 8820095/96 cancelled. From-CH test and video jobs unchanged.
+- Note: the STEP_GROWTH guard needs 2 accepted steps, so it never caught a wild direction in iterations 2-3.
+- Video: renderer takes `HISTORY_EVERY=2,2,5` (one value per file). 128^3 dense preview (render job 8820289,
+  8 min, 250 designs): `figures/video/video_s0.3_N128_preview.mp4`. The video rerun 128^3 ended at MAXITER 500,
+  f 1.5007 (the fused chain run reached 1.412: a different path / local optimum).
