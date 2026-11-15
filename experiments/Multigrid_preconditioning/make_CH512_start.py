@@ -1,21 +1,21 @@
 """
-N^3 Cahn-Hilliard start for the TO whose interface is the TO's own (user, 2026-11-15: "512 Cahn-Hilliard geometry
-with the same interphase sharpness parameter", as the init guess of a 512^3 TO).
+Initial geometry for the TO from the Cahn-Hilliard evolution at N^3, with the TO's interface parameter
+(user, 2026-11-15: run the Cahn-Hilliard evolution equation with the same interface width to generate the start).
 
     dc/dt = Lap(c^3 - c - eps^2 Lap c), periodic, semi-implicit spectral steps with muFFTTO's FFT (discretization
     engine, GPU), discrete 7-point Laplacian symbol as in the Helmholtz H_0 of to3d_large.py.
 
-Geometry: the bi_s11 structure of the chain's start (data/CH3D/ch3d_bi_s11.npy: 128^3 Cahn-Hilliard, eps 0.02,
-black / white, 1 = stiff), nearest-neighbour upsampled to N^3, c = 1 - 2 rho. It is relaxed with
-eps = sqrt(2) eta, eta = ETA_H / N, so that the Cahn-Hilliard interface c = tanh(x / (sqrt(2) eps)) is exactly the
-TO's equilibrium profile rho = (1 + tanh(x / (2 eta))) / 2 of eta |grad rho|^2 + rho^2 (1 - rho)^2 / eta, for a time
-T = T_EPS2 eps^2 (default 10): the interfaces reach their profile, the structure does not coarsen (coarsening needs
-times ~ L^3 / eps, L ~ 0.2 the feature size). The chain's start (CH3D_start_bi_s11.nc) is the same structure blurred
-by 1.5 voxels at 128^3, i.e. ~6 voxels at 512^3 instead of the TO's 2.
+Same procedure as the 128^3 geometry bi_s11 of make_new_CH_geometries.py (random start c = 0.05 N(0, 1) around the
+mean 0, seed 11, time step 0.0625 eps^2, end time 250 eps^2), but on the N^3 grid and with eps from the TO:
+eps = EPS_ETA x eta, eta = ETA_H / N. Default EPS_ETA = sqrt(2): the Cahn-Hilliard interface
+c = tanh(x / (sqrt(2) eps)) is then exactly the TO's equilibrium profile rho = (1 + tanh(x / (2 eta))) / 2 of
+eta |grad rho|^2 + rho^2 (1 - rho)^2 / eta (same interface width). The structure size scales with eps, so at 512^3 it is
+~3.6x finer than bi_s11 (eps 0.02). Design rho = (1 - c) / 2 (rho = 1 stiff where c < 0, as bi_s11), no threshold.
 
-    DEVICE=gpu NPIX=512 python make_CH512_start.py   -> data/CH3D/CH<N>_start_bi_s11_eta<ETA_H>h.nc (INIT_FROM),
-                                                        figures/CH<N>_start_bi_s11_eta<ETA_H>h.png (mid slices)
-Env: NPIX (512), ETA_H (2), T_EPS2 (10), DT_EPS2 (0.03: dt = DT_EPS2 eps^2), DEVICE (gpu), OUT (output .nc path).
+    DEVICE=gpu NPIX=512 python make_CH512_start.py   -> data/CH3D/CH<N>_start_s11_eta<ETA_H>h.nc (or OUT), INIT_FROM
+                                                        figures/CH<N>_start_s11_eta<ETA_H>h.png (mid slice + zoom)
+Env: NPIX (512), ETA_H (2), EPS_ETA (sqrt 2), T_EPS2 (250: end time / eps^2), DT_EPS2 (0.0625), SEED (11),
+     DEVICE (gpu), OUT.
 """
 import os
 import sys
@@ -36,12 +36,13 @@ from muFFTTO.tensor_operations import to_host
 
 N = int(os.environ.get('NPIX', 512))
 ETA_H = float(os.environ.get('ETA_H', 2))
-T_EPS2, DT_EPS2 = float(os.environ.get('T_EPS2', 10)), float(os.environ.get('DT_EPS2', 0.03))
+T_EPS2, DT_EPS2 = float(os.environ.get('T_EPS2', 250)), float(os.environ.get('DT_EPS2', 0.0625))
+EPS_ETA, SEED = float(os.environ.get('EPS_ETA', np.sqrt(2))), int(os.environ.get('SEED', 11))
 DEVICE = os.environ.get('DEVICE', 'gpu')
 eta = ETA_H / N
-eps = np.sqrt(2) * eta
+eps = EPS_ETA * eta
 dt, steps = DT_EPS2 * eps ** 2, int(round(T_EPS2 / DT_EPS2))
-label = f'CH{N}_start_bi_s11_eta{ETA_H:g}h'
+label = f'CH{N}_start_s{SEED}_eta{ETA_H:g}h'
 out = Path(os.environ.get('OUT', HERE / 'data' / 'CH3D' / f'{label}.nc'))
 start_time = time.time()
 
@@ -60,15 +61,8 @@ neg_laplace = xp.asarray(sum(4 / h ** 2 * np.sin(np.pi * np.asarray(to_host(disc
 denominator = 1.0 + dt * eps ** 2 * neg_laplace ** 2
 normalisation = disc.fft.normalisation
 
-# ---- start: the 128^3 black / white bi_s11 structure, nearest-neighbour upsampled
-coarse = np.load(HERE / 'data' / 'CH3D' / 'ch3d_bi_s11.npy')                        # int8, 1 = stiff
-factor = N // coarse.shape[0]
-assert factor * coarse.shape[0] == N, (N, coarse.shape)
-rho0 = xp.asarray(coarse, dtype=float)
-for axis in range(3):
-    rho0 = xp.repeat(rho0, factor, axis=axis)
-c.s[0, 0] = 1.0 - 2.0 * rho0
-del rho0
+# ---- start: random noise around the mean 0 (as make_new_CH_geometries.py)
+c.s[0, 0] = xp.asarray(0.05 * np.random.default_rng(SEED).standard_normal((N,) * 3))
 print(f'{label}: N {N}, eta {eta:.5g} (= {ETA_H:g} h), eps {eps:.5g}, dt {dt:.3g}, {steps} steps to T {T_EPS2:g} eps^2, '
       f'stiff fraction {float(xp.mean(c.s[0, 0] < 0)):.4f}', flush=True)
 
@@ -93,31 +87,22 @@ rho = solution.s[0, 0]
 grey = float(xp.mean((rho > 0.1) & (rho < 0.9)))
 out.parent.mkdir(parents=True, exist_ok=True)
 io_utils.save_fields(str(out), [solution], attributes={
-    'description': f'Cahn-Hilliard start bi_s11 at {N}^3 with the TO interface (eps = sqrt(2) eta, eta = {ETA_H:g} h, '
-                   f'T = {T_EPS2:g} eps^2), make_CH512_start.py', 'eta': eta, 'ch_eps': eps})
+    'description': f'Cahn-Hilliard evolution at {N}^3 from noise (seed {SEED}) with the TO interface (eps = {EPS_ETA:.4g} '
+                   f'eta, eta = {ETA_H:g} h, T = {T_EPS2:g} eps^2), make_CH512_start.py', 'eta': eta, 'ch_eps': eps})
 print(f'saved {out}: stiff fraction (rho > 0.5) {float(xp.mean(rho > 0.5)):.4f}, mean rho {float(xp.mean(rho)):.4f}, '
       f'grey fraction (0.1 < rho < 0.9) {grey:.4f}, {time.time() - start_time:.0f} s', flush=True)
 
-# ---- mid slices: the chain's start (128^3, blurred, bilinearly interpolated in the slice) vs the new start
-old = np.asarray(io_utils.read_file(str(HERE / 'data' / 'CH3D' / 'CH3D_start_bi_s11.nc')).fields['phase_field_solution'][-1])
-nc = int(round(old.size ** (1 / 3)))
-old = old.reshape((nc,) * 3)[:, :, nc // 2]                 # the plane z = 1/2 (exactly a coarse plane)
-for axis in range(2):
-    position = np.arange(N) * (nc / N)
-    base = np.floor(position).astype(int)
-    fraction = (position - base).reshape([-1 if a == axis else 1 for a in range(2)])
-    old = np.take(old, base % nc, axis=axis) * (1 - fraction) + np.take(old, (base + 1) % nc, axis=axis) * fraction
+# ---- mid slice z = 1/2 and a zoom (exact pixels)
 new = to_host(rho[:, :, N // 2])
 zoom = slice(0, N // 4)
-fig, axes = plt.subplots(2, 2, figsize=(14, 14))
-for col, (image, name) in enumerate([(old, 'chain start: 128³ blurred, interpolated'),
-                                     (new, f'new: Cahn-Hilliard at {N}³, interface eta = {ETA_H:g}h')]):
-    axes[0, col].imshow(image.T, origin='lower', cmap='gray_r', vmin=0, vmax=1, interpolation='nearest')
-    axes[0, col].set_title(f'{name}\nz = 1/2, grey (0.1-0.9) {np.mean((image > 0.1) & (image < 0.9)):.3f}', fontsize=13)
-    axes[1, col].imshow(image[zoom, zoom].T, origin='lower', cmap='gray_r', vmin=0, vmax=1, interpolation='nearest')
-    axes[1, col].set_title('zoom: first quarter of the cell', fontsize=13)
-    for row in range(2):
-        axes[row, col].set_xticks([]), axes[row, col].set_yticks([])
+fig, axes = plt.subplots(1, 2, figsize=(14, 7.4))
+axes[0].imshow(new.T, origin='lower', cmap='gray_r', vmin=0, vmax=1, interpolation='nearest')
+axes[0].set_title(f'Cahn-Hilliard at {N}³, eps = {EPS_ETA:.3g} eta, eta = {ETA_H:g}h, T = {T_EPS2:g} eps²\n'
+                  f'z = 1/2, stiff {float(np.mean(new > 0.5)):.2f}, grey (0.1-0.9) {grey:.3f}', fontsize=13)
+axes[1].imshow(new[zoom, zoom].T, origin='lower', cmap='gray_r', vmin=0, vmax=1, interpolation='nearest')
+axes[1].set_title('zoom: first quarter of the cell', fontsize=13)
+for ax in axes:
+    ax.set_xticks([]), ax.set_yticks([])
 fig.tight_layout()
 figure = HERE / 'figures' / f'{label}.png'
 fig.savefig(figure, dpi=max(N // 7, 100))
