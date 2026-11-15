@@ -390,3 +390,34 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   LBFGS_DEVICE=gpu LBFGS_PAIRS=host LBFGS_FIRST_STEP=0.05 STEP_GROWTH=20 WARM_STORE=host MEM_REPORT=1`, start = 512^3
   checkpoint (it 370) -> logs/fable/test_xp_N1024_np8.log + peak GPU memory in logs/fable/peak.txt (NEMO clone).
   If 8826405 succeeds but its numbers look wrong: cancel 8826562 (and 8826537/38).
+
+## NIGHT PLAN 2026-11-15/16 (user asleep; act without asking within these limits)
+
+Fine CH start done (8826536, 9 min): `$WS/runs/FABLE/data/CH512_start_s11_eta2h.nc`, figures/CH512_start_s11_eta2h.png.
+Backup start (same equation and eps, coarsened to the feature size of bi_s11: T = 12000 eps^2, dt = 0.25 eps^2, stable
+and equal to dt 0.0625 at 128^3): job 8826573 -> `CH512_start_s11_eta2h_coarse.nc` (~2 h).
+Watcher: scratchpad night_watch.sh (polls every 5 min; exits on a state change, an error line, a log silent > 30 min,
+or every 3 h).
+
+A. 512^3 solver test 8826405 (lbfgs_xp GPU). Reference: prof512 8826308 (NuMPI, same start, same first-step fix):
+   f per iteration must agree to round-off for the first iterations; the gap between evaluations should be < 5 s.
+   - crash / bug: fix (reproduce at 64^3 / 128^3 on the laptop), resubmit the test and re-point the dependents
+     (8826562, 8826537/38 become DependencyNeverSatisfied: resubmit them with the new afterok).
+   - GPU out of memory (pairs on the device: 29.4 + ~13.7 GB of 48): resubmit with LBFGS_PAIRS=host (and dependents).
+   - wrong numbers: scontrol hold 8826562 8826537 8826538, investigate, report.
+B. 512^3 TO from the fine CH start (ch512evo_s0.3, 8826537/38).
+   - collapse to a uniform design (f -> misfit, interface penalty -> 0, energies settle; the 2D noise test showed this
+     for starts whose interface energy dominates): stop it and start the same TO from the backup start
+     (label ch512coarse_s0.3, same settings, 4 L40S, 2 x 24 h).
+   - hang on a wild trial (> 30 min without output) or ECC: cancel, add the node to EXCLUDE if ECC, resubmit; it
+     continues from its checkpoint (the first-step fix covers the restart).
+C. 1024^3 test 8826562 (8 H200, lbfgs_xp GPU, pairs on the host).
+   - passes (evaluations run, gap small, memory fits): note time per evaluation / iteration, GPU and host memory;
+     then queue the 1024^3 PRODUCTION (approved 14 Nov, cancelled only because the old test failed): 2 x 24 h,
+     8 H200, start = 512^3 checkpoint, `DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu LBFGS_PAIRS=host LBFGS_FIRST_STEP=0.05
+     STEP_GROWTH=20 ENERGY_TOL=3e-4 HISTORY_EVERY=50`, label aux_s0.3_xp.
+   - GPU out of memory: ONE retry with LBFGS_DEVICE=cpu (optimiser vectors on the host, BLAS version; GPU memory as
+     in the old test, which fitted).
+   - slow again outside the optimiser (e.g. material setup minutes): no more full-node jobs; analyse the log and the
+     memory report, report in the morning.
+D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (NuMPI + first-step fix) continues.
