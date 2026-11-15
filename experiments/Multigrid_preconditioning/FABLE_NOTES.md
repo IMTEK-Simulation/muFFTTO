@@ -421,3 +421,12 @@ C. 1024^3 test 8826562 (8 H200, lbfgs_xp GPU, pairs on the host).
    - slow again outside the optimiser (e.g. material setup minutes): no more full-node jobs; analyse the log and the
      memory report, report in the morning.
 D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (NuMPI + first-step fix) continues.
+
+## 2026-11-15 23:35 — from-CH 512³ test FINISHED (converged)
+- Run `fromCH_s0.3_fused` (start `CH3D_start_bi_s11.nc`, 128³ CH upsampled, directly at 512³, 4 L40S):
+  CONVERGENCE ENERGY_TOL 1e-3 at ITER 446 (~20 its in segment 1, which died on the g3610 ECC fault, then 426 in 8820185).
+- Wall: 1 h 49 + 0 h 18 + 0 h 02 (ECC/requeue segments, g3610) + 14 h 54 (8820185) = **17.1 h on 4 L40S (~68 L40S-h)**;
+  useful ~16.5 h. Last segment: 463 evaluations, CG mech 58749 / adjoint 110743, solves 35187 s, Helmholtz 1654 s.
+- Final f **1.2645** (misfit 0.0701) vs chain 512³ stage (video_s0.3, 56 its from 256³) f **1.1706** (misfit 0.0503).
+  Direct start at 512³ is ~8x more iterations, ~1.5x the whole chain's wall time, and a worse local optimum.
+- Final: `$WS/runs/FABLE/data/N512_soft0.001_eta0.00390625_energy_fromCH_s0.3_fused_final.nc`.
