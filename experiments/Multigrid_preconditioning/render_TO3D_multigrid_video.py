@@ -11,7 +11,8 @@ Files: `_history.nc` of to3d_large.py (all frames; one every HISTORY_EVERY itera
 previous grid shows that frame too (it is the start of the stage).
 Environment: OUT (figures/TO3D_multigrid_video), TEST=1 (three stills instead of the video), TITLE, HISTORY_EVERY (50; or a
              comma list, one value per file, the last repeats, e.g. 2,2,5),
-             OBJECTIVES="<file index>:<objective>,..." for single-design files, HOLD (video frames per design, 45).
+             OBJECTIVES="<file index>:<objective>,..." for single-design files, HOLD (video frames per design, 45;
+             or a comma list per file like HISTORY_EVERY).
 Runs headless on NEMO (VTK EGL) with ~/software/render-venv (pyvista, vtk, scikit-image, netCDF4, imageio-ffmpeg):
 sbatch_render_TO3D_multigrid.sh.
 """
@@ -34,7 +35,8 @@ OUT = os.environ.get('OUT', os.path.join(HERE, 'figures', 'TO3D_multigrid_video'
 TEST = os.environ.get('TEST') == '1'
 EVERY_LIST = [int(v) for v in os.environ.get('HISTORY_EVERY', '50').split(',')]   # one per file, last one repeats
 EVERY_OF = lambda index: EVERY_LIST[min(index, len(EVERY_LIST) - 1)]
-HOLD = int(os.environ.get('HOLD', 45))
+HOLD_LIST = [int(v) for v in os.environ.get('HOLD', '45').split(',')]                # one per file, last one repeats
+HOLD_OF = lambda name: HOLD_LIST[min(FILES.index(name), len(HOLD_LIST) - 1)]
 GIVEN = {int(k): float(v) for k, v in (item.split(':') for item in os.environ.get('OBJECTIVES', '').split(',') if item)}
 W, H = 3600, 2024
 FPS, TURN = 30, 360                                   # frames of the final full turn
@@ -161,7 +163,7 @@ writer.send(None)
 azimuth = AZIMUTH0
 for i, design in enumerate(designs):
     set_design(design)
-    for _ in range(HOLD):
+    for _ in range(HOLD_OF(design[0])):
         set_view(azimuth)
         image = compose(i)
         writer.send(image)
