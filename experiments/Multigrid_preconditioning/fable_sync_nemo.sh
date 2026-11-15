@@ -3,4 +3,5 @@
 cd "$(dirname "$0")/../.."
 rsync -a --exclude .git --exclude __pycache__ --exclude '.pytest_cache' --exclude 'experiments/*/logs' \
       --exclude 'experiments/*/figures' --exclude 'experiments/*/exp_data' --exclude 'experiments/dual_preconditioner' \
-      --exclude 'experiments/Multigrid_preconditioning/data/example_*' ./ nemo:software/muFFTTO_fable/
+      --exclude 'experiments/Multigrid_preconditioning/data/example_*' \
+      --exclude 'experiments/Multigrid_preconditioning/data/nemo_fable' ./ nemo:software/muFFTTO_fable/

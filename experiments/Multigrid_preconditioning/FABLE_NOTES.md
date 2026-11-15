@@ -274,3 +274,24 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   `data/CH3D/CH3D_start_bi_s11.nc` (the 128^3 CH field the chain started from), `MAXITER=100000 ENERGY_TOL=1e-3`,
   4 L40S, jobs 8819707 + 8819708 (24 h each). Compare wall time / result with the chain 128 -> 256 -> 512.
 - Local copy of the 512^3 design at iteration 370: `data/nemo_fable/N512_aux_s0.3_fused_checkpoint_it0616.nc` (muEye).
+
+## 2026-11-15 08:15  wild L-BFGS trial designs (the "hang"), STEP_GROWTH guard, video, mesh-independence check
+
+- The 512^3 restarts (8819699, 8819700) "hung" at evaluation 5: a line-search trial design with MEAN change 0.13 from
+  the accepted design (normal accepted steps on the plateau: 2e-5); its solves take 130-320 CG iterations instead of
+  ~10. Seen via the new `TRIAL design` line. Also hit by the from-CH test at iteration 29 (old code), and it explains
+  why the first 512^3 segment averaged 67 s per evaluation instead of 35 s.
+- Guards in `to3d_large.py` (off by default): `MAX_STEP` (absolute mean change) and `STEP_GROWTH` (mean change >
+  STEP_GROWTH x largest of the last 10 accepted steps): rejected without solving, the line search halves the step.
+  MAX_STEP=0.05 alone was too loose on the plateau (job 8819947: still ~10 slow evaluations per iteration).
+- User: "current 512 is sufficient as an init solution". 512^3 stage ended at the checkpoint of iteration 370
+  (f 1.0822); 1024^3 = 8820095 + 8820096 (`ENERGY_TOL=3e-4 STEP_GROWTH=20`, start = that checkpoint, afterok the
+  full-node test 8817512). All older 512^3 / 1024^3 production jobs are cancelled.
+- From-CH 512^3 test restarted with the guard: 8820101 + 8820102 (`fromCH_s0.3_fused`, continues from its checkpoint
+  of iteration 20; the first attempt 8819707 spent 58 min on 28 iterations and then stalled). Wall time = sum of logs.
+- Video 128^3 -> 256^3 -> 512^3: `render_TO3D_multigrid_video.py` + `sbatch_render_TO3D_multigrid.sh` (NEMO,
+  ~/software/render-venv), result `figures/video/aux_s0.3_grids.mp4` (NEMO: `$WS/runs/FABLE/video/`).
+- 2D mesh-independence check (`run_mesh_independence_2D.sh`, `plot_mesh_independence_2D.py`): fixed eta -> objective,
+  interface penalty and nu agree between 64^2 and 128^2; eta = 2h -> a different problem per grid (nu -0.21, -0.27,
+  -0.30 at 32^2, 64^2, 128^2). 256^2 runs on the laptop GPU (unit fable-meshindep-gpu) pending.
+- `fable_sync_nemo.sh` now excludes `data/nemo_fable` (it had started to upload the downloaded histories).
