@@ -46,6 +46,17 @@ and new here:
                    starts are rebuilt); <output>_final.nc is written when the optimizer stops (converged / MAXITER)
     TIME_BUDGET    seconds; after this wall time the run writes a checkpoint and ends cleanly (exit 0, no final file)
                    so that the next job of a chain continues it (set it below the job's time limit)
+    ENERGY_TOL     stop when the homogenised energies of the objective have settled: every W_k changed by less
+                   than ENERGY_TOL |W*_k| over the last FTOL_WINDOW (default 10) iterations; 0 (default) = off.
+                   The stiffness is then final although the interface penalty still reshapes the design
+                   (2D prototype stop_criterion_2D.py: 1e-3 after ~20 % of a full run with nu within 0.005 of the
+                   final value -- enough before handing the design to a finer grid; 3e-4 after ~40-50 % with the
+                   design itself within 1-3 % of the final one). OBJECTIVE=stress: the stress components instead
+    FTOL           stop when the objective decreased by less than FTOL (relative) over the last FTOL_WINDOW
+                   (default 10) iterations; 0 (default) = off. The design then no longer changes in a way that
+                   matters for the objective, long before the step test (largest change of rho < 1e-3) fires
+    MISFIT_TOL     stop when the stiffness part of the objective (the summed squared relative misfits of the
+                   target energies or stresses) is below this value; 0 (default) = off
     HELMHOLTZ      fft | cg: how the Helmholtz initial inverse Hessian of L-BFGS is applied (default fft on one
                    rank, cg under MPI)
     MEM_REPORT=1   print the memory table (fable_memory.py) at the end
@@ -77,6 +88,10 @@ def unit_strain(i, j):
     E = np.zeros((3, 3))
     E[i, j] = E[j, i] = 1.0 if i == j else 0.5
     return E
+
+
+class Converged(Exception):
+    """raised by the iteration callback when a stopping test on the objective is met (FTOL, MISFIT_TOL)"""
 
 
 class TimeBudgetReached(Exception):
@@ -357,9 +372,12 @@ class TopologyOptimization:
                   + ', '.join(f'{stage} {seconds:.1f} s' for stage, seconds in self.mg.setup_seconds.items()), flush=True)
 
         f = self.phase_field_term()                       # writes self.sensitivity
+        self.interface_term = f
+        self.stiffness_measures = []          # homogenised energies (stresses) relative to their targets, this design
         self.quad_sensitivity.s[...] = 0.0
         for load_case in self.load_cases:
             f += self.load_case_term(*load_case)
+        self.misfit = f - self.interface_term             # the stiffness part of the objective (all load cases)
 
         # chain rule through s(rho_q) and the interpolation: N^T W [ ds/drho_q * (accumulated contractions) ]
         t_sens = time.time()
@@ -412,6 +430,10 @@ class TopologyOptimization:
 
         stress = self.homogenized_stress(u, E)
         self.homogenized_stresses[lc] = stress
+        if self.objective == 'energy':        # W_k / |W*_k| of the energy terms of this load case
+            self.stiffness_measures += [float(np.sum(E_k * stress)) / abs(W_k) for E_k, W_k, _ in energy_terms]
+        else:                                 # stress components relative to the size of the target stress
+            self.stiffness_measures += list(stress.ravel() / np.linalg.norm(self.target_stresses[lc]))
 
         # objective of the load case and D = d f / d Sigma_h * (-V / 2w): the "stress difference" driving the adjoint
         difference = self.target_stresses[lc] - stress
@@ -632,13 +654,16 @@ def main():
     history_name = output + ('_history.nc' if iterations_done == 0 else f'_history_from{iterations_done}.nc')
     history = io_utils.FieldWriter(history_name, [iterate], attributes=parameters, frame_variables={
         'objective': (), 'volume_fraction': (), 'nb_evaluations': ()}) if history_every > 0 else None
-    state = {'iteration': iterations_done, 'f': np.nan}
+    state = {'iteration': iterations_done, 'f': np.nan, 'misfit': np.nan, 'x': None, 'history': [], 'measures': None,
+             'stiffness_history': []}
+    energy_tol = float(env('ENERGY_TOL', 0))
     time_budget = float(env('TIME_BUDGET', 0))
+    ftol, ftol_window, misfit_tol = float(env('FTOL', 0)), int(env('FTOL_WINDOW', 10)), float(env('MISFIT_TOL', 0))
 
     def objective(x):
         t = time.time()
         f, gradient = to.evaluate(x)
-        state['f'] = f
+        state['f'], state['misfit'], state['measures'] = f, to.misfit, np.array(to.stiffness_measures)
         if rank0:
             print(f'EVAL {to.nb_evaluations} f {float(f):.12e} wall {time.time() - start_time:.2f} '
                   f'eval {time.time() - t:.2f} s', flush=True)
@@ -661,6 +686,28 @@ def main():
                 os.replace(output + '_checkpoint_new.nc', output + '_checkpoint.nc')
         if out_of_time:
             raise TimeBudgetReached
+        # stopping tests on the objective (the optimizers evaluate the accepted iterate last, so state holds its values)
+        history_f = state['history']
+        history_f.append(state['f'])
+        decrease = (history_f[-1 - ftol_window] - history_f[-1]) / abs(history_f[-1]) if len(history_f) > ftol_window \
+            else np.inf
+        stiffness = state['stiffness_history']
+        stiffness.append(state['measures'])
+        settled = float(np.abs(stiffness[-1] - stiffness[-1 - ftol_window]).max()) if len(stiffness) > ftol_window \
+            else np.inf
+        if rank0:
+            print(f'ITER {it} f {state["f"]:.8e} stiffness misfit {state["misfit"]:.6e}; over {ftol_window} iterations: '
+                  f'relative decrease of f {decrease:.2e}, largest change of an energy / target {settled:.2e}',
+                  flush=True)
+        reason = (f'ENERGY_TOL: energies changed by {settled:.2e} < {energy_tol:g} of their targets over {ftol_window} '
+                  f'iterations' if energy_tol > 0 and settled < energy_tol else
+                  f'FTOL: relative decrease {decrease:.2e} < {ftol:g} over {ftol_window} iterations'
+                  if ftol > 0 and decrease < ftol else
+                  f'MISFIT_TOL: stiffness misfit {state["misfit"]:.3e} < {misfit_tol:g}'
+                  if misfit_tol > 0 and state['misfit'] < misfit_tol else None)
+        if reason is not None:
+            state['x'] = np.array(x, dtype=float).ravel()
+            raise Converged(reason)
 
     # ---- optimisation
     profiler = None
@@ -679,6 +726,10 @@ def main():
         else:
             result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
                                                 precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)
+    except Converged as stop:
+        from types import SimpleNamespace
+        result = SimpleNamespace(x=state['x'], success=True, nit=state['iteration'] - iterations_done,
+                                 message=f'CONVERGENCE: {stop}')
     except TimeBudgetReached:
         if history is not None:
             history.close()
