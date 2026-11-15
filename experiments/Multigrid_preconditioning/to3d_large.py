@@ -44,6 +44,10 @@ and new here:
     MAX_STEP       > 0: a trial design of the line search whose MEAN change from the last accepted design exceeds
                    this is rejected without solving (the line search halves the step). Guards against a wild
                    L-BFGS direction on the plateau, whose trial design costs a very long CG solve. 0 (default): off.
+    STEP_GROWTH    > 0: the same, relative: a trial design is rejected if its mean change exceeds STEP_GROWTH x the
+                   largest mean change of the last 10 accepted steps (needs 2 accepted steps). Observed at 512^3 on
+                   the plateau after a restart: accepted steps 2e-5, then a trial of 1.3e-1 whose solves took
+                   150-300 CG iterations instead of 10 (2026-11-15). 0 (default): off.
                    Every evaluation prints the max and mean change of its trial design ("TRIAL design").
     CHECKPOINT_EVERY   write <output>_checkpoint.nc (the current design) every n iterations. A run that finds its
                    own checkpoint continues from it (iteration count carried on; the L-BFGS memory and the warm
@@ -661,7 +665,8 @@ def main():
     state = {'iteration': iterations_done, 'f': np.nan, 'misfit': np.nan, 'x': None, 'history': [], 'measures': None,
              'stiffness_history': []}
     state['accepted'] = None
-    max_step = float(env('MAX_STEP', 0))
+    state['steps'], state['trial_mean'] = [], None
+    max_step, step_growth = float(env('MAX_STEP', 0)), float(env('STEP_GROWTH', 0))
     energy_tol = float(env('ENERGY_TOL', 0))
     time_budget = float(env('TIME_BUDGET', 0))
     ftol, ftol_window, misfit_tol = float(env('FTOL', 0)), int(env('FTOL_WINDOW', 10)), float(env('MISFIT_TOL', 0))
@@ -672,10 +677,14 @@ def main():
             change = np.abs(np.asarray(x, dtype=float).ravel() - state['accepted'])
             largest = mpi.allreduce(float(change.max()), op=MPI.MAX)
             mean = mpi.allreduce(float(change.sum())) / n_pix ** 3
-            rejected = max_step > 0 and mean > max_step
+            recent = state['steps'][-10:]                  # mean changes of the last accepted steps
+            limit = min(max_step if max_step > 0 else np.inf,
+                        step_growth * max(recent) if step_growth > 0 and len(recent) >= 2 else np.inf)
+            rejected = mean > limit
+            state['trial_mean'] = mean
             if rank0:
                 print(f'TRIAL design: change from the last accepted design max {largest:.3e}, mean {mean:.3e}'
-                      + (f' > MAX_STEP {max_step:g}: rejected without solving' if rejected else ''), flush=True)
+                      + (f' > limit {limit:.3e}: rejected without solving' if rejected else ''), flush=True)
             if rejected:                                  # the line search halves the step
                 return np.inf, np.zeros_like(np.asarray(x, dtype=float))
         f, gradient = to.evaluate(x)
@@ -688,6 +697,8 @@ def main():
     def callback(x):
         state['iteration'] += 1
         state['accepted'] = np.array(x, dtype=float).ravel()
+        if state['trial_mean'] is not None and state['trial_mean'] > 0:
+            state['steps'].append(state['trial_mean'])    # the trial evaluated last is the accepted one
         it = state['iteration']
         write_history = history is not None and (it - 1) % history_every == 0
         out_of_time = time_budget > 0 and time.time() - start_time > time_budget
