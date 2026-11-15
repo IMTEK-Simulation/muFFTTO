@@ -407,8 +407,8 @@ class TopologyOptimization:
             self.timing['symmetry'] += time.time() - t_symmetry
         self.timing['sensitivity'] += time.time() - t_sens
         self.nb_evaluations += 1
-        if self.gradient_on_device:                       # DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu: no host round trip
-            return f, self.sensitivity.s[0, 0].reshape(-1).copy()
+        if self.gradient_on_device:                       # DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu: a VIEW of the
+            return f, self.sensitivity.s[0, 0].reshape(-1)  # sensitivity field (lbfgs_xp copies it at once)
         return f, to_host(self.sensitivity.s[0, 0]).reshape(-1)
 
     def phase_field_term(self):
@@ -619,14 +619,18 @@ def main():
                           ** 2 for a in range(3))
         helm_symbol = xp.asarray(disc.fft.normalisation / (1.0 + helm_c * eta ** 2 * neg_laplace))
 
-        def helmholtz(v):
+        def helmholtz(v, out=None):
             start = time.time()
             to.nodal_scratch.s[0, 0] = xp.asarray(v).reshape(to.nodal_scratch.s.shape[2:])
             disc.fft.fft(to.nodal_scratch, helm_hat)
             helm_hat.s[0, 0] *= helm_symbol
             disc.fft.ifft(helm_hat, to.nodal_scratch)
-            result = (to.nodal_scratch.s[0, 0].ravel().copy() if device_vectors
-                      else to_host(to.nodal_scratch.s[0, 0]).ravel())
+            if out is not None:                            # lbfgs_xp: straight into the optimiser's vector
+                out.reshape(to.nodal_scratch.s.shape[2:])[...] = to.nodal_scratch.s[0, 0]
+                result = out
+            else:
+                result = (to.nodal_scratch.s[0, 0].ravel().copy() if device_vectors
+                          else to_host(to.nodal_scratch.s[0, 0]).ravel())
             seconds['helmholtz'] += time.time() - start
             return result
     else:
@@ -641,7 +645,7 @@ def main():
         z, r, p, Ap = to.nodal_scratch, to.rho, to.sensitivity, disc.get_scalar_field(name='phase_field_iterate')
         dot = lambda u, w: to.comm.sum(np.float64(float(linalg.vecdot(u, w))))
 
-        def helmholtz(v):
+        def helmholtz(v, out=None):
             start = time.time()
             r.s[0, 0] = xp.asarray(v).reshape(r.s.shape[2:])
             linalg.copy(r, p)
@@ -659,7 +663,11 @@ def main():
                 rr_new = dot(r, r)
                 linalg.axpby(1.0, r, rr_new / rr, p)
                 rr = rr_new
-            result = z.s[0, 0].ravel().copy() if device_vectors else to_host(z.s[0, 0]).ravel()
+            if out is not None:                            # lbfgs_xp: straight into the optimiser's vector
+                out.reshape(z.s.shape[2:])[...] = z.s[0, 0]
+                result = out
+            else:
+                result = z.s[0, 0].ravel().copy() if device_vectors else to_host(z.s[0, 0]).ravel()
             seconds['helmholtz'] += time.time() - start
             return result
 
@@ -671,15 +679,16 @@ def main():
     if first_step > 0 and env('DESIGN_OPT', 'lbfgs_helm') != 'lbfgs_helm_local':
         helmholtz_unscaled, h0_scale = helmholtz, {}
 
-        def helmholtz(v):
-            z = helmholtz_unscaled(v)
+        def helmholtz(v, out=None):
+            z = helmholtz_unscaled(v, out=out)
             if 'c' not in h0_scale:
                 largest = mpi.allreduce(float(abs(z).max()), op=MPI.MAX)
                 h0_scale['c'] = first_step / largest if largest > 0 else 1.0
                 if rank0:
                     print(f'LBFGS_FIRST_STEP: H_0 = {h0_scale["c"]:.3e} x Helmholtz (first step changes the design by '
                           f'at most {first_step:g})', flush=True)
-            return h0_scale['c'] * z
+            z *= h0_scale['c']
+            return z
 
     # ---- output: history (every HISTORY_EVERY-th iterate), checkpoint, evaluation log
     parameters = {'nb_of_pixels': (n_pix,) * 3, 'domain_size': [1, 1, 1], 'domain_lengths': [1.0, 1.0, 1.0],
@@ -789,9 +798,14 @@ def main():
         elif env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_xp':
             import lbfgs_xp
             from types import SimpleNamespace
+            allocate = None
+            if device_vectors:                            # the optimiser's vectors are muGrid fields on the GPU
+                import muGrid
+                lbfgs_fields = muGrid.GlobalFieldCollection([int(x0.size)], device='cuda')
+                allocate = lambda name: lbfgs_fields.real_field(name).p.reshape(-1)
             result = SimpleNamespace(**lbfgs_xp.l_bfgs_bounded_xp(
                 objective, x0, bounds_lo=0.0, bounds_hi=1.0, precond=helmholtz, comm=mpi, callback=callback,
-                disp=True, pair_store=env('LBFGS_PAIRS', 'device'), **options))
+                disp=True, pair_store=env('LBFGS_PAIRS', 'device'), allocate=allocate, **options))
             lbfgs_seconds.update(result.timing)
         else:
             result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
