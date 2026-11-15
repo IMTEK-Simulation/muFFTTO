@@ -430,3 +430,9 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
 - Final f **1.2645** (misfit 0.0701) vs chain 512³ stage (video_s0.3, 56 its from 256³) f **1.1706** (misfit 0.0503).
   Direct start at 512³ is ~8x more iterations, ~1.5x the whole chain's wall time, and a worse local optimum.
 - Final: `$WS/runs/FABLE/data/N512_soft0.001_eta0.00390625_energy_fromCH_s0.3_fused_final.nc`.
+
+## 2026-11-15 23:56 — 512³ lbfgs_xp test PASSED (8826405 vs NuMPI 8826308, same start, 12 its, 4 L40S)
+- f identical to all printed digits at ITER 1-12 (1.08218563 -> 1.08201850), same CG counts (mech 1056, adjoint 1256), 17 evals.
+- Wall 595.5 s vs 678.0 s; mean gap between evaluations after accepted steps 3.3 s vs 9.0 s;
+  L-BFGS vector work 37.8 s total of which Helmholtz (cg) 36.6 s -> pure L-BFGS vector work ~0.1 s/iteration on GPU.
+- Dependents released: ch512evo_s0.3 (8826537) RUNNING on g3611 since 23:54; 1024³ test 8826562 pending (Resources).
