@@ -342,3 +342,25 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   256 / 512 / 1024 vs misfit ~40; a smooth but GREY start still pays W(rho) / eta ~ N). Once it dominates the
   misfit, the optimiser removes it by making the design uniform. Not an L-BFGS problem. Remedies to test: a
   near-binary start (thresholded smooth noise / CH), eta continuation, or the grid chain (what production does).
+
+## 2026-11-15 21:30  where the time between evaluations goes; lbfgs_xp.py (CPU / GPU L-BFGS)
+
+- 512^3 on 4 L40S: ~37 s between two evaluations after every ACCEPTED step (0 s after a rejected trial), i.e. ~40 %
+  of the wall time (TOTAL of the video 512^3 run: 8363 s wall, solves + MG setup + sensitivity + Helmholtz 4635 s).
+  Cause: NuMPI's L-BFGS works on host numpy arrays (temporaries in every inner product, masks, copies). Laptop
+  benchmark at 33.5 M values (= 512^3 / 4 ranks): 12 s per iteration with a full memory (two-loop 3.9 s).
+  At 1024^3 / 8 ranks (4x per rank, 8 ranks on one node's memory bandwidth, H200 host erratically slow - cf. the
+  start-interpolation stall of 14 Nov) this became ~2500 s in iteration 1 -> the 1024^3 test timed out.
+- `lbfgs_xp.py` (experiment-local): NuMPI's l_bfgs_bounded with precond, same algorithm, for numpy (CPU, MPI) or
+  cupy (everything on the GPU). Fixed memory: all vectors allocated once (on the GPU as muGrid fields of a
+  GlobalFieldCollection([n_local], device='cuda'), user's suggestion), in-place updates, BLAS / cuBLAS dots;
+  LBFGS_PAIRS=host keeps the 2 x 20 pair vectors in pinned host memory (streamed; for 1024^3 on H200).
+  Checks: reduction='sum' reproduces NuMPI bitwise (synthetic box problem, 465 evaluations); fast mode agrees to
+  12 digits until a near-tie; 64^3 TO: NuMPI / xp cpu / xp gpu (muGrid fields) / xp gpu + host pairs give the same
+  f at iterations 1/10/20/30 and the same CG counts. Vector work per iteration at 33.5 M values (laptop): NuMPI ~11 s,
+  xp CPU ~5 s, xp GPU ~0.3 s (device pairs) / ~0.9 s (host pairs).
+  Use: `DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu [LBFGS_PAIRS=host]`. 512^3 test on 4 L40S: job 8826405 (label xp512,
+  12 iterations from the 512^3 checkpoint); NuMPI profile for comparison: 8826308 (prof512, PROFILE=1).
+- Costs of the study (Slurm accounting): chain 128^3 (1 H200, 59.5 min) + 256^3 (1 L40S, 1 h 39) + 512^3 (4 L40S,
+  8 h 45) = 11 h 23 wall, ~1 H200-h + 36.6 L40S-h, <= 13.5 kWh GPU energy at TDP (NEMO records no energy).
+  Host memory (MaxRSS per rank): 3.9 / 18.6 / 77 GB; 1024^3 test 69 GB per rank after one iteration.
