@@ -3,7 +3,9 @@
 Task: `FABLE_BRIEF.md`. Worktree `/home/martin/PycharmProjects/muFFTTO_fable`, branch `fable/large-3d-to` (base 3a56b48),
 NEMO clone `~/software/muFFTTO_fable`, NEMO runs/logs `$WS/runs/FABLE/`, job names `FB_*`.
 
-## RESUME HERE (state 2026-11-14 ~20:15)
+## RESUME HERE: read `HANDOFF.md` first (state 2026-11-15 08:40); the text below is the older state
+
+## Older state (2026-11-14 ~20:15)
 
 User is away until the evening of 2026-11-14 and said: work on autonomously, keep the NEMO rules (own single-node jobs
 <= 24 h; ask before > 24 h, full-node 8-GPU production, deletions in `$WS`); use several GPUs and muGrid's features;

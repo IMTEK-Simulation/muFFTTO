@@ -78,7 +78,8 @@ The iteration count does not grow with N.
 Bound-constrained L-BFGS (NuMPI `l_bfgs_bounded`, memory 20, bounds [0, 1], projected Armijo line search) with the
 **Helmholtz initial inverse Hessian** H_0 = (I + c η² (−Δ_h))⁻¹, c = 4, Δ_h the 7-point Laplacian. On one GPU H_0 is
 applied by FFT; on several GPUs by CG on the stencil to a relative residual of 10⁻¹⁰ (same result to 2·10⁻¹²).
-Stop: largest change of ρ in an iteration below 10⁻³, or `MAXITER` (500).
+Stop: largest change of ρ in an iteration below 10⁻³, or `MAXITER` (500), or one of the optional tests of
+section 13.
 
 This is the only place where an FFT is used, and only in single-GPU runs.
 
@@ -87,7 +88,7 @@ This is the only place where an FFT is used, and only in single-GPU runs.
 A large run never starts from noise. Each grid starts from the converged design of the next coarser grid,
 interpolated trilinearly (`INIT_FROM`): 128³ → 256³ → 512³ → 1024³, the first from the 3D Cahn–Hilliard pattern
 `data/CH3D/CH3D_start_bi_s11.nc`. The interface width stays 2 voxels on every grid, so it halves in physical units
-from grid to grid.
+from grid to grid. What that means for the comparability of grids is in section 15.
 
 ## 7. What makes it fit and run fast
 
@@ -188,3 +189,72 @@ Poisson ratios and stiffness of a result (copy the `_final.nc` to the laptop fir
 - Fused kernel: gradient passes the finite-difference check (10⁻⁸); double- and single-precision multigrid give the
   same history (8·10⁻¹³) and iteration counts; 1 and 4 MPI ranks agree exactly.
 - Unit tests of the library: 205 passed.
+
+## 13. Stopping the design iteration on the energies (added 2026-11-15)
+
+The objective has two parts: the stiffness misfit (squared relative misfits of the homogenised energies) and the
+interface penalty. The stiffness settles long before the interfaces are clean, so a test on the energies stops much
+earlier than the step test. `ENERGY_TOL=<tol>` stops when every energy of the objective changed by less than tol of
+its target over the last 10 iterations (`FTOL_WINDOW`). Every iteration prints this measure (`ITER` line).
+Also available: `FTOL` (relative decrease of f over the window), `MISFIT_TOL` (absolute misfit). All off by default;
+with all off a run is unchanged.
+
+2D prototype (`stop_criterion_2D.py`, 128², 600 iterations, figure `figures/stop_criterion_2D.png`):
+
+| test | stops after (share of the full run) | state there |
+|---|---|---|
+| energies within 5-10 % of the target | 4-7 %, or never if the target is out of reach | design still diffuse: not usable |
+| energies settled to 10⁻³ | about 20 % | Poisson ratio within 0.005 of final, design 5-10 % from final |
+| energies settled to 3·10⁻⁴ | 40-50 % | design within 1-3 % of final |
+| step below 10⁻³ (old test) | 45-55 % | - |
+
+Used in production: 10⁻³ on grids that only feed the next grid, 3·10⁻⁴ on the final grid.
+
+## 14. Guard against wild line-search steps (added 2026-11-15)
+
+Observed at 512³: L-BFGS occasionally proposes a direction thousands of times larger than its recent steps (mean
+design change 0.13 after accepted steps of 2·10⁻⁵), typically right after a restart from a checkpoint. The trial
+design is then close to noise and its linear solves need 130-320 CG iterations instead of about 10, so a single
+evaluation takes many minutes. Every evaluation now prints the max and mean change of its trial design
+(`TRIAL design` line). Two guards, off by default:
+
+- `STEP_GROWTH=<g>`: reject a trial design whose mean change exceeds g × the largest mean change of the last 10
+  accepted steps (needs two accepted steps). Production uses 20.
+- `MAX_STEP=<x>`: the same with an absolute limit on the mean change.
+
+A rejected trial is not solved; the objective returns infinity and the line search halves the step. The cause in the
+optimiser (candidates: no curvature condition on the stored pairs, changing active set, gradient noise on the
+plateau) is not yet identified; `design_optimizers.py` prints diagnostics of every pair for that (`DESIGN_OPT=
+lbfgs_helm_local`, serial).
+
+## 15. Is the result mesh-size independent? (2D check, 2026-11-15)
+
+The interface penalty is normalised so that, once the interface is resolved, it equals w × interface area: its value
+does not depend on the grid. What depends on the grid is the interface width η = 2h, which sets the smallest feature.
+2D check (`run_mesh_independence_2D.sh`, `plot_mesh_independence_2D.py`; same start, 600 iterations; figures
+`figures/mesh_independence_2D.png` and `figures/mesh_independence_2D_interfaces.png`):
+
+| interface width | grid | nodes across | objective | misfit | interface penalty | Poisson ratio |
+|---|---|---|---|---|---|---|
+| 1/16 fixed | 64² | 4 | 1.131 | 0.266 | 0.866 | −0.216 |
+| 1/16 fixed | 128² | 8 | 1.113 | 0.249 | 0.864 | −0.220 |
+| 1/16 fixed | 256² | 16 | 1.108 | 0.244 | 0.864 | −0.221 |
+| 1/32 fixed | 64² | 2 | 0.873 | 0.035 | 0.839 | −0.270 |
+| 1/32 fixed | 128² | 4 | 0.859 | 0.030 | 0.830 | −0.279 |
+| 1/32 fixed | 256² | 8 | 0.855 | 0.029 | 0.827 | −0.281 |
+| 2h | 32² | 2 | 1.197 | 0.200 | 0.997 | −0.210 |
+| 2h | 64² | 2 | 0.873 | 0.035 | 0.839 | −0.270 |
+| 2h | 128² | 2 | 0.719 | 0.009 | 0.710 | −0.300 |
+| 2h | 256² | 2 | 0.682 | 0.003 | 0.679 | −0.316 |
+
+With a fixed physical η the result is mesh-independent (4 nodes across the interface are enough; 2 are
+under-resolved). With η = 2h every grid solves a different problem, and the thinner interface is what lets the
+design become more auxetic. In 3D `ETA_H=<η / h>` of `sbatch_TO3D_large.sh` chooses between the two.
+
+## 16. Video of a run through the grids
+
+`render_TO3D_multigrid_video.py` renders the solid of every stored design of a sequence of history / checkpoint
+files (different grids allowed), with the objective curve; `sbatch_render_TO3D_multigrid.sh` runs it headless on one
+L40S with `~/software/render-venv`. `TEST=1` writes three stills. A smooth video needs a dense history
+(`HISTORY_EVERY=2` at 128³ / 256³, 5 at 512³: a 512³ frame is about 1 GB).
+

@@ -108,6 +108,12 @@ def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, 
         r_new = _kkt_residual(grad_new, x_new, lo=bounds_lo, hi=bounds_hi)
         s, y = x_new - x, r_new - r
         sy = np.sum(s * y)
+        if disp:                                           # diagnostics of the curvature pair and of the direction
+            Hy = H0(y, mask)
+            print(f'L-BFGS pair it {it:4d}: cos(s, y) {sy / (np.linalg.norm(s) * np.linalg.norm(y) + 1e-300):+.3e}  '
+                  f'gamma = sy / yHy {sy / (np.sum(y * Hy) + 1e-300):+.3e}  mean|d| {np.mean(np.abs(d)):.3e}  '
+                  f'mean|s| {np.mean(np.abs(s)):.3e}  free nodes changed {int(np.sum(_free_mask(x_new, grad_new, bounds_lo, bounds_hi) != mask))}',
+                  flush=True)
         if sy > 1e-12 * (np.linalg.norm(s) * np.linalg.norm(y) + np.finfo(float).eps):
             S.insert(0, s.copy()); Y.insert(0, y.copy()); RHO.insert(0, 1.0 / sy)
             if len(S) > maxcor:
