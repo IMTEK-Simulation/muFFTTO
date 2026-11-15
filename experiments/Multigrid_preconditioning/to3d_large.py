@@ -39,7 +39,9 @@ and new here:
                    and gradient are projected. The homogenised stiffness is then cubic, and two load cases (xx
                    and xy) give the whole objective: 3x less work and state per evaluation
     DESIGN_OPT     lbfgs_helm (default; NuMPI L-BFGS with the Helmholtz H_0, MPI-capable) | lbfgs_helm_local
-                   (design_optimizers.py, serial; the optimizer of the baseline runs)
+                   (design_optimizers.py, serial; the optimizer of the baseline runs) | lbfgs_xp (lbfgs_xp.py: NuMPI's
+                   algorithm with in-place BLAS vector work, MPI-capable; LBFGS_DEVICE=gpu keeps all its vectors on
+                   the GPU, LBFGS_PAIRS=host then keeps the curvature pairs in pinned host memory, for 1024^3)
     OUT_DIR        output folder (default data/to3d_large)
     MAX_STEP       > 0: a trial design of the line search whose MEAN change from the last accepted design exceeds
                    this is rejected without solving (the line search halves the step). Guards against a wild
@@ -258,6 +260,7 @@ class TopologyOptimization:
                 name='hourglass_strain_of_one_component', components=(1, 4), sub_pt='quad_points')
         self.cg_iterations = {'mechanical': [], 'adjoint': []}
         self.timing = {'setup': 0.0, 'solve': 0.0, 'sensitivity': 0.0, 'symmetry': 0.0}
+        self.gradient_on_device = False
         self.nb_evaluations = 0
 
     # ------------------------------------------------------------------ small helpers
@@ -404,6 +407,8 @@ class TopologyOptimization:
             self.timing['symmetry'] += time.time() - t_symmetry
         self.timing['sensitivity'] += time.time() - t_sens
         self.nb_evaluations += 1
+        if self.gradient_on_device:                       # DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu: no host round trip
+            return f, self.sensitivity.s[0, 0].reshape(-1).copy()
         return f, to_host(self.sensitivity.s[0, 0]).reshape(-1)
 
     def phase_field_term(self):
@@ -591,6 +596,14 @@ def main():
         to.symmetrize(to.rho)
         start = to_host(to.rho.s[0, 0])
     x0 = np.ascontiguousarray(start, dtype=float).ravel()
+    # DESIGN_OPT=lbfgs_xp with LBFGS_DEVICE=gpu: iterate, gradient, preconditioned vectors and L-BFGS memory stay on
+    # the GPU (lbfgs_xp.py); vx is the namespace of the optimiser's vectors
+    device_vectors = env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_xp' and env('LBFGS_DEVICE', 'cpu') == 'gpu'
+    if device_vectors:
+        assert xp is not np, 'LBFGS_DEVICE=gpu needs DEVICE=gpu'
+        to.gradient_on_device = True
+        x0 = xp.asarray(x0)
+    vx = xp if device_vectors else np
 
     # ---- Helmholtz initial inverse Hessian (I + c eta^2 (-Lap_h))^-1, Lap_h: 7-point Laplacian
     #      HELMHOLTZ=fft: exact, by FFT (default on one rank); HELMHOLTZ=cg: conjugate gradients on the stencil to a
@@ -612,7 +625,8 @@ def main():
             disc.fft.fft(to.nodal_scratch, helm_hat)
             helm_hat.s[0, 0] *= helm_symbol
             disc.fft.ifft(helm_hat, to.nodal_scratch)
-            result = to_host(to.nodal_scratch.s[0, 0]).ravel()
+            result = (to.nodal_scratch.s[0, 0].ravel().copy() if device_vectors
+                      else to_host(to.nodal_scratch.s[0, 0]).ravel())
             seconds['helmholtz'] += time.time() - start
             return result
     else:
@@ -645,7 +659,7 @@ def main():
                 rr_new = dot(r, r)
                 linalg.axpby(1.0, r, rr_new / rr, p)
                 rr = rr_new
-            result = to_host(z.s[0, 0]).ravel()
+            result = z.s[0, 0].ravel().copy() if device_vectors else to_host(z.s[0, 0]).ravel()
             seconds['helmholtz'] += time.time() - start
             return result
 
@@ -660,7 +674,7 @@ def main():
         def helmholtz(v):
             z = helmholtz_unscaled(v)
             if 'c' not in h0_scale:
-                largest = mpi.allreduce(float(np.max(np.abs(z))), op=MPI.MAX)
+                largest = mpi.allreduce(float(abs(z).max()), op=MPI.MAX)
                 h0_scale['c'] = first_step / largest if largest > 0 else 1.0
                 if rank0:
                     print(f'LBFGS_FIRST_STEP: H_0 = {h0_scale["c"]:.3e} x Helmholtz (first step changes the design by '
@@ -692,7 +706,7 @@ def main():
     def objective(x):
         t = time.time()
         if state['accepted'] is not None:                 # how far is this trial design from the last accepted one?
-            change = np.abs(np.asarray(x, dtype=float).ravel() - state['accepted'])
+            change = abs(vx.asarray(x, dtype=float).ravel() - state['accepted'])
             largest = mpi.allreduce(float(change.max()), op=MPI.MAX)
             mean = mpi.allreduce(float(change.sum())) / n_pix ** 3
             recent = state['steps'][-10:]                  # mean changes of the last accepted steps
@@ -704,7 +718,7 @@ def main():
                 print(f'TRIAL design: change from the last accepted design max {largest:.3e}, mean {mean:.3e}'
                       + (f' > limit {limit:.3e}: rejected without solving' if rejected else ''), flush=True)
             if rejected:                                  # the line search halves the step
-                return np.inf, np.zeros_like(np.asarray(x, dtype=float))
+                return np.inf, vx.zeros_like(vx.asarray(x, dtype=float))
         f, gradient = to.evaluate(x)
         state['f'], state['misfit'], state['measures'] = f, to.misfit, np.array(to.stiffness_measures)
         if rank0:
@@ -714,7 +728,7 @@ def main():
 
     def callback(x):
         state['iteration'] += 1
-        state['accepted'] = np.array(x, dtype=float).ravel()
+        state['accepted'] = vx.array(x, dtype=float).ravel()
         if state['trial_mean'] is not None and state['trial_mean'] > 0:
             state['steps'].append(state['trial_mean'])    # the trial evaluated last is the accepted one
         it = state['iteration']
@@ -724,7 +738,7 @@ def main():
         if write_history or write_checkpoint:
             iterate.s[0, 0] = xp.asarray(x).reshape(iterate.s.shape[2:])
         if write_history:
-            history.write(objective=state['f'], volume_fraction=mpi.allreduce(float(np.sum(x))) / n_pix ** 3,
+            history.write(objective=state['f'], volume_fraction=mpi.allreduce(float(vx.sum(x))) / n_pix ** 3,
                           nb_evaluations=to.nb_evaluations)
         if write_checkpoint:
             io_utils.save_fields(output + '_checkpoint_new.nc', [iterate], attributes={**parameters, 'iteration': it})
@@ -752,7 +766,7 @@ def main():
                   f'MISFIT_TOL: stiffness misfit {state["misfit"]:.3e} < {misfit_tol:g}'
                   if misfit_tol > 0 and state['misfit'] < misfit_tol else None)
         if reason is not None:
-            state['x'] = np.array(x, dtype=float).ravel()
+            state['x'] = vx.array(x, dtype=float).ravel()
             raise Converged(reason)
 
     # ---- optimisation
@@ -761,6 +775,7 @@ def main():
         import cProfile
         profiler = cProfile.Profile()
         profiler.enable()
+    lbfgs_seconds = {}
     options = dict(gtol=float(env('GTOL', 0.0)), xtol=1e-3, maxiter=int(env('MAXITER', 500)) - iterations_done,
                    maxcor=20, c1=1e-4, max_halvings=40)
     try:
@@ -771,6 +786,13 @@ def main():
                 objective, x0, precond=helmholtz, bounds_lo=0.0, bounds_hi=1.0, callback=callback, disp=True,
                 gamma0=float(env('LBFGS_GAMMA0', 1.0)), cos_min=float(env('LBFGS_COS_MIN', 0.0)),
                 first_step=float(env('LBFGS_FIRST_STEP', 0.0)), **options)
+        elif env('DESIGN_OPT', 'lbfgs_helm') == 'lbfgs_xp':
+            import lbfgs_xp
+            from types import SimpleNamespace
+            result = SimpleNamespace(**lbfgs_xp.l_bfgs_bounded_xp(
+                objective, x0, bounds_lo=0.0, bounds_hi=1.0, precond=helmholtz, comm=mpi, callback=callback,
+                disp=True, pair_store=env('LBFGS_PAIRS', 'device'), **options))
+            lbfgs_seconds.update(result.timing)
         else:
             result = solvers_nonlinear.minimize(fun=objective, x0=x0, method='l_bfgs', bounds=(0.0, 1.0),
                                                 precond=helmholtz, comm=mpi, callback=callback, disp=True, **options)
@@ -809,7 +831,8 @@ def main():
               f'CG adjoint {sum(to.cg_iterations["adjoint"])}, evaluations {to.nb_evaluations}, '
               f'MG setup {to.timing["setup"]:.1f} s, solves {to.timing["solve"]:.1f} s (of which warm-start '
               f'transfers {to.warm.seconds:.1f} s), sensitivity {to.timing["sensitivity"]:.1f} s (of which symmetry '
-              f'{to.timing["symmetry"]:.1f} s), Helmholtz ({helmholtz_mode}) {seconds["helmholtz"]:.1f} s')
+              f'{to.timing["symmetry"]:.1f} s), Helmholtz ({helmholtz_mode}) {seconds["helmholtz"]:.1f} s'
+              + (f', L-BFGS vector work {lbfgs_seconds["optimizer"]:.1f} s (incl. Helmholtz)' if lbfgs_seconds else ''))
     if env('MEM_REPORT', '0') == '1' and rank0:
         import fable_memory
         owners = {'TO + MG level 0': disc}
