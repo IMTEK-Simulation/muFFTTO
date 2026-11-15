@@ -263,3 +263,14 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
 - 512^3 `aux_s0.3_fused` (job 8817830, 4 L40S, g3611, old code without ENERGY_TOL): 06:13 eval 467 / iteration 371,
   f 1.0822 (1.1142 @50, 1.0999 @200, 1.0871 @300, 1.0835 @400), ~35 s per evaluation, no errors. Time limit 21:31.
 - 1024^3 full-node test 8817512 still pending (Resources), estimated start 14:47 on 15 Nov.
+
+## 2026-11-15 06:20  production resubmitted with ENERGY_TOL (user: 1e-3 for 512^3, 3e-4 for 1024^3)
+
+- Cancelled 8817830 (512^3, at iteration 371, f 1.0822) and 8817831-33. Resubmitted, same label `aux_s0.3_fused`,
+  `OPERATOR=fused MG_PRECISION=single HISTORY_EVERY=50`:
+  512^3 `ENERGY_TOL=1e-3`: 8819699 (running, continued from the checkpoint of iteration 371), 8819700 (afterany);
+  1024^3 `ENERGY_TOL=3e-4`: 8819701, 8819702 (8 H200, 24 h each; afterok 8819700 AND the full-node test 8817512).
+- User's test "512^3 directly from a Cahn-Hilliard start, no iteration limit": label `fromCH_s0.3_fused`, start
+  `data/CH3D/CH3D_start_bi_s11.nc` (the 128^3 CH field the chain started from), `MAXITER=100000 ENERGY_TOL=1e-3`,
+  4 L40S, jobs 8819707 + 8819708 (24 h each). Compare wall time / result with the chain 128 -> 256 -> 512.
+- Local copy of the 512^3 design at iteration 370: `data/nemo_fable/N512_aux_s0.3_fused_checkpoint_it0616.nc` (muEye).
