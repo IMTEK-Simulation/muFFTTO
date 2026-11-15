@@ -364,3 +364,16 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
 - Costs of the study (Slurm accounting): chain 128^3 (1 H200, 59.5 min) + 256^3 (1 L40S, 1 h 39) + 512^3 (4 L40S,
   8 h 45) = 11 h 23 wall, ~1 H200-h + 36.6 L40S-h, <= 13.5 kWh GPU energy at TDP (NEMO records no energy).
   Host memory (MaxRSS per rank): 3.9 / 18.6 / 77 GB; 1024^3 test 69 GB per rank after one iteration.
+
+## 2026-11-15 22:30  512^3 TO from a 512^3 Cahn-Hilliard start with the TO's interface (user)
+
+- `make_CH512_start.py`: bi_s11 structure (128^3 black/white, as the chain's start), nearest-neighbour upsampled,
+  relaxed by Cahn-Hilliard at N^3 with eps = sqrt(2) eta (eta = 2h: the CH interface tanh(x / (sqrt(2) eps)) equals
+  the TO's equilibrium profile (1 + tanh(x / 2 eta)) / 2), T = 10 eps^2 (interfaces settle, no coarsening).
+  muFFTTO FFT on the GPU. 128^3 local test: 8 s, volume conserved (stiff 0.499), grey fraction 0.45 (wide 2h band
+  at 128^3), figure figures/CH128_start_bi_s11_eta2h.png.
+- NEMO: CH job 8826508 (1 L40S) -> `$WS/runs/FABLE/data/CH512_start_bi_s11_eta2h.nc`; TO 8826509 + 8826510 (label
+  `ch512sharp_s0.3`, 4 L40S, 2 x 24 h, afterok the CH job AND the lbfgs_xp test 8826405): `OPERATOR=fused
+  MG_PRECISION=single DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu LBFGS_FIRST_STEP=0.05 STEP_GROWTH=20 ENERGY_TOL=1e-3
+  MAXITER=100000 HISTORY_EVERY=50`. Purpose: wall time of a direct 512^3 optimisation from a sharp CH start
+  (compare: chain 11.4 h to f 1.082; blurred-CH direct run 8820185 f 1.333 after ~14.5 h).
