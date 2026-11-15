@@ -222,10 +222,17 @@ evaluation takes many minutes. Every evaluation now prints the max and mean chan
   accepted steps (needs two accepted steps). Production uses 20.
 - `MAX_STEP=<x>`: the same with an absolute limit on the mean change.
 
-A rejected trial is not solved; the objective returns infinity and the line search halves the step. The cause in the
-optimiser (candidates: no curvature condition on the stored pairs, changing active set, gradient noise on the
-plateau) is not yet identified; `design_optimizers.py` prints diagnostics of every pair for that (`DESIGN_OPT=
-lbfgs_helm_local`, serial).
+A rejected trial is not solved; the objective returns infinity and the line search halves the step.
+
+**Cause (found 2026-11-15).** After a (re)start the L-BFGS memory is empty and the first step uses H₀ = Helmholtz
+with scale 1, but the right scale (γ = s·y / y·H₀y) is ~6·10³ at 128³ and grows with the grid. The first step is then
+~10⁵ times too small, its curvature pair is CG noise (pair γ 0.22 instead of ~6·10³; cos(s, y) looks normal, so a
+cautious-update test does not catch it), and the next directions blow up. 128³ restart test
+(`plot_lbfgs_restart.py`, `figures/lbfgs_restart_128.png`): unfixed 4 iterations in 49 evaluations, then stuck;
+fixed 15 iterations in 22 evaluations. **Fix: `LBFGS_FIRST_STEP=<x>`** (0.05 in production): H₀ = c × Helmholtz
+with c chosen at the first call so that the first step changes the design by at most x. γ makes all later directions
+independent of c. Note that `STEP_GROWTH` needs two accepted steps, so it never catches a wild direction in
+iterations 2-3.
 
 ## 15. Is the result mesh-size independent? (2D check, 2026-11-15)
 
@@ -256,5 +263,66 @@ design become more auxetic. In 3D `ETA_H=<η / h>` of `sbatch_TO3D_large.sh` cho
 `render_TO3D_multigrid_video.py` renders the solid of every stored design of a sequence of history / checkpoint
 files (different grids allowed), with the objective curve; `sbatch_render_TO3D_multigrid.sh` runs it headless on one
 L40S with `~/software/render-venv`. `TEST=1` writes three stills. A smooth video needs a dense history
-(`HISTORY_EVERY=2` at 128³ / 256³, 5 at 512³: a 512³ frame is about 1 GB).
+(`HISTORY_EVERY=2` at 128³ / 256³, 5 at 512³: a 512³ frame is about 1 GB). `HISTORY_EVERY` and `HOLD` (video frames
+per design) accept one value per file, e.g. `HISTORY_EVERY=2,2,5 HOLD=3,3,8` (export them before `sbatch`: its
+`--export` splits at commas). Result: `figures/video/video_s0.3_smooth.mp4` (289 designs, 128³ → 256³ → 512³).
 
+
+## 17. What the runs cost: time, memory, energy (2026-11-15)
+
+Sources: Slurm accounting (`sacct -j <jobs> -o JobID,Partition,State,Elapsed,AllocTRES,MaxRSS,NodeList`), the run
+logs `$WS/runs/FABLE/TO3D_N<N>_<label>.log` (one `EVAL` line per evaluation with its time, one `load case` line per
+solve with the CG counts, the `TOTAL` line at the end) and `logs/fable/peak.txt` (GPU memory of the test runs).
+NEMO records no energy (`ConsumedEnergy` is 0), so energy is estimated from GPU-hours.
+
+**Production chain `aux_s0.3[_fused]`** (energy objective, ν* = −0.5, scale 0.3, 6 load cases, η = 2h)
+
+| grid | job | hardware | wall time | iterations | evaluations | CG iterations (mech + adj) | per evaluation | final f | stiffness misfit |
+|---|---|---|---|---|---|---|---|---|---|
+| 128³ | 8817007 | 1 H200 | 59.5 min | 500 | 545 | 86.9 k | 6.4 s | 1.412 | 0.167 |
+| 256³ | 8817470 | 1 L40S | 1 h 39 min | 229 | 290 | 47.0 k | 16.8 s | 1.188 | 0.085 |
+| 512³ | 8817830 | 4 L40S | 8 h 45 min | 373 | 470 | 84.4 k | 40.8 s | 1.082 | 0.054 |
+| total | | | 11 h 23 min | 1102 | 1305 | 218 k | | | |
+
+GPU time: ~1 H200-h + 36.6 L40S-h. About 16 CG iterations per solve on every grid (1024³ too). At 512³, 61 % of the
+wall time is evaluations and 39 % is outside them, mostly NuMPI's L-BFGS vector work on the host (section 18).
+
+**Memory**
+
+| grid | GPU memory (≈ 900 B per voxel all-in) | host memory per rank (MaxRSS) | design file |
+|---|---|---|---|
+| 128³ | 1.9 GB | 3.9 GB | 17 MB |
+| 256³ | 15 GB | 18.6 GB | 134 MB |
+| 512³ | 121 GB (4 × 29.4 GiB on L40S; 112 GiB on one H200) | ≤ 77 GB (4 ranks) | 1.07 GB |
+| 1024³ | ≈ 970 GB (8 × ≈ 121 GB on H200, estimate) | 69 GB after one iteration (test 8817512); + 43 GB per rank for 20 L-BFGS pairs on the host | 8.6 GB |
+
+**Energy** (GPUs only, at their rated power H200 700 W / L40S 350 W, i.e. an upper bound; a realistic load of ~60 %
+gives about 60 % of it; CPUs and node not included): chain ≤ 13.5 kWh.
+
+**Other runs of 15 Nov**: 512³ restarts lost to wild steps 7.7 L40S-h; cancelled 256³ attempts 2.3 L40S-h; 1024³
+full-node test 8817512 (timed out, section 18) 12 H200-h ≈ 8 kWh at rated power; dense-history video rerun 128³ /
+256³ / 512³ (0.4 + 2.8 + 9.3 L40S-h, the 256³ stage includes a 1.5 h wild-step stall) and renders 0.3 L40S-h;
+512³ directly from the Cahn-Hilliard start: ≈ 56 L40S-h and ≈ 14 h wall by 20:00, at f 1.37 / misfit 0.086, against
+f 1.082 / misfit 0.054 of the chain after 11.4 h: grid continuation is clearly cheaper.
+
+## 18. L-BFGS vector work on the GPU: `lbfgs_xp.py` (2026-11-15)
+
+Between two evaluations, after every accepted step, the 512³ runs on 4 L40S spend ~37 s (0 s after a rejected trial):
+NuMPI's L-BFGS works on host numpy arrays and allocates a temporary for every inner product (laptop, 33.5 M values =
+512³ / 4 ranks: ~11 s per iteration with a full memory). At 1024³ on 8 H200 (4× the data per rank, 8 ranks on one
+node's memory bandwidth, host side of the H200 nodes erratically slow) the first iteration took ~2500 s and the
+evaluation after it had a 303 s material setup; the full-node test timed out.
+
+`lbfgs_xp.py` is NuMPI's `l_bfgs_bounded` with `precond`, the same algorithm, for numpy (CPU, MPI reductions) or cupy
+arrays (everything on the GPU; only scalars go over PCIe / MPI). All vectors are allocated once (on the GPU as muGrid
+fields of a `GlobalFieldCollection([n_local], device='cuda')`), updates are in place, dots use BLAS / cuBLAS:
+fixed memory, nothing in the cupy pool. `LBFGS_PAIRS=host` keeps the 2 × 20 pair vectors in pinned host memory and
+streams them (for 1024³, where they do not fit on the H200 next to the solver).
+
+    DESIGN_OPT=lbfgs_xp LBFGS_DEVICE=gpu [LBFGS_PAIRS=host]
+
+Checks: with `reduction='sum'` (NuMPI's rounding) it reproduces NuMPI bitwise (synthetic box problem, 465
+evaluations); in the fast mode it agrees to 12 digits until a near-tie (slope ≈ 0) where round-off decides. 64³ TO:
+NuMPI, CPU, GPU (muGrid fields) and GPU with host pairs give the same objective at iterations 1/10/20/30 and the same
+CG counts. Vector work per iteration at 33.5 M values (laptop): NuMPI ~11 s, CPU ~5 s, GPU ~0.3 s (pairs on the
+device) / ~0.9 s (host pairs). 512³ check on 4 L40S: job 8826405 (pending at the time of writing).
