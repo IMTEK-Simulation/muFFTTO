@@ -385,3 +385,8 @@ gradient scratch 72, hourglass strain 96, design fields ~50 -> ~500 B/voxel + st
   `$WS/runs/FABLE/data/CH512_start_s11_eta2h.nc`; TO 8826537 + 8826538 (label `ch512evo_s0.3`, same settings as
   above, afterok 8826536 and 8826405). 8826509/10 cancelled; the relaxed file CH512_start_bi_s11_eta2h.nc (job
   8826508) is unused.
+- 1024^3 full-node test with lbfgs_xp (user: run it when the 512^3 test passes): job **8826562** (`FB_1024_test`,
+  8 H200, 2 h, afterok 8826405), `fable_run_TO_mpi.sh test_xp 1024 5` (MAXITER 5) with `DESIGN_OPT=lbfgs_xp
+  LBFGS_DEVICE=gpu LBFGS_PAIRS=host LBFGS_FIRST_STEP=0.05 STEP_GROWTH=20 WARM_STORE=host MEM_REPORT=1`, start = 512^3
+  checkpoint (it 370) -> logs/fable/test_xp_N1024_np8.log + peak GPU memory in logs/fable/peak.txt (NEMO clone).
+  If 8826405 succeeds but its numbers look wrong: cancel 8826562 (and 8826537/38).
