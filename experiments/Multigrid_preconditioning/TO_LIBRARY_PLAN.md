@@ -17,9 +17,9 @@ each piece belongs. Status: ✔ exists there, ◐ prototype in muFFTTO/experimen
 
 | # | Piece | Where it is now | Status |
 |---|---|---|---|
-| N1 | Bounded L-BFGS with a preconditioned initial inverse Hessian (`precond=`, H0 = P M P) | NuMPI `feat/tr_precond` commit 6561d66 (local + NEMO, **not pushed**) | ◐ → PR |
+| N1 | Bounded L-BFGS with a preconditioned initial inverse Hessian (`precond=`, H0 = P M P) | PR https://github.com/muSpectre/NuMPI/pull/112 (branch `enh/lbfgs-precond`, worktree `NuMPI_pr`; incl. docs, CI green 2026-11-16) | ◐ PR open, awaiting review/merge |
 | N2 | Restart fix: tiny first step after a restart, then a ~5000x too large step (carry γ across restarts or cautious pair test) | finding in `muFFTTO_fable/.../HANDOFF.md` | ✘ (test experiment-locally first) |
-| N3 | Array-module agnostic L-BFGS (numpy or CuPy, device buffers, fixed memory) — host vector work was ~2500 s per iteration at 1024³ | Fable's `lbfgs_xp.py` | ✘ |
+| N3 | GPU L-BFGS — decided 2026-11-16: in **muGrid**, not NuMPI (brief `MUGRID_LBFGS_BRIEF.md`) | Fable's `lbfgs_xp.py` | ✘ |
 | N4 | MPI reductions with device arrays on non-CUDA-aware MPI (reduce on device, then host Allreduce) | Fable's driver | ✘ (with N3) |
 
 ## muTopOpt — the TO formulation and driver
@@ -35,6 +35,11 @@ each piece belongs. Status: ✔ exists there, ◐ prototype in muFFTTO/experimen
 | T7 | Memory diet: warm starts on host or in float32, one load case on the GPU at a time (512³ on one H200 at ~0.9 KiB/voxel) | Fable's driver | ✘ |
 | T8 | Multi-GPU MPI run on one 8×H200 node, checkpoint/restart within the 2-day limit | Fable's sbatch scripts | ◐ |
 | T9 | Optional: cubic design symmetry (2 load cases) — numerically correct, but gave non-auxetic designs | Fable's `cubic_symmetry.py` | optional |
+
+## Briefs for separate Claude sessions (2026-11-16)
+- `MUGRID_PORT_BRIEF.md`: multigrid, element-free, guaranteed λmax bound (clone `muGrid_mg`)
+- `MUGRID_CG_HG_BRIEF.md`: energy-error CG + one-point hexahedron with hourglass control (clone `muGrid_cghg`)
+- `MUGRID_LBFGS_BRIEF.md`: bounded preconditioned L-BFGS (clone `muGrid_lbfgs`)
 
 ## Order
 
