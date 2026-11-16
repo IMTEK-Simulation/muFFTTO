@@ -41,8 +41,8 @@ handling; do not port the element-specific coarsening as the core.
 - Above b, p grows fast, so modes with eigenvalue above b are **amplified**, not damped. Measured for degree 2:
   |p| stays ≤ 1 only up to 1.033 b; it is 5.7 at 1.5 b and 13.9 at 2 b, and V(2,2) applies it twice per level. The
   cycle then stops being positive definite, and CG breaks down or needs thousands of iterations.
-- Overestimating b is harmless: the smoother only gets a little less effective. Hence the safety factor 1.1, or
-  better a guaranteed bound.
+- Overestimating b is harmless: the smoother only gets a little less effective. Underestimating it is dangerous.
+  So b must be a **guaranteed** upper bound (see the requirement below); the reference's estimate × 1.1 is not.
 - The lower end a = b/α is **not** an eigenvalue bound. It is the choice of which part of the spectrum the smoother
   treats: the oscillatory top part. Everything below a is the coarse grid's job.
 - The smallest eigenvalue is never needed. In periodic problems it is 0 (rigid translations), and the coarsest
