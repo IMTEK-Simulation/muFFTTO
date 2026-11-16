@@ -444,3 +444,5 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
 - Pace ~1.1 min/iteration (eval 50-60 s), 40 its in 45 min. Plan B not needed; backup CH start stays unused unless it stalls.
 - 00:56 backup CH start done (8826573, 6383 s on 1 L40S, T 12000 eps², dt 0.25 eps²): grey fraction 0.125, stiff 0.500;
   `$WS/runs/FABLE/data/CH512_start_s11_eta2h_coarse.nc`, figure `figures/CH512_start_s11_eta2h_coarse.png`. Kept in reserve.
+- 02:08 ch512evo it 120: f 1.934, misfit 0.128 (fromCH at it 120: f 1.669, misfit 0.135); 120 its in 2 h 13 min (~66 s/it);
+  energy change over 10 its 1.3e-2 (stop at 1e-3). 1024³ test still pending (Resources: both H200 nodes partly used by others).
