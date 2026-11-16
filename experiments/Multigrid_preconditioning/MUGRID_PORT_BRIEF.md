@@ -48,7 +48,8 @@ counts allow (measure).
 
 ## 2. What muGrid already has (check, reuse, do not duplicate)
 
-muGrid repo: `/home/martin/PycharmProjects/muGrid` (remote `muSpectre/muGrid`; `origin/main` = release 1.6.1).
+You work in a **fresh clone** of muGrid (section 5), from `muSpectre/muGrid` `main`, release 1.6.1 or newer. The
+user's existing checkout `/home/martin/PycharmProjects/muGrid` is older and has unpushed work; do not use it.
 
 - **`MultigridReferencePreconditioner`** and `_MultigridLevel` in `language_bindings/python/muGrid/Preconditioners.py`,
   with the plan and measurements in `docs/multigrid_preconditioner_plan.md`.
@@ -101,29 +102,44 @@ muGrid repo: `/home/martin/PycharmProjects/muGrid` (remote `muSpectre/muGrid`; `
 
 ## 5. Workspace and rules
 
-**Your workspace**
-- Your own muGrid worktree:
+**Your workspace: a new copy of muGrid**
+- Clone muGrid fresh from GitHub. The repo is public; use https, or ssh if https fails:
   ```
-  cd /home/martin/PycharmProjects/muGrid && git fetch origin
-  git worktree add /home/martin/PycharmProjects/muGrid_mg -b feat/heterogeneous-multigrid origin/main
+  git clone https://github.com/muSpectre/muGrid.git /home/martin/PycharmProjects/muGrid_mg
+  cd /home/martin/PycharmProjects/muGrid_mg && git checkout -b feat/heterogeneous-multigrid
   ```
+- Work only in `/home/martin/PycharmProjects/muGrid_mg`. Commit on your branch. Do not push or open PRs unless the
+  user asks.
 - **Do not touch:**
-  - the main checkout (`perf/cpu-convolution-row-loop`, the user's unpushed work) and its other worktree
-    `.claude/worktrees/rowloop`;
+  - the user's old checkout `/home/martin/PycharmProjects/muGrid` (unpushed work), which you may read;
   - the muFFTTO repos (`muFFTTO`, `muFFTTO_fable`), which you only read.
-- Commit on your branch. Do not push or open PRs unless the user asks.
 
-**Building and testing**
-- Toolchain: micromamba env `muffto-gpu` (conda gcc 14, CUDA 12.9, OpenMPI, PnetCDF, CuPy):
+**Your own Python environment for the new muGrid**
+- The compilers and CUDA come from the micromamba env `muffto-gpu` (conda gcc 14, CUDA 12.9, OpenMPI, PnetCDF,
+  CuPy, muFFTTO's dependencies):
   `eval "$(~/.local/bin/micromamba shell hook -s bash)"; micromamba activate muffto-gpu`.
+- **Never `pip install` anything into `muffto-gpu` itself.** muFFTTO's production code and other sessions use its
+  muGrid (an older 1.4.1-based build).
+- Make a venv on top of it that sees the env's packages but has its own muGrid:
+  ```
+  python -m venv --system-site-packages ~/venvs/muGrid_mg
+  source ~/venvs/muGrid_mg/bin/activate          # after activating muffto-gpu
+  cd /home/martin/PycharmProjects/muGrid_mg
+  pip install --no-build-isolation --no-deps -e . -Cbuild-dir=build-cuda \
+      -Ccmake.define.MUGRID_ENABLE_CUDA=ON -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=120 \
+      -Ccmake.define.MUGRID_ENABLE_MPI=ON -Ccmake.define.CMAKE_BUILD_TYPE=Release
+  python -c "import muGrid; print(muGrid.__file__, muGrid.__version__)"   # must point into muGrid_mg
+  ```
+  If the editable install misbehaves, fall back to a plain cmake build and `runtests.py` with `PYTHONPATH`
+  (`docs/multigrid_preconditioner_plan.md` §0.3 describes this; it was written on another machine, so adapt its paths).
+- Run muGrid's test suite once **before** changing anything, so you know the baseline.
+- The muFFTTO reference (`muFFTTO_fable`) imports muGrid too. Run the cross-checks in this venv, so muFFTTO and the
+  new class use the same new muGrid. If muFFTTO does not work with muGrid 1.6.x, report what breaks and run the
+  reference in `muffto-gpu` instead. Do not edit muFFTTO.
+
+**GPU and MPI**
 - GPU: RTX PRO 1000 (Blackwell, sm_120, 8 GB). It is **shared** with other sessions, so check `nvidia-smi` and stay
   ≤ 3 GB.
-- **Never `pip install` muGrid into `muffto-gpu`.** muFFTTO's production code and other sessions use that install.
-- Build with cmake into your own build dir in your worktree. Options: `-DMUGRID_ENABLE_CUDA=ON
-  -DCMAKE_CUDA_ARCHITECTURES=120 -DMUGRID_ENABLE_MPI=ON -DMUGRID_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Release`.
-- Test with `PYTHONPATH=<build>/language_bindings/python:language_bindings/python python runtests.py tests/ ...`.
-  `runtests.py` drops the editable-install finder; `docs/multigrid_preconditioner_plan.md` §0.3 describes this. That
-  section was written on another machine; adapt its paths.
 - The conda OpenMPI is **not CUDA-aware**: never pass device buffers to MPI.
 
 **Running things**
