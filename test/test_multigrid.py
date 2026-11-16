@@ -149,3 +149,38 @@ def test_fused_operator_is_the_voxelwise_8_point_hexahedron():
         results.append((np.array(Ku.s), np.array(mg.levels[0].dinv.s)))
     assert np.allclose(results[0][0], results[1][0], rtol=1e-12, atol=1e-12 * np.abs(results[0][0]).max())
     assert np.allclose(results[0][1], results[1][1], rtol=1e-12)
+
+
+@pytest.mark.parametrize('element, N, dim', CASES)
+def test_lmax_bound_is_guaranteed(element, N, dim):
+    """the default smoothing interval end (lmax='bound') is >= the true lambda_max(D^-1 A) on every smoothed level,
+    for an extreme random design (s from 0 to 1 per quadrature point, 6 decades) -- dense check"""
+    import scipy.linalg
+    disc, mg = make(element, N, dim)
+    rng = np.random.default_rng(7)
+    s = 10.0 ** rng.uniform(-6, 0, size=mg.scale.s.shape)
+    s[rng.random(s.shape) < 0.2] = 0.0                                   # void points: s = 0 is allowed
+    mg.scale.s[...] = s
+    mg.setup()
+    for level in mg.levels:
+        if level.dinv is None:
+            continue
+        n = int(np.prod(level.r.s.shape))
+        A = np.empty((n, n))
+        for i, entry in enumerate(np.ndindex(*level.r.s.shape)):
+            level.r.s[...] = 0.0
+            level.r.s[entry] = 1.0
+            level.apply_K(level.r, level.t)
+            A[:, i] = np.asarray(level.t.s, dtype=float).ravel()
+        D = 1.0 / np.asarray(level.dinv.s, dtype=float).ravel()
+        lam_true = scipy.linalg.eigh(0.5 * (A + A.T), np.diag(D), eigvals_only=True)[-1]
+        tol = 1e-4 if level.dtype == np.float32 else 1e-10
+        assert level.lmax >= lam_true * (1 - tol), (level.index, level.lmax, lam_true)
+        assert level.lmax <= 3.0 * lam_true                                # and not uselessly loose
+
+
+def test_negative_scale_raises():
+    disc, mg = make('trilinear_hexahedron', 8, 3)
+    mg.scale.s[0, 0, 0, 0, 0, 0] = -1e-3
+    with pytest.raises(ValueError, match='>= 0'):
+        mg.setup()

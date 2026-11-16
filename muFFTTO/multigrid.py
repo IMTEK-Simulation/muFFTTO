@@ -27,7 +27,9 @@ Grids N, N/2, ..., ``n_coarsest`` (N = n_coarsest * 2^k).
            One-point hexahedra (``trilinear_hexahedron_1Q``, ``_1Q_hg``) are used on the fine level only; all coarse
            levels are fully integrated, so they carry no hourglass modes.
 smoother   ``degree`` Chebyshev steps in D^-1 A on [lambda_max / alpha, lambda_max], D = diag(A);
-           lambda_max(D^-1 A) by power iteration (warm started after a material update), times 1.1
+           lambda_max: a GUARANTEED upper bound of lambda_max(D^-1 A) (default, see :meth:`Multigrid._lmax_bound`),
+           or -- ``lmax='power'``, the old behaviour -- a power-iteration estimate times 1.1 (not safe: a warm
+           start can miss a new localised mode, e.g. a crack; 1000-12000 CG iterations in an AT2 run)
 coarsest   exact: dense pseudo-inverse of the ``n_coarsest`` grid operator
 
 The cycle is a fixed SPD operator, so it plugs into CG with any stopping test.
@@ -298,10 +300,15 @@ class Multigrid:
     n_agglomerate : int
         MPI only: grids of this size and coarser are solved on rank 0 (serial multigrid on its device). On small
         grids a ghost exchange is pure message latency; 16 keeps every distributed level at 32^3 or larger.
+    lmax : {'bound', 'power'}
+        Upper end of the smoothing interval. 'bound' (default): the guaranteed bound max over the local pieces of
+        lambda_max(D_e^-1 A_e) (:meth:`_lmax_bound`) -- valid for any design and contrast because the level material
+        is s C_0 with s >= 0 (checked at every setup); computed once per kind of level, no iterations. 'power':
+        power-iteration estimate times 1.1 (reproduces ``mg_lib`` and runs before 2026-11-16).
     power_start : callable, optional
-        ``power_start(level_index, shape) -> ndarray``: start vector of the power iteration (serial runs only; used
-        by the tests to reproduce ``mg_lib``). Default: seeded random numbers per grid plane, independent of the
-        MPI decomposition.
+        ``power_start(level_index, shape) -> ndarray``: start vector of the power iteration (``lmax='power'``, serial
+        runs only; used by the tests to reproduce ``mg_lib``). Default: seeded random numbers per grid plane,
+        independent of the MPI decomposition.
 
     Attributes
     ----------
@@ -315,10 +322,17 @@ class Multigrid:
 
     def __init__(self, discretization, C_0, degree=2, alpha=30.0, n_coarsest=4, power_start=None,
                  coarse_element=None, coarse_hourglass_eps=None, n_agglomerate=16, operator='stencil',
-                 precision='double'):
+                 precision='double', lmax='bound'):
+        assert lmax in ('bound', 'power')
+        self.lmax = lmax
+        self._lmax_bounds = {}                                  # bound per kind of level (see _lmax_bound)
         self.degree = degree
         self.alpha = alpha
         self.C_0 = np.asarray(C_0)
+        d2 = self.C_0.shape[0] ** 2                            # the bound needs s C_0 >= 0: C_0 positive semidefinite
+        eigenvalues = np.linalg.eigvalsh(0.5 * (self.C_0.reshape(d2, d2) + self.C_0.reshape(d2, d2).T))
+        if eigenvalues.min() < -1e-12 * abs(eigenvalues).max():
+            raise ValueError('Multigrid: C_0 must be positive semidefinite')
         self.n_coarsest = n_coarsest
         self.power_start = power_start
         self.coarse_element = coarse_element
@@ -379,7 +393,7 @@ class Multigrid:
                 hourglass_eps=getattr(disc.hourglass_control, 'eps', None))
             self.tail = Multigrid(serial, self.C_0, degree=self.degree, alpha=self.alpha, n_coarsest=self.n_coarsest,
                                   coarse_element=self.coarse_element, coarse_hourglass_eps=self.coarse_hourglass_eps,
-                                  operator=self.operator, precision=self.precision)
+                                  operator=self.operator, precision=self.precision, lmax=self.lmax)
             if self.tail.levels[0].x is None:
                 self.tail.levels[0].x = self.tail.levels[0].vector('mg_x')
                 self.tail.levels[0].b = self.tail.levels[0].vector('mg_b')
@@ -397,6 +411,11 @@ class Multigrid:
             self.setup_seconds[stage] = self.setup_seconds.get(stage, 0.0) + clock[-1] - clock[-2]
 
         self.setup_seconds = {}
+        if self.lmax == 'bound':                             # the bound holds for s C_0 with s >= 0 only
+            xp = tensor_operations.get_array_module(self.scale.s)
+            local_min = float(xp.min(self.scale.s)) if self.scale.s.size else np.inf
+            if self.mpi.allreduce(local_min, op=MPI.MIN) < 0.0:
+                raise ValueError('Multigrid: the material scale s must be >= 0 everywhere (lambda_max bound)')
         self.fine_operator.update_material()
         if self.levels[0] is not self.fine_operator:         # single-precision cycle: its copy of the scale
             self.levels[0].scale.s[...] = self.scale.s
@@ -409,8 +428,12 @@ class Multigrid:
             if level.dinv is not None:
                 self._assemble_inverse_diagonal(level)
                 lap('diagonals')
-                self._estimate_lmax(level)
-                lap('power iterations')
+                if self.lmax == 'bound':
+                    level.lmax = self._lmax_bound(level)
+                    lap('lambda_max bound')
+                else:
+                    self._estimate_lmax(level)
+                    lap('power iterations')
         if self.tail is None:
             self._factorise_coarsest()
         else:
@@ -460,6 +483,53 @@ class Multigrid:
         xp = tensor_operations.get_array_module(diagonal)
         xp.divide(1.0, diagonal, out=diagonal)
         level.disc.fft.communicate_ghosts(level.dinv)        # the Jacobi product runs over the ghost points too
+
+    def _lmax_bound(self, level):
+        """Guaranteed upper bound of lambda_max(D^-1 A) on ``level`` -- no estimate, no safety factor.
+
+        A is a sum of local pieces A_e, each scaled by ONE material value (one quadrature point of one voxel; for
+        one-point elements and the fused operator: one voxel, including its hourglass term), and D = diag(A) =
+        sum_e D_e with D_e = diag(A_e). For every x (all terms >= 0, mediant inequality):
+
+            x.Ax / x.Dx = sum_e x.A_e x / sum_e x.D_e x  <=  max_e x.A_e x / x.D_e x  <=  max_e lambda_max(D_e^-1 A_e)
+
+        Here A_e = s_e A_e^0 with s_e >= 0 and a fixed matrix A_e^0 (material s C_0), so the bound depends only on the
+        element, the pixel shape, C_0 and the hourglass control -- not on the design or the contrast. It is computed
+        once per kind of level: A_e^0 of every quadrature point is assembled on a 4^d grid (scale 1 on that point of
+        one voxel, 0 elsewhere) on the voxel's 2^d corner nodes, then a small generalised eigenproblem.
+        (2D Q1, nu 0.2: 3.52, against 2.10 for homogeneous material and <= 3.1 for random extreme contrast.)"""
+        import scipy.linalg
+        disc = level.disc
+        eps = getattr(disc.hourglass_control, 'eps', None)
+        pixel = tuple(float(h) for h in disc.pixel_size)
+        key = (disc.element_type, level.fused, eps, pixel)
+        if key in self._lmax_bounds:
+            return self._lmax_bounds[key]
+        cell = domain.PeriodicUnitCell(domain_size=[4 * h for h in pixel], problem_type='elasticity')
+        small = domain.Discretization(cell=cell, nb_of_pixels_global=(4,) * self.dim,
+                                      discretization_type='finite_element', element_type=disc.element_type,
+                                      hourglass_eps=eps)
+        piece = Level(small, self.C_0, 0, fused=level.fused)                 # double precision, on the host
+        corners = [(c, 0) + tuple(1 + i for i in offset)                     # the 2^d nodes of voxel (1, ..., 1)
+                   for offset in np.ndindex(*(2,) * self.dim) for c in range(self.dim)]
+        bound = 0.0
+        for q in range(piece.scale.s.shape[2]):
+            piece.scale.s[...] = 0.0
+            piece.scale.s[(0, 0, q) + (1,) * self.dim] = 1.0
+            piece.update_material()
+            A_e = np.empty((len(corners), len(corners)))
+            for j, dof in enumerate(corners):
+                piece.x.s[...] = 0.0
+                piece.x.s[dof] = 1.0
+                piece.apply_K(piece.x, piece.b)
+                A_e[:, j] = [float(piece.b.s[i]) for i in corners]
+            A_e = 0.5 * (A_e + A_e.T)
+            D_e = np.diag(A_e).copy()
+            stiff = D_e > 1e-12 * D_e.max()                  # dofs the piece does not touch (e.g. a triangle's 4th node)
+            bound = max(bound, float(scipy.linalg.eigh(A_e[np.ix_(stiff, stiff)], np.diag(D_e[stiff]),
+                                                       eigvals_only=True)[-1]))
+        self._lmax_bounds[key] = bound
+        return bound
 
     def _estimate_lmax(self, level, iterations=40, warm_iterations=15, safety=1.1):
         """level.lmax: upper estimate of lambda_max(D^-1 A) by power iteration, warm started from the dominant vector

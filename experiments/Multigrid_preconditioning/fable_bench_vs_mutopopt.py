@@ -43,6 +43,7 @@ parser.add_argument('--element', default=None)   # mufftto: trilinear_hexahedron
 parser.add_argument('--preconditioner', default='green-jacobi')                           # muTopOpt only
 parser.add_argument('--operator', default='stencil', choices=('stencil', 'fused'))        # muFFTTO only
 parser.add_argument('--mg-precision', default='double', choices=('double', 'single'))     # muFFTTO, fused only
+parser.add_argument('--lmax', default='bound', choices=('bound', 'power'))             # muFFTTO: smoother interval end
 args = parser.parse_args()
 N, E_SOLID, NU_SOLID, PENALTY, VOID = args.n, 1.0, 0.3, 2.0, 1e-3
 
@@ -116,7 +117,7 @@ else:
     disc = domain.Discretization(cell=cell, nb_of_pixels_global=(N, N, N), discretization_type='finite_element',
                                  element_type=element, device='gpu',
                                  hourglass_eps=0.3 if element.endswith('_hg') else None)
-    mg = multigrid.Multigrid(disc, C_0, operator=args.operator, precision=args.mg_precision)
+    mg = multigrid.Multigrid(disc, C_0, operator=args.operator, precision=args.mg_precision, lmax=args.lmax)
     xp = tensor_operations.get_array_module(mg.scale.s)
     sync = lambda: xp.cuda.Device().synchronize()
     label = (f'muFFTTO fused q1, multigrid V(2,2) in {args.mg_precision} precision, CG double' if fused

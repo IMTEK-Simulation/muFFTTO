@@ -47,7 +47,7 @@ def mg_lib_start(index, shape):                     # mg_lib.Level.lmax
     return v - v.mean(axis=(-3, -2, -1), keepdims=True)
 
 
-mg = multigrid.Multigrid(disc, C_0, power_start=mg_lib_start if serial else None)
+mg = multigrid.Multigrid(disc, C_0, power_start=mg_lib_start if serial else None, lmax='power')
 mg.scale.s[0, 0] = xp.asarray(s_global[(slice(None),) + window])
 mg.setup()
 rng = np.random.default_rng(7)
