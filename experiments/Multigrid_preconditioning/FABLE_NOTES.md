@@ -446,3 +446,5 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
   `$WS/runs/FABLE/data/CH512_start_s11_eta2h_coarse.nc`, figure `figures/CH512_start_s11_eta2h_coarse.png`. Kept in reserve.
 - 02:08 ch512evo it 120: f 1.934, misfit 0.128 (fromCH at it 120: f 1.669, misfit 0.135); 120 its in 2 h 13 min (~66 s/it);
   energy change over 10 its 1.3e-2 (stop at 1e-3). 1024³ test still pending (Resources: both H200 nodes partly used by others).
+- 04:09 ch512evo it 250: f 1.410, misfit 0.066 — now AHEAD of fromCH at it 250 (f 1.435, misfit 0.097);
+  254 its in 4 h 14 min (~60 s/it), energy change over 10 its 2-4e-3 (stop 1e-3) -> convergence expected soon.
