@@ -28,15 +28,52 @@ worktree. Read the module docstring first: it is the specification.
 | MPI | every level on the same communicator; slab decomposition, nested while every rank keeps an even number of planes; coarse levels (≤ `n_agglomerate` = 16) gathered and solved on rank 0 |
 | GPU grid transfer | CuPy RawKernels |
 
-**Production setting** (the one to make fast in muGrid): `operator='fused'`, `precision='single'`, trilinear
-hexahedra, isotropic C_0, scale per voxel.
+**Production case** (the benchmark the muGrid version must be fast on): muGrid's fused `IsotropicStiffnessOperator3D`,
+float32 cycle, trilinear hexahedra, isotropic C_0, scale per voxel.
+
+**The reference is element-specific, the muGrid version must not be** (section 1a). The reference builds its coarse
+levels by re-discretising a known element with averaged material. Port the cycle, the smoother, the MPI and precision
+handling; do not port the element-specific coarsening as the core.
 
 **A known flaw to fix while porting.** The warm-started power estimate of λmax can miss a newly localised mode: in an
-AT2 fracture run a crack cut through the cell and CG went to 1000-12000 iterations. Fix: a rigorous,
-contrast-independent bound c = max over Gauss points q of λmax(D_q⁻¹ K_q) (the mediant inequality; see
-`gershgorin_constant` in `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`,
-c = 3.523 for 2D Q1 with ν = 0.2). Offer it as an option, `lmax='bound'`, and make it the default if the iteration
-counts allow (measure).
+AT2 fracture run a crack cut through the cell and CG went to 1000-12000 iterations.
+- The reference fix is a rigorous, contrast-independent bound c = max over Gauss points q of λmax(D_q⁻¹ K_q) (the
+  mediant inequality; see `gershgorin_constant` in
+  `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`; c = 3.523 for 2D Q1, ν = 0.2).
+- It needs the element stiffness, which the generic multigrid does not have. Find an operator-agnostic safe choice,
+  e.g. a fresh Lanczos estimate at every setup with a safety factor, or bounds from the explicit coarse stencils.
+- Accept the element bound only as an optional input. Test against the AT2 failure mode: a mode that appears
+  localised after the previous setup.
+
+## 1a. Design requirement (user): the multigrid must not care about the element
+
+It must work with **any muGrid operator**: any SPD (or periodic, semidefinite) linear operator that maps a nodal field
+to a nodal field and couples only neighbouring nodes. Examples: the gradient → material → divergence chain of any FE
+element with any material (per quadrature point, anisotropic), the fused `IsotropicStiffnessOperator`, an operator
+with hourglass control added, or a Python callable wrapping muGrid operators.
+
+The multigrid gets only:
+- the operator (`apply(x, y)`);
+- the decomposition;
+- the nodal layout (components per node, nodal points per pixel).
+
+The way to get there:
+- **Galerkin coarse operators A_H = R A_h P, measured by probing.**
+  - Apply the fine operator to the prolongation of coloured coarse unit vectors: 3^d colours × components. In 3D
+    elasticity that is 81 fine applications per level and material update, about 5 % of a TO evaluation.
+  - The result is the exact coarse operator as an explicit variable-coefficient stencil: 3^d neighbours, each a
+    (components × components) block per coarse node.
+  - Coarser levels are R A P of those stencils.
+  - The fine-level diagonal for the Jacobi smoother also comes from probing.
+- **One new muGrid primitive:** a nodal-to-nodal operator with a *different* stencil at every node, with CPU and GPU
+  kernels, ghost exchange, and double and single precision. Use the symmetry of A to store about half the blocks.
+- **Memory:** about 240 B per fine voxel for the first coarse level in double, 120 B in float32. Keep it within the
+  large-TO budget of about 1 KiB/voxel in total.
+- **P and R:** multilinear interpolation, correct for all elements with nodes at the pixel corners only. For several
+  nodal points per pixel (e.g. quadratic elements) either generalise P or reject them clearly.
+- **Optional fast path, measured against Galerkin:** the reference's re-discretisation with averaged material, for
+  the case A = s(x)·C_0 with a known element. Keep it behind a small "coarsening rule" interface so the core stays
+  element-free.
 
 **Other context, read on demand**
 - `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`: subclass adding the 2D
@@ -68,25 +105,29 @@ user's existing checkout `/home/martin/PycharmProjects/muGrid` is older and has 
 ## 3. Suggested stages (reorder if your findings say so, and write down why)
 
 1. **Design.** Write a short note (`docs/heterogeneous_multigrid.md`): API, algorithm, relation to
-   `MultigridReferencePreconditioner`.
-   - Suggested API: a `Preconditioner` subclass, e.g. `HeterogeneousMultigridPreconditioner(decomposition,
-     grid_spacing, lambda_0, mu_0, element=FEMElement.q1, degree=2, alpha=30, n_coarsest=4, precision='double',
-     lmax='bound')`.
-   - Methods: `set_scale(field)` / `setup()` after each material change, and `apply(r, z)`.
-   - Start with the isotropic, per-voxel case (`IsotropicStiffnessOperator`), 2D and 3D.
-2. **Serial CPU** implementation and tests.
-3. **GPU** (device fields, transfer kernels, no host round trips in the cycle).
-4. **float32 cycle.**
-5. **MPI** (nested decompositions, agglomeration on rank 0).
-6. *Optional:* general material, i.e. per-quadrature-point scale or anisotropic C_0 through operator stencils, and the
-   one-point hexahedron with hourglass control (muFFTTO's `trilinear_hexahedron_1Q_hg`, `muFFTTO/hourglass_control.py`).
-7. *Only after the user's OK:* make muFFTTO's `Multigrid` a thin wrapper of the muGrid class.
+   `MultigridReferencePreconditioner`, memory and setup cost. Show it to the user before coding.
+   - Suggested API: a `Preconditioner` subclass, e.g. `MultigridPreconditioner(operator, decomposition,
+     nb_components, degree=2, alpha=30, n_coarsest=4, precision='double', lmax=...)`, where `operator` is any muGrid
+     operator or a callable `apply(x, y)` on nodal fields.
+   - Methods: `setup()` after each change of the operator (material update), and `apply(r, z)`.
+2. **Variable-stencil operator and Galerkin probing**, serial CPU, with tests: the probed stencil reproduces A_h P
+   exactly, and R A P equals the explicit triple product on small grids.
+3. **Serial CPU multigrid** on top of it, with tests. Test it with several different operators: 2D linear triangles,
+   2D Q1, 3D hexahedra with per-quadrature-point anisotropic material, the fused isotropic operator, and muFFTTO's
+   one-point hexahedron with hourglass control (`trilinear_hexahedron_1Q_hg`) as a callable.
+4. **GPU** (device fields, transfer and stencil kernels, no host round trips in the cycle).
+5. **float32 cycle.**
+6. **MPI** (nested decompositions, agglomeration of the coarse levels on rank 0).
+7. *Optional fast path:* the re-discretisation coarsening rule for A = s(x)·C_0. Implement it only if Galerkin is
+   measurably slower or larger in the production case.
+8. *Only after the user's OK:* make muFFTTO's `Multigrid` a thin wrapper of the muGrid class.
 
 ## 4. Validation, required
 
 - muGrid unit tests in the style of `tests/python_*_tests.py`:
   - P and R are exact adjoints, and P reproduces linear fields;
-  - in 2D, the triangle coarse operator equals PᵀAP;
+  - the probed coarse operator equals PᵀAP computed explicitly (small grids, several operators);
+  - for 2D linear triangles it also equals the reference's re-discretised coarse operator;
   - the cycle is symmetric and positive definite;
   - CG iterations are grid-independent on a phase-field geometry;
   - 1/2/4 MPI ranks give the same iteration counts (`mpiexec`);
@@ -95,8 +136,11 @@ user's existing checkout `/home/martin/PycharmProjects/muGrid` is older and has 
 - **Cross-check against the muFFTTO reference:** same geometry (e.g.
   `/home/martin/PycharmProjects/muFFTTO/experiments/Multigrid_preconditioning/data/CH3D/ch3d_ch_s12.npy` with a tanh
   interface, or a seeded smooth random field), contrast 1e3-1e4, same parameters.
-  - CG iteration counts must be the same; the reference's `power_start` hook reproduces its power iteration.
-  - The homogenised stress must agree to round-off.
+  - 2D linear triangles: the CG iteration counts must be the same, since Galerkin equals the reference's coarse
+    operator there. The reference's `power_start` hook reproduces its power iteration.
+  - 3D hexahedra: Galerkin replaces the reference's re-discretisation. Report the iteration counts side by side; they
+    should be equal or lower. Explain any increase before going on.
+  - The homogenised stress must agree to the CG tolerance.
 - **Report:** time per V-cycle, CG time and GPU memory per voxel at 64³/128³ (and 256³ if it fits) vs the muFFTTO
   implementation, measured per process with `nvidia-smi --query-compute-apps`.
 
