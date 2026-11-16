@@ -462,3 +462,12 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
   figures/TO3D_stills/designs512_sheet.png (render_TO3D_stills.py, NEMO job 8828965, 1 min on 1 L40S; smoke 8828964).
   Volume solid / grey fractions: A start 0.500/0.420 -> final 0.515/0.091; B start 0.499/0.197 -> 0.506/0.093;
   C start (256³) 0.510/0.165 -> 0.500/0.089; backup start 0.500/0.125.
+
+## 2026-11-16 07:00 — videos of the 512³ run from the 512³ CH start (user: "do you create videos on NEMO? set it up")
+- Preview now: render 8828973 from the stored history (9 frames, every 50 its; HOLD 45) ->
+  `$WS/runs/FABLE/video/ch512evo_preview.mp4`.
+- Smooth video: the same run again with a dense history: TO 8828974 (label `ch512evo_vid_s0.3`, 4 L40S, ≤24 h,
+  same settings as ch512evo + HISTORY_EVERY=2, ~200 frames x 1.07 GB ≈ 220 GB in $WS, 3.7 TB free), then render
+  8828975 (afterok, HISTORY_EVERY=2 HOLD=4, 6 h limit) -> `$WS/runs/FABLE/video/ch512evo_smooth.mp4`. Expected ~7 h.
+- (First submission 8828970-72 cancelled at once: WS unset in the ssh line, wrong paths; nothing ran.)
+- Watcher MAP now: 8826562 (1024³ test), 8828973, 8828974, 8828975.
