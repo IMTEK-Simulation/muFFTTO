@@ -55,13 +55,34 @@ AT2 fracture run a crack cut through the cell and CG went to 1000-12000 iteratio
 - Why: the power iteration's Rayleigh quotient always lies **below** λmax; it is a lower estimate made "safe" only by
   the factor 1.1. Warm-started from the previous dominant vector, it can stay on the old mode when a new, larger one
   appears (the crack).
-- The reference fix is a rigorous, contrast-independent bound c = max over Gauss points q of λmax(D_q⁻¹ K_q) (the
-  mediant inequality; see `gershgorin_constant` in
-  `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`; c = 3.523 for 2D Q1, ν = 0.2).
-- It needs the element stiffness, which the generic multigrid does not have. Find an operator-agnostic safe choice,
-  e.g. a fresh Lanczos estimate at every setup with a safety factor, or bounds from the explicit coarse stencils.
-- Accept the element bound only as an optional input. Test against the AT2 failure mode: a mode that appears
-  localised after the previous setup.
+- **User requirement (2026-11-16): no estimated λmax and no ad-hoc safety factor. Every level's smoother uses a
+  rigorous upper bound.**
+- The rigorous bound (the reference's AT2 fix, `gershgorin_constant` in
+  `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`; the name is historical, it is
+  not Gershgorin). If A is a sum of positive semidefinite local contributions, A = Σ_e A_e, and D = diag(A) =
+  Σ_e diag(A_e), then for every x
+  `x·Ax / x·Dx = Σ_e x·A_e x / Σ_e x·D_e x ≤ max_e x·A_e x / x·D_e x`  (mediant inequality),
+  so **λmax(D⁻¹A) ≤ c = max_e λmax(D_e⁻¹ A_e)**, with D_e = diag(A_e).
+- Measured, AT2 sweep (2D Q1, ν = 0.2): c = 3.523 (true value 2.10 homogeneous, ≤ 3.1 at extreme random contrast).
+  The largest CG count of any solve dropped from 12084 to 117. Median cost: +4 % CG iterations, total time ratio
+  1.00, because the power iterations are saved.
+- **This is not element-specific, only structure-specific.** Every muGrid FE operator chain is such a sum:
+  - the per-quadrature-point contributions K_q = w_q B_qᵀ C_q B_q of `Bᵀ W C(x) B`;
+  - plus per-voxel hourglass terms H_vᵀ κ_v H_v, combined with K_q of the same voxel into one local matrix.
+  - Galerkin coarse levels inherit it: A_H = Σ_q (P_qᵀ K_q P_q), so the same bound holds on **every level** with
+    the local matrices P_qᵀ K_q P_q (P_q = P restricted to the support of K_q).
+  - For A = s(x)·C_0 every local matrix is s times a fixed one. The bound is then a constant per level (max over the
+    positions of q inside a coarse cell), independent of the contrast and the design, and computed once.
+  - For general per-point materials it is one small eigenproblem per local matrix, batched; or a bound over the
+    admissible material family, computed once.
+- **Design consequence.** The multigrid should accept the operator together with its local contributions (the
+  quadrature-point stencil B, the material field and the weights, plus optional extra local terms), not just a black-box
+  `apply`. That keeps it element-free and makes the bound rigorous at every level.
+- **For a true black box** (only `apply` available): use a bound that is still rigorous, from the probed entries. l1-Jacobi
+  replaces D by the absolute row sums, giving λmax ≤ 1 by Gershgorin; or use the row-sum bound with D. Both are looser
+  and cost smoothing efficiency, so measure them.
+- Power iteration or Lanczos only as a **diagnostic** of how tight the bound is, never to choose the interval.
+- Test against the AT2 failure mode: a localised mode that appears after the previous setup.
 
 ## 1a. Design requirement (user): the multigrid must not care about the element
 
@@ -125,7 +146,7 @@ user's existing checkout `/home/martin/PycharmProjects/muGrid` is older and has 
 1. **Design.** Write a short note (`docs/heterogeneous_multigrid.md`): API, algorithm, relation to
    `MultigridReferencePreconditioner`, memory and setup cost. Show it to the user before coding.
    - Suggested API: a `Preconditioner` subclass, e.g. `MultigridPreconditioner(operator, decomposition,
-     nb_components, degree=2, alpha=30, n_coarsest=4, precision='double', lmax=...)`, where `operator` is any muGrid
+     nb_components, degree=2, alpha=30, n_coarsest=4, precision='double')`, where `operator` is any muGrid
      operator or a callable `apply(x, y)` on nodal fields.
    - Methods: `setup()` after each change of the operator (material update), and `apply(r, z)`.
 2. **Variable-stencil operator and Galerkin probing**, serial CPU, with tests: the probed stencil reproduces A_h P
@@ -147,6 +168,8 @@ user's existing checkout `/home/martin/PycharmProjects/muGrid` is older and has 
   - the probed coarse operator equals PᵀAP computed explicitly (small grids, several operators);
   - for 2D linear triangles it also equals the reference's re-discretised coarse operator;
   - the cycle is symmetric and positive definite;
+  - the λmax bound is ≥ the true λmax(D⁻¹A) on every level (Lanczos to convergence on small grids, homogeneous,
+    random extreme-contrast and crack-like localised materials);
   - CG iterations are grid-independent on a phase-field geometry;
   - 1/2/4 MPI ranks give the same iteration counts (`mpiexec`);
   - CPU and GPU give the same results;
