@@ -364,5 +364,11 @@ Three 512³ runs, same objective and settings (target scale 0.3, η = 2h, ENERGY
   ~3 h 06 min, and with `lbfgs_xp` ~2 h 15 min (section 17). The chain is cheaper AND better: both direct starts end
   in a worse local optimum (f 1.26 vs 1.17). The production chain `aux_s0.3_fused` (11 h 23 min, section 17) reached
   f 1.082 because its 512³ stage ran 373 iterations without the 1e-3 stopping test.
+- Resources of the 512³ Cahn-Hilliard-start run (CH job 8826536 + TO job 8826537): 6 h 20 min wall; 24.9 L40S-h
+  (CH 0.16 on 1 L40S, TO 24.8 on 4 L40S); 404 iterations, 431 evaluations, 94.7 k CG iterations (≈ 18 per solve);
+  wall split solves 91 %, Helmholtz 6 %, sensitivity 2 %, MG setup 0.6 %; host memory ≤ 69 GB per rank (MaxRSS),
+  CH job 9.6 GB; GPU memory not logged (chain at 512³: 29.4 GiB per L40S; lbfgs_xp adds ≈ 5 GiB per rank for 20
+  pairs + work vectors); GPU energy ≤ 8.7 kWh at rated 350 W (≈ 5.2 kWh at 60 % load); files: final and checkpoint
+  1.07 GB each, history (9 frames) 9.7 GB.
 - Correction (2026-11-16): the first version of this table gave the chain as 11 h 23 min with f 1.1706; that mixed the
   production chain's time with the video chain's result.
