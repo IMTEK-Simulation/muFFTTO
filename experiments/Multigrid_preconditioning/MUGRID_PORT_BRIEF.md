@@ -82,6 +82,14 @@ AT2 fracture run a crack cut through the cell and CG went to 1000-12000 iteratio
   replaces D by the absolute row sums, giving λmax ≤ 1 by Gershgorin; or use the row-sum bound with D. Both are looser
   and cost smoothing efficiency, so measure them.
 - Power iteration or Lanczos only as a **diagnostic** of how tight the bound is, never to choose the interval.
+- **Safeguards (user requirement): the bound must only be used where it is valid.**
+  - The constant per-level bound holds only for A = Σ_k s_k(x)·C_k (scaled materials with fixed C_k, e.g. s(x)·C_0)
+    with the same element and quadrature everywhere. Check this when the multigrid is built. For any other operator,
+    refuse the constant bound and use the per-local-matrix bound or the rigorous row-sum / l1 fallback.
+  - Check s_k ≥ 0 everywhere at every setup (cheap global min). Raise a clear error otherwise.
+  - Unit tests: the bound is ≥ the true λmax (Lanczos to convergence) for homogeneous, random extreme-contrast and
+    crack-like localised materials.
+  - Optional debug mode: a few Lanczos steps per setup; raise if the estimate exceeds the bound.
 - Test against the AT2 failure mode: a localised mode that appears after the previous setup.
 
 ## 1a. Design requirement (user): the multigrid must not care about the element
