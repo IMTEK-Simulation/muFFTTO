@@ -458,3 +458,7 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
 - CORRECTION 07:xx: chain in the comparison = video_s0.3 (same ENERGY_TOL 1e-3): 5 h 31 min total (128³ 24 min +
   256³ 2 h 48 min incl. a 2 h 25 min wild step + 512³ 2 h 20 min), 12.5 L40S-h, f 1.1706. Figure now adds the time
   before the 512³ stage. Chain is cheaper and better than both direct starts.
+- 06:45 design views: figures/TO512_designs_slices.png (plot_512_designs.py, mid slices, local copies in data/fable512),
+  figures/TO3D_stills/designs512_sheet.png (render_TO3D_stills.py, NEMO job 8828965, 1 min on 1 L40S; smoke 8828964).
+  Volume solid / grey fractions: A start 0.500/0.420 -> final 0.515/0.091; B start 0.499/0.197 -> 0.506/0.093;
+  C start (256³) 0.510/0.165 -> 0.500/0.089; backup start 0.500/0.125.
