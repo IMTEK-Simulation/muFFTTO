@@ -35,8 +35,26 @@ float32 cycle, trilinear hexahedra, isotropic C_0, scale per voxel.
 levels by re-discretising a known element with averaged material. Port the cycle, the smoother, the MPI and precision
 handling; do not port the element-specific coarsening as the core.
 
+**Which eigenvalue information the multigrid needs: only a safe UPPER bound of λmax(D⁻¹A), per level.**
+- The Chebyshev smoother is a polynomial p(D⁻¹A) built for the interval [a, b] with b = λmax. Inside it, |p| < 1
+  (degree 2, α = 30: |p| ≤ 0.78).
+- Above b, p grows fast, so modes with eigenvalue above b are **amplified**, not damped. Measured for degree 2:
+  |p| stays ≤ 1 only up to 1.033 b; it is 5.7 at 1.5 b and 13.9 at 2 b, and V(2,2) applies it twice per level. The
+  cycle then stops being positive definite, and CG breaks down or needs thousands of iterations.
+- Overestimating b is harmless: the smoother only gets a little less effective. Hence the safety factor 1.1, or
+  better a guaranteed bound.
+- The lower end a = b/α is **not** an eigenvalue bound. It is the choice of which part of the spectrum the smoother
+  treats: the oscillatory top part. Everything below a is the coarse grid's job.
+- The smallest eigenvalue is never needed. In periodic problems it is 0 (rigid translations), and the coarsest
+  level's pseudo-inverse handles that.
+- CG needs no eigenvalue bounds either. The energy-error stopping test is a lower *estimate of the error* with an
+  adaptive delay. Do not add a λmin estimate.
+
 **A known flaw to fix while porting.** The warm-started power estimate of λmax can miss a newly localised mode: in an
 AT2 fracture run a crack cut through the cell and CG went to 1000-12000 iterations.
+- Why: the power iteration's Rayleigh quotient always lies **below** λmax; it is a lower estimate made "safe" only by
+  the factor 1.1. Warm-started from the previous dominant vector, it can stay on the old mode when a new, larger one
+  appears (the crack).
 - The reference fix is a rigorous, contrast-independent bound c = max over Gauss points q of λmax(D_q⁻¹ K_q) (the
   mediant inequality; see `gershgorin_constant` in
   `/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/mg_q1.py`; c = 3.523 for 2D Q1, ν = 0.2).
