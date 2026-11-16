@@ -448,3 +448,10 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
   energy change over 10 its 1.3e-2 (stop at 1e-3). 1024³ test still pending (Resources: both H200 nodes partly used by others).
 - 04:09 ch512evo it 250: f 1.410, misfit 0.066 — now AHEAD of fromCH at it 250 (f 1.435, misfit 0.097);
   254 its in 4 h 14 min (~60 s/it), energy change over 10 its 2-4e-3 (stop 1e-3) -> convergence expected soon.
+
+## 2026-11-16 06:06 — ch512evo_s0.3 CONVERGED (the user's 512³ timing question)
+- 404 its, ENERGY_TOL 9.97e-4, f 1.2576, misfit 0.0652; TO 6 h 11 min on 4 L40S (8826537) + CH start 9 min on 1 L40S.
+- 431 evals, CG mech 45685 / adjoint 49025, solves 20298 s of 22262 s, Helmholtz 1297 s.
+- vs fromCH (128³ CH start, NuMPI): 446 its, 17.1 h, f 1.2645; vs chain: f 1.1706 (11 h 23 min all levels).
+- Table in LARGE_3D_TO.md section 19, figure figures/TO512_starts_convergence.png (plot_512_starts.py).
+- Segment 2 (8826538) exited at once (final exists). 1024³ test 8826562 still pending (Resources, H200).
