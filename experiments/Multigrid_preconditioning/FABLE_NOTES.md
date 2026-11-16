@@ -455,3 +455,6 @@ D. From-CH test: segment 1 (8820185) ends at 24 h (~08:38), segment 2 8826299 (N
 - vs fromCH (128³ CH start, NuMPI): 446 its, 17.1 h, f 1.2645; vs chain: f 1.1706 (11 h 23 min all levels).
 - Table in LARGE_3D_TO.md section 19, figure figures/TO512_starts_convergence.png (plot_512_starts.py).
 - Segment 2 (8826538) exited at once (final exists). 1024³ test 8826562 still pending (Resources, H200).
+- CORRECTION 07:xx: chain in the comparison = video_s0.3 (same ENERGY_TOL 1e-3): 5 h 31 min total (128³ 24 min +
+  256³ 2 h 48 min incl. a 2 h 25 min wild step + 512³ 2 h 20 min), 12.5 L40S-h, f 1.1706. Figure now adds the time
+  before the 512³ stage. Chain is cheaper and better than both direct starts.

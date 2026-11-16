@@ -4,7 +4,9 @@
     python plot_512_starts.py   (reads logs/fable/starts512/lines.txt, the ITER / EVAL / job lines of the three logs)
                                 -> figures/TO512_starts_convergence.png
 
-Wall time is summed over all Slurm segments of a run, including segments lost to node faults (real cost).
+Wall time is summed over all Slurm segments of a run, including segments lost to node faults (real cost), and starts
+with the time spent before the 512^3 stage (Cahn-Hilliard start job; the chain's 128^3 and 256^3 stages, 1 L40S each;
+the chain's 256^3 stage includes 2 h 25 min of one wild trial step, before LBFGS_FIRST_STEP existed).
 """
 import re
 from pathlib import Path
@@ -15,10 +17,12 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
-RUNS = {  # log -> (label, colour, style)
-    'TO3D_N512_ch512evo_s0.3.log': ('start: Cahn-Hilliard evolved at 512³ (TO interface)', 'tab:red', '-'),
-    'TO3D_N512_fromCH_s0.3_fused.log': ('start: Cahn-Hilliard 128³ (bi_s11) upsampled', 'tab:blue', '-'),
-    'TO3D_N512_video_s0.3.log': ('chain 64³→512³: 512³ stage from the 256³ result', 'tab:green', '-'),
+RUNS = {  # log -> (label, colour, style, hours spent before the 512^3 stage: making the start / coarser grids)
+    'TO3D_N512_ch512evo_s0.3.log': ('start: Cahn-Hilliard evolved at 512³ (TO interface)', 'tab:red', '-',
+                                    9 / 60 + 22 / 3600),                          # CH job 8826536, 1 L40S
+    'TO3D_N512_fromCH_s0.3_fused.log': ('start: Cahn-Hilliard 128³ (bi_s11) upsampled', 'tab:blue', '-', 0.0),
+    'TO3D_N512_video_s0.3.log': ('chain 128³ → 256³ → 512³ (curve: 512³ stage)', 'tab:green', '-',
+                                 (23 * 60 + 49 + 2 * 3600 + 47 * 60 + 56) / 3600),  # 128³ 8820129 + 256³ 8820130, 1 L40S
 }
 
 
@@ -43,14 +47,18 @@ def read(lines):
 
 runs = read((HERE / 'logs' / 'fable' / 'starts512' / 'lines.txt').read_text().splitlines())
 fig, axes = plt.subplots(1, 2, figsize=(14, 5.6))
-for name, (label, colour, style) in RUNS.items():
+for name, (label, colour, style, before) in RUNS.items():
     its = sorted(runs[name]['iters'])
     f = [runs[name]['iters'][i][0] for i in its]
-    hours = [runs[name]['iters'][i][1] for i in its]
-    final = f'{label}\n{its[-1]} its, {hours[-1]:.1f} h, final f {f[-1]:.4f}'
+    hours = [before + runs[name]['iters'][i][1] for i in its]
+    final = f'{label}\n{its[-1]} its at 512³, {hours[-1]:.1f} h in total, final f {f[-1]:.4f}'
     axes[0].plot(its, f, style, color=colour, lw=2, label=final)
     axes[1].plot(hours, f, style, color=colour, lw=2)
-for ax, xlabel in zip(axes, ['L-BFGS iteration at 512³', 'wall time at 512³ on 4 L40S [h]']):
+    if before > 0.5:
+        axes[1].plot([0, before], [f[0], f[0]], ':', color=colour, lw=2)  # time on the coarser grids before
+        axes[1].annotate('128³ + 256³ stages', (before / 2, f[0]), xytext=(0, 8), textcoords='offset points',
+                         ha='center', fontsize=12, color=colour)
+for ax, xlabel in zip(axes, ['L-BFGS iteration at 512³', 'total wall time incl. start / coarser grids [h]']):
     ax.set_ylim(0, 4)
     ax.set_xlim(left=0)
     ax.set_xlabel(xlabel, fontsize=14)
@@ -63,6 +71,7 @@ fig.tight_layout(rect=(0, 0.17, 1, 1))
 out = HERE / 'figures' / 'TO512_starts_convergence.png'
 fig.savefig(out, dpi=110)
 print('saved', out)
-for name, (label, *_) in RUNS.items():
+for name, (label, colour, style, before) in RUNS.items():
     its = sorted(runs[name]['iters'])
-    print(f'{name}: {its[-1]} its, {runs[name]["iters"][its[-1]][1]:.2f} h, f {runs[name]["iters"][its[-1]][0]:.5f}')
+    print(f'{name}: {its[-1]} its, 512^3 stage {runs[name]["iters"][its[-1]][1]:.2f} h, total '
+          f'{before + runs[name]["iters"][its[-1]][1]:.2f} h, f {runs[name]["iters"][its[-1]][0]:.5f}')

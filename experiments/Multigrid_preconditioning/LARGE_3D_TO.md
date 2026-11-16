@@ -354,11 +354,15 @@ Three 512³ runs, same objective and settings (target scale 0.3, η = 2h, ENERGY
 |---|---|---|---|---|---|---|
 | Cahn-Hilliard evolved at 512³ from noise, ε = √2 η (`make_CH512_start.py`, 9 min on 1 L40S) | lbfgs_xp (GPU) | 404 | 6 h 11 min (+9 min CH) | 25 L40S-h | 1.2576 | 0.0652 |
 | Cahn-Hilliard 128³ `bi_s11` upsampled | NuMPI (host) | 446 | 17.1 h (2 h lost to the g3610 ECC fault) | 68 L40S-h | 1.2645 | 0.0701 |
-| chain 64³→128³→256³→512³ (all levels) | NuMPI (host) | 56 at 512³ | 11 h 23 min | 1 H200-h + 36.6 L40S-h | 1.1706 | 0.0503 |
+| chain 128³ → 256³ → 512³ (`video_s0.3`, all stages) | NuMPI (host) | 500 + 54 + 56 | 5 h 31 min (128³ 24 min, 256³ 2 h 48 min, 512³ 2 h 20 min) | 12.5 L40S-h | 1.1706 | 0.0503 |
 
 - The 512³ Cahn-Hilliard start has ~2x the interface energy at first (structure ~3.6x finer than `bi_s11`) but
   overtakes the upsampled 128³ start after ~200 iterations and converges in fewer iterations.
 - Per iteration: 55 s (lbfgs_xp) vs 126 s (NuMPI run): time outside the CG solves 1964 s of 22262 s (Helmholtz
   1297 s) vs 18454 s of 53641 s, and fewer CG iterations per evaluation (220 vs 366).
-- Both direct starts end in a worse local optimum than the chain (f 1.26 vs 1.17): the chain is still the best design,
-  the Cahn-Hilliard start is the cheapest way to a converged 512³ design.
+- The chain's 5 h 31 min include 2 h 25 min of ONE wild trial step at 256³ (before `LBFGS_FIRST_STEP`); without it
+  ~3 h 06 min, and with `lbfgs_xp` ~2 h 15 min (section 17). The chain is cheaper AND better: both direct starts end
+  in a worse local optimum (f 1.26 vs 1.17). The production chain `aux_s0.3_fused` (11 h 23 min, section 17) reached
+  f 1.082 because its 512³ stage ran 373 iterations without the 1e-3 stopping test.
+- Correction (2026-11-16): the first version of this table gave the chain as 11 h 23 min with f 1.1706; that mixed the
+  production chain's time with the video chain's result.
