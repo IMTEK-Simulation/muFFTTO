@@ -18,18 +18,18 @@ from muFFTTO import visualization_utils
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 10                  # number of load steps (nominal; a failed trust-region solve halves the step)
+N_inc = 12                  # number of load steps (nominal; a failed trust-region solve halves the step)
 NEWTON_TOL = 5e-7           # only for the small-strain probe of NU_LAT / E_eff below (|r| / |r0| of its Newton solve)
 E_LOAD = 1                  # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False     # plot the deformed cell after every load step
 plot_fig4 = True           # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
-MATERIAL = 'simplified'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
+MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
                             #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
 INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --sri): mu part at the 4 Gauss points,
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
-                            #          LOCKS for Lambda/mu = 1000)
+                            #          LOCKS for Lambda/mu = 1000) (Always use
 SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, which
                             #           the trust region handles (Steihaug CG stops at negative curvature)
                             # 'spd'   = without the initial-stress part of the lam term (same solution, other path)
@@ -44,12 +44,14 @@ TR_DELTA_MAX  = 0.5         # Martin --delta_max
 TR_INNER_TOL  = 1e-6        # Martin --inner_tol: Steihaug CG relative energy-error tolerance
 TR_INNER_TAU  = 0.25        # Martin --inner_tau: adaptive delay of the energy-error estimate (minimum delay 10)
 TR_MAXITER    = 500         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
+CELLS         = (1, 2)      # (1, 1) = primitive cell; (1, 2) = 1 x 2 supercell
+IMPERFECTION  = 0.0         # Martin --imperfection, in pixel sizes (e.g. 1e-3); 0 = perfect cell
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.020, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+EPS_MAX = {'X': 0.05, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
-Y_MAX_MPA = {'X': 0.010, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
+Y_MAX_MPA = {'X': 0.015, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
 # NU_MODE = 'auto': computed in this script at F = I (2 linear solves) for exactly this NX, element, MATERIAL and
 # INTEGRATION. 'table': the values below (small-strain script: bilinear, full integration only)
@@ -58,10 +60,19 @@ NU_LAT_TABLE = {('paper',      64):  {'X': 0.2575, 'Y': 0.2797},
                 ('paper',      128): {'X': 0.2990, 'Y': 0.3479},
                 ('simplified', 64):  {'X': 0.3269, 'Y': 0.3933},
                 ('simplified', 128): {'X': 0.3383, 'Y': 0.4217}}
-PAPER_SLOPE_MPA = {'X': {'Exp.': 0.32, 'Sim. periodic': 0.35},   # initial slopes digitised from Fig. 4,
-                   'Y': {'Exp.': 0.46, 'Sim. periodic': 0.50}}   # approx. +-5 %
+PAPER_SLOPE_MPA = {'X': {'Exp.': 0.31, 'Sim. periodic': 0.32},   # initial slopes of Fig. 4 (least-squares fit through 0
+                   'Y': {'Exp.': 0.48, 'Sim. periodic': 0.46}}   # for eps <= 0.6 eps_cr of the digitised curves), +-5-10 %
+# Paper curves in the Fig. 4 plot (full range 0 - 0.2, also after the critical point) =====================
+EPS_CR       = {'X': 0.016, 'Y': 0.026}         # critical strains of the infinite periodic composite (paper Sec. 3)
+PAPER_CURVES = ('experiment', 'periodic')       # digitised curves to plot: 'experiment', 'periodic', 'finite size'
+PAPER_CSV    = 'paper_fig4_compositeA_digitised.csv'   # in exp_data/ next to this script (digitised from the PDF)
+PLOT_PAPER_SLOPES = False                       # also plot the initial-slope lines of PAPER_SLOPE_MPA
 # ====================================================================================================================================================
-
+problem_type        = 'elasticity'
+discretization_type = 'finite_element'
+element_type        = 'biquadratic_rectangle' #bilinear_rectangle
+formulation         = 'finite_strain'
+preconditioner_type = 'Green'
 # ============================================================================
 # argument parsing
 # ============================================================================
@@ -114,22 +125,20 @@ incl_vol_frac = 1.0 - c_matrix          # total circle fraction (voids + stiff)
 a = r * np.sqrt(2 * np.pi / (np.sqrt(3) * incl_vol_frac))
 ligament = a - 2 * r                                            # thinnest matrix ligament (void-void)
 
-domain_size      = [2 * a, np.sqrt(3) * a]
-number_of_pixels = (nnn, int(round(nnn * domain_size[1] / domain_size[0])))   # square pixels
+cell_size        = [2 * a, np.sqrt(3) * a]
+domain_size      = [CELLS[0] * cell_size[0], CELLS[1] * cell_size[1]]
+number_of_pixels = (CELLS[0] * nnn, CELLS[1] * int(round(nnn * cell_size[1] / cell_size[0])))
 dim              = len(domain_size)
 h_x, h_y = domain_size[0] / number_of_pixels[0], domain_size[1] / number_of_pixels[1]   # actual sizes
 
 if MPI.COMM_WORLD.rank == 0:
     print(f'a = {a * L_REF:.3f} mm | ligament = {ligament * L_REF:.3f} mm | '
           f'pixel = {h_x * L_REF:.4f} x {h_y * L_REF:.4f} mm | '
-          f'{ligament / max(h_x, h_y):.1f} px across ligament | grid = {number_of_pixels}')
+          f'{ligament / max(h_x, h_y):.1f} px across ligament | grid = {number_of_pixels} | '
+          f'cells = {CELLS[0]} x {CELLS[1]} | imperfection = {IMPERFECTION:g} pixel sizes')
 
 
-problem_type        = 'elasticity'
-discretization_type = 'finite_element'
-element_type        = 'biquadratic_rectangle' #
-formulation         = 'finite_strain'
-preconditioner_type = 'Green'
+
 
 _info = {
     'problem_type':        problem_type,
@@ -157,10 +166,12 @@ discretization = domain.Discretization(cell=my_cell,
 # output folders
 # ============================================================================
 file_folder_path   = os.path.dirname(os.path.realpath(__file__))
+run_tag            = ('' if tuple(CELLS) == (1, 1) else f'_cells{CELLS[0]}x{CELLS[1]}') + \
+                     ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}')
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
@@ -204,12 +215,15 @@ _info['E_LOAD']     = E_LOAD
 geometry_ID = 'geometry_stefanus'
 
 phase_field = discretization.get_scalar_field(name='phase_field')
+coords_all  = np.asarray(discretization.fft.coords)
+coords_prim = np.stack([np.mod(coords_all[0] * CELLS[0], 1.0),
+                        np.mod(coords_all[1] * CELLS[1], 1.0)])
 phase_field.s[0, 0] = microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
     microstructure_name=geometry_ID,
-    coordinates=discretization.fft.coords,
+    coordinates=coords_prim,
     vol_frac=incl_vol_frac,
-    domain_size=domain_size
+    domain_size=cell_size
 )
 
 matrix_mask = phase_field.s[0, 0] == 0
@@ -435,7 +449,7 @@ load_pattern       = np.zeros((dim, dim))       # total macro gradient F - I
 if LOAD_MODE == 'fig4':
     load_pattern[k, k] = -EPS_MAX[LOAD_DIRECTION]                           # uniaxial compression
     load_pattern[l, l] = +NU_LAT[LOAD_DIRECTION] * EPS_MAX[LOAD_DIRECTION]  # lateral expansion (free side, simple)
-    load_pattern[l, k] = 0.01   # introduce shear for imperfection
+    # load_pattern[l, k] = 0.01   # introduce shear for imperfection
 else:                                           # 'manual': set any components here (index [i, j] = du_i/dx_j)
     load_pattern[0, 1] = 0.01                   # shear
     load_pattern[0, 0] = 0.04                   # stretch in x
@@ -586,7 +600,7 @@ def tr_precond(r):
 max_step, t_load, inc = 1.0 / ninc, 0.0, 0
 min_step = max_step / 64
 d_t      = max_step
-x_cur    = tr_join(np.zeros(nb_u), 0.0)
+x_cur    = tr_join(IMPERFECTION * h_x * np.random.default_rng(1).standard_normal(u_work.s.shape).ravel(), 0.0)
 while t_load < 1.0 - 1e-12:
     d_t = min(d_t, 1.0 - t_load)
     tr_F_macro[...] = np.eye(dim) + (t_load + d_t) * E_LOAD * load_pattern
@@ -663,7 +677,7 @@ _info['elapsed_time']    = elapsed_time
 if discretization.communicator.rank == 0:
     print('=' * 70)
     print(f'element_type     : {element_type} | integration: {INTEGRATION} | tangent: {SRI_TANGENT} | material: {MATERIAL}')
-    print(f'number_of_pixels : {number_of_pixels}')
+    print(f'number_of_pixels : {number_of_pixels}  (cells {CELLS[0]} x {CELLS[1]}, imperfection {IMPERFECTION:g})')
     print(f'preconditioner   : {preconditioner_type}')
     print(f'Total CG its     : {sum_CG_its}')
     print(f'Total TR its     : {sum_Newton_its}  (trust-region Newton iterations)')
@@ -702,19 +716,42 @@ if discretization.communicator.rank == 0 and LOAD_MODE == 'fig4':
 
     if plot_fig4:
         from matplotlib import pyplot as plt
+
         fig, ax = plt.subplots(figsize=(5, 4.2))
+        x_top = max(EPS_MAX[LOAD_DIRECTION], eps_nom.max())
+        y_seen = [stress_MPa.max()]
+        # digitised paper curves (whole range, also after the critical point), line styles as in the paper
+        paper_file = os.path.join(file_folder_path, 'exp_data', PAPER_CSV)
+        paper_styles = {'experiment': ('k-', 'paper Exp.'),
+                        'periodic': ('r-.', 'paper Sim. periodic'),
+                        'finite size': ('b--', 'paper Sim. finite size')}
+        if os.path.isfile(paper_file):
+            import csv
+
+            with open(paper_file, encoding='utf-8') as fh:  # columns: direction, curve, eps, stress_MPa
+                paper_rows = list(csv.reader(line for line in fh if not line.startswith('#')))[1:]
+            for curve in PAPER_CURVES:
+                e_p, s_p = np.array([(float(r[2]), float(r[3])) for r in paper_rows
+                                     if r[0] == LOAD_DIRECTION and r[1] == curve]).T
+                ax.plot(e_p, s_p, paper_styles[curve][0], lw=1.2, label=paper_styles[curve][1] + ' (digitised)')
+                y_seen.append(s_p[e_p <= x_top].max())
+        else:
+            print(f'paper curves not plotted: {paper_file} not found')
+        if PLOT_PAPER_SLOPES:
+            for (name, slope), style in zip(PAPER_SLOPE_MPA[LOAD_DIRECTION].items(), ['k:', 'r:']):
+                ax.plot(eps_nom, slope * eps_nom, style, lw=1, label=f'paper {name} (initial slope, digitised)')
         ax.plot(eps_nom, stress_MPa, 'o-', color='tab:green', ms=3,
-                label=f'muFFTTO finite strain ({number_of_pixels[0]}x{number_of_pixels[1]}, {element_type}, {INTEGRATION}, {MATERIAL})')
-        for (name, slope), style in zip(PAPER_SLOPE_MPA[LOAD_DIRECTION].items(), ['k-', 'r-.']):
-            ax.plot(eps_nom, slope * eps_nom, style, lw=1, label=f'paper {name} (initial slope, digitised)')
-        ax.set_xlim(0, EPS_MAX[LOAD_DIRECTION])
-        ax.xaxis.set_major_locator(plt.MaxNLocator(5))                       # 0, 0.004, ..., 0.020 (as small strain)
-        ax.yaxis.set_major_locator(plt.MultipleLocator(0.002))               # y ticks every 0.002 MPa (as small strain)
-        ax.set_ylim(0, max(Y_MAX_MPA[LOAD_DIRECTION], 1.05 * stress_MPa.max()))   # fixed top, grows if the curve is higher
+                label=f'muFFTTO finite strain ({number_of_pixels[0]}x{number_of_pixels[1]}, {CELLS[0]}x{CELLS[1]} cells, '
+                      f'{element_type}, {INTEGRATION}, {MATERIAL})')
+        ax.axvline(EPS_CR[LOAD_DIRECTION], color='k', ls=':', lw=1)  # eps_cr, dotted as in the paper
+        ax.set_xlim(0, x_top)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(5))
+        ax.yaxis.set_major_locator(plt.MultipleLocator(0.002))  # y ticks every 0.002 MPa (as small strain)
+        ax.set_ylim(0, max(Y_MAX_MPA[LOAD_DIRECTION], 1.05 * max(y_seen)))  # fixed top, grows if a curve is higher
         ax.set_xlabel(rf'Nominal strain, $\varepsilon_{LOAD_DIRECTION}$')
         ax.set_ylabel('Nominal stress (MPa)')
         ax.set_title(f'Fig. 4{"a" if LOAD_DIRECTION == "X" else "b"}: uniaxial compression in {LOAD_DIRECTION} '
-                     f'(up to eps_cr)', fontsize=10)
+                     f'(dotted: eps_cr = {EPS_CR[LOAD_DIRECTION]})', fontsize=10)
         ax.legend(fontsize=7, loc='upper left')
         ax.grid(alpha=0.3)
         fig.tight_layout()
