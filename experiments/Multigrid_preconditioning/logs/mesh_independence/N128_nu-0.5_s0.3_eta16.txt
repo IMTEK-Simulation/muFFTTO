@@ -1,0 +1,18 @@
+2D TO 128^2, energy objective, target nu* -0.5 scale 0.3: 600 iterations, 687 evaluations
+targets  C1111 +0.08679  C1122 -0.02893  C2222 +0.08679  C1212 +0.05786
+final    C1111 +0.09492  C1122 -0.02085  C2222 +0.09499  C1212 +0.03521   nu12 -0.2196  f 1.11292 (misfit 0.24888, interface 0.86404)  max relative energy misfit 0.391
+
+stopping test          iteration  evaluations  share     nu12  max rel. misfit         f  mean |rho - rho_final|
+E_close(0.2)               never
+E_close(0.1)               never
+E_close(0.05)              never
+E_close(0.02)              never
+E_settled(0.01)               70           89    13%  -0.2238            0.406   1.12056                  0.0428
+E_settled(0.003)              88          108    16%  -0.2214            0.398   1.11613                  0.0295
+E_settled(0.001)             118          138    20%  -0.2203            0.392   1.11325                  0.0090
+E_settled(0.0003)            141          161    23%  -0.2198            0.392   1.11297                  0.0031
+F_settled(0.01)               55           74    11%  -0.2267            0.423   1.12855                  0.0534
+F_settled(0.001)             104          124    18%  -0.2210            0.393   1.11414                  0.0172
+F_settled(0.0001)            134          154    22%  -0.2198            0.392   1.11300                  0.0043
+step < 1e-3 (xtol)           133          153    22%  -0.2198            0.392   1.11301                  0.0045
+full run                     600          687   100%  -0.2196            0.391   1.11292                  0.0000

@@ -1,0 +1,1 @@
+2D noise start 512^2 (noise drawn on 64^2), FIRST_STEP 0.05, seed 0: 300 iterations, 321 evaluations, 1412 s; final f 0.80186 (misfit 0.0014, interface 0.8004), std 0.4621, grey 0.067, nu12 -0.317; optimizer: MAXITER

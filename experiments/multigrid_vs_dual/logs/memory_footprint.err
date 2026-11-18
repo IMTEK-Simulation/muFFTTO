@@ -1,0 +1,3 @@
+E1116 08:57:56.809123 3169958 cuda_context.cc:141] The primary context is active and has a different flag set (128) than the desired flag set (0).
+/home/martin/PycharmProjects/muFFTTO_fable/experiments/multigrid_vs_dual/../../muFFTTO/discretization_library.py:351: RuntimeWarning: The discrete Laplacian operator is identically zero for this element/geometry combination, so any term built on it will have no effect. This is expected for P1 elements (no curvature) and for Q1 elements on axis-aligned pixels, where J^-1 is diagonal and the mixed reference derivatives are annihilated by the metric. Use the full Hessian operator if you need a nonzero second-derivative penalty.
+  self._compute_laplacian_matrices(
