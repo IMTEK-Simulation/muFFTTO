@@ -257,6 +257,9 @@ def test_mpi_matches_serial(tmp_path):
     mpirun = shutil.which('mpirun') or shutil.which('mpiexec')
     if mpirun is None:
         pytest.skip('mpirun not available')
+    import muGrid
+    if not muGrid.has_mpi:
+        pytest.skip('muGrid built without MPI (e.g. the PyPI wheel)')
     script = tmp_path / 'filter_mpi.py'
     script.write_text(MPI_SCRIPT)
     # importing mpi4py initialised MPI in this process; its environment must not leak into the child mpirun
