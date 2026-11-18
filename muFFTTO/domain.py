@@ -207,6 +207,34 @@ def _fused_tensor_kernel(xp, tensors, transposed):
     return xp.ElementwiseKernel(inputs, outputs, ' '.join(code), 'scaled_material_apply')
 
 
+class GlobalReduction:
+    """Reductions over all MPI ranks of a muGrid communicator (works for numpy and cupy arrays).
+
+    ``sum``/``min``/``max``/``mean`` of a whole local array give a global scalar (NuMPI's ``Reduction`` interface,
+    muGrid's ``communicator.reduction``); ``sum(a, axis=...)``, ``min(a, axis=...)``, ``max(a, axis=...)`` reduce
+    the local array along ``axis`` first and return the elementwise global result (an array).
+    """
+
+    def __init__(self, communicator):
+        self.communicator = communicator
+
+    def _along(self, operation, a, axis):
+        xp = tensor_operations.get_array_module(a)
+        return getattr(self.communicator, operation)(getattr(xp, operation)(xp.asarray(a), axis=axis))
+
+    def sum(self, a, axis=None):
+        return self.communicator.reduce_sum(a) if axis is None else self._along('sum', a, axis)
+
+    def min(self, a, axis=None):
+        return self.communicator.reduce_min(a) if axis is None else self._along('min', a, axis)
+
+    def max(self, a, axis=None):
+        return self.communicator.reduce_max(a) if axis is None else self._along('max', a, axis)
+
+    def mean(self, a):
+        return self.communicator.reduce_mean(a)
+
+
 def quad_point_blocks(nb_quad_points, low_memory):
     """The quadrature points in the blocks an operation on a ``[.., q, x, y(, z)]`` field is evaluated in, as slices
     of the q axis (the axis is kept, so the same expression serves both modes):
@@ -354,7 +382,7 @@ class Discretization:
         Interpolation, Hessian and Laplacian stencils (same layout idea).
     gradient_op, interpolation_op, hessian_op, laplacian
         muGrid ``GenericLinearOperator`` wrappers of the stencils above.
-    mpi_reduction : muGrid communicator reduction
+    mpi_reduction : GlobalReduction
         Helper for global (all-rank) sums/min/max.
     """
 
@@ -444,7 +472,7 @@ class Discretization:
         self.device = device
         self.low_memory = low_memory           # see the docstring and quad_point_blocks()
         self.communicator = communicator
-        self.mpi_reduction = communicator.reduction   # .sum/.min/.max/.mean of a whole array over all ranks
+        self.mpi_reduction = GlobalReduction(communicator)   # sum/min/max over all ranks, of an array or along axes
         # Validate the symmetries of material data where it enters a solve
         # (see check_material_symmetry); can be switched off for speed.
         self.check_material_symmetry = True
