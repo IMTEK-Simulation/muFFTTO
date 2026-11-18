@@ -207,6 +207,39 @@ def random_field(coords, seed=0):
     return (h >> np.uint64(11)).astype(float) / float(2 ** 53)  # top 53 bits -> [0, 1)
 
 
+def correlated_random_field(coords, correlation_length, seed=0):
+    """Smooth periodic random field with values in ``(0, 1)`` and correlation length ``correlation_length``.
+
+    A random Fourier series ``sum_k a_k (xi_k cos 2 pi k.x + eta_k sin 2 pi k.x)``, ``xi, eta ~ N(0, 1)``, over a
+    half space of wave vectors ``k`` with ``|k_i| <= k_max = ceil(3 / (2 pi l_c))``, with the Gaussian spectrum
+    ``a_k^2 ~ exp(-(2 pi |k| l_c)^2 / 2)``, mapped by the normal CDF of its standard deviation to a uniform marginal.
+    It depends on the points only, not on the grid or the MPI decomposition (e.g. a random toughness Gc(x)).
+    2D and 3D; in 2D the values are those of the phase-field fracture studies.
+    """
+    from scipy.special import ndtr
+    coords = np.asarray(coords, dtype=float)
+    dim = coords.shape[0]
+    rng = np.random.default_rng(seed)
+    k_max = int(np.ceil(3.0 / (2 * np.pi * correlation_length)))
+    span = range(-k_max, k_max + 1)
+    if dim == 2:
+        wave_vectors = [(i, j) for i in span for j in range(0, k_max + 1) if j > 0 or i > 0]
+    elif dim == 3:
+        wave_vectors = [(i, j, l) for i in span for j in span for l in range(0, k_max + 1)
+                        if l > 0 or j > 0 or (j == 0 and i > 0)]
+    else:
+        raise ValueError(f'correlated_random_field: dim must be 2 or 3, got {dim}')
+    field = np.zeros(coords.shape[1:])
+    variance = 0.0
+    for k in wave_vectors:
+        amplitude = np.exp(-(2 * np.pi * np.linalg.norm(k) * correlation_length) ** 2 / 4)
+        xi, eta = rng.standard_normal(2)
+        phase = 2 * np.pi * sum(k_i * x_i for k_i, x_i in zip(k, coords))
+        field += amplitude * (xi * np.cos(phase) + eta * np.sin(phase))
+        variance += amplitude ** 2
+    return ndtr(field / np.sqrt(variance))
+
+
 def _splitmix64(x):
     """SplitMix64 finaliser: a fast, well-mixing 64-bit integer hash."""
     x = (x ^ (x >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
