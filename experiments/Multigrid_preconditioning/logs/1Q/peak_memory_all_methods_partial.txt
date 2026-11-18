@@ -1,2 +1,0 @@
-trilinear_hexahedron N 32 eta 0 peak 268 MiB
-trilinear_hexahedron N 32 eta 1 peak 268 MiB

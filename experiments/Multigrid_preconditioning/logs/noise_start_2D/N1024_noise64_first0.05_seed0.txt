@@ -1,1 +1,0 @@
-2D noise start 1024^2 (noise drawn on 64^2), FIRST_STEP 0.05, seed 0: 88 iterations, 101 evaluations, 1327 s; final f 3.95353 (misfit 3.9533, interface 0.0002), std 0.0003, grey 0.000, nu12 +0.400; optimizer: collapsed to a uniform design (std < 1e-3)

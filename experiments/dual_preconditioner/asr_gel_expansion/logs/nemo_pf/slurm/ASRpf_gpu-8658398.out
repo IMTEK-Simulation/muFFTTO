@@ -1,6 +1,0 @@
-job 8658398 host g3609 start 2026-11-07T12:54:39+01:00 DIM=2 N=512 fourel Green_Jacobi log=/work/classic/fr_ml1145-muffto/runs/asr_pf_fourel/logs/ASRpf_fourel_N512_Green_Jacobi.log RESTART_FROM=
-NVIDIA L40S, 46068 MiB, 615.71.10
-12:56 792260, 1006 MiB  util 88 %
-13:06 792260, 1006 MiB  util 88 %
-13:16 792260, 1006 MiB  util 88 %
-[2026-11-07T13:20:20.279] error: *** JOB 8658398 ON g3609 CANCELLED AT 2026-11-07T13:20:20 DUE to SIGNAL Terminated ***

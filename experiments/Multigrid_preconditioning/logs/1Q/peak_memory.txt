@@ -1,9 +1,0 @@
-trilinear_hexahedron N 32 eta 0 peak 14 MiB
-trilinear_hexahedron N 32 eta 1 peak 14 MiB
-trilinear_hexahedron N 32 eta 2 peak 246 MiB
-trilinear_hexahedron_1Q N 32 eta 0 peak 164 MiB
-trilinear_hexahedron_1Q N 32 eta 1 peak 164 MiB
-trilinear_hexahedron_1Q N 32 eta 2 peak 164 MiB
-trilinear_hexahedron N 64 eta 0 peak 1080 MiB
-trilinear_hexahedron N 64 eta 1 peak 1080 MiB
-trilinear_hexahedron N 64 eta 2 peak 1080 MiB

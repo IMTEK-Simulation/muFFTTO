@@ -1,2 +1,0 @@
-baseline N 32 peak 212 MiB exit 0 21 evals TOTAL wall 313.9 s, CG mech 1928, CG adjoint 1981, evaluations 21, MG setup 25.4 s
-baseline N 64 peak 876 MiB exit 0 11 evals TOTAL wall 392.4 s, CG mech 1138, CG adjoint 1176, evaluations 11, MG setup 18.9 s
