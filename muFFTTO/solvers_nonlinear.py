@@ -508,8 +508,10 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
             result = Optimization.l_bfgs_projected(counted_fun, x0, constraint, jac=True, bounds_lo=lo, bounds_hi=hi,
                                                    comm=comm, **common, **options)
         else:
+            # precond only when given: NuMPI without the preconditioned L-BFGS (muSpectre/NuMPI PR #112) lacks it
+            extra = {} if precond is None else {'precond': precond}
             result = Optimization.l_bfgs_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi, comm=comm,
-                                                 precond=precond, **common, **options)
+                                                 **extra, **common, **options)
     elif method == 'mma':
         if precond is not None or hessp is not None:
             raise ValueError("'mma' takes neither hessp nor precond")

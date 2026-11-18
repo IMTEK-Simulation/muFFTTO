@@ -617,14 +617,9 @@ def run_grid_adaptation_workflow(
     #
     # if relax_iters < 0:
     #     raise ValueError("relax_iters must be non-negative.")
-    #
-    # data = np.load(input_path).astype(np.float32)
-    #
-    # if data.ndim != 2:
-    #     raise ValueError(
-    #         "Expected a 2-D input image, "
-    #         f"but got shape {data.shape}."
-    #     )
+    data = np.load(input_path).astype(np.float32)
+    if data.ndim != 2:
+        raise ValueError(f"Expected a 2-D input image, but got shape {data.shape}.")
     #
     # if verbose:
     #     print(f"Loaded data successfully: {input_path}")

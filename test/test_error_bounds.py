@@ -152,7 +152,9 @@ def test_delayed_estimate_matches_paper_and_solver(problem):
     ours = DelayedEnergyErrorEstimate()
     paper = two_sided.DelayedEstimate()
     for alpha, rz in steps:
-        assert ours.update(alpha, rz) == pytest.approx(paper.update(alpha, rz), rel=1e-12)
+        accepted_ours, accepted_paper = ours.update(alpha, rz), paper.update(alpha, rz)
+        assert [l for l, _ in accepted_ours] == [l for l, _ in accepted_paper]
+        assert [v for _, v in accepted_ours] == pytest.approx([v for _, v in accepted_paper], rel=1e-12)
     _, (_, info) = problem.solve(name='solver_estimate', maxiter=60, d_min=0, stopping_rule=residual_rule(1e-24))
     estimates = [value for _, value in ours.estimates]
     solver_estimates = [value for _, value in info['estimator'].estimates]

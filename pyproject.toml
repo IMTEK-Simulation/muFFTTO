@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-xdist",
     "pytest-cov",
     "flake8"
 ]

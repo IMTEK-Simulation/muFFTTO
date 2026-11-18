@@ -23,6 +23,11 @@ from scipy.optimize import minimize as scipy_minimize
 
 from muFFTTO.solvers_nonlinear import minimize, mma_bounded
 
+import inspect
+needs_lbfgs_precond = pytest.mark.skipif(
+    'precond' not in inspect.signature(l_bfgs_bounded).parameters,
+    reason='NuMPI without the preconditioned l_bfgs_bounded (muSpectre/NuMPI PR #112)')
+
 
 def separable_quadratic(c):
     return lambda x: (0.5 * np.sum((x - c) ** 2), x - c)
@@ -121,6 +126,7 @@ def test_minimize_box_only_same_minimum(method):
     assert result.fun == pytest.approx(reference.fun, rel=1e-6)
 
 
+@needs_lbfgs_precond
 def test_minimize_l_bfgs_precond_box():
     """L-BFGS with a preconditioned initial inverse Hessian, passed through minimize: a mild smoother (I + K)^-1 of
     the Laplacian-type problem (about 60 % of the components end on the box) reaches the same minimum (fewer

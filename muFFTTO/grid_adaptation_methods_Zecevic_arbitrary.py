@@ -1,5 +1,6 @@
 from __future__ import annotations
 import time
+from os import PathLike
 from pathlib import Path
 from typing import Union
 import matplotlib.pyplot as plt
@@ -12,8 +13,7 @@ def majority_vote_for_coarse_grids(
         coarse_Ny: int,
 ):
     fine_phase_label_mask = np.asarray(fine_phase_label_mask)
-
-    return coarse_phase_label_mask
+    raise NotImplementedError('majority_vote_for_coarse_grids is not written yet')
 # MAIN
 def adapt_grid_to_arbitrary_shape(
         input_path: PathLike,
@@ -47,8 +47,8 @@ def adapt_grid_to_arbitrary_shape(
     # find edge index
     fine_edge_cell_idx_y, fine_edge_cell_idx_x = np.nonzero(edge_binary)
     # edge cells centre coords: used to tell if the fine edge cell is inside the coarse cell
-    fine_edge_cell_centre_coords_x = (edge_idx_x + 0.5) / nx * Lx
-    fine_edge_cell_centre_coords_y = (edge_idx_y + 0.5) / ny * Ly
+    fine_edge_cell_centre_coords_x = (fine_edge_cell_idx_x + 0.5) / nx * Lx
+    fine_edge_cell_centre_coords_y = (fine_edge_cell_idx_y + 0.5) / ny * Ly
 
     fine_edge_cell_centre = np.column_stack((fine_edge_cell_centre_coords_x,fine_edge_cell_centre_coords_y))
     print("hello")
