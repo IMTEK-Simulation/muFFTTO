@@ -76,7 +76,7 @@ class SquareInclusion:
         field.s[...] = 0.0 if values is None else values
         return field
 
-    def solve(self, solver=solvers.conjugate_gradients_mugrid, name='solution', **options):
+    def solve(self, solver=solvers.conjugate_gradients, name='solution', **options):
         """PCG from u_0 = 0; returns the solution field and the solver output."""
         u = self.field(name)
         out = solver(comm=self.discretization.communicator, fc=self.discretization.field_collection,
@@ -98,8 +98,18 @@ class SquareInclusion:
             snapshots.append(np.array(x, copy=True))
             previous['rz'] = float(np.dot(r.ravel(), z.ravel()))
 
-        self.solve(name='iterates', tol=1e-12, rtol=True, maxiter=maxiter, callback=callback)
+        self.solve(name='iterates', maxiter=maxiter, callback=callback, stopping_rule=residual_rule(1e-24))
         return snapshots, steps
+
+
+def residual_rule(relative):
+    """Stopping rule of conjugate_gradients: (r_k, z_k) below `relative` times its first value."""
+    first = {}
+
+    def rule(iteration, x, alpha, rz):
+        first.setdefault('rz', rz)
+        return rz <= relative * first['rz']
+    return rule
 
 
 def spread(snapshots, count=7):
@@ -143,10 +153,10 @@ def test_delayed_estimate_matches_paper_and_solver(problem):
     paper = two_sided.DelayedEstimate()
     for alpha, rz in steps:
         assert ours.update(alpha, rz) == pytest.approx(paper.update(alpha, rz), rel=1e-12)
-    _, (_, norms) = problem.solve(solver=solvers.conjugate_gradients_mugrid_experimental, name='experimental',
-                                  tol=1e-12, rtol=True, maxiter=60, stop_crit_norm='rr')
+    _, (_, info) = problem.solve(name='solver_estimate', maxiter=60, d_min=0, stopping_rule=residual_rule(1e-24))
     estimates = [value for _, value in ours.estimates]
-    assert estimates == pytest.approx(norms['energy_lower_estim'][:len(estimates)], rel=1e-10)
+    solver_estimates = [value for _, value in info['estimator'].estimates]
+    assert estimates == pytest.approx(solver_estimates[:len(estimates)], rel=1e-10)
 
 
 def eager_stop_iteration(problem, theta, maxiter):
@@ -174,7 +184,7 @@ def test_total_error_stop(problem):
     theta = 0.1
     bounds = TwoSidedBounds2D(problem.discretization, problem.material, problem.E_field, E)
     rule = TotalErrorStoppingRule(bounds, theta=theta)
-    u, _ = problem.solve(name='total_error_stop', stop_crit_norm='total_error', stopping_rule=rule, maxiter=500)
+    u, _ = problem.solve(name='total_error_stop', stopping_rule=rule, maxiter=500)
     stop = rule.history['iteration'][-1]
     upper, lower = rule.history['upper'][-1], rule.best_lower
 
@@ -183,19 +193,10 @@ def test_total_error_stop(problem):
     # the certified interval contains the exact coefficient
     assert lower <= problem.A_exact <= upper
     # the true algebraic error at the stop, U_k - A_h (A_h from a tight reference solve), is below theta (U - L*)
-    reference, _ = problem.solve(name='reference', tol=1e-14, rtol=True, maxiter=5000)
+    reference, _ = problem.solve(name='reference', maxiter=5000, stopping_rule=residual_rule(1e-28))
     A_h, _ = bounds(reference)
     assert upper - A_h <= theta * (upper - lower)
-    # the experimental solver stops at the same iterate
-    rule_experimental = TotalErrorStoppingRule(bounds, theta=theta)
-    problem.solve(solver=solvers.conjugate_gradients_mugrid_experimental, name='total_error_experimental',
-                  stop_crit_norm='total_error', stopping_rule=rule_experimental, maxiter=500)
-    assert rule_experimental.history['iteration'][-1] == stop
 
-
-def test_total_error_stop_requires_rule(problem):
-    with pytest.raises(ValueError):
-        problem.solve(name='no_rule', stop_crit_norm='total_error')
 
 
 def test_stop_matches_paper_rule(problem):
@@ -215,6 +216,6 @@ def test_stop_matches_paper_rule(problem):
 
     ours = TotalErrorStoppingRule(TwoSidedBounds2D(problem.discretization, problem.material, problem.E_field, E),
                                   theta=0.1, algebraic_estimate='upper')
-    problem.solve(name='paper_rule', stop_crit_norm='total_error', stopping_rule=ours, callback=drive_paper_rule,
+    problem.solve(name='paper_rule', stopping_rule=ours, callback=drive_paper_rule,
                   maxiter=500)
     assert paper_rule.stop == ours.history['iteration'][-1]

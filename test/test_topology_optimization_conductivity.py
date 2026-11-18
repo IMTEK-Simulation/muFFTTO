@@ -176,7 +176,7 @@ def test_fd_check_of_whole_objective_function_2D_conductivity(discretization_fix
         temperature_field = discretization.get_unknown_size_field(name='temperature_field_')
         temperature_field.s.fill(0)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator

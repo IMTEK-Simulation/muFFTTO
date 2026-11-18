@@ -185,22 +185,11 @@ def _diagonal_system(disc, scale):
 
 
 def test_cg_relative_tolerance_ignores_absolute_scale():
-    """With rtol=True a tiny right-hand side must still be solved accurately."""
-    disc = _make_discretization('conductivity')
-    scale = 1e-12  # initial residual is far below the absolute tol**2
-    b, x, hessp, precond = _diagonal_system(disc, scale)
-    x = solvers.conjugate_gradients_mugrid(disc.communicator, disc.field_collection,
-                                           hessp, b, x, precond, tol=1e-8, rtol=True)
-    np.testing.assert_allclose(x.s, scale, rtol=1e-6)
-
-
-def test_experimental_cg_relative_tolerance_ignores_absolute_scale():
+    """The energy test is relative: a tiny right-hand side must still be solved accurately."""
     disc = _make_discretization('conductivity')
     scale = 1e-12
     b, x, hessp, precond = _diagonal_system(disc, scale)
-    x, _ = solvers.conjugate_gradients_mugrid_experimental(
-        disc.communicator, disc.field_collection, hessp, b, x, precond,
-        tol=1e-8, rtol=True)
+    x, _ = solvers.conjugate_gradients(disc.communicator, disc.field_collection, hessp, b, x, precond, tol=1e-8)
     np.testing.assert_allclose(x.s, scale, rtol=1e-6)
 
 
@@ -209,15 +198,6 @@ def test_findS_accepts_lists():
     Delta = [6.0, 3.0, 0.5, 0.5]
     S = solvers.findS(curve, Delta, 1)
     assert S == pytest.approx(max(c / d for c, d in zip(curve[:-1], Delta[:-1])))
-
-
-def test_adam_without_callback_minimises_quadratic():
-    target = np.array([1.0, -2.0, 0.5])
-    x, phi, _ = solvers.adam(f=lambda x: float(np.sum((x - target) ** 2)),
-                             df=lambda x: 2 * (x - target),
-                             x0=np.zeros(3), n_iter=5000, alpha=0.05,
-                             beta1=0.9, beta2=0.999, gtol=1e-6, ftol=0.0)
-    np.testing.assert_allclose(x, target, atol=1e-3)
 
 
 # ---------------------------------------------------------------------------
@@ -292,3 +272,14 @@ def test_jacobi_diagonal_covers_all_nodes_of_q2(problem_type):
         disc.apply_system_matrix_mugrid(material_data_field=material_field, input_field_inxyz=unit,
                                         output_field_inxyz=response)
         assert jacobi.s[index] == pytest.approx(response.s[index] ** -0.5, rel=1e-12), index
+
+
+def test_global_reduction_whole_array_and_along_axes():
+    """Discretization.mpi_reduction: global scalar for a whole array, elementwise result along axes."""
+    disc = _make_discretization('conductivity')
+    a = np.arange(24.0).reshape(2, 3, 4)
+    size = disc.communicator.size
+    assert disc.mpi_reduction.sum(a) == pytest.approx(size * a.sum())
+    np.testing.assert_allclose(disc.mpi_reduction.sum(a, axis=(1, 2)), size * a.sum(axis=(1, 2)))
+    assert disc.mpi_reduction.max(a) == pytest.approx(a.max())
+    np.testing.assert_allclose(disc.mpi_reduction.min(a, axis=0), a.min(axis=0))

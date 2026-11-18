@@ -4,7 +4,7 @@ Nonlinear solvers for muFFTTO.
 Cell problems
     :func:`solve_finite_strain_newton_cg`, an incremental Newton--Raphson solver for (finite-strain) hyperelastic
     cell problems on a periodic muFFTTO discretisation. Each Newton step solves the linearised equilibrium equations
-    with the preconditioned conjugate gradient solver :func:`muFFTTO.solvers.conjugate_gradients_mugrid`
+    with the preconditioned conjugate gradient solver :func:`muFFTTO.solvers.conjugate_gradients`
     (Newton--Krylov / Newton-CG scheme).
 
 Optimization (energy minimization, topology optimization)
@@ -119,8 +119,8 @@ def solve_finite_strain_newton_cg(
     newton_max_iter : int, optional
         Maximum Newton iterations per increment. Default 50.
     cg_tol : float, optional
-        *Relative* CG tolerance (CG is called with ``rtol=True``, i.e. it
-        stops when ``||r_k|| <= cg_tol * ||r_0||``). Default 1e-6.
+        Relative energy error of every linear solve (:func:`muFFTTO.solvers.conjugate_gradients`, minimal
+        delay 10). Default 1e-6.
     cg_max_iter : int, optional
         Maximum CG iterations per Newton step. Default 10000.
     preconditioner_type : str, optional
@@ -364,7 +364,7 @@ def solve_finite_strain_newton_cg(
             def cg_callback(it, x, r, p, z, stop_crit_norm):
                 cg_iter_count[0] = it
 
-            solvers.conjugate_gradients_mugrid(
+            solvers.conjugate_gradients(
                 comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,
@@ -373,9 +373,7 @@ def solve_finite_strain_newton_cg(
                 P=M_fun,
                 tol=cg_tol,
                 maxiter=cg_max_iter,
-                callback=cg_callback,
-                rtol=True,
-            )
+                callback=cg_callback)
 
             results['cg_iterations_per_newton_step'].append(cg_iter_count[0])
             results['total_cg_iterations'] += cg_iter_count[0]

@@ -191,7 +191,7 @@ def make_objective_function(discretization, preconditioner_type='Green_Jacobi'):
         temperature_field = discretization.get_unknown_size_field(name='temperature_field_')
         temperature_field.s.fill(0)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator

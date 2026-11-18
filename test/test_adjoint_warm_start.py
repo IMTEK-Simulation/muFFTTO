@@ -49,7 +49,7 @@ def setup_problem(n=16, p=3, contrast=1e-5, seed=3):
     rhs = discretization.get_unknown_size_field(name='rhs')
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=C_field, macro_gradient_field_ijqxyz=E, rhs_inxyz=rhs)
     u = discretization.get_unknown_size_field(name='u')
-    solvers.conjugate_gradients_mugrid(comm=discretization.communicator, fc=discretization.field_collection,
+    solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
                                        hessp=K_fun, b=rhs, x=u, P=M_fun, tol=1e-12, maxiter=20000)
     stress = discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=C_field,
                                                           displacement_field_inxyz=u, macro_gradient_field_ijqxyz=E,

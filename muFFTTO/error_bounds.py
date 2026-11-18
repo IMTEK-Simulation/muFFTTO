@@ -12,7 +12,8 @@ the total error: further iterations cannot improve the homogenized energy by mor
 
 This module provides
 
-* :class:`DelayedEnergyErrorEstimate` -- the PT estimate of the algebraic error: the Hestenes-Stiefel lower bound
+* :class:`DelayedEnergyErrorEstimate` (= :class:`muFFTTO.solvers.EnergyErrorEstimate`) -- the PT estimate of the
+  algebraic error: the Hestenes-Stiefel lower bound
   sum_{j=l}^{k} alpha_j (r_j, z_j) of ||u_h - u_l||_K^2 with the adaptive delay of Meurant, Papez and Tichy
   (Numer. Algorithms 88, 2021). It needs no bound on the spectrum and is accurate (within a factor of about
   0.16-1.33 of the true error for the Green preconditioner, Ladecky et al.), but it is not guaranteed.
@@ -29,62 +30,11 @@ This module provides
 """
 import numpy as np
 
-from muFFTTO.solvers import findS
+from muFFTTO.solvers import EnergyErrorEstimate
 
 
-class DelayedEnergyErrorEstimate:
-    """
-    PT estimate of the energy error of PCG (Meurant, Papez, Tichy 2021).
-
-    With Delta_j = alpha_j (r_j, z_j) = ||u_{j+1} - u_j||_K^2, the error of the iterate l is bounded from below by
-
-        ||u_h - u_l||_K^2 >= sum_{j=l}^{k} Delta_j.
-
-    The estimate for l is accepted at iteration k once the newest contribution is small,
-    S Delta_k / sum_{j=l}^{k-1} Delta_j <= tau, with the safety factor S of :func:`muFFTTO.solvers.findS`; with
-    d_min > 0 also the delay k - l must be at least d_min. This is the same estimator as in
-    :func:`muFFTTO.solvers.conjugate_gradients_mugrid_experimental` (stop_crit_norm='energy_lower_estim').
-
-    Call :meth:`update` once per PCG iteration with alpha_k and (r_k, z_k).
-    """
-
-    def __init__(self, tau=0.25, d_min=0):
-        self.tau = tau
-        self.d_min = d_min
-        self.Delta = []              # Delta_j = alpha_j (r_j, z_j)
-        self.curve = []              # curve[j] = sum_{i=j}^{k} Delta_i
-        self.l = 0                   # iterate whose error is estimated next
-        self.d = 0                   # current delay
-        self.estimates = []          # accepted (l, estimate of ||u_h - u_l||_K^2), in order of acceptance
-
-    @property
-    def latest(self):
-        """The most recent accepted estimate (None before the first one)."""
-        return self.estimates[-1][1] if self.estimates else None
-
-    @property
-    def initial_error(self):
-        """Estimate of the initial error ||u_h - u_0||_K^2 (a lower bound): the sum of all Delta_j so far."""
-        return self.curve[0] if self.curve else 0.0
-
-    def update(self, alpha, rz):
-        """Add the step of one PCG iteration; returns the newly accepted (l, estimate) pairs."""
-        self.Delta.append(alpha * rz)
-        self.curve = [value + self.Delta[-1] for value in self.curve] + [self.Delta[-1]]
-        accepted = []
-        if len(self.Delta) > 2:
-            safety_factor = findS(self.curve, self.Delta, self.l)
-            newest = safety_factor * self.Delta[-1]
-            tail = float(np.sum(self.Delta[self.l:-1]))
-            while (self.d >= 0 and tail > 0 and newest / tail <= self.tau
-                   and len(self.Delta) - self.l >= self.d_min):
-                accepted.append((self.l, tail + self.Delta[-1]))
-                self.l += 1
-                self.d -= 1
-                tail = float(np.sum(self.Delta[self.l:-1]))
-            self.d += 1
-        self.estimates += accepted
-        return accepted
+# the PT estimate of the algebraic error is the estimator of the library CG
+DelayedEnergyErrorEstimate = EnergyErrorEstimate
 
 
 class TwoSidedBounds2D:
@@ -206,11 +156,11 @@ class TotalErrorStoppingRule:
     As in the paper, U_k and L_k are evaluated at every iteration; the lower bound costs one FFT pair, i.e. about
     as much as one PCG iteration.
 
-    Usage with :func:`muFFTTO.solvers.conjugate_gradients_mugrid`::
+    Usage with :func:`muFFTTO.solvers.conjugate_gradients`::
 
         bounds = TwoSidedBounds2D(discretization, material, macro_gradient_field, E)
         rule = TotalErrorStoppingRule(bounds, theta=0.1)
-        conjugate_gradients_mugrid(..., stop_crit_norm='total_error', stopping_rule=rule)
+        conjugate_gradients(..., stopping_rule=rule)
         lower, upper = rule.best_lower, rule.history['upper'][-1]        # guaranteed interval for E^T A* E
 
     Parameters

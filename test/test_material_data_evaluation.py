@@ -293,7 +293,9 @@ def finite_difference_gradient(fun, x0, eps=1e-5):
 
 
 def identity_preconditioner(x, Px):
-    Px.s[...] = x.s
+    """Identity on the mean-free fields: the periodic operator is singular (constant null space), and a
+    preconditioner that keeps the mean lets CG blow up once the rest has converged (serial test)."""
+    Px.s[...] = x.s - x.s.mean(axis=tuple(range(2, x.s.ndim)), keepdims=True)
 
 
 def simp_material(disc, rho_values, base, void, p, name):
@@ -335,8 +337,8 @@ def test_elasticity_sensitivity_with_anisotropic_material(element_type, nb_pixel
         disc.get_rhs_mugrid(C, E_field, rhs)
         u = disc.get_displacement_sized_field(name='u_state')
         u.s.fill(0)
-        solvers.conjugate_gradients_mugrid(comm=disc.communicator, fc=disc.field_collection, hessp=K,
-                                           b=rhs, x=u, P=identity_preconditioner, tol=1e-13, maxiter=20000)
+        solvers.conjugate_gradients(comm=disc.communicator, fc=disc.field_collection, hessp=K,
+                                           b=rhs, x=u, P=identity_preconditioner, tol=1e-10, maxiter=20000)
         stress = disc.get_homogenized_stress_mugrid(C, u, E_field, formulation='small_strain')
         return K, u, stress
 
@@ -347,7 +349,7 @@ def test_elasticity_sensitivity_with_anisotropic_material(element_type, nb_pixel
     adjoint = disc.get_displacement_sized_field(name='lambda_sens')
     sensitivity = to.sensitivity_stress_and_adjoint_FE_NEW(
         disc, C1, C0, u, adjoint, E_field, rho, target, stress,
-        identity_preconditioner, K, p, weight, cg_tol=1e-13)[0]
+        identity_preconditioner, K, p, weight, cg_tol=1e-10)[0]
     reference = finite_difference_gradient(objective, rho.s.copy())
     np.testing.assert_allclose(np.asarray(sensitivity), reference,
                                rtol=1e-6, atol=1e-8 * np.abs(reference).max())
@@ -380,8 +382,8 @@ def test_conductivity_sensitivity_with_anisotropic_material(element_type, nb_pix
         disc.get_rhs_mugrid(A, E_field, rhs)
         u = disc.get_unknown_size_field(name='u_state_c')
         u.s.fill(0)
-        solvers.conjugate_gradients_mugrid(comm=disc.communicator, fc=disc.field_collection, hessp=K,
-                                           b=rhs, x=u, P=identity_preconditioner, tol=1e-13, maxiter=20000)
+        solvers.conjugate_gradients(comm=disc.communicator, fc=disc.field_collection, hessp=K,
+                                           b=rhs, x=u, P=identity_preconditioner, tol=1e-10, maxiter=20000)
         return K, u, disc.get_homogenized_stress_mugrid(A, u, E_field)
 
     def objective(rho_values):
@@ -391,7 +393,7 @@ def test_conductivity_sensitivity_with_anisotropic_material(element_type, nb_pix
     adjoint = disc.get_unknown_size_field(name='lambda_sens_c')
     sensitivity = toc.sensitivity_flux_and_adjoint(
         disc, A1, A0, u, adjoint, E_field, rho, target, flux,
-        identity_preconditioner, K, p, weight, cg_tol=1e-13)[0]
+        identity_preconditioner, K, p, weight, cg_tol=1e-10)[0]
     reference = finite_difference_gradient(objective, rho.s.copy())
     np.testing.assert_allclose(np.asarray(sensitivity), reference,
                                rtol=1e-6, atol=1e-8 * np.abs(reference).max())
