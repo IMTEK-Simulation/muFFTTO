@@ -26,7 +26,7 @@ dynamic = [ "version" ]
 dependencies = [
     "numpy",
     "scipy",
-    "muGrid",
+    "muGrid>=1.6.1",  # Communicator reductions, Preconditioners (Green, Green-Jacobi), linalg kernels
     "NuMPI @ git+https://github.com/muSpectre/NuMPI@feat/tr_precond",  # tr_newton_bounded with precond= (not yet released); remove the pin once NuMPI is released with it
     "mpi4py",
     "jax",
