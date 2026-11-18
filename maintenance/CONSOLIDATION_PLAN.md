@@ -91,3 +91,22 @@ flight); muFFTTO then switches to the muGrid version and deletes its own.
 4. ~~Element path~~ (decided: own path = reference, muGrid fused = optional fast path).
 5. ~~Multigrid~~ (decided: take it now).
 6. ~~Phase-field scope~~ (decided: material models in the library + AT1/AT2 example; study to its repo).
+
+## Progress (2026-11-18, branch `consolidate/library`, not pushed)
+
+| Phase | State |
+|---|---|
+| 0 Safety | ✔ fable work committed; `fable/large-3d-to` and `main` merged; tag `pre-consolidation` = `cb9dbbd`; local `main` moved there (not pushed); baseline: 950 passed (muffto-gpu muGrid 1.4.1 and dev env muGrid 1.6.1) |
+| 1 One branch | ✔ (merge commits `67b53d6`, `cb9dbbd`); `feat/fracture_and_contact`, `worktree-polycrystal-crack`, `StefanusMichael_Dev` left as they are |
+| 2 Split | ✔ four private repos `MartinLadecky/muFFTTO-{dual-preconditioner,multigrid,contact,stefanus}` (pushed), laptop `/home/martin/PycharmProjects/<repo>`, same layout, frozen `muFFTTO/`, `env.sh`; data moved, fable data copied; polycrystal/fibre folders moved out of the polycrystal worktree. NEMO clones untouched |
+| 3 Reuse muGrid | ✔ reductions (`GlobalReduction` on the communicator), Green (muGrid for one node per pixel), Green-Jacobi (muGrid), residual CG (muGrid); ◐ grid transfer / fused operator still muFFTTO's own (multigrid.py) until muGrid releases the multigrid |
+| 4 Unify | ✔ one energy-error CG, `preconditioners` (incl. dual), `phase_field_fracture` (AT1/AT2 + example), `geometry.correlated_random_field`; ✘ third-medium contact functional, MPI/optimizer-vector helpers, Helmholtz L-BFGS start as a function, multigrid wrapper in `preconditioners` |
+| 5 Clean up | ◐ dead CG variants and two legacy preconditioner methods removed, examples curated (26 + AT1/AT2, outputs untracked), docs updated; ✘ split `domain.py`, merge the grid-adaptation modules, remove the muFFTTO Green/Jacobi field API once the examples use `preconditioners` |
+| 6 Port | ongoing in the muGrid/muTopOpt sessions (`TO_LIBRARY_PLAN.md` now in `muFFTTO-multigrid`) |
+
+Environments: library dev venv `~/venvs/muFFTTO_dev` (muffto-gpu + muGrid 1.6.1 with the GPU multinode fix,
+worktree `/home/martin/PycharmProjects/muGrid_161`, branch `muffto/1.6.1-gpu-multinode`); the studies keep `muffto-gpu`
+(muGrid 1.4.1) with their frozen library copies. Old-code reference: worktree `muFFTTO_pre-consolidation`.
+
+Known: `examples/topology_optimization_finite_strain/example_2D_finite_strain_TO.py` hits an indefinite Newton
+tangent (also before the consolidation).
