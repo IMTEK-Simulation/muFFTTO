@@ -113,6 +113,8 @@ class ScaledMaterial:
         ncomp = shape[0] * shape[1]
         if out is None:
             out = xp.empty_like(gradient)
+        if xp is not np and all(np.ndim(tensor) == 4 for _, tensor in self.terms):
+            return self._apply_fused(xp, gradient, transposed, out)       # GPU: one kernel, no temporaries
         # constant tensors as (ncomp x ncomp) matrices acting on the components of a point, stored in muGrid's
         # memory order: the first index fastest, i.e. as [.., j, i]
         matrices = []
@@ -144,6 +146,66 @@ class ScaledMaterial:
             # back to the component-first layout [i, j, q, x, y(, z)]; g is fully read before out is written
             out[:, :, q] = xp.moveaxis(result.reshape(block_shape + (shape[1], shape[0])), (-2, -1), (1, 0))
         return out
+
+    def apply_to_field(self, gradient_field, transposed=False):
+        """:meth:`apply` in place on a whole gradient-sized muGrid field (ghost points included; their values are
+        meaningless until the next ghost exchange). On the GPU, with scales that are muGrid fields or numbers, the
+        kernel runs over the contiguous component vectors of the buffers (:func:`tensor_operations.point_view`) --
+        one pass at memory bandwidth. Otherwise :meth:`apply` on the interior."""
+        xp = tensor_operations.get_array_module(gradient_field.s)
+        scales = [scale() if callable(scale) else scale for scale, _ in self.terms]
+        if (xp is np or not all(np.ndim(tensor) == 4 for _, tensor in self.terms)
+                or not all(isinstance(scale, Field) or np.isscalar(scale) for scale in scales)):
+            return self.apply(gradient_field.s, transposed=transposed, out=gradient_field.s)
+        components = tensor_operations.point_view(gradient_field)             # [d, d, q, points]
+        d = components.shape[0]
+        components = components.reshape(d, d, -1)
+        scales = [components.dtype.type(scale) if np.isscalar(scale)
+                  else tensor_operations.point_view(scale).reshape(-1) for scale in scales]
+        kernel = self._fused_kernel_for(xp, transposed, components.dtype)
+        vectors = [components[i, j] for i in range(d) for j in range(d)]
+        kernel(*vectors, *scales, *vectors)
+        return gradient_field.s
+
+    def _fused_kernel_for(self, xp, transposed, dtype):
+        tensors = [np.asarray(tensor_operations.to_host(tensor), dtype=float) for _, tensor in self.terms]
+        key = (transposed, str(dtype)) + tuple(tensor.tobytes() for tensor in tensors)
+        if getattr(self, '_fused_key', None) != key:
+            self._fused_kernel, self._fused_key = _fused_tensor_kernel(xp, tensors, transposed), key
+        return self._fused_kernel
+
+    def _apply_fused(self, xp, gradient, transposed, out):
+        """:meth:`apply` on the GPU as one elementwise kernel over the points (elasticity): each point reads its
+        d x d gradient components and writes the d x d result, with the constant tensors compiled into the kernel --
+        no full-size temporaries (the matrix-product path needs two) and one pass over the field."""
+        d = gradient.shape[0]
+        scales = [self._scale_array(scale) for scale, _ in self.terms]
+        scales = [gradient.dtype.type(scale) if np.isscalar(scale) else xp.asarray(scale) for scale in scales]
+        kernel = self._fused_kernel_for(xp, transposed, gradient.dtype)
+        kernel(*[gradient[i, j] for i in range(d) for j in range(d)], *scales,
+               *[out[i, j] for i in range(d) for j in range(d)])
+        return out
+
+
+def _fused_tensor_kernel(xp, tensors, transposed):
+    """CuPy elementwise kernel ``out_ij = sum_t s_t sum_kl C_t[i, j, k, l] g_kl`` (``g_kl C_t[k, l, i, j]`` if
+    transposed) for constant tensors ``C_t``: arguments ``g_00 .. g_dd, s_0 .. s_T, out_00 .. out_dd``. All inputs
+    of a point are read before its outputs are written, so ``out`` may be the gradient itself."""
+    d = tensors[0].shape[0]
+    pairs = [(i, j) for i in range(d) for j in range(d)]
+    inputs = ', '.join([f'T g{i}{j}' for i, j in pairs] + [f'T s{t}' for t in range(len(tensors))])
+    outputs = ', '.join(f'T o{i}{j}' for i, j in pairs)
+    code = [f'T a{k}{l} = g{k}{l};' for k, l in pairs]
+    for i, j in pairs:
+        terms = []
+        for t, tensor in enumerate(tensors):
+            entries = [(tensor[k, l, i, j] if transposed else tensor[i, j, k, l], k, l) for k, l in pairs]
+            contraction = ' + '.join(f'({float(c)!r}) * a{k}{l}' for c, k, l in entries if c != 0)
+            if contraction:
+                terms.append(f's{t} * ({contraction})')
+        code.append(f'T r{i}{j} = ' + (' + '.join(terms) if terms else '0') + ';')
+    code += [f'o{i}{j} = r{i}{j};' for i, j in pairs]
+    return xp.ElementwiseKernel(inputs, outputs, ' '.join(code), 'scaled_material_apply')
 
 
 def quad_point_blocks(nb_quad_points, low_memory):
@@ -391,7 +453,8 @@ class Discretization:
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)
-        if MPI.COMM_WORLD.size > 1:
+        if communicator.size > 1:               # (a discretization on a serial communicator, e.g. MPI.COMM_SELF for
+            # an agglomerated coarse grid on one rank of a parallel run, must not enter collective calls)
             # adjust the number of points
             # NOTE: currently a no-op (the "- 2" correction is commented out)
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
@@ -2151,7 +2214,10 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, ScaledMaterial):
-            material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
+            if self.device != 'cpu':
+                material_data.apply_to_field(gradient_field)           # one contiguous pass over the buffer
+            else:
+                material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
             return
         if isinstance(material_data, np.ndarray):
             # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
@@ -2772,7 +2838,7 @@ class Discretization:
         self.apply_material_data_mugrid(material_data=material_data_field,
                                         gradient_field=gradient_ijqxyz)
 
-        self.fft.communicate_ghosts(gradient_ijqxyz)
+        # f = B^T W sigma (exchanges the ghosts of the stress before and of the result after)
         self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)

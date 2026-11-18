@@ -1,0 +1,63 @@
+baseline N 32 peak 212 MiB exit 0 21 evals TOTAL wall 313.9 s, CG mech 1928, CG adjoint 1981, evaluations 21, MG setup 25.4 s
+baseline N 64 peak 876 MiB exit 0 11 evals TOTAL wall 392.4 s, CG mech 1138, CG adjoint 1176, evaluations 11, MG setup 18.9 s
+lean N 32 peak 168 MiB exit 0 22 evals TOTAL wall 163.6 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 12.8 s, solves 141.9 s, sensitivity 1.3 s
+lean2 N 32 peak 152 MiB exit 0 22 evals TOTAL wall 120.1 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 8.8 s, solves 102.6 s, sensitivity 1.2 s
+lean_c1Q N 32 peak 148 MiB exit 0 22 evals TOTAL wall 111.0 s, CG mech 2230, CG adjoint 2305, evaluations 22, MG setup 7.7 s, solves 98.3 s, sensitivity 0.8 s
+lean3 N 32 peak 152 MiB exit 0 22 evals TOTAL wall 83.4 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 5.3 s, solves 70.0 s, sensitivity 0.8 s
+lean_host N 32 peak 140 MiB exit 0 22 evals TOTAL wall 85.9 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 5.5 s, solves 72.5 s, sensitivity 0.9 s
+lean_host32 N 32 peak 140 MiB exit 0 22 evals TOTAL wall 83.2 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 5.4 s, solves 69.9 s, sensitivity 0.8 s
+lean_device32 N 32 peak 146 MiB exit 0 22 evals TOTAL wall 83.0 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 5.2 s, solves 69.7 s, sensitivity 0.8 s
+sym N 32 peak 144 MiB exit 0 24 evals TOTAL wall 34.2 s, CG mech 511, CG adjoint 511, evaluations 24, MG setup 6.0 s, solves 20.8 s, sensitivity 0.3 s
+conv_sym N 32 peak 144 MiB exit 0 132 evals TOTAL wall 156.0 s, CG mech 2533, CG adjoint 2530, evaluations 132, MG setup 34.8 s, solves 110.9 s, sensitivity 2.0 s
+conv_full N 32 peak 152 MiB exit 0 418 evals TOTAL wall 1142.5 s, CG mech 27631, CG adjoint 29431, evaluations 418, MG setup 90.1 s, solves 1026.2 s, sensitivity 14.7 s
+symstart_cos2 N 32 peak 144 MiB exit 0 54 evals TOTAL wall 54.2 s, CG mech 954, CG adjoint 959, evaluations 54, MG setup 12.8 s, solves 33.1 s, sensitivity 0.8 s
+symstart_cos1 N 32 peak 144 MiB exit 0 91 evals TOTAL wall 87.6 s, CG mech 1639, CG adjoint 1640, evaluations 91, MG setup 21.8 s, solves 56.9 s, sensitivity 1.3 s
+symstart_prod1 N 32 peak 144 MiB exit 0 125 evals TOTAL wall 108.2 s, CG mech 2317, CG adjoint 2313, evaluations 125, MG setup 25.4 s, solves 71.4 s, sensitivity 1.8 s
+symstart_edges N 32 peak 144 MiB exit 0 68 evals TOTAL wall 59.6 s, CG mech 1252, CG adjoint 1256, evaluations 68, MG setup 13.2 s, solves 37.8 s, sensitivity 1.0 s
+symstart_fromfull N 32 peak 144 MiB exit 0 92 evals TOTAL wall 76.8 s, CG mech 1654, CG adjoint 1646, evaluations 92, MG setup 17.5 s, solves 49.2 s, sensitivity 1.3 s
+lean4 N 32 peak 152 MiB exit 0 22 evals TOTAL wall 96.8 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 7.6 s, solves 80.6 s, sensitivity 1.2 s
+symstart_fromfull_sharp N 32 peak 144 MiB exit 0 134 evals TOTAL wall 143.7 s, CG mech 2328, CG adjoint 2329, evaluations 134, MG setup 38.4 s, solves 93.8 s, sensitivity 2.4 s
+lean5 N 32 peak 140 MiB exit 0 22 evals TOTAL wall 54.6 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 4.1 s, solves 42.5 s, sensitivity 0.8 s
+c1Q_eps0.3 N 32 peak 148 MiB exit 0 22 evals TOTAL wall 83.8 s, CG mech 2230, CG adjoint 2305, evaluations 22, MG setup 7.3 s, solves 71.4 s, sensitivity 0.9 s
+c1Q_eps1.0 N 32 peak 148 MiB exit 0 22 evals TOTAL wall 80.5 s, CG mech 1931, CG adjoint 1988, evaluations 22, MG setup 7.8 s, solves 66.8 s, sensitivity 1.0 s
+c1Q_eps3.0 N 32 peak 148 MiB exit 0 22 evals TOTAL wall 80.1 s, CG mech 2102, CG adjoint 2171, evaluations 22, MG setup 7.3 s, solves 67.7 s, sensitivity 0.9 s
+symrnd2_s0 N 32 peak 144 MiB exit 0 94 evals TOTAL wall 70.7 s, CG mech 1778, CG adjoint 1779, evaluations 94, MG setup 17.5 s, solves 44.0 s, sensitivity 1.3 s
+symrnd2_s1 N 32 peak 144 MiB exit 0 245 evals TOTAL wall 160.9 s, CG mech 4292, CG adjoint 4283, evaluations 245, MG setup 44.7 s, solves 103.7 s, sensitivity 3.2 s
+symrnd2_s2 N 32 peak 144 MiB exit 0 102 evals TOTAL wall 75.0 s, CG mech 1943, CG adjoint 1945, evaluations 102, MG setup 18.8 s, solves 47.1 s, sensitivity 1.4 s
+symrnd2_s3 N 32 peak 144 MiB exit 0 61 evals TOTAL wall 48.4 s, CG mech 1176, CG adjoint 1183, evaluations 61, MG setup 11.3 s, solves 28.8 s, sensitivity 0.8 s
+symrnd3_s0 N 32 peak 144 MiB exit 0 123 evals TOTAL wall 86.3 s, CG mech 2218, CG adjoint 2218, evaluations 123, MG setup 22.6 s, solves 53.8 s, sensitivity 1.6 s
+symrnd3_s1 N 32 peak 144 MiB exit 0 90 evals TOTAL wall 66.0 s, CG mech 1665, CG adjoint 1671, evaluations 90, MG setup 16.5 s, solves 40.6 s, sensitivity 1.2 s
+symrnd3_s2 N 32 peak 144 MiB exit 0 43 evals TOTAL wall 36.2 s, CG mech 842, CG adjoint 847, evaluations 43, MG setup 8.0 s, solves 20.4 s, sensitivity 0.6 s
+symrnd3_s3 N 32 peak 144 MiB exit 0 117 evals TOTAL wall 82.5 s, CG mech 2135, CG adjoint 2146, evaluations 117, MG setup 21.4 s, solves 51.8 s, sensitivity 1.5 s
+chiral_CH N 32 peak 144 MiB exit 0 132 evals TOTAL wall 95.8 s, CG mech 2470, CG adjoint 2469, evaluations 132, MG setup 24.6 s, solves 60.7 s, sensitivity 2.2 s
+chiral_fromfull N 32 peak 144 MiB exit 0 113 evals TOTAL wall 79.2 s, CG mech 2048, CG adjoint 2058, evaluations 113, MG setup 20.4 s, solves 49.1 s, sensitivity 1.8 s
+chiral_rnd2_s0 N 32 peak 144 MiB exit 0 94 evals TOTAL wall 68.5 s, CG mech 1778, CG adjoint 1779, evaluations 94, MG setup 17.0 s, solves 42.4 s, sensitivity 1.5 s
+chiral_rnd2_s1 N 32 peak 144 MiB exit 0 282 evals TOTAL wall 183.3 s, CG mech 4832, CG adjoint 4824, evaluations 282, MG setup 51.7 s, solves 117.6 s, sensitivity 4.5 s
+chiral_rnd3_s0 N 32 peak 144 MiB exit 0 189 evals TOTAL wall 123.8 s, CG mech 3270, CG adjoint 3279, evaluations 189, MG setup 33.9 s, solves 78.6 s, sensitivity 3.0 s
+chiral_rnd3_s1 N 32 peak 144 MiB exit 0 188 evals TOTAL wall 155.4 s, CG mech 3169, CG adjoint 3188, evaluations 188, MG setup 45.8 s, solves 97.2 s, sensitivity 3.5 s
+warm_host N 32 peak 140 MiB exit 0 22 evals TOTAL wall 85.2 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 7.1 s, solves 69.5 s (of which warm-start transfers 0.1 s), sensitivity 1.1 s
+warm_host32 N 32 peak 140 MiB exit 0 22 evals TOTAL wall 55.9 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 4.2 s, solves 43.7 s (of which warm-start transfers 0.1 s), sensitivity 0.8 s
+warm_device N 32 peak 152 MiB exit 0 22 evals TOTAL wall 54.3 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 4.1 s, solves 42.3 s (of which warm-start transfers 0.0 s), sensitivity 0.8 s
+helmcg N 32 peak 146 MiB exit 0 22 evals TOTAL wall 57.2 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 4.3 s, solves 44.4 s (of which warm-start transfers 0.0 s), sensitivity 0.8 s (of which symmetry 0.0 s), Helmholtz (cg) 0.5 s
+t N 32 peak 152 MiB exit 0 5 evals TOTAL wall 17.2 s, CG mech 346, CG adjoint 370, evaluations 5, MG setup 1.1 s, solves 8.8 s (of which warm-start transfers 0.0 s), sensitivity 0.2 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+interp N 32 peak 152 MiB exit 0 22 evals TOTAL wall 56.6 s, CG mech 1820, CG adjoint 1871, evaluations 22, MG setup 4.3 s, solves 44.2 s (of which warm-start transfers 0.0 s), sensitivity 0.8 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+fused_double N 32 peak 134 MiB exit 0 22 evals TOTAL wall 31.4 s, CG mech 1915, CG adjoint 1978, evaluations 22, MG setup 1.7 s, solves 25.5 s (of which warm-start transfers 0.0 s), sensitivity 0.2 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+fused_single N 32 peak 132 MiB exit 0 22 evals TOTAL wall 21.8 s, CG mech 1915, CG adjoint 1978, evaluations 22, MG setup 2.4 s, solves 15.0 s (of which warm-start transfers 0.0 s), sensitivity 0.2 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+ftol N 32 peak 132 MiB exit 0 115 evals TOTAL wall 91.2 s, CG mech 9276, CG adjoint 9646, evaluations 115, MG setup 6.0 s, solves 78.6 s (of which warm-start transfers 0.1 s), sensitivity 1.0 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s
+etol N 32 peak 132 MiB exit 0 115 evals TOTAL wall 91.4 s, CG mech 9276, CG adjoint 9646, evaluations 115, MG setup 6.0 s, solves 79.1 s (of which warm-start transfers 0.1 s), sensitivity 1.0 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s
+etol_off N 32 peak 130 MiB exit 0 22 evals TOTAL wall 22.0 s, CG mech 1915, CG adjoint 1978, evaluations 22, MG setup 1.2 s, solves 16.3 s (of which warm-start transfers 0.0 s), sensitivity 0.2 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+trialA N 32 peak 132 MiB exit 0 8 evals TOTAL wall 15.0 s, CG mech 660, CG adjoint 697, evaluations 8, MG setup 0.9 s, solves 9.6 s (of which warm-start transfers 0.0 s), sensitivity 0.1 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+trialB N 32 peak 132 MiB exit 0 8 evals TOTAL wall 13.4 s, CG mech 571, CG adjoint 619, evaluations 8, MG setup 0.9 s, solves 8.3 s (of which warm-start transfers 0.0 s), sensitivity 0.1 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+trialC N 32 peak 132 MiB exit 0 10 evals TOTAL wall 12.9 s, CG mech 846, CG adjoint 884, evaluations 10, MG setup 0.6 s, solves 7.6 s (of which warm-start transfers 0.0 s), sensitivity 0.1 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s
+rst_base N 128 peak 1786 MiB exit 0 49 evals TOTAL wall 509.0 s, CG mech 2175, CG adjoint 2635, evaluations 49, MG setup 13.2 s, solves 468.8 s (of which warm-start transfers 0.1 s), sensitivity 20.0 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s
+lbfgsdiag N 64 peak 370 MiB exit 0 436 evals TOTAL wall 1549.8 s, CG mech 34822, CG adjoint 36309, evaluations 436, MG setup 88.7 s, solves 1402.1 s (of which warm-start transfers 0.5 s), sensitivity 26.2 s (of which symmetry 0.0 s), Helmholtz (fft) 2.2 s
+rst_cos N 128 peak 1786 MiB exit 0 49 evals TOTAL wall 488.5 s, CG mech 2175, CG adjoint 2635, evaluations 49, MG setup 10.7 s, solves 452.1 s (of which warm-start transfers 0.1 s), sensitivity 18.8 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s
+rst_gamma N 128 peak 1786 MiB exit 0 22 evals TOTAL wall 259.1 s, CG mech 1579, CG adjoint 1804, evaluations 22, MG setup 2.6 s, solves 239.2 s (of which warm-start transfers 0.0 s), sensitivity 7.7 s (of which symmetry 0.0 s), Helmholtz (fft) 0.4 s
+rst_first N 128 peak 1786 MiB exit 0 22 evals TOTAL wall 268.4 s, CG mech 1645, CG adjoint 1861, evaluations 22, MG setup 2.6 s, solves 248.1 s (of which warm-start transfers 0.0 s), sensitivity 7.7 s (of which symmetry 0.0 s), Helmholtz (fft) 0.4 s
+rst_numpi_first N 128 peak 1786 MiB exit 0 22 evals TOTAL wall 268.9 s, CG mech 1645, CG adjoint 1861, evaluations 22, MG setup 2.6 s, solves 248.8 s (of which warm-start transfers 0.0 s), sensitivity 7.7 s (of which symmetry 0.0 s), Helmholtz (fft) 0.2 s
+xp_numpi N 64 peak 370 MiB exit 0 33 evals TOTAL wall 76.2 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 2.0 s, solves 67.0 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s
+xp_cpu N 64 peak 370 MiB exit 0 33 evals TOTAL wall 73.3 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 1.8 s, solves 65.3 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.1 s, L-BFGS vector work 0.7 s (incl. Helmholtz)
+xp_gpu N 64 peak 474 MiB exit 0 33 evals TOTAL wall 73.1 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 1.7 s, solves 65.7 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s, L-BFGS vector work 0.1 s (incl. Helmholtz)
+xp_gpuhost N 64 peak 400 MiB exit 0 33 evals TOTAL wall 72.7 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 1.7 s, solves 65.2 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s, L-BFGS vector work 0.3 s (incl. Helmholtz)
+xp_gpu_fields N 64 peak 482 MiB exit 0 33 evals TOTAL wall 74.0 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 1.8 s, solves 66.2 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s, L-BFGS vector work 0.2 s (incl. Helmholtz)
+xp_gpuhost_fields N 64 peak 406 MiB exit 0 33 evals TOTAL wall 74.0 s, CG mech 3219, CG adjoint 3302, evaluations 33, MG setup 1.8 s, solves 66.3 s (of which warm-start transfers 0.0 s), sensitivity 1.4 s (of which symmetry 0.0 s), Helmholtz (fft) 0.0 s, L-BFGS vector work 0.4 s (incl. Helmholtz)

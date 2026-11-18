@@ -198,6 +198,7 @@ adjoint_field_load_case = [discretization.get_unknown_size_field(name=f'adj_{i}'
 p = 2  # SIMP penalty exponent
 double_well_depth_test = float(os.environ.get('DW_DEPTH', 1))  # weight of the double well rho^2 (1 - rho)^2 / eta
 norms_sigma, norms_pf, norms_adjoint_energy = [], [], []
+last_evaluation = {}        # 'homogenized_stresses' [load case, i, j] of the latest evaluation (stop_criterion_2D.py)
 
 info_mech = {'num_iteration_adjoint': [], 'residual_rz': []}
 info_adjoint = {'num_iteration_adjoint': [], 'residual_rz': []}
@@ -514,6 +515,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
     discretization.fft.communicate_ghosts(s_sensitivity_field)
     norms_sigma.append(norm_sigma_step)
     norms_adjoint_energy.append(adjoint_energies_step)
+    last_evaluation['homogenized_stresses'] = homogenized_stresses.copy()
 
     return objective_function[0], to_host(s_sensitivity_field.s[0, 0]).reshape(-1)
 

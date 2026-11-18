@@ -54,8 +54,17 @@ class _Counted:
 
 
 def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, gtol=1e-5, xtol=0.0, maxiter=500,
-                           maxcor=20, c1=1e-4, max_halvings=40, callback=None, disp=False):
+                           maxcor=20, c1=1e-4, max_halvings=40, callback=None, disp=False, gamma0=1.0, cos_min=0.0,
+                           info=None, first_step=0.0):
+    """gamma0: scale of H_0 while the memory is empty (start, restart, after a memory reset); afterwards the last
+    computed gamma is used for an empty memory. 1.0 = NuMPI's behaviour.
+    cos_min: a curvature pair is kept only if cos(s, y) >= cos_min (cautious update); 0.0 = NuMPI's behaviour.
+    info: optional dict, receives 'gamma' (current H_0 scale) after every iteration (to carry it over a restart).
+    first_step: > 0: the line search of the first iteration starts at the step whose LARGEST design change is
+    first_step (instead of alpha = 1 with the unscaled H_0, whose step is far too small on a plateau, so that the first
+    curvature pair is CG noise and blows up the next directions; seen at 128^3 / 512^3 after restarts, 2026-11-15)."""
     shape = np.asarray(x0).shape
+    gamma_last = float(gamma0)
     fg = _Counted(fun, shape)
     project = _project_fn(bounds_lo, bounds_hi)
     x = project(np.asarray(x0, dtype=float).ravel())
@@ -78,9 +87,10 @@ def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, 
             q -= a * y
         if S:
             Hy = H0(Y[0], mask)
-            q = (np.sum(S[0] * Y[0]) / np.sum(Y[0] * Hy)) * H0(q, mask)
-        else:
-            q = H0(q, mask)
+            gamma_last = np.sum(S[0] * Y[0]) / np.sum(Y[0] * Hy)
+        q = gamma_last * H0(q, mask)
+        if info is not None:
+            info['gamma'] = float(gamma_last)
         for (s, y, rho), a in zip(reversed(list(zip(S, Y, RHO))), reversed(alphas)):
             b = rho * np.sum(y * q)
             q += (a - b) * s
@@ -89,13 +99,15 @@ def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, 
         quasi_newton = len(S) > 0
         if gd >= 0:
             S.clear(); Y.clear(); RHO.clear()
-            d = -H0(r, mask)
+            d = -gamma_last * H0(r, mask)
             gd = np.sum(r * d)
-        alpha_init = 1.0 if (quasi_newton or precond is not None) else 1.0
+        alpha_init = 1.0
+        if first_step > 0 and it == 1 and not quasi_newton:
+            alpha_init = first_step / max(float(np.max(np.abs(d))), 1e-300)
         step = _armijo(fg, x, d, phi, gd, project, c1=c1, max_halvings=max_halvings, alpha_init=alpha_init)
         if step is None:
             S.clear(); Y.clear(); RHO.clear()
-            d = -H0(r, mask)
+            d = -gamma_last * H0(r, mask)
             gd = np.sum(r * d)
             dn = np.max(np.abs(d))
             step = _armijo(fg, x, d, phi, gd, project, c1=c1, max_halvings=max_halvings,
@@ -108,7 +120,16 @@ def l_bfgs_bounded_precond(fun, x0, bounds_lo=0.0, bounds_hi=1.0, precond=None, 
         r_new = _kkt_residual(grad_new, x_new, lo=bounds_lo, hi=bounds_hi)
         s, y = x_new - x, r_new - r
         sy = np.sum(s * y)
-        if sy > 1e-12 * (np.linalg.norm(s) * np.linalg.norm(y) + np.finfo(float).eps):
+        if disp:                                           # diagnostics of the curvature pair and of the direction
+            Hy = H0(y, mask)
+            print(f'L-BFGS pair it {it:4d}: cos(s, y) {sy / (np.linalg.norm(s) * np.linalg.norm(y) + 1e-300):+.3e}  '
+                  f'gamma = sy / yHy {sy / (np.sum(y * Hy) + 1e-300):+.3e}  mean|d| {np.mean(np.abs(d)):.3e}  '
+                  f'mean|s| {np.mean(np.abs(s)):.3e}  free nodes changed {int(np.sum(_free_mask(x_new, grad_new, bounds_lo, bounds_hi) != mask))}',
+                  flush=True)
+        cos_sy = sy / (np.linalg.norm(s) * np.linalg.norm(y) + 1e-300)
+        if disp and 0 < cos_sy < cos_min:
+            print(f'L-BFGS pair it {it:4d}: skipped (cos(s, y) {cos_sy:.3e} < {cos_min:g})', flush=True)
+        if sy > 1e-12 * (np.linalg.norm(s) * np.linalg.norm(y) + np.finfo(float).eps) and cos_sy >= cos_min:
             S.insert(0, s.copy()); Y.insert(0, y.copy()); RHO.insert(0, 1.0 / sy)
             if len(S) > maxcor:
                 S.pop(); Y.pop(); RHO.pop()

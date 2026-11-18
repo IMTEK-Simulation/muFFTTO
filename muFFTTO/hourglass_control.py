@@ -47,7 +47,7 @@ the Jacobi diagonal and Green's reference operator, both built from ``apply_syst
 import itertools
 
 import numpy as np
-from muGrid import GenericLinearOperator
+from muGrid import Field, GenericLinearOperator, linalg
 
 from . import tensor_operations
 
@@ -141,14 +141,44 @@ class HourglassControl:
         self.operator.apply(nodal_field=lambda_field, quadrature_point_field=self.strain)
         return (self.stiffness(material_derivative) * q_u * self.strain.s).sum(axis=(0, 1))
 
+    def _scale_by_stiffness(self, material):
+        """strain *= eps kappa(material), in place. A one-term ScaledMaterial s(x) C_0 (the usual case) needs no
+        temporary: eps kappa = s(x) times a 3 x 4 constant, applied as two in-place products."""
+        terms = getattr(material, 'terms', None)
+        if terms is not None and len(terms) == 1:
+            xp = tensor_operations.get_array_module(self.strain.s)
+            scale, tensor = terms[0]
+            scale = material._scale_array(scale)
+            constant = self.eps * self._kappa_of_tensor(np.asarray(tensor_operations.to_host(tensor)), np)
+            if xp is not np and isinstance(terms[0][0], Field):         # GPU: contiguous component vectors
+                strain = tensor_operations.point_view(self.strain)      # [i, alpha, q = 1, points]
+                scale = tensor_operations.point_view(terms[0][0]).reshape(-1)
+                for i, alpha in np.ndindex(*constant.shape):
+                    component = strain[i, alpha, 0]
+                    xp.multiply(component, scale, out=component)
+                    component *= float(constant[i, alpha])
+            else:
+                if np.ndim(scale) == 0:
+                    constant = constant * float(scale)
+                else:
+                    self.strain.s[...] *= xp.asarray(scale)             # [q, x, y, z] broadcasts over (i, alpha)
+                self.strain.s[...] *= xp.asarray(constant).reshape(constant.shape + (1,) * (self.strain.s.ndim - 2))
+        else:
+            self.strain.s[...] *= self.stiffness(material)
+
     # ---------------------------------------------------------------- K_hg u
-    def add_stiffness(self, material, input_field, output_field):
-        """output += H^T (eps kappa(material)) H input   (collective: ghost exchange)"""
+    def add_stiffness(self, material, input_field, output_field, exchange_ghosts=True):
+        """output += H^T (eps kappa(material)) H input   (collective: ghost exchange)
+
+        ``exchange_ghosts=False``: the caller has just exchanged the ghosts of ``input_field`` and does not read
+        the ghosts of ``output_field`` -- only the exchange of the hourglass strain remains (one instead of three)."""
         fft = self.discretization.fft
-        fft.communicate_ghosts(input_field)
+        if exchange_ghosts:
+            fft.communicate_ghosts(input_field)
         self.operator.apply(nodal_field=input_field, quadrature_point_field=self.strain)       # q = H u
-        self.strain.s[...] *= self.stiffness(material)                                          # eps kappa q
+        self._scale_by_stiffness(material)                                                      # eps kappa q
         fft.communicate_ghosts(self.strain)
         self.operator.transpose(quadrature_point_field=self.strain, nodal_field=self.force, weights=[1.0])
-        fft.communicate_ghosts(self.force)
-        output_field.s[...] += self.force.s
+        if exchange_ghosts:
+            fft.communicate_ghosts(self.force)
+        linalg.axpy(1.0, self.force, output_field)
