@@ -90,7 +90,7 @@ $$
 | `small_strain_elasticity/example_2D_homogenization_elasticity.py` | 2D | linear elastic, small strain | `bilinear_rectangle` (2×2 Gauss) | 32×32 | `LinearElastic` → tangent field $\mathbb{C}_q$ | `muGrid.Solvers.conjugate_gradients`, `tol=1e-6` | Green, $\mathbb{C}_{\mathrm{ref}}(K_0,G_0)$ | $3\times3$ Voigt $\mathbb{C}^{\mathrm{eff}}$, plots of $\tilde u_x,\tilde u_y$ on the deformed grid |
 | `small_strain_elasticity/example_2D_homogenization_elasticity_no_data_field.py` | 2D | linear elastic, small strain | `linear_triangles` | 32×32 | explicit stress function $\boldsymbol\sigma(\boldsymbol\varepsilon)$ from $\lambda_q,\mu_q$ (no $\mathbb{C}$ field) | same | Green, $\mathbb{C}(\lambda_0,\mu_0)$ | $3\times3$ Voigt $\mathbb{C}^{\mathrm{eff}}$, plots of $\tilde u_0,\tilde u_1$ |
 | `small_strain_elasticity/example_3D_homogenization_elasticity.py` | 3D | linear elastic, small strain | `trilinear_hexahedron` (2×2×2 Gauss) | 17³, cell $4\times3\times5$ | constant $\mathbb{C}$ field scaled by masks | same | Green, $\mathbb{C}(K_0,G_0)$ | $6\times6$ Voigt $\mathbb{C}^{\mathrm{eff}}$, mid-plane plots of $\tilde u_{0,1,2}$ |
-| `finite_strain_elasticity/example_2D_homogenization_finite_strain_elasticity_NeoHookean.py` | 2D | Neo-Hookean, finite strain | `bilinear_rectangle` | 64×64 (`-n`) | `NeoHookean` (stress + tangent + energy) | Newton + muFFTTO `solvers.conjugate_gradients_mugrid`, absolute `tol=1e-5` | Green, small-strain $\mathbb{C}(\lambda_m,\mu_m)$ | Newton/CG iteration log, `.npy` fields per Newton iteration, `info_log_final.npz` |
+| `finite_strain_elasticity/example_2D_homogenization_finite_strain_elasticity_NeoHookean.py` | 2D | Neo-Hookean, finite strain | `bilinear_rectangle` | 64×64 (`-n`) | `NeoHookean` (stress + tangent + energy) | Newton + muFFTTO `solvers.conjugate_gradients`, absolute `tol=1e-5` | Green, small-strain $\mathbb{C}(\lambda_m,\mu_m)$ | Newton/CG iteration log, `.npy` fields per Newton iteration, `info_log_final.npz` |
 | `finite_strain_elasticity/example_3D_homogenization_finite_strain_elasticity_NeoHookean.py` | 3D | — | — | — | — | — | — | **The file is empty (0 bytes).** |
 
 ---
@@ -343,7 +343,7 @@ After all increments, $\bar{\mathbf{F}}-\mathbf{I}$ has simple shear $0.8$ in co
    $\mathbf{b}=-\mathsf{B}^\top\mathsf{W}\mathbf{P}$ with `apply_gradient_transposed_operator_mugrid(..., apply_weights=True)`.
 2. **Newton loop (`:257-369`).** Each step:
    - solves $\mathsf{B}^\top\mathsf{W}\mathbb{A}\mathsf{B}\,\delta\tilde{\mathbf{u}}=\mathbf{b}$ with
-     `solvers.conjugate_gradients_mugrid` (`:278`), with absolute `tol=1e-5` and `maxiter=1000`. `K_fun`
+     `solvers.conjugate_gradients` (`:278`), with absolute `tol=1e-5` and `maxiter=1000`. `K_fun`
      uses the current tangent field;
    - updates $\mathbf{F}\leftarrow\mathbf{F}+\mathsf{B}\delta\tilde{\mathbf{u}}$ and
      $\tilde{\mathbf{u}}\leftarrow\tilde{\mathbf{u}}+\delta\tilde{\mathbf{u}}$ (`:301-312`);

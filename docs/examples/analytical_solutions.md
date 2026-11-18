@@ -107,7 +107,7 @@ entry-wise square root of the product of the core and shell tensors (a heuristic
 "geometric mean").
 
 **5. Hydrostatic solve** (`:111-141`). $E=I$ (`:34`), rhs from `get_rhs_mugrid`, and
-PCG with `muFFTTO.solvers.conjugate_gradients_mugrid` (`tol=1e-8`).
+PCG with `muFFTTO.solvers.conjugate_gradients` (`tol=1e-8`).
 
 **6. Strain field and comparison** (`:145-184`). The total strain is
 $\varepsilon=E+\nabla^s\tilde u$ (`apply_gradient_operator_symmetrized_mugrid` plus $E$),
@@ -129,7 +129,7 @@ The shear-related entries have no closed-form reference here.
 | File | Dim | Physics | Key method | Outputs |
 |---|---|---|---|---|
 | `analytical_solution_2D_elasticity_Hashin_composite_sphere.py` | 2D (formula is $d$-generic) | linear elasticity, coated cylinder | closed-form strain `solution_hashin` | `hashin_strain_field_2d_analytical_v2.png`; strain at centre printed |
-| `example_2D_homogenization_elasticity_Hashin_composite_sphere.py` | 2D | small-strain periodic homogenization | FE + Green-PCG (`conjugate_gradients_mugrid`), matrix bulk modulus = Hashin $\kappa_3$ | `hashin_strain_field_2d_FFT_solver.png`; $\bar\sigma(E=I)$; $C^{\mathrm{eff}}$ (Voigt) |
+| `example_2D_homogenization_elasticity_Hashin_composite_sphere.py` | 2D | small-strain periodic homogenization | FE + Green-PCG (`conjugate_gradients`), matrix bulk modulus = Hashin $\kappa_3$ | `hashin_strain_field_2d_FFT_solver.png`; $\bar\sigma(E=I)$; $C^{\mathrm{eff}}$ (Voigt) |
 
 ## Key tunable parameters
 

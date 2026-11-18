@@ -117,7 +117,7 @@ for i in range(dim):
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
-    solvers.conjugate_gradients_mugrid(
+    solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
@@ -126,8 +126,7 @@ for i in range(dim):
         P=M_fun,
         tol=1e-5,
         maxiter=2000,
-        callback=callback, rtol=True
-    )
+        callback=callback)
 
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field

@@ -273,17 +273,16 @@ def count_state_iteration(*args):
 def solve_load_case(k, tol):
     """Equilibrium for the load case k (warm start from the previous solution); homogenized stress.
 
-    ``tol`` is relative to the right-hand side: |r| <= tol |b| (scale free; with an absolute tolerance below the
-    round-off level of |b| CG iterates in noise and returns a wrong state)."""
+    ``tol`` is the relative energy error of the solve (solvers.conjugate_gradients; warm start: relative to the
+    energy of the start)."""
     discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[k],
                                                    macro_gradient_field_ijqxyz=macro_gradient_field)
     rhs.s.fill(0)
     discretization.get_rhs_mugrid(material_data_field_ijklqxyz=C_field, macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs)
-    rhs_norm = np.sqrt(discretization.communicator.sum(np.dot(rhs.s.ravel(), rhs.s.ravel())))
-    solvers.conjugate_gradients_mugrid(comm=discretization.communicator, fc=discretization.field_collection,
-                                       hessp=apply_stiffness, b=rhs, x=displacements[k], P=apply_preconditioner,
-                                       tol=tol * rhs_norm, rtol=False, maxiter=20000, callback=count_state_iteration)
+    solvers.conjugate_gradients(comm=discretization.communicator, fc=discretization.field_collection,
+                                hessp=apply_stiffness, b=rhs, x=displacements[k], P=apply_preconditioner,
+                                tol=tol, maxiter=20000, callback=count_state_iteration)
     return discretization.get_homogenized_stress_mugrid(material_data_field_ijklqxyz=C_field,
                                                         displacement_field_inxyz=displacements[k],
                                                         macro_gradient_field_ijqxyz=macro_gradient_field,
@@ -352,9 +351,7 @@ def mismatch_and_gradient(rho_physical_flat, design_index=0, free_scale=None):
         # zero at the solution and is NOT added to the objective (with inexact solves it only adds noise)
         discretization.get_macro_gradient_field_mugrid(macro_gradient_ij=macro_gradients[k],
                                                        macro_gradient_field_ijqxyz=macro_gradient_field)
-        # adjoint: warm start, tolerance relative to the right-hand side (r_tol). Until 2026-10-10 the library
-        # measured it relative to the residual of the warm start, which near the solution is round-off: CG then
-        # returned wrong adjoints (gradients off by up to 10x after short line-search steps; robust runs stalled).
+        # adjoint: warm start, energy-error stop relative to the energy of the start
         sensitivity_load_case.s[0, 0], adjoints[k], adjoint_energy, adjoint_info = \
             topology_optimization.sensitivity_stress_and_adjoint_FE_NEW(
                 discretization=discretization, base_material_data_ijkl=C_solid, void_material_data_ijkl=C_void,
@@ -362,7 +359,7 @@ def mismatch_and_gradient(rho_physical_flat, design_index=0, free_scale=None):
                 macro_gradient_field_ijqxyz=macro_gradient_field, phase_field_1nxyz=rho_nodal,
                 target_stress_ij=target, actual_stress_ij=stresses[k],
                 preconditioner_fun=apply_preconditioner, system_matrix_fun=apply_stiffness,
-                formulation='small_strain', p=simp_p, weight=w, cg_tol=cg_tol, r_tol=True)
+                formulation='small_strain', p=simp_p, weight=w, cg_tol=cg_tol)
         cg_iterations['adjoint'] += adjoint_info.get('num_iteration_adjoint', 0)
         gradient += sensitivity_load_case.s[0, 0]
     return f_mismatch, gradient.reshape(-1), scale
@@ -382,7 +379,7 @@ def stress_functional_gradient(k, stress, A):
         displacement_field_inxyz=displacements[k], adjoint_field_inxyz=adjoints[k],
         macro_gradient_field_ijqxyz=macro_gradient_field, phase_field_1nxyz=rho_nodal, target_stress_ij=target,
         actual_stress_ij=stress, preconditioner_fun=apply_preconditioner, system_matrix_fun=apply_stiffness,
-        formulation='small_strain', p=simp_p, weight=-0.5 * np.sum(target ** 2), cg_tol=cg_tol, r_tol=True)
+        formulation='small_strain', p=simp_p, weight=-0.5 * np.sum(target ** 2), cg_tol=cg_tol)
     cg_iterations['adjoint'] += adjoint_info.get('num_iteration_adjoint', 0)
     return sensitivity_load_case.s[0, 0].copy()
 

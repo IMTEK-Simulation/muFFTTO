@@ -275,7 +275,7 @@ for inc in range(ninc):
 
         displacement_increment_field.s.fill(0)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,
@@ -284,9 +284,7 @@ for inc in range(ninc):
             P=M_fun_Green,
             tol=1e-5,
             maxiter=1000,
-            callback=callback,
-            #rtol=True,
-        )
+            callback=callback)
 
         nb_it_cg    = len(norms['residual_rr'])
         sum_CG_its += nb_it_cg

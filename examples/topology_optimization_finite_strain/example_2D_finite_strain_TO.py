@@ -259,10 +259,9 @@ def solve_cg(rhs, x, rtol):
     def count(*args):
         counter[0] += 1
 
-    solvers.conjugate_gradients_mugrid_experimental(
+    solvers.conjugate_gradients(
         comm=discretization.communicator, fc=discretization.field_collection, hessp=apply_tangent, b=rhs, x=x,
-        P=apply_preconditioner, tol=rtol, maxiter=cg_maxiter, callback=count,
-        stop_crit_norm='energy_lower_estim', d_min=cg_delay, energy_rtol=True)
+        P=apply_preconditioner, tol=rtol, maxiter=cg_maxiter, callback=count, d_min=cg_delay)
     return max(counter[0] - 1, 0)           # called once before the first iteration (not at all if x is converged)
 
 

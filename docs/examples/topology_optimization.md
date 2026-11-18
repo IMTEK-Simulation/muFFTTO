@@ -66,7 +66,7 @@ $$
 
 where $D$ is the (symmetrized) gradient from nodes to quadrature points and $W$ holds the
 quadrature weights. The equation is solved with preconditioned CG
-(`solvers.conjugate_gradients_mugrid`). The homogenized stress (or flux) is
+(`solvers.conjugate_gradients`). The homogenized stress (or flux) is
 
 $$
 \boldsymbol\Sigma_h^{l}(\rho) = \frac{1}{|\Omega|}\int_\Omega \mathbb C(\rho) : (\mathbf E_l + \nabla^s u_l)\,dx
@@ -153,16 +153,9 @@ The preconditioner is selected with `preconditioner_type`. All scripts use
 * `'Green_Jacobi'`: $M^{-1} = J\,G\,J$ with $J = \mathrm{diag}(K(\rho))^{-1/2}$. Because the
   material changes with $\rho$, $J$ is recomputed in every objective evaluation.
 
-CG tolerances (`cg_setup`). Note that `conjugate_gradients_mugrid` compares $(r,r)$ with
-`tol**2`. The state solves use an **absolute** criterion (the default `rtol=False`), and
-the adjoint solves use a **relative** one unless `r_tol=False` is set:
-
-| Script | `cg_tol` | state solve | adjoint solve |
-|---|---|---|---|
-| 2D elasticity | 1e-3 | absolute | relative |
-| tilled grid | 1e-6 | absolute | relative |
-| 3D elasticity | 1e-6, `r_tol=False` | absolute | absolute |
-| conductivity | 1e-6 | absolute | relative |
+CG tolerances (`cg_setup`). Every state and adjoint solve uses `solvers.conjugate_gradients`, which stops on
+the estimate of the energy error: relative tolerance `cg_tol` (1e-6 in all examples), adaptive delay with minimum
+`cg_delay` (10); a warm start is measured relative to the energy of the start.
 
 ### Optimizer
 
@@ -402,8 +395,8 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
   $\mathbf e_i\otimes\mathbf e_i$. There are **no shear load cases**, so the shear part of
   $\mathbb C_t$ is not targeted. **Target**: $\nu_t = -0.3$ (`:96`).
 * **Phase-field term**: `objective_function_phase_field_3D` (`:164`).
-* **Solver** (`:35, 259`): `cg_setup = {'cg_tol': 1e-6, 'r_tol': False}`, so both the state
-  and adjoint solves use an absolute tolerance.
+* **Solver**: `cg_setup = {'cg_tol': 1e-6, 'cg_delay': 10}`, the energy-error stop for the state and adjoint
+  solves.
 * **Initial guess**: as in 2D. The sinusoid depends only on $x$ and $y$, and noise is added.
 * **Optimizer** (`:451-469`): `l_bfgs_bounded` with `gtol=1e-5` and `xtol=1e-3`.
 * **Plotting** (`:384-428`): in serial runs, every 10th iteration renders three
@@ -427,7 +420,7 @@ set $\{0, 1/n, \dots, 1\}$. It is **serial only** (`assert MPI.COMM_WORLD.size =
 | `poison_target` / `poisson_target`, `G_target_auxet`, `conductivity_C_target` | target block | target effective tensor |
 | `macro_gradients`, `nb_load_cases` | load-case block | which responses are matched |
 | `preconditioner_type` | top | `'Green'`, `'Jacobi'` or `'Green_Jacobi'` |
-| `cg_setup` | top | CG tolerance (`cg_tol`) and relative/absolute switch for the adjoint (`r_tol`) |
+| `cg_setup` | top | relative energy error of the CG solves (`cg_tol`) and the minimal delay of its estimate (`cg_delay`) |
 | `gtol`, `xtol`, `ftol`, `maxiter`, `maxcor` | optimizer call | L-BFGS stopping and memory |
 | `random_init`, `show_plots` | `__main__` | initial guess, per-iteration plotting |
 | `nb_phase_levels` | conductivity `__main__` | rounding of the final design (None = off) |

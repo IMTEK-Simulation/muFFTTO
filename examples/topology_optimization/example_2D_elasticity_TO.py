@@ -35,13 +35,10 @@ show_plots = os.environ.get('SHOW_PLOTS', '1') == '1'  # phase field figure afte
 eta = float(os.environ['ETA']) if 'ETA' in os.environ else max(1 * pixel_size)  # Filter width (ETA: fixed in physical units)
 init_noise_grid = int(os.environ.get('INIT_NOISE_GRID', '0'))  # >0: start noise drawn on this grid (see below)
 weight = 5.  # Weight for the stress match term
-cg_setup = {'cg_tol': 1e-3}
-# CG_MODE='energy': every forward and adjoint solve from zero, stopped on the energy-error estimate relative to the
-# initial error (1e-6, delay 10) -> accurate gradients, the same for every preconditioner. Default: warm starts and
-# the residual tolerance cg_tol (absolute for the forward problem, relative to |b| for the adjoint)
-cg_mode = os.environ.get('CG_MODE', 'residual')
-if cg_mode == 'energy':
-    cg_setup = {'cg_tol': 1e-6, 'cg_stop': 'energy', 'cg_warm_start': False, 'cg_delay': 10}
+# every forward and adjoint solve stops on the energy-error estimate (solvers.conjugate_gradients): relative
+# tolerance cg_tol, adaptive delay with minimum cg_delay; warm starts are relative to the energy of the start
+cg_setup = {'cg_tol': 1e-6, 'cg_delay': 10}
+cg_mode = 'energy'
 optimizer = 'l_bfgs'  # Options: 'l_bfgs', 'mma', 'tr_newton' (box constraints only), see solvers_nonlinear.minimize
 volume_fraction = None  # None: box constraints only; e.g. 0.6: mean(phase) <= 0.6 (MMA) / = 0.6 (projected L-BFGS)
 fd_step = 1e-3  # tr_newton: Hessian-vector products by central differences of the gradient, step in phase units
@@ -289,33 +286,17 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
-        if cg_mode == 'energy':
-            displacement_field_load_case[load_case].s[...] = 0.0
-            solvers.conjugate_gradients_mugrid_experimental(
-                comm=discretization.communicator,
-                fc=discretization.field_collection,
-                hessp=K_fun,
-                b=rhs_load_case_inxyz,
-                x=displacement_field_load_case[load_case],
-                P=M_fun,
-                tol=cg_setup['cg_tol'],
-                maxiter=100000,
-                callback=callback,
-                stop_crit_norm='energy_lower_estim',
-                energy_rtol=True,
-                d_min=cg_setup['cg_delay'])
-        else:
-            solvers.conjugate_gradients_mugrid(
-                comm=discretization.communicator,
-                fc=discretization.field_collection,
-                hessp=K_fun,  # linear operator
-                b=rhs_load_case_inxyz,
-                x=displacement_field_load_case[load_case],
-                P=M_fun,
-                tol=cg_setup['cg_tol'],
-                maxiter=10000,
-                callback=callback,
-            )
+        solvers.conjugate_gradients(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=K_fun,
+            b=rhs_load_case_inxyz,
+            x=displacement_field_load_case[load_case],
+            P=M_fun,
+            tol=cg_setup['cg_tol'],
+            maxiter=100000,
+            callback=callback,
+            d_min=cg_setup['cg_delay'])
 
         if MPI.COMM_WORLD.rank == 0:
             nb_it = len(norms_cg_mech['residual_rr'])
@@ -570,7 +551,7 @@ if __name__ == '__main__':
 
         displacement_field = discretization.get_unknown_size_field(name='displacement_field_postprocess')
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -578,8 +559,7 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
         # compute homogenized stress field corresponding to final displacement
         homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
@@ -609,7 +589,7 @@ if __name__ == '__main__':
                                           macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                                           rhs_inxyz=rhs_field_final)
 
-            solvers.conjugate_gradients_mugrid(
+            solvers.conjugate_gradients(
                 comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun_final,  # linear operator
@@ -617,8 +597,7 @@ if __name__ == '__main__':
                 x=displacement_field,
                 P=M_fun,
                 tol=1e-5,
-                maxiter=10000,
-            )
+                maxiter=10000)
 
             homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,

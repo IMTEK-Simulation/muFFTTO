@@ -65,8 +65,8 @@ comm = disc_u.communicator
 # Material: C = g(d) s(x) C_0
 # ----------------------------------------------------------------------------------------------------------------
 K_0, mu_0 = material_models.get_bulk_and_shear_modulus(E=E_young, poisson=poisson)
-lam_0, _ = material_models.get_lame_parameters_from_bulk_and_shear(K_0, mu_0, dim=2)
 C_0 = material_models.get_elastic_material_tensor(dim=2, K=K_0, mu=mu_0, kind='linear')
+lam_0, mu_0 = C_0[0, 0, 1, 1], C_0[0, 1, 0, 1]          # the Lame parameters of C_0 (for the energy split)
 phase = microstructure_library.get_geometry(nb_voxels=disc_u.nb_of_pixels, microstructure_name='circle_inclusion',
                                             coordinates=disc_u.fft.coords)          # 1 matrix, 0 pore
 stiffness = np.where(phase > 0, 1.0, pore_contrast)                                # s(x) per pixel

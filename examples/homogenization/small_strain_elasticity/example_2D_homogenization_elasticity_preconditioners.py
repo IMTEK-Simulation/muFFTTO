@@ -156,7 +156,7 @@ for i, j in [(0, 0), (1, 1), (0, 1)]:
                                   macro_gradient_field_ijqxyz=macro_gradient_field,
                                   rhs_inxyz=rhs_field)
     solution_field.s.fill(0)
-    _, norms = solvers.conjugate_gradients_mugrid_experimental(
+    _, info = solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,
@@ -165,12 +165,10 @@ for i, j in [(0, 0), (1, 1), (0, 1)]:
         P=M_fun,
         tol=1e-6,
         maxiter=10000,
-        stop_crit_norm='energy_lower_estim',  # estimate of the energy error ...
-        energy_rtol=True,  # ... relative to the initial one
         d_min=10)
     if MPI.COMM_WORLD.rank == 0:
         print(f'load case E_{i}{j}: {preconditioner_type} CG iterations = '
-              f'{norms["stop_iteration"]["energy_lower_estim"]}')
+              f'{info["iterations"]}')
     homogenized_C_ijkl[:, :, i, j] = homogenized_C_ijkl[:, :, j, i] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C,
         displacement_field_inxyz=solution_field,
