@@ -27,6 +27,8 @@ to a single example are listed at the end of that example's walkthrough page in
 | all contractions | The code mixed the reversed contraction $C_{ijkl}\varepsilon_{lk}$ with silent symmetry assumptions. It now uses the standard $C_{ijkl}\varepsilon_{kl}$ (and $A_{ij}g_j$) everywhere, and stores the Neo-Hookean tangent as $\partial P_{ij}/\partial F_{kl}$. Explicit transposes are used where the maths needs them: $\mathbb C^T$ / $A^T$ in the adjoint right-hand sides, and the full gradient of $\lambda$ in the sensitivity. `Discretization.assert_material_symmetry` checks the symmetries the methods require (major for CG/adjoint, minor for small strain) where material data enters a solve. See theory §2.3. |
 | `topology_optimization_conductivity.adjoint_potential` | Ghosts were refreshed on the empty output field instead of the flux that $B^T$ reads, so the `adjoint_energy` diagnostic was wrong. The sensitivities were not affected. |
 | `domain.get_preconditioner_Green_mugrid` | Removed debug prints. |
+| `domain.py` `Discretization.__init__` | `mpi_reduction` used `MPI.COMM_WORLD` whatever communicator was passed in. It is now a `GlobalReduction` on the discretization's muGrid communicator (2026-11-18). |
+| `solvers.py` | The residual CG, the multi-criterion experimental CG and their `rtol` inconsistencies are gone (2026-11-18): one `conjugate_gradients` with the energy-error stop. |
 | tests | `test/conftest.py` selects the non-interactive matplotlib backend, so tests that call `plt.show()` no longer block `pytest` or the pre-commit hook. |
 
 ## Open: may affect results
@@ -36,9 +38,9 @@ to a single example are listed at the end of that example's walkthrough page in
 | `material_models.get_elastic_material_tensor` vs `get_lame_parameters_from_bulk_and_shear(dim=2)` | In 2D, λ is computed as $K-\tfrac23\mu$ in one and $K-G$ in the other. The first treats $K$ as the 3D bulk modulus (plane strain); the second treats it as a 2D bulk modulus. This is a convention to decide, not a typo, so it has not been changed. |
 | `material_models.get_orthotropic_stiffness_tensor_plane_strain` | The formulas give the reduced plane-*stress* stiffness, despite the function name. |
 | `domain.py` `get_preconditioner_Green_mugrid` | The zero-frequency handling uses real-space `fft.icoords` to decide whether the local Fourier index 0 is $k=0$. This may be wrong on ranks that do not own $k=0$ under a pencil decomposition. It needs an MPI test with more than 2 ranks. |
-| `domain.py` `Discretization.__init__` | `mpi_reduction` always uses `MPI.COMM_WORLD`, ignoring the communicator that is passed in. muGrid's `Communicator.mpi4py_comm` is `None` in the installed builds, so there is no simple fix. |
-| `solvers.conjugate_gradients_mugrid_experimental` | With `rtol=True`, every criterion, including the energy-error ones, is scaled by $(r_0, r_0)$. |
 | `visualization_utils.get_deformed_grid_coords_two_dim` | The periodic copy nodes (last row/column) do not get the grid displacement. |
+
+| `examples/topology_optimization_finite_strain/example_2D_finite_strain_TO.py` | The Newton tangent becomes indefinite in the first design evaluation: CG raises `(p, K p) <= 0` (also before the consolidation, with the experimental CG). See `FINITE_STRAIN_TO_STATUS.md` there. |
 
 ## Open: legacy code that cannot run
 

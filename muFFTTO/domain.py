@@ -1,3 +1,6 @@
+# TODO [Martin] Nvidia Warp -> Ask claude to port material specific part that appluse this i
+# TODO [Martin] find out if this work on CPU also ..
+
 """Periodic unit cell and its (FEM / Fourier) discretization.
 
 This module is the core of muFFTTO. It defines
@@ -43,7 +46,7 @@ the ghost buffers. Before a stencil (convolution) operator reads a field,
 its ghost layers must be filled by ``self.fft.communicate_ghosts(field)``
 (MPI halo exchange + periodic wrap-around).
 
-The global (MPI-reduced) sums are done with ``NuMPI.Tools.Reduction``.
+The global (MPI-reduced) sums are done with the muGrid communicator (``communicator.reduction``, also for GPU data).
 The quadrature weights ``self.quadrature_weights`` are *physical* weights
 (they already contain the pixel area/volume), so
 ``sum_{q, pixels} w_q f_q`` approximates ``\\int_\\Omega f dx``.
@@ -53,7 +56,6 @@ import warnings
 import numpy as np
 import scipy as sc
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 import muGrid
@@ -61,6 +63,191 @@ from muGrid import GenericLinearOperator  # ConvolutionOperator
 from muGrid import Field
 
 from muFFTTO import discretization_library, tensor_operations
+
+
+class ScaledMaterial:
+    """Material data ``C(x) = sum_k s_k(x) C_k`` with scalar scale fields ``s_k`` and constant tensors ``C_k``.
+
+    Avoids storing the full tangent ``C_ijkl`` (elasticity, ``d^4`` values) or ``A_ij`` (conductivity, ``d^2``) per
+    quadrature point when the material is a scalar multiple of fixed tensors, e.g. SIMP with a void material
+    ``C_void = kappa C_0``: ``C(rho) = s(rho) C_0`` -- or, for any void, ``rho^p (C_1 - C_0) + 1 * C_0`` (two terms).
+    Accepted wherever material data is applied (:meth:`Discretization.apply_material_data_mugrid` and the methods
+    built on it: system matrix, right-hand side, homogenized stress, stress field, Jacobi preconditioner).
+
+    Parameters
+    ----------
+    terms : list of (scale, tensor)
+        ``scale``: float, ndarray broadcastable to ``[q, x, y(, z)]``, a scalar quadrature muGrid Field
+        (``[1, 1, q, x, y(, z)]``, read at use), or a callable returning such an array, evaluated at every application
+        (no stored field, e.g. the dual's ``C_0 A^-1 C_0 = C_0 / s(x)`` computed from the field of ``A = s(x) C_0``);
+        ``tensor``: ``[d, d, d, d]`` (elasticity) or ``[d, d]`` (conductivity).
+    """
+
+    def __init__(self, terms):
+        self.terms = list(terms)
+        # C_ijkl = C_ijlk for every (elasticity) tensor: then C : grad u = C : sym(grad u), and the small-strain
+        # system matrix can skip the symmetrisation of the gradient
+        self.minor_symmetric = all(
+            np.ndim(tensor) == 4
+            and np.allclose(tensor_operations.to_host(tensor), tensor_operations.to_host(tensor).transpose(0, 1, 3, 2))
+            for _, tensor in self.terms)
+
+    @staticmethod
+    def _scale_array(scale):
+        if callable(scale):
+            scale = scale()
+        if isinstance(scale, Field):
+            return scale.s[0, 0]
+        return scale
+
+    def apply(self, gradient, transposed=False, out=None, low_memory=False):
+        """``sum_k s_k (C_k : g)``; ``g``: ``[d, d, q, x, y(, z)]`` (elasticity) or ``[1, d, q, ...]`` (conductivity).
+        ``transposed``: contract the first index pair instead (``g : C_k``).
+        ``out``: array of the shape of ``g`` to write the result to (may be ``g`` itself); a new array if None.
+        ``low_memory``: evaluate one quadrature point at a time instead of all at once (same result, smaller
+        temporaries, slower); the library passes :attr:`Discretization.low_memory`."""
+        xp = tensor_operations.get_array_module(gradient)
+        shape = gradient.shape
+        nc = 2                                    # component axes: (i, j) elasticity, (u, i) conductivity
+        ncomp = shape[0] * shape[1]
+        if out is None:
+            out = xp.empty_like(gradient)
+        if xp is not np and all(np.ndim(tensor) == 4 for _, tensor in self.terms):
+            return self._apply_fused(xp, gradient, transposed, out)       # GPU: one kernel, no temporaries
+        # constant tensors as (ncomp x ncomp) matrices acting on the components of a point, stored in muGrid's
+        # memory order: the first index fastest, i.e. as [.., j, i]
+        matrices = []
+        for scale, tensor in self.terms:
+            tensor = xp.asarray(tensor)
+            if tensor.ndim == 4:                  # [d,d,d,d]: C_(ij)(kl), rows and columns in the (j, i) order of g
+                matrix = tensor.transpose(1, 0, 3, 2).reshape(ncomp, ncomp)
+            else:                                 # [d,d] acting on [u=1, d]: A_ij
+                matrix = tensor
+            matrices.append(matrix if transposed else matrix.T)
+        scales = [self._scale_array(scale) for scale, _ in self.terms]
+        scales = [scale if np.isscalar(scale) else xp.broadcast_to(xp.asarray(scale), shape[nc:]) for scale in scales]
+        for q in quad_point_blocks(shape[nc], low_memory):
+            # points first, components last: (j, i) merged into one axis (a view in muGrid's memory order), so the
+            # constant tensor acts as a (ncomp x ncomp) matrix on every point (batched matvec)
+            block_shape = gradient[:, :, q].shape[nc:]
+            g = xp.moveaxis(gradient[:, :, q], (1, 0), (-2, -1)).reshape(block_shape + (ncomp,))
+            result = None
+            for scale, matrix in zip(scales, matrices):
+                term = g @ matrix
+                if not np.isscalar(scale):
+                    term *= scale[q][..., None]
+                elif scale != 1.0:
+                    term *= scale
+                if result is None:
+                    result = term
+                else:
+                    result += term
+            # back to the component-first layout [i, j, q, x, y(, z)]; g is fully read before out is written
+            out[:, :, q] = xp.moveaxis(result.reshape(block_shape + (shape[1], shape[0])), (-2, -1), (1, 0))
+        return out
+
+    def apply_to_field(self, gradient_field, transposed=False):
+        """:meth:`apply` in place on a whole gradient-sized muGrid field (ghost points included; their values are
+        meaningless until the next ghost exchange). On the GPU, with scales that are muGrid fields or numbers, the
+        kernel runs over the contiguous component vectors of the buffers (:func:`tensor_operations.point_view`) --
+        one pass at memory bandwidth. Otherwise :meth:`apply` on the interior."""
+        xp = tensor_operations.get_array_module(gradient_field.s)
+        scales = [scale() if callable(scale) else scale for scale, _ in self.terms]
+        if (xp is np or not all(np.ndim(tensor) == 4 for _, tensor in self.terms)
+                or not all(isinstance(scale, Field) or np.isscalar(scale) for scale in scales)):
+            return self.apply(gradient_field.s, transposed=transposed, out=gradient_field.s)
+        components = tensor_operations.point_view(gradient_field)             # [d, d, q, points]
+        d = components.shape[0]
+        components = components.reshape(d, d, -1)
+        scales = [components.dtype.type(scale) if np.isscalar(scale)
+                  else tensor_operations.point_view(scale).reshape(-1) for scale in scales]
+        kernel = self._fused_kernel_for(xp, transposed, components.dtype)
+        vectors = [components[i, j] for i in range(d) for j in range(d)]
+        kernel(*vectors, *scales, *vectors)
+        return gradient_field.s
+
+    def _fused_kernel_for(self, xp, transposed, dtype):
+        tensors = [np.asarray(tensor_operations.to_host(tensor), dtype=float) for _, tensor in self.terms]
+        key = (transposed, str(dtype)) + tuple(tensor.tobytes() for tensor in tensors)
+        if getattr(self, '_fused_key', None) != key:
+            self._fused_kernel, self._fused_key = _fused_tensor_kernel(xp, tensors, transposed), key
+        return self._fused_kernel
+
+    def _apply_fused(self, xp, gradient, transposed, out):
+        """:meth:`apply` on the GPU as one elementwise kernel over the points (elasticity): each point reads its
+        d x d gradient components and writes the d x d result, with the constant tensors compiled into the kernel --
+        no full-size temporaries (the matrix-product path needs two) and one pass over the field."""
+        d = gradient.shape[0]
+        scales = [self._scale_array(scale) for scale, _ in self.terms]
+        scales = [gradient.dtype.type(scale) if np.isscalar(scale) else xp.asarray(scale) for scale in scales]
+        kernel = self._fused_kernel_for(xp, transposed, gradient.dtype)
+        kernel(*[gradient[i, j] for i in range(d) for j in range(d)], *scales,
+               *[out[i, j] for i in range(d) for j in range(d)])
+        return out
+
+
+def _fused_tensor_kernel(xp, tensors, transposed):
+    """CuPy elementwise kernel ``out_ij = sum_t s_t sum_kl C_t[i, j, k, l] g_kl`` (``g_kl C_t[k, l, i, j]`` if
+    transposed) for constant tensors ``C_t``: arguments ``g_00 .. g_dd, s_0 .. s_T, out_00 .. out_dd``. All inputs
+    of a point are read before its outputs are written, so ``out`` may be the gradient itself."""
+    d = tensors[0].shape[0]
+    pairs = [(i, j) for i in range(d) for j in range(d)]
+    inputs = ', '.join([f'T g{i}{j}' for i, j in pairs] + [f'T s{t}' for t in range(len(tensors))])
+    outputs = ', '.join(f'T o{i}{j}' for i, j in pairs)
+    code = [f'T a{k}{l} = g{k}{l};' for k, l in pairs]
+    for i, j in pairs:
+        terms = []
+        for t, tensor in enumerate(tensors):
+            entries = [(tensor[k, l, i, j] if transposed else tensor[i, j, k, l], k, l) for k, l in pairs]
+            contraction = ' + '.join(f'({float(c)!r}) * a{k}{l}' for c, k, l in entries if c != 0)
+            if contraction:
+                terms.append(f's{t} * ({contraction})')
+        code.append(f'T r{i}{j} = ' + (' + '.join(terms) if terms else '0') + ';')
+    code += [f'o{i}{j} = r{i}{j};' for i, j in pairs]
+    return xp.ElementwiseKernel(inputs, outputs, ' '.join(code), 'scaled_material_apply')
+
+
+class GlobalReduction:
+    """Reductions over all MPI ranks of a muGrid communicator (works for numpy and cupy arrays).
+
+    ``sum``/``min``/``max``/``mean`` of a whole local array give a global scalar (NuMPI's ``Reduction`` interface,
+    muGrid's ``communicator.reduction``); ``sum(a, axis=...)``, ``min(a, axis=...)``, ``max(a, axis=...)`` reduce
+    the local array along ``axis`` first and return the elementwise global result (an array).
+    """
+
+    def __init__(self, communicator):
+        self.communicator = communicator
+
+    def _along(self, operation, a, axis):
+        xp = tensor_operations.get_array_module(a)
+        return getattr(self.communicator, operation)(getattr(xp, operation)(xp.asarray(a), axis=axis))
+
+    def sum(self, a, axis=None):
+        return self.communicator.reduce_sum(a) if axis is None else self._along('sum', a, axis)
+
+    def min(self, a, axis=None):
+        return self.communicator.reduce_min(a) if axis is None else self._along('min', a, axis)
+
+    def max(self, a, axis=None):
+        return self.communicator.reduce_max(a) if axis is None else self._along('max', a, axis)
+
+    def mean(self, a):
+        return self.communicator.reduce_mean(a)
+
+
+def quad_point_blocks(nb_quad_points, low_memory):
+    """The quadrature points in the blocks an operation on a ``[.., q, x, y(, z)]`` field is evaluated in, as slices
+    of the q axis (the axis is kept, so the same expression serves both modes):
+
+    - ``low_memory=False``: one block with all points -- fastest (few large GPU kernels);
+    - ``low_memory=True``: one point per block -- the temporaries of an expression are 1/q of the field instead of
+      the full field. On the GPU this matters: CuPy's memory pool keeps every temporary's memory reserved, so a few
+      full-size [d, d, q, x, y, z] temporaries roughly double the memory of a large elasticity run.
+
+    See :attr:`Discretization.low_memory`."""
+    if not low_memory:
+        return [slice(None)]
+    return [slice(q, q + 1) for q in range(nb_quad_points)]
 
 
 class PeriodicUnitCell:
@@ -195,7 +382,7 @@ class Discretization:
         Interpolation, Hessian and Laplacian stencils (same layout idea).
     gradient_op, interpolation_op, hessian_op, laplacian
         muGrid ``GenericLinearOperator`` wrappers of the stencils above.
-    mpi_reduction : NuMPI.Tools.Reduction
+    mpi_reduction : GlobalReduction
         Helper for global (all-rank) sums/min/max.
     """
 
@@ -203,7 +390,10 @@ class Discretization:
                  nb_of_pixels_global=None,
                  discretization_type='finite_element',
                  element_type='linear_triangles',
-                 communicator=muGrid.Communicator(MPI.COMM_WORLD)):
+                 communicator=muGrid.Communicator(MPI.COMM_WORLD),
+                 device='cpu',
+                 low_memory=False,
+                 hourglass_eps=None):
         """Initialize discretization.
 
         Parameters
@@ -221,6 +411,24 @@ class Discretization:
         communicator : muGrid.Communicator, optional
             MPI communicator for parallel computation. Note: the default is
             evaluated once at import time (``MPI.COMM_WORLD``).
+        device : str, optional
+            Where the fields live: 'cpu' (default) or 'gpu'. Passed to
+            ``muGrid.FFTEngine``. For 'gpu', muGrid has to be built with CUDA
+            and field data (``.s``) are cupy arrays instead of numpy arrays.
+        low_memory : bool, optional
+            How the material is applied to gradient-sized ``[d, d, q, x, y(, z)]``
+            fields (in every system-matrix product, right-hand side, stress and
+            sensitivity). False (default): all quadrature points at once, the
+            fastest. True: one quadrature point at a time; the temporaries are then
+            1/q of such a field. Same results; about half the GPU memory of a large
+            elasticity run (3D topology optimization: ~4.8 instead of ~9.6 kB per
+            voxel). The speed depends on the GPU: 17-33 % slower on an L40S (AT2,
+            2D 128^2 and 3D 32^3), 10 % faster on a laptop GPU (TO, 3D 64^3). Use it
+            when a grid does not fit on the GPU otherwise. See :func:`quad_point_blocks`.
+        hourglass_eps : float, optional
+            Only for ``element_type='trilinear_hexahedron_1Q_hg'`` (one-point hexahedron with Flanagan-Belytschko
+            hourglass control, see :mod:`muFFTTO.hourglass_control`): strength of the control as a fraction of the
+            hourglass stiffness of the fully integrated element (default 0.3).
 
         Raises
         ------
@@ -260,9 +468,11 @@ class Discretization:
                                     nb_ghosts_left=left_ghosts,
                                     nb_ghosts_right=right_ghosts,
                                     # nb_sub_pts=self.nb_nodes_per_pixel
-                                    )
+                                    device=device)
+        self.device = device
+        self.low_memory = low_memory           # see the docstring and quad_point_blocks()
         self.communicator = communicator
-        self.mpi_reduction = Reduction(MPI.COMM_WORLD)
+        self.mpi_reduction = GlobalReduction(communicator)   # sum/min/max over all ranks, of an array or along axes
         # Validate the symmetries of material data where it enters a solve
         # (see check_material_symmetry); can be switched off for speed.
         self.check_material_symmetry = True
@@ -270,7 +480,8 @@ class Discretization:
         # number of pixels/voxels of a subdomain for MPI
         self.nb_of_pixels = np.asarray(self.fft.nb_subdomain_grid_pts,
                                        dtype=np.intp)
-        if MPI.COMM_WORLD.size > 1:
+        if communicator.size > 1:               # (a discretization on a serial communicator, e.g. MPI.COMM_SELF for
+            # an agglomerated coarse grid on one rank of a parallel run, must not enter collective calls)
             # adjust the number of points
             # NOTE: currently a no-op (the "- 2" correction is commented out)
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
@@ -384,6 +595,12 @@ class Discretization:
             # material_data_field [d,d,d,d,q,x,y,z] - elasticity
             #  rhs=-Dt*A*E
 
+        # One-point hexahedron with hourglass control: K u = B^T W C B u + H^T eps kappa H u (muFFTTO.hourglass_control)
+        self.hourglass_control = None
+        if element_type == 'trilinear_hexahedron_1Q_hg' and discretization_type == 'finite_element':
+            from .hourglass_control import HourglassControl
+            self.hourglass_control = HourglassControl(self, eps=hourglass_eps)
+
     def get_nodal_points_coordinates(self):
         """Calculate spatial coordinates of nodal points scaled to domain size.
 
@@ -419,7 +636,9 @@ class Discretization:
 
         # fft.coords are fractional coordinates in [0,1) of the local grid points, shape [dim, x, y, z];
         # scale component-wise by the cell size -> physical coordinates of the pixel origins
-        nodal_points_coordinates_ixyz = self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)] * self.fft.coords
+        # (computed on the host, moved to the device of the field (CPU or GPU) when written)
+        nodal_points_coordinates_ixyz = (self.domain_size[tuple([slice(None)] + [np.newaxis] * dim)]
+                                         * tensor_operations.to_host(self.fft.coords))
         # Coordinates above are already in physical units, so each column of the pixel Jacobian
         # is normalised by its own diagonal entry: that yields a unit diagonal regardless of the
         # element's reference domain ([0,1] for triangles, [-1,1] for quads) and expresses the
@@ -428,6 +647,8 @@ class Discretization:
 
         # x_j = sum_i J_adj[j, i] * x_i   (apply the adjusted Jacobian to every grid point)
         nodal_points_coordinates_ixyz = np.einsum('i...,ji->j...', nodal_points_coordinates_ixyz, adjusted_jacobian)
+        xp = tensor_operations.get_array_module(nodal_points_coordinates_inxyz.s)
+        nodal_points_coordinates_ixyz = xp.asarray(nodal_points_coordinates_ixyz)
         if self.nb_nodes_per_pixel == 1:
             nodal_points_coordinates_inxyz.s[...] = np.expand_dims(nodal_points_coordinates_ixyz, axis=1)  # x, axis = 0
         elif self.nb_nodes_per_pixel == 4:
@@ -466,6 +687,65 @@ class Discretization:
             )
 
         return nodal_points_coordinates_inxyz
+
+    def get_domain_boundary_pixel_mask(self, boundaries=None, width=1):
+        """Boolean mask of the pixels on the boundary of the whole (global) domain.
+
+        Pixels are selected by their *global* index, so the mask is correct on
+        every MPI rank (each rank gets the part of its own subdomain). Use it
+        e.g. to set the stiffness of the domain boundary to zero, which cuts the
+        periodic connection to the neighbouring cells.
+
+        Parameters
+        ----------
+        boundaries : str or iterable of str, optional
+            Which boundaries to include: ``'left'`` / ``'right'`` (first / last
+            pixel layer in x), ``'bottom'`` / ``'top'`` (in y) and, in 3D,
+            ``'back'`` / ``'front'`` (in z). Default ``None``: all boundaries.
+        width : int, optional
+            Number of pixel layers per boundary (default 1).
+
+        Returns
+        -------
+        mask_xyz : ndarray of bool [x, y, (z)]
+            ``True`` on boundary pixels of the local subdomain; numpy on the
+            CPU, cupy on the GPU (``device='gpu'``).
+
+        Notes
+        -----
+        The domain is periodic: the ``'right'`` layer (x = N_x - 1) touches the
+        ``'left'`` layer (x = 0) of the next cell, so one of them per direction
+        is enough to cut the connection in that direction.
+        """
+        boundary_axes = {'left': (0, False), 'right': (0, True),
+                         'bottom': (1, False), 'top': (1, True),
+                         'back': (2, False), 'front': (2, True)}
+        dim = self.domain_dimension
+        if boundaries is None:
+            boundaries = [name for name, (axis, _) in boundary_axes.items() if axis < dim]
+        elif isinstance(boundaries, str):
+            boundaries = [boundaries]
+
+        # global pixel indices of the local subdomain [dim, x, y, (z)], numpy also on the GPU
+        icoords = np.asarray(self.fft.icoords)
+        mask_xyz = np.zeros(icoords.shape[1:], dtype=bool)
+        for name in boundaries:
+            if name not in boundary_axes or boundary_axes[name][0] >= dim:
+                valid = [n for n, (axis, _) in boundary_axes.items() if axis < dim]
+                raise ValueError(f"Unknown boundary '{name}' for a {dim}D domain; choose from {valid}")
+            axis, is_upper = boundary_axes[name]
+            nb_pixels = self.nb_of_pixels_global[axis]
+            if not 1 <= width <= nb_pixels:
+                raise ValueError(f"width must be between 1 and {nb_pixels}, got {width}")
+            if is_upper:
+                mask_xyz |= icoords[axis] >= nb_pixels - width
+            else:
+                mask_xyz |= icoords[axis] < width
+
+        if self.device == 'gpu':
+            import cupy
+            return cupy.asarray(mask_xyz)
+        return mask_xyz
 
     def get_nodal_points_coordinates_with_periodic_nodes(self):
         """Calculate coordinates of nodal points including periodic boundary nodes.
@@ -644,7 +924,13 @@ class Discretization:
                                             grad_u_ijqxyz=grad_u_ijqxyz)
 
         # 2. symmetrize it
-        grad_u_ijqxyz.s[...] = (grad_u_ijqxyz.s + np.swapaxes(grad_u_ijqxyz.s, 0, 1)) / 2
+        # in place, one (i, j) pair at a time (no full-size temporaries); the diagonal (a + a) / 2 = a is unchanged
+        g = grad_u_ijqxyz.s
+        for i in range(g.shape[0]):
+            for j in range(i + 1, g.shape[1]):
+                sym = (g[i, j] + g[j, i]) / 2
+                g[i, j] = sym
+                g[j, i] = sym
 
     def apply_gradient_transposed_operator_mugrid(self,
                                                   gradient_field_ijqxyz,
@@ -1055,7 +1341,8 @@ class Discretization:
         fields (``.s`` is accessed). The weak form
         ``int grad(v) : C : (E + grad(u)) dx = 0`` for all periodic ``v``
         gives ``K u = -B^T W C E``. The macro gradient is copied into the
-        scratch field ``'stress_temporary_rhs'`` so the input is not modified.
+        shared scratch field ``'grad_field_temporary'`` (see
+        :meth:`apply_system_matrix_mugrid`) so the input is not modified.
         """
 
         # macro_gradient_field    [f,d,q,x,y,z]
@@ -1065,7 +1352,7 @@ class Discretization:
         #  rhs=-Dt*wA*E
 
         self.assert_material_symmetry(material_data_field_ijklqxyz, name='material data in get_rhs')
-        gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
 
         # sigma = C : E   (in place in the scratch field)
@@ -1134,7 +1421,7 @@ class Discretization:
         inv_F = inv_of_deformation_gradient
 
         self.assert_material_symmetry(material_data_field_ijklqxyz, name='material data in get_rhs')
-        gradient_ijqxyz = self.get_gradient_size_field(name='stress_temporary_rhs')
+        gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
         gradient_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s[...]
 
         # Macro gradient in reference domain
@@ -1224,6 +1511,9 @@ class Discretization:
             The same object as the input field.
         """
 
+        # macro gradient is a small numpy array -> move it to the device of the field (CPU or GPU)
+        xp = tensor_operations.get_array_module(macro_gradient_field_ijqxyz.s)
+        macro_gradient_ij = xp.asarray(macro_gradient_ij)
         # broadcast E_ij to every quadrature point and pixel: append (ndim-2) singleton axes
         macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
@@ -1271,7 +1561,7 @@ class Discretization:
                                       name='material data in get_homogenized_stress_mugrid')
         self.fft.communicate_ghosts(field=displacement_field_inxyz)
 
-        gradient_field_ijqxyz = self.get_gradient_size_field(name='strain_temp')
+        gradient_field_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
 
         if formulation == 'small_strain':
             self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_inxyz,
@@ -1282,23 +1572,25 @@ class Discretization:
                                                 grad_u_ijqxyz=gradient_field_ijqxyz)
 
         # compute total strain
-        gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
+        gradient_field_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
 
-        mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
-        if isinstance(material_data_field_ijklqxyz, np.ndarray):
-            # mat_data_temp.sg[...] = material_data_field_ijklqxyz
-            raise TypeError("NOT YET  does not support ndarray")
+        if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
+            mat_data_temp = material_data_field_ijklqxyz          # applied directly, no full-size copy
         else:
-            mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
+            mat_data_temp = self.get_material_data_size_field_mugrid(name='weighted_data_field_temporary')
+            if isinstance(material_data_field_ijklqxyz, np.ndarray):
+                # mat_data_temp.sg[...] = material_data_field_ijklqxyz
+                raise TypeError("NOT YET  does not support ndarray")
+            else:
+                mat_data_temp.s[...] = material_data_field_ijklqxyz.s[...]
 
         self.apply_material_data_mugrid(material_data=mat_data_temp,
                                         gradient_field=gradient_field_ijqxyz)
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
 
-        # sum over the last (d + 1) axes = quadrature points q and pixels x, y(, z); global MPI sum
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        # sum over quadrature points q and pixels x, y(, z); global MPI sum
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_homogenized_energy_mugrid(self,
@@ -1372,8 +1664,7 @@ class Discretization:
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=flux_field_ijqxyz)
 
         # (E + grad u) : w_q C : (E + grad u),  reduced over q and space
-        contracted_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s * flux_field_ijqxyz.s,
-                                               axis=tuple(range(-self.domain_dimension - 1, 0)))
+        contracted_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s * flux_field_ijqxyz.s)
 
         return np.sum(contracted_ij) / self.cell.domain_volume
 
@@ -1425,8 +1716,7 @@ class Discretization:
 
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
 
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_homogenized_stress_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
@@ -1495,8 +1785,7 @@ class Discretization:
         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
         gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s[...] * det_F.s[...][None, None, ...]
 
-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        homogenized_stress_ij = self.sum_over_quad_points_and_pixels(gradient_field_ijqxyz.s)
         return homogenized_stress_ij / self.cell.domain_volume
 
     def get_stress_field_mugrid(self,
@@ -1545,9 +1834,13 @@ class Discretization:
             self.apply_gradient_operator_mugrid(u_inxyz=displacement_field_inxyz,
                                                 grad_u_ijqxyz=output_stress_field_ijqxyz)
 
-        output_stress_field_ijqxyz.s[...] = output_stress_field_ijqxyz.s + macro_gradient_field_ijqxyz.s
-        output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
-                                                      output_stress_field_ijqxyz.s)
+        output_stress_field_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
+        if isinstance(material_data_field_ijklqxyz, ScaledMaterial):
+            material_data_field_ijklqxyz.apply(output_stress_field_ijqxyz.s, out=output_stress_field_ijqxyz.s,
+                                               low_memory=self.low_memory)
+        else:
+            output_stress_field_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...', material_data_field_ijklqxyz.s,
+                                                          output_stress_field_ijqxyz.s)
 
 
     def get_flux_field_mugrid(self,
@@ -1694,7 +1987,31 @@ class Discretization:
         None
         """
         # apply quadrature weights without material data
-        grad_field.s[...] = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
+        # (weights are a numpy array -> move them to the device of the field (CPU or GPU))
+        xp = tensor_operations.get_array_module(grad_field.s)
+        weights = np.asarray(tensor_operations.to_host(self.quadrature_weights)).ravel()
+        # in place and broadcast over [i, j, q, x, y(, z)]: one kernel, no temporary
+        grad_field.s[...] *= xp.asarray(weights).reshape((1, 1, -1) + (1,) * self.domain_dimension)
+
+    def sum_over_quad_points_and_pixels(self, data_qxyz):
+        """Sum over quadrature points and pixels of the whole cell (all MPI ranks).
+
+        Works for CPU (numpy) and GPU (cupy) data.
+
+        Parameters
+        ----------
+        data_qxyz : numpy or cupy ndarray [..., q, x, y, z]
+            The last (d + 1) axes -- quadrature points q and pixels x, y(, z) -- are summed.
+
+        Returns
+        -------
+        numpy ndarray [...]
+            Global sum, the same on every rank. Always a numpy array.
+        """
+        # local sum over q, x, y(, z) on the device of the data (CPU or GPU)
+        local_sum = data_qxyz.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
+        # global sum over the ranks of this discretization (muGrid stages device data through the host if needed)
+        return np.asarray(tensor_operations.to_host(self.communicator.sum(local_sum)))
 
     def apply_material_data(self, material_data, gradient_field):
         """Legacy (numpy-returning) constitutive map, dispatched on problem type.
@@ -1781,11 +2098,14 @@ class Discretization:
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
+            material_data = xp.asarray(material_data)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                stress = np.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
+                stress = xp.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
             elif material_data.ndim > 4:
-                stress = np.einsum('ijkl...,kl...->ij...', material_data, gradient_field.s)
+                stress = xp.einsum('ijkl...,kl...->ij...', material_data, gradient_field.s)
         else:
             stress = np.einsum('ijkl...,kl...->ij...', material_data.s, gradient_field.s)
 
@@ -1810,12 +2130,15 @@ class Discretization:
         """
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.sg)
+            material_data = xp.asarray(material_data)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 2:
-                flux_ijnxyz = np.einsum('ij,uj...->ui...', material_data,
+                flux_ijnxyz = xp.einsum('ij,uj...->ui...', material_data,
                                         gradient_field.sg)  # 'u' just to keep the size of array consistent
             else:
-                flux_ijnxyz = np.einsum('ij...,uj...->ui...', material_data,
+                flux_ijnxyz = xp.einsum('ij...,uj...->ui...', material_data,
                                         gradient_field.sg)
 
                 # raise ValueError('The reference material_data for conductivity hase more dimensions than 2')
@@ -1875,10 +2198,15 @@ class Discretization:
         """
         # overwrite the array !!!
         # dot21  = lambda A,v: np.einsum('ij...,j...  ->i...',A,v)
+        if isinstance(material_data, ScaledMaterial):
+            material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
+            return
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensorF
             if material_data.ndim == 2:
-                gradient_field.s[...] = np.einsum('ij,uj...->ui...', material_data,
+                gradient_field.s[...] = xp.einsum('ij,uj...->ui...', xp.asarray(material_data),
                                                   gradient_field.s)  # 'u' just to keep the size of array consistent
             else:
                 raise TypeError("apply_material_data_mugrid does not support global ndarray")
@@ -1909,10 +2237,20 @@ class Discretization:
         (``TypeError``); an ndarray with ndim < 4 is silently ignored.
         """
         # ddot42 = lambda A4, B2: np.einsum('ijklxyz,lkxyz  ->ijxyz  ', A4, B2)
+        if isinstance(material_data, ScaledMaterial):
+            if self.device != 'cpu':
+                material_data.apply_to_field(gradient_field)           # one contiguous pass over the buffer
+            else:
+                material_data.apply(gradient_field.s, out=gradient_field.s, low_memory=self.low_memory)
+            return
         if isinstance(material_data, np.ndarray):
+            # material tensor is a numpy array -> move it to the device of the field (CPU or GPU)
+            xp = tensor_operations.get_array_module(gradient_field.s)
             # for the case of ref material, we need only one single material tensor
             if material_data.ndim == 4:
-                gradient_field.s[...] = np.einsum('ijkl,kl...->ij...', material_data, gradient_field.s)
+                material = xp.asarray(material_data)
+                for q in quad_point_blocks(gradient_field.s.shape[2], self.low_memory):
+                    gradient_field.s[:, :, q] = xp.einsum('ijkl,klq...->ijq...', material, gradient_field.s[:, :, q])
 
             elif material_data.ndim > 4:
                 raise TypeError("apply_material_data_elasticity_mugrid does not support global ndarray")
@@ -1974,7 +2312,8 @@ class Discretization:
     def get_preconditioner_Green_mugrid(self, reference_material_data_ijkl,
                                         formulation=None,
                                         operator=None,
-                                        invert_zero_mode=False):
+                                        invert_zero_mode=False,
+                                        name='Greens_diagonal_fast'):
         """Assemble the Fourier-space Green preconditioner ``(K_ref)^{-1}``.
 
         Parameters
@@ -1996,11 +2335,15 @@ class Discretization:
             ``K_ref = B^T W B + c N^T W N`` with a mass (reaction) term
             ``c > 0``. Default ``False``: ``K_ref_hat(0)`` is singular for a
             pure stiffness operator and is left as is.
+        name : str, optional
+            Name of the returned field. A second call with the same name
+            reuses (overwrites) the same field, so give every preconditioner
+            that has to coexist on one discretization its own name.
 
         Returns
         -------
         preconditioner_diagonals_ininqks : muGrid complex Field [f, n, f, n, k_x, k_y, (k_z)]
-            Field ``'Greens_diagonal_fast'``: for every wave vector ``k`` the
+            Field ``name``: for every wave vector ``k`` the
             inverse of the (``f*n`` x ``f*n``) block ``K_ref_hat(k)``.
 
         Notes
@@ -2042,7 +2385,7 @@ class Discretization:
             unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
 
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
-                name='Greens_diagonal_fast',  # name of the field
+                name=name,  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
                 sub_pt='nodal_points'
             )  #
@@ -2090,8 +2433,11 @@ class Discretization:
             # (transpose returns a view, so the in-place inversion below also updates reshaped_matrices)
             # Invert each matrix using np.linalg.inv (vectorized)
             if np.any(np.all(self.fft.icoords == 0, axis=0)) and not invert_zero_mode:
-                # this core has the zero mode: K_hat(0) is singular -> do not invert it
+                # this core has the zero mode: K_hat(0) is singular -> do not invert it, and set it to exactly zero:
+                # it is only zero up to round-off ~ |C_ref| eps, which for a large reference (e.g. E = 1e10) is
+                # orders of magnitude above the inverted blocks ~ 1/|C_ref| and makes G asymmetric and indefinite
                 G_batch[1:, ...] = np.linalg.inv(G_batch[1:, ...])  # shape: (N, d, d)
+                G_batch[0, ...] = 0.0
             else:
                 G_batch[0:, ...] = np.linalg.inv(G_batch[0:, ...])  # shape: (N, d, d)
 
@@ -2109,7 +2455,7 @@ class Discretization:
             unit_impulse_response_inxyz = self.get_unknown_size_field(name='unit_impulse_response')
 
             preconditioner_diagonals_ininqks = self.ffield_collection.complex_field(
-                name='Greens_diagonal_fast',  # name of the field
+                name=name,  # name of the field
                 components=(*self.unknown_size[:2] + self.unknown_size[:1],),  # shape of components
                 sub_pt='nodal_points'  # sub-point type
             )  #
@@ -2188,6 +2534,7 @@ class Discretization:
                                          constitutive: callable = None,
                                          formulation=None,
                                          operator: callable = None,
+                                         name='jacobi_diagonal_inxyz',
                                          **kwargs):
         """Matrix-free Jacobi preconditioner ``diag(K)^{-1/2}`` via Dirac combs.
 
@@ -2206,6 +2553,10 @@ class Discretization:
             output_field_inxyz=...)`` whose diagonal is computed instead
             (takes precedence over the two arguments above). Its stencil must
             couple only nearest-neighbour pixels.
+        name : str, optional
+            Name of the returned field. A second call with the same name
+            reuses (overwrites) the same field, so give every Jacobi diagonal
+            that has to coexist on one discretization its own name.
         **kwargs
             ``zero_threshold`` (float, default 1.0): value stored where the
             diagonal entry is exactly zero (e.g. void pixels).
@@ -2213,7 +2564,7 @@ class Discretization:
         Returns
         -------
         diagonal_inxyz : muGrid Field [f, n, x, y, z]
-            Field ``'jacobi_diagonal_inxyz'`` containing ``1/sqrt(K_ii)``,
+            Field ``name`` containing ``1/sqrt(K_ii)``,
             to be used as a symmetric (split) scaling ``D^{-1/2} K D^{-1/2}``.
 
         Notes
@@ -2239,7 +2590,7 @@ class Discretization:
 
         threshold = kwargs.get('zero_threshold', 1.)
 
-        diagonal_inxyz = self.get_unknown_size_field(name='jacobi_diagonal_inxyz')
+        diagonal_inxyz = self.get_unknown_size_field(name=name)
         dirac_comb_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_inxyz_temporary')
         dirac_comb_response_inxyz = self.get_unknown_size_field(name='jacobi_dirac_comb_response_inxyz_temporary')
 
@@ -2301,62 +2652,6 @@ class Discretization:
 
         return diagonal_inxyz
 
-    def apply_preconditioner_NEW(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
-        """Apply preconditioner to nodal field using FFT.
-
-        Parameters
-        ----------
-        preconditioner_Fourier_fnfnqks : ndarray
-            Preconditioner diagonals in Fourier space [f,n,f,n,q,k,s]
-        nodal_field_fnxyz : ndarray
-            Input nodal field [f,n,x,y,z]
-
-        Returns
-        -------
-        ndarray
-            Preconditioned field [f,n,x,y,z]
-
-        Notes
-        -----
-        ``z = F^{-1}[ G_hat(k) . F[r](k) ]`` with the block product
-        ``z_hat_ab = G_hat_abcd r_hat_cd``. Legacy: uses ``.sg`` (ghosted
-        arrays) throughout and a Fourier field without the ``nodal_points``
-        sub-point; returns a view of the internal scratch field
-        ``'temp_output_field_in_apply_preconditioner_fnxyz'``.
-
-        Currently does not run with the present muGrid (``can't set attribute
-        'sg'``), and its ``'abcd...,cd...->ab...'`` applies the transposed
-        block compared with :meth:`apply_preconditioner_mugrid`
-        (``'cdab...'``), which matters for elements with several nodes per
-        pixel. Kept for experiments with the Green-Jacobi preconditioner.
-        """
-
-        # allocate field
-        temp_nodal_field_fnxyz = self.get_unknown_size_field(name='temp_nodal_field_in_apply_preconditioner_fnxyz')
-        temp_ouput_field_fnxyz = self.get_unknown_size_field(name='temp_output_field_in_apply_preconditioner_fnxyz')
-
-        ffield_fnqks = self.ffield_collection.complex_field(
-            name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            components=(*self.cell.unknown_shape,))  # sub-point type
-
-        if isinstance(nodal_field_fnxyz, np.ndarray):
-            temp_nodal_field_fnxyz.sg[...] = nodal_field_fnxyz
-        else:
-            temp_nodal_field_fnxyz.sg[...] = nodal_field_fnxyz.sg
-
-        # FFTn of input array
-        self.fft.fft(temp_nodal_field_fnxyz, ffield_fnqks)
-
-        # multiplication with a diagonals of preconditioner
-        ffield_fnqks.sg[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.sg, ffield_fnqks.sg)
-
-        # normalization
-        ffield_fnqks.sg *= self.fft.normalisation
-        # iFFTn
-        self.fft.ifft(ffield_fnqks, temp_ouput_field_fnxyz)
-
-        return temp_ouput_field_fnxyz.sg
-
     def apply_preconditioner_mugrid(self, preconditioner_Fourier_fnfnqks,
                                     input_nodal_field_fnxyz,
                                     output_nodal_field_fnxyz):
@@ -2407,46 +2702,6 @@ class Discretization:
         # normalization
         output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
 
-    def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
-                                               jacobi_half_fnfnxyz,
-                                               nodal_field_fnxyz):
-        """Apply combined Green and Jacobi preconditioner.
-
-        Parameters
-        ----------
-        green_fnfnqks : ndarray
-            Green preconditioner in Fourier space [f,n,f,n,q,k,s]
-        jacobi_half_fnfnxyz : ndarray
-            Jacobi preconditioner blocks [f,n,f,n,x,y,z]
-        nodal_field_fnxyz : ndarray
-            Input nodal field [f,n,x,y,z]
-
-        Returns
-        -------
-        ndarray
-            Preconditioned field [f,n,x,y,z]
-
-        Notes
-        -----
-        Computes ``J^{1/2} G J^{1/2} r`` with ``J^{1/2}`` the per-pixel block
-        Jacobi scaling and ``G`` the Green preconditioner applied by
-        :meth:`apply_preconditioner_NEW` (legacy numpy interface). The
-        block-Jacobi input used to come from ``get_preconditioner_Jacoby_fast``
-        (``prec_type='full'``), which was removed because it no longer ran;
-        this method is currently unused.
-        """
-        # apply Jacobi 1/2 --- multiplication with a left diagonal blocks of preconditioner
-        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
-
-        # apply Green preconditioner using FFT
-        nodal_field_fnxyz = self.apply_preconditioner_NEW(
-            preconditioner_Fourier_fnfnqks=green_fnfnqks,
-            nodal_field_fnxyz=nodal_field_fnxyz)
-
-        # apply Jacobi 1/2 --- multiplication with a right diagonal blocks of preconditioner
-        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
-        return nodal_field_fnxyz
-
     def apply_system_matrix_mugrid(self,
                                    material_data_field,
                                    input_field_inxyz,
@@ -2483,6 +2738,11 @@ class Discretization:
         Steps: ``g = B u`` (gradient at quadrature points) ->
         ``sigma = C : g`` -> ``f = B^T W sigma``. Uses the scratch field
         ``'grad_field_temporary'``. Collective MPI operation (ghost exchange).
+
+        ``'grad_field_temporary'`` is a SHARED scratch field (one [d, d, q, x, y(, z)] buffer, the largest field
+        size of a run): it is also used by :meth:`get_rhs_mugrid`, :meth:`get_homogenized_stress_mugrid` and the
+        sensitivity functions of :mod:`muFFTTO.topology_optimization`. Its content is valid only inside one call;
+        never hold it across a call to one of these functions or pass it to them as an argument.
         """
 
         if isinstance(input_field_inxyz, np.ndarray):
@@ -2492,8 +2752,9 @@ class Discretization:
         # allocate temporary fields
         gradient_ijqxyz = self.get_gradient_size_field(name='grad_field_temporary')
 
-        # g = B u   (or sym(B u))
-        if np.all(formulation == 'small_strain'):
+        # g = B u   (or sym(B u); not needed for a minor-symmetric C, where C : sym(B u) = C : B u)
+        minor_symmetric = isinstance(material_data_field, ScaledMaterial) and material_data_field.minor_symmetric
+        if np.all(formulation == 'small_strain') and not minor_symmetric:
             self.apply_gradient_operator_symmetrized_mugrid(u_inxyz=input_field_inxyz,
                                                             grad_u_ijqxyz=gradient_ijqxyz)
 
@@ -2505,10 +2766,13 @@ class Discretization:
         self.apply_material_data_mugrid(material_data=material_data_field,
                                         gradient_field=gradient_ijqxyz)
 
-        self.fft.communicate_ghosts(gradient_ijqxyz)
+        # f = B^T W sigma (exchanges the ghosts of the stress before and of the result after)
         self.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=gradient_ijqxyz,
                                                        div_u_fnxyz=output_field_inxyz,
                                                        apply_weights=True)
+
+        if self.hourglass_control is not None:          # one-point hexahedron: + H^T eps kappa H u
+            self.hourglass_control.add_stiffness(material_data_field, input_field_inxyz, output_field_inxyz)
 
     def apply_system_matrix_mugrid_deformed_grid(self,
                                                  material_data_field,
@@ -2651,10 +2915,9 @@ class Discretization:
         """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        stress_field = np.einsum('ijq...,q->ijq...', stress_field, self.quadrature_weights)
-        # TODO change this to muGRID
-        integral = self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
-        return integral
+        xp = tensor_operations.get_array_module(stress_field)
+        stress_field = xp.einsum('ijq...,q->ijq...', stress_field, xp.asarray(self.quadrature_weights))
+        return self.sum_over_quad_points_and_pixels(stress_field)
 
     def integrate_over_cell_mugrid(self, stress_field):
         """Integrate a gradient-shaped muGrid field over the (global) cell.
@@ -2672,8 +2935,8 @@ class Discretization:
         """
         # compute integral of stress field over the domain: int sigma d Omega = sum x_q *w_q
 
-        stress_field.s[...] = np.einsum('ijq...,q->ijq...', stress_field.s, self.quadrature_weights)
-        integral = self.mpi_reduction.sum(stress_field.s, axis=tuple(range(-self.domain_dimension - 1, 0)))  #
+        self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=stress_field)
+        integral = self.sum_over_quad_points_and_pixels(stress_field.s)
 
         return integral
 
@@ -3214,7 +3477,11 @@ class Discretization:
         """
         if not self.check_material_symmetry:
             return
-        C = material_data.s if isinstance(material_data, Field) else np.asarray(material_data)
+        if isinstance(material_data, ScaledMaterial):     # scalar scales keep the symmetries of the tensors
+            for k, (_, tensor) in enumerate(material_data.terms):
+                self.assert_material_symmetry(tensor, minor=minor, name=f'{name} (term {k})', rtol=rtol)
+            return
+        C = material_data.s if isinstance(material_data, Field) else (material_data if tensor_operations.get_array_module(material_data) is not np else np.asarray(material_data))
         d = self.domain_dimension
         is_elasticity = self.cell.problem_type == 'elasticity'
 
@@ -3286,8 +3553,12 @@ class Discretization:
         Affine map ``f <- min_val + (max_val - min_val) (f - f_min) / (f_max - f_min)``
         with global (MPI-reduced) extrema; divides by zero for a constant field.
         """
-        field_min = self.mpi_reduction.min(field.s)
-        field_max = self.mpi_reduction.max(field.s)
+        # local min / max on the device of the field (CPU or GPU), global min / max over MPI ranks on the host
+        # (an empty subdomain contributes +inf / -inf)
+        local_min = float(field.s.min()) if field.s.size else np.inf
+        local_max = float(field.s.max()) if field.s.size else -np.inf
+        field_min = float(self.mpi_reduction.min(np.asarray(local_min)))
+        field_max = float(self.mpi_reduction.max(np.asarray(local_max)))
         field.s[...] = (field.s - field_min) / (field_max - field_min)
         field.s *= (max_val - min_val)
         field.s += min_val

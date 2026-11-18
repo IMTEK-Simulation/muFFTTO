@@ -66,7 +66,7 @@ field ``phase_field_1nxyz`` has shape ``[1, n, nx, ny(, nz)]``.
 Fields are mostly muGrid fields: ``.s`` is the view without ghost layers and
 ``.sg`` the view including ghost layers (needed for stencil/roll operations
 in MPI-parallel runs). Global reductions are performed with
-``discretization.mpi_reduction`` (NuMPI) or ``discretization.communicator``.
+``discretization.mpi_reduction`` (muGrid communicator reduction) or ``discretization.communicator``.
 
 Functions suffixed ``_FE``/``_FE_NEW`` are the current, muGrid-based
 implementations. (Older variants built on removed NumPy-array APIs of the
@@ -83,8 +83,14 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
+
+
+def _global_sum(discretization, array):
+    """Sum of all entries of a local numpy or cupy array over all MPI ranks: the local sum on the device, the
+    scalar to the host, then the MPI reduction."""
+    from muFFTTO import tensor_operations
+    return discretization.mpi_reduction.sum(float(tensor_operations.get_array_module(array).sum(array)))
 
 
 def objective_function_small_strain(discretization,
@@ -491,7 +497,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                        + (1 / 12) * (rho3 ** 2 + rho1 ** 2 + rho2 ** 2) \
                                                        + (2 / 24) * (rho3 * rho1 + rho3 * rho2 + rho2 * rho1)
 
-    rho_squared = discretization.mpi_reduction.sum(rho_squared_pixel(rho_00.s[0, 0],
+    rho_squared = _global_sum(discretization, rho_squared_pixel(rho_00.s[0, 0],
                                                                      rho_10.s[0, 0],
                                                                      rho_01.s[0, 0],
                                                                      rho_11.s[0, 0])) * Jacobian_det
@@ -508,7 +514,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                    + rho2 ** 2 * rho3 + rho2 ** 2 * rho1) \
                                                      + (6 / 120) * (rho3 * rho1 * rho2)
 
-    rho_qubed = discretization.mpi_reduction.sum(rho_qubed_pixel(rho_00.s[0, 0],
+    rho_qubed = _global_sum(discretization, rho_qubed_pixel(rho_00.s[0, 0],
                                                                  rho_10.s[0, 0],
                                                                  rho_01.s[0, 0],
                                                                  rho_11.s[0, 0])) * Jacobian_det
@@ -535,7 +541,7 @@ def compute_double_well_potential_analytical(discretization, phase_field_1nxyz):
                                                                        + rho3 * rho1 ** 2 * rho2 \
                                                                        + rho3 * rho1 * rho2 ** 2)
 
-    rho_quartic = discretization.mpi_reduction.sum(rho_quartic_pixel(rho_00.s[0, 0],
+    rho_quartic = _global_sum(discretization, rho_quartic_pixel(rho_00.s[0, 0],
                                                                      rho_10.s[0, 0],
                                                                      rho_01.s[0, 0],
                                                                      rho_11.s[0, 0])) * Jacobian_det
@@ -605,7 +611,7 @@ def compute_double_well_potential_nodal(discretization,
     # phase field potential = int ( rho^2(1-rho)^2 ) / eta   dx
     # double - well potential
     integrant = (phase_field_1nxyz.s ** 2) * (1 - phase_field_1nxyz.s) ** 2
-    integral = discretization.mpi_reduction.sum(integrant)
+    integral = _global_sum(discretization, integrant)
     integral = (integral / get_nb_of_entries_global(discretization, integrant)) * discretization.cell.domain_volume
     return integral / eta
 
@@ -1003,8 +1009,6 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
         name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
-    dmaterial_data_field_drho_ijklqxyz_FE = discretization.get_material_data_size_field_mugrid(
-        name='data_field_drho_partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE')
     # dmaterial_data_field_drho_ijklqxyz_FE.s[...] = material_data_field_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                           np.power(
     #                                               p * phase_field_at_quad_poits_1qxyz.s, p - 1)[0, 0, :, ...]
@@ -1017,9 +1021,9 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     expand = (...,) + (np.newaxis,) * (dim + 1)
 
     # dC/drho at quadrature points: p * rho_q^(p-1) * (C_1 - C_0)  -> [d,d,d,d,q,x,y(,z)]
-    dmaterial_data_field_drho_ijklqxyz_FE.s[...] = \
-        (material_data_field_ijkl - void_material_data_ijkl)[expand] \
-        * (p * np.power(phase_field_at_quad_poits_1qxyz.s, p - 1))[0, 0, :, ...]
+    # (scalar field x constant tensor: no full [d,d,d,d,q,x,y] field is stored)
+    dmaterial_data_drho = domain.ScaledMaterial(
+        [(p * phase_field_at_quad_poits_1qxyz.s[0, 0] ** (p - 1), material_data_field_ijkl - void_material_data_ijkl)])
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
     # (more precisely: SIMP C = (C_1 - C_0) rho^p + C_0  =>  dC/drho = p rho^(p-1) (C_1 - C_0);
@@ -1028,16 +1032,15 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
     # int(∂ C/ ∂ rho_i  * (macro_grad + micro_grad)) dx / | domain |
 
     # compute strain field from to displacement and macro gradient
-    strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='strain_ijqxyz_local_at_pdofsewpf')
+    # shared scratch (see Discretization.apply_system_matrix_mugrid): nothing below uses it
+    strain_ijqxyz = discretization.get_displacement_gradient_sized_field(name='grad_field_temporary')
     discretization.apply_gradient_operator_symmetrized_mugrid(u_inxyz=displacement_field_fnxyz,
                                                               grad_u_ijqxyz=strain_ijqxyz)
-    strain_ijqxyz.s[...] = macro_gradient_field_ijqxyz.s + strain_ijqxyz.s
+    strain_ijqxyz.s[...] += macro_gradient_field_ijqxyz.s
 
     # compute stress field
     # dsigma/drho_ij = dC/drho_ijkl eps_kl
-    strain_ijqxyz.s[...] = np.einsum('ijkl...,kl...->ij...',
-                                     dmaterial_data_field_drho_ijklqxyz_FE.s,
-                                     strain_ijqxyz.s)
+    dmaterial_data_drho.apply(strain_ijqxyz.s, out=strain_ijqxyz.s, low_memory=discretization.low_memory)
     # this is actually stress
 
     # stress difference
@@ -1045,9 +1048,9 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # (Sigma_t - Sigma_h) : dsigma/drho at every quadrature point -> [1, 1, q, x, y(, z)]
     double_contraction_stress_qxyz_FE = discretization.get_quad_field_scalar(name='temp_at_quads')
-    double_contraction_stress_qxyz_FE.s[0, 0] = np.einsum('ij,ijqxy...->qxy...',
-                                                          stress_difference_ij,
-                                                          strain_ijqxyz.s)
+    for q in domain.quad_point_blocks(strain_ijqxyz.s.shape[2], discretization.low_memory):
+        double_contraction_stress_qxyz_FE.s[0, 0, q] = np.einsum('ij,ijq...->q...', stress_difference_ij,
+                                                                 strain_ijqxyz.s[:, :, q])
     # N^T W [...] : integrate against the nodal shape functions -> nodal field
     dfstress_drho = discretization.get_scalar_field(name='dfstress_drho_output')
     discretization.apply_N_transposed_operator_mugrid(
@@ -1114,7 +1117,7 @@ def adjoint_potential(discretization,
     adjoint_potential_field = np.einsum('i...,i...->...', adjoint_field_inxyz.s, force_field_inxyz.s)
 
     # Reductor_numpi = discretization.mpi_reduction(MPI.COMM_WORLD)
-    integral = discretization.mpi_reduction.sum(adjoint_potential_field)  #
+    integral = _global_sum(discretization, adjoint_potential_field)  #
 
     return integral
 
@@ -1190,8 +1193,6 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
         name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
 
-    dmaterial_data_field_drho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_in_sensitivity_reusable')
 
     # dmaterial_data_field_drho_ijklqxyz.s[...] = (base_material_data_ijkl - void_material_data_ijkl)[
     #                                                 ..., np.newaxis, np.newaxis, np.newaxis] * (
@@ -1201,12 +1202,13 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
     expand = (...,) + (np.newaxis,) * (dim + 1)
 
     # dC/drho = p rho_q^(p-1) (C_1 - C_0) at every quadrature point
-    dmaterial_data_field_drho_ijklqxyz.s[...] = \
-        (base_material_data_ijkl - void_material_data_ijkl)[expand] \
-        * (p * np.power(phase_field_at_quad_poits_1qxyz.s[0, 0, :, ...], p - 1))
+    # (scalar field x constant tensor: no full [d,d,d,d,q,x,y] field is stored)
+    dmaterial_data_field_drho_ijklqxyz = domain.ScaledMaterial(
+        [(p * phase_field_at_quad_poits_1qxyz.s[0, 0] ** (p - 1), base_material_data_ijkl - void_material_data_ijkl)])
     # compute strain field from to displacement and macro gradient
     # -> stress_ijqxyz = dC/drho : (E + grad^s u)  ("stress derivative")
-    stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='stress_ijqxyz_local_at_pdapwpf')
+    # shared scratch (see Discretization.apply_system_matrix_mugrid); get_stress_field_mugrid writes into it directly
+    stress_ijqxyz = discretization.get_displacement_gradient_sized_field(name='grad_field_temporary')
 
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=dmaterial_data_field_drho_ijklqxyz,
@@ -1221,16 +1223,26 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
 
     # gradient of adjoint_field
     adjoint_field_gradient_ijqxyz = discretization.get_displacement_gradient_sized_field(
-        name='adjoint_field_gradient_ijqxyz__pdapwpf')
+        name='grad_field_temporary_2')        # second shared scratch, alive together with the first
     # g = B^T W sigma uses the full gradient operator, so lambda^T dg/drho
     # contracts the full gradient of lambda with dsigma/drho
     discretization.apply_gradient_operator_mugrid(u_inxyz=adjoint_field_inxyz,
                                                   grad_u_ijqxyz=adjoint_field_gradient_ijqxyz)
     # ddot22 = lambda A2, B2:  np.einsum('ijqxyz  ,jiqxyz  ->qxyz    ', A2, B2)
     double_contraction_stress_qxyz = discretization.get_quad_field_scalar(name='double_contraction_stress_qxyz')
-    double_contraction_stress_qxyz.s[0, 0] = np.einsum('ij...,ij...->...',
-                                                       adjoint_field_gradient_ijqxyz.s,
-                                                       stress_ijqxyz.s)  # this is stress, It just cupy the same name
+    for q in domain.quad_point_blocks(stress_ijqxyz.s.shape[2], discretization.low_memory):
+        double_contraction_stress_qxyz.s[0, 0, q] = np.einsum('ij...,ij...->...',
+                                                              adjoint_field_gradient_ijqxyz.s[:, :, q],
+                                                              stress_ijqxyz.s[:, :, q])
+
+    # one-point hexahedron with hourglass control: + the hourglass part of lambda^T (dK/drho_q) u (its energy carries no
+    # quadrature weight, hence / w_q, since N^T W below applies the weights)
+    if getattr(discretization, 'hourglass_control', None) is not None:
+        hourglass_qxyz = discretization.hourglass_control.design_derivative(
+            dmaterial_data_field_drho_ijklqxyz, displacement_field_fnxyz, adjoint_field_inxyz)
+        xp = domain.tensor_operations.get_array_module(hourglass_qxyz)
+        w_q = np.asarray(domain.tensor_operations.to_host(discretization.quadrature_weights)).reshape(-1, *([1] * dim))
+        double_contraction_stress_qxyz.s[0, 0] += hourglass_qxyz / xp.asarray(w_q)
 
     output_field_inxyz.s.fill(0)
     discretization.fft.communicate_ghosts(double_contraction_stress_qxyz)
@@ -1272,7 +1284,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
        (:func:`partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_FE`).
     2. Adjoint problem ``K(rho) lambda = b`` with
        ``b = -weight * df_sigma/du = 2 weight / (|Omega| |Sigma_t|^2) D^T W C(rho) : (Sigma_t - Sigma_h)``,
-       solved with :func:`muFFTTO.solvers.conjugate_gradients_mugrid`
+       solved with :func:`muFFTTO.solvers.conjugate_gradients`
        (``adjoint_field_inxyz`` is used as initial guess -> warm start).
     3. Adjoint term ``lambda^T dg/drho = N^T W [grad(lambda) : dC/drho : (E + grad^s u)]``
        (:func:`partial_derivative_of_adjoint_potential_wrt_phase_field_FE`).
@@ -1303,7 +1315,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         Homogenized stress ``Sigma_h`` of the current design.
     preconditioner_fun : callable
         Preconditioner for the CG solver (signature as expected by
-        ``conjugate_gradients_mugrid``).
+        ``conjugate_gradients``).
     system_matrix_fun : callable
         Linear operator ``K(rho)`` (stiffness/Hessian-vector product) of the
         current design, same operator as used for the equilibrium problem.
@@ -1316,9 +1328,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     disp : bool, optional
         If True, rank 0 prints CG iteration info.
     **kwargs
-        ``cg_tol`` (float, default 1e-7): CG tolerance;
-        ``r_tol`` (bool, default True): passed as ``rtol`` to the CG solver
-        (relative vs. absolute stopping criterion).
+        ``cg_tol`` (float, default 1e-6): relative energy error of the adjoint solve
+        (:func:`muFFTTO.solvers.conjugate_gradients`; warm start: relative to ``||lambda_0||_K``);
+        ``cg_delay`` (int, default 10): minimal delay of the energy-error estimate;
+        ``cg_warm_start`` (bool, default True): start from the previous adjoint.
 
     Returns
     -------
@@ -1339,8 +1352,9 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     All reductions inside CG and :func:`adjoint_potential` are global (MPI).
     Several named temporary fields of the discretization are overwritten.
     """
-    cg_tol = kwargs.get('cg_tol', 1e-7)
-    r_tol = kwargs.get('r_tol', True)
+    cg_tol = kwargs.get('cg_tol', 1e-6)
+    cg_warm_start = kwargs.get('cg_warm_start', True)
+    cg_delay = kwargs.get('cg_delay', 10)
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -1361,9 +1375,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     phase_field_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
         name='phase_field_at_quads_reusable')
     discretization.apply_N_operator_mugrid(phase_field_1nxyz, phase_field_at_quad_poits_1qxyz)
+    quad_point_density = kwargs.get('quad_point_density')  # optional map of the interpolated field to the density,
+    if quad_point_density is not None:                      # as in the forward problem (e.g. a sharp threshold)
+        phase_field_at_quad_poits_1qxyz.s[...] = quad_point_density(phase_field_at_quad_poits_1qxyz.s)
 
-    material_data_field_rho_ijklqxyz = discretization.get_material_data_size_field_mugrid(
-        name='data_field_in_sensitivity_sensitivity_stress_and_adjoint_FE_NEW')
     # material_data_field_rho_ijklqxyz.s[...] = base_material_data_ijkl[..., np.newaxis, np.newaxis, np.newaxis] * \
     #                                      np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...]
 
@@ -1386,10 +1401,10 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
 
     # SIMP: C(rho_q) = (C_1 - C_0) rho_q^p + C_0 at every quadrature point
     # (same as material_interpolation_simp)
-    material_data_field_rho_ijklqxyz.s[...] = \
-        (base_material_data_ijkl - void_material_data_ijkl)[expand] \
-        * np.power(phase_field_at_quad_poits_1qxyz.s, p)[0, 0, :, ...] \
-        + void_material_data_ijkl[expand]
+    # (two terms 'scalar field x constant tensor': no full [d,d,d,d,q,x,y] field is stored)
+    material_data_field_rho_ijklqxyz = domain.ScaledMaterial(
+        [(phase_field_at_quad_poits_1qxyz.s[0, 0] ** p, base_material_data_ijkl - void_material_data_ijkl),
+         (1.0, void_material_data_ijkl)])
 
     # d_stress_d_rho phase field gradient potential for a phase field without perturbation
     # (explicit part df_sigma/drho at fixed u)
@@ -1413,12 +1428,15 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # and Delta = Sigma_t - Sigma_h:
     #   d f_sigma/du = -2 / (|Omega| |Sigma_t|^2) B^T W (C^T : Delta),
     #   (C^T : Delta)_kl = Delta_ij C_ijkl   (transpose: contract the FIRST index pair)
-    # NOTE: this buffer has the same name as stress_field_ijqxyz below, i.e. the
-    # same memory is reused once the RHS has been assembled.
-    stress_difference_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
-    stress_difference_ijqxyz.s[...] = np.einsum('ij,ijkl...->kl...', stress_difference_ij,
-                                                material_data_field_rho_ijklqxyz.s)
+    # Shared scratch 'grad_field_temporary' (see Discretization.apply_system_matrix_mugrid), as is
+    # stress_field_ijqxyz below: free once the RHS is assembled (the adjoint CG overwrites it)
+    stress_difference_ijqxyz = discretization.get_gradient_size_field(name='grad_field_temporary')
+    stress_difference_ijqxyz.s[...] = 0.0
+    _xp = domain.tensor_operations.get_array_module(stress_difference_ijqxyz.s)     # CPU or GPU field
+    stress_difference_ijqxyz.s[...] += _xp.asarray(stress_difference_ij).reshape(
+        stress_difference_ij.shape + (1,) * (dim + 1))
+    material_data_field_rho_ijklqxyz.apply(stress_difference_ijqxyz.s, transposed=True, out=stress_difference_ijqxyz.s,
+                                           low_memory=discretization.low_memory)
     # minus sign is already there
     df_du_field = discretization.get_unknown_size_field(
         name='adjoint_problem_rhs_in_sensitivity_stress_and_adjoint_FE_NEW')
@@ -1441,27 +1459,33 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         """CG callback: record global r.r and r.z (MPI-reduced on all ranks, stored on rank 0)."""
         # global norms_cg_mech
         # communicator.sum is collective -> must be called on every rank
-        norm_of_rr = discretization.communicator.sum(np.dot(r.ravel(), r.ravel()))
-        norm_of_rz = discretization.communicator.sum(np.dot(r.ravel(), z.ravel()))
+        norm_of_rr = discretization.communicator.sum(np.float64(float(np.dot(r.ravel(), r.ravel()))))
+        norm_of_rz = discretization.communicator.sum(np.float64(float(np.dot(r.ravel(), z.ravel()))))
         if MPI.COMM_WORLD.rank == 0:
             norms_cg_adjoint['residual_rr'].append(norm_of_rr)
             norms_cg_adjoint['residual_rz'].append(norm_of_rz)
 
     # adjoint equation K^T lambda = -df/du; K^T = K because C(rho) has major
-    # symmetry (checked above), so the state operator is reused
-    solvers.conjugate_gradients_mugrid(
-        comm=discretization.communicator,
-        fc=discretization.field_collection,
-        hessp=system_matrix_fun,  # linear operator
-        b=df_du_field,
-        x=adjoint_field_inxyz,
-        P=preconditioner_fun,
-        tol=cg_tol,
-        rtol=r_tol,
-        maxiter=int(10000),
-        callback=callback_adjoint,
-        # norm_metric=res_norm
-    )
+    # symmetry (checked above), so the state operator is reused.
+    # The adjoint is warm started; the energy test is then relative to ||lambda_0||_K (not to the round-off error of
+    # a start that is already nearly the solution, which could not be met). |b| = 0 means lambda = 0.
+    b_norm = np.sqrt(discretization.communicator.sum(np.float64(float(np.dot(df_du_field.s.ravel(), df_du_field.s.ravel())))))
+    if not cg_warm_start:
+        adjoint_field_inxyz.s[...] = 0.0
+    if b_norm == 0:
+        adjoint_field_inxyz.s[...] = 0.0
+    else:
+        solvers.conjugate_gradients(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=system_matrix_fun,
+            b=df_du_field,
+            x=adjoint_field_inxyz,
+            P=preconditioner_fun,
+            tol=cg_tol,
+            d_min=cg_delay,
+            maxiter=100000,
+            callback=callback_adjoint)
 
     info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:
@@ -1487,8 +1511,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         p=p)
 
     # Diagnostic only: adjoint "energy" lambda^T D^T W sigma (~0 at equilibrium)
-    stress_field_ijqxyz = discretization.get_gradient_size_field(
-        name='stress_field_in_sensitivity_stress_and_adjoint_FE_NEW')
+    stress_field_ijqxyz = discretization.get_gradient_size_field(name='grad_field_temporary')   # shared scratch
     discretization.get_stress_field_mugrid(
         material_data_field_ijklqxyz=material_data_field_rho_ijklqxyz,
         displacement_field_inxyz=displacement_field_inxyz,
@@ -1500,6 +1523,16 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
         discretization=discretization,
         stress_field_ijqxyz=stress_field_ijqxyz,
         adjoint_field_inxyz=adjoint_field_inxyz)
+
+    # one-point hexahedron with hourglass control: the equilibrium residual is B^T W sigma + K_hg u, so the diagnostic
+    # lambda^T (residual) needs the hourglass force too (otherwise it is not ~0 and depends on the design)
+    if getattr(discretization, 'hourglass_control', None) is not None:
+        hourglass_force = discretization.get_unknown_size_field(name='hourglass_force_in_adjoint_energy')
+        hourglass_force.s.fill(0)
+        discretization.hourglass_control.add_stiffness(material_data_field_rho_ijklqxyz, displacement_field_inxyz,
+                                                       hourglass_force)
+        adjoint_energy += _global_sum(discretization,
+                                      np.einsum('i...,i...->...', adjoint_field_inxyz.s, hourglass_force.s))
 
     return weight * dstress_drho.s + dadjoin_drho.s, adjoint_field_inxyz, adjoint_energy, info_adjoint_
 

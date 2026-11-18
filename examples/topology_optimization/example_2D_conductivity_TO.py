@@ -9,6 +9,7 @@ import time
 from NuMPI import Optimization
 from mpi4py import MPI
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import topology_optimization_conductivity as topology_optimization
 from muFFTTO import material_models
@@ -230,7 +231,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
@@ -405,15 +406,12 @@ if __name__ == '__main__':
     # discretization.fft.communicate_ghosts(a)
     # target = 0.0
     # c = Optimization.LinearConstraint(a.s, target)
-    xopt_FE_MPI = Optimization.l_bfgs_bounded(
+    xopt_FE_MPI = solvers_nonlinear.minimize(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
+        method='l_bfgs',
       #  linear_constraint=c,
-        args=(),
-        jac=True,
-        bounds_lo=0.,
-        bounds_hi=1.,
-        zero_mask=None,
+        bounds=(0., 1.),
         gtol=1e-4,
         xtol=1e-4,
         maxiter=500,
@@ -478,7 +476,7 @@ if __name__ == '__main__':
 
         displacement_field = discretization.get_unknown_size_field(name='displacement_field_postprocess')
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -486,8 +484,7 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
         # compute homogenized stress field corresponding to final displacement
         homogenized_fluxes[load_case] = discretization.get_homogenized_stress_mugrid(
@@ -515,7 +512,7 @@ if __name__ == '__main__':
                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                                       rhs_inxyz=rhs_field_final)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -523,8 +520,7 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
         homogenized_C_ijkl[:, i] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,

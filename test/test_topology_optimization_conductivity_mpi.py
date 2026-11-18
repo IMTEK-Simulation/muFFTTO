@@ -191,7 +191,7 @@ def make_objective_function(discretization, preconditioner_type='Green_Jacobi'):
         temperature_field = discretization.get_unknown_size_field(name='temperature_field_')
         temperature_field.s.fill(0)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
@@ -470,6 +470,9 @@ def test_serial_and_mpi_give_the_same_results(tmp_path):
     if not any(os.access(os.path.join(path, 'mpirun'), os.X_OK)
                for path in os.environ.get('PATH', '').split(os.pathsep)):
         pytest.skip('mpirun not found')
+    import muGrid
+    if not muGrid.has_mpi:
+        pytest.skip('muGrid built without MPI (e.g. the PyPI wheel)')
 
     # importing mpi4py has initialised MPI in this process; the MPI environment
     # variables it left behind make a nested mpirun refuse to start.

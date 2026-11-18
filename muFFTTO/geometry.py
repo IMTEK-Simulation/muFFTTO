@@ -37,6 +37,8 @@ New geometries are added with the :func:`register` decorator::
         disks = geometry.ball((0.25, 0.5), radius) | geometry.ball((0.75, 0.5), radius)
         return geometry.indicator(~disks, coords)
 """
+import warnings
+
 import numpy as np
 
 __all__ = ['Shape', 'box', 'ball', 'everywhere', 'periodic_distance_sq', 'indicator', 'pixel_average',
@@ -205,6 +207,39 @@ def random_field(coords, seed=0):
     return (h >> np.uint64(11)).astype(float) / float(2 ** 53)  # top 53 bits -> [0, 1)
 
 
+def correlated_random_field(coords, correlation_length, seed=0):
+    """Smooth periodic random field with values in ``(0, 1)`` and correlation length ``correlation_length``.
+
+    A random Fourier series ``sum_k a_k (xi_k cos 2 pi k.x + eta_k sin 2 pi k.x)``, ``xi, eta ~ N(0, 1)``, over a
+    half space of wave vectors ``k`` with ``|k_i| <= k_max = ceil(3 / (2 pi l_c))``, with the Gaussian spectrum
+    ``a_k^2 ~ exp(-(2 pi |k| l_c)^2 / 2)``, mapped by the normal CDF of its standard deviation to a uniform marginal.
+    It depends on the points only, not on the grid or the MPI decomposition (e.g. a random toughness Gc(x)).
+    2D and 3D; in 2D the values are those of the phase-field fracture studies.
+    """
+    from scipy.special import ndtr
+    coords = np.asarray(coords, dtype=float)
+    dim = coords.shape[0]
+    rng = np.random.default_rng(seed)
+    k_max = int(np.ceil(3.0 / (2 * np.pi * correlation_length)))
+    span = range(-k_max, k_max + 1)
+    if dim == 2:
+        wave_vectors = [(i, j) for i in span for j in range(0, k_max + 1) if j > 0 or i > 0]
+    elif dim == 3:
+        wave_vectors = [(i, j, l) for i in span for j in span for l in range(0, k_max + 1)
+                        if l > 0 or j > 0 or (j == 0 and i > 0)]
+    else:
+        raise ValueError(f'correlated_random_field: dim must be 2 or 3, got {dim}')
+    field = np.zeros(coords.shape[1:])
+    variance = 0.0
+    for k in wave_vectors:
+        amplitude = np.exp(-(2 * np.pi * np.linalg.norm(k) * correlation_length) ** 2 / 4)
+        xi, eta = rng.standard_normal(2)
+        phase = 2 * np.pi * sum(k_i * x_i for k_i, x_i in zip(k, coords))
+        field += amplitude * (xi * np.cos(phase) + eta * np.sin(phase))
+        variance += amplitude ** 2
+    return ndtr(field / np.sqrt(variance))
+
+
 def _splitmix64(x):
     """SplitMix64 finaliser: a fast, well-mixing 64-bit integer hash."""
     x = (x ^ (x >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
@@ -291,6 +326,43 @@ def circle_inclusion(coords, radius=None):
     return indicator(~inclusion, coords)
 
 
+def polydisperse_disk_centres_and_radii(dim=2, porosity=0.25, radius_range=(0.05, 0.14), gap=0.04, seed=0,
+                                        max_attempts=100000):
+    """Random sequential addition of non-overlapping periodic balls with radii uniform in ``radius_range``.
+
+    Largest radii are placed first; every pair of balls keeps a solid ligament of at least ``gap``.
+    Balls are added until the (analytic) volume fraction reaches ``porosity`` or no more fit. The result
+    depends only on the arguments, not on the grid or the MPI decomposition.
+    """
+    rng = np.random.default_rng(seed)
+    unit_ball = np.pi if dim == 2 else 4.0 / 3.0 * np.pi
+    radii = []
+    while unit_ball * np.sum(np.array(radii) ** dim) < porosity:
+        radii.append(rng.uniform(*radius_range))
+    centres, placed = [], []
+    for r in sorted(radii, reverse=True):
+        for _ in range(max_attempts):
+            c = rng.uniform(0.0, 1.0, dim)
+            if all(np.linalg.norm((c - c2 + 0.5) % 1.0 - 0.5) >= r + r2 + gap for c2, r2 in zip(centres, placed)):
+                centres.append(c)
+                placed.append(r)
+                break
+    return np.array(centres), np.array(placed)
+
+
+@register('polydisperse_pores')
+def polydisperse_pores(coords, porosity=0.25, radius_range=(0.05, 0.14), gap=0.04, seed=0):
+    """Matrix (1) with non-overlapping disk/ball pores (0) of different sizes, randomly placed (fixed seed).
+
+    See :func:`polydisperse_disk_centres_and_radii`.
+    """
+    centres, radii = polydisperse_disk_centres_and_radii(coords.shape[0], porosity, radius_range, gap, seed)
+    shape = None
+    for c, r in zip(centres, radii):
+        shape = ball(c, r) if shape is None else shape | ball(c, r)
+    return indicator(~shape, coords)
+
+
 @register('random_distribution')
 def random_distribution(coords, seed=None):
     """Independent uniform random value in ``[0, 1)`` in every pixel.
@@ -335,6 +407,76 @@ def contact_test_geometry_2(coords):
              | box([0.15, 0.35], [0.52, 0.45])
              | box([0.47, 0.55], [0.95, 0.65]))
     return indicator(solid, coords)
+
+
+@register('contact_beam_root_notch')
+def contact_beam_root_notch(coords, fillet_radius=0.08, notch_radius=0.025, notch_offset=0.03):
+    """``contact_test_geometry_2`` made to crack at the roots of the sticks (beams).
+
+    Same square frame and overlapping sticks, with two changes:
+
+    * the inner corners of the frame are rounded with ``fillet_radius``, which
+      removes the stress concentration at the frame corners;
+    * each stick has a semicircular notch of ``notch_radius`` in its top and its
+      bottom face, centred ``notch_offset`` from the frame wall, which weakens the
+      stick at its root (cross-section 0.1 -> 0.1 - 2 notch_radius).
+
+    Under shear the sticks come into contact and bend; the bending moment is
+    largest at the root, where the notches now localize the crack.
+    """
+    lower, upper = 0.15, 0.85
+    r = fillet_radius
+    # inner square with rounded corners: two crossed boxes plus a disk in every corner
+    cavity = (box([lower + r, lower], [upper - r, upper])
+              | box([lower, lower + r], [upper, upper - r]))
+    for cx in (lower + r, upper - r):
+        for cy in (lower + r, upper - r):
+            cavity = cavity | ball((cx, cy), r)
+    left_stick = box([lower, 0.35], [0.52, 0.45])            # root at the left wall, x = 0.15
+    right_stick = box([0.47, 0.55], [0.95, 0.65])            # root at the right wall, x = 0.85
+    notches = (ball((lower + notch_offset, 0.35), notch_radius) | ball((lower + notch_offset, 0.45), notch_radius)
+               | ball((upper - notch_offset, 0.55), notch_radius) | ball((upper - notch_offset, 0.65), notch_radius))
+    solid = (everywhere() - cavity) | ((left_stick | right_stick) - notches)
+    return indicator(solid, coords)
+
+
+@register('frame_contact_supports')
+def frame_contact_supports(coords, gap=0.2, thickness=0.15, overlap=0.1):
+    """Square frame (1) around a void (0) with two thick support blocks: a secondary load path.
+
+    The frame is the one of ``contact_test_geometry_2`` (inner square ``[0.15, 0.85)^2``,
+    sharp corners). A lower block on the left wall and an upper block on the right wall
+    overlap by ``overlap`` in ``x``; the vertical ``gap`` between them is centred at
+    ``y = 0.5``. Under shear (H_10 < 0) the gap closes; with a large gap the supports
+    come into contact only after the frame has started to crack, and then carry the load
+    until they crack as well.
+    """
+    lower, upper = 0.15, 0.85
+    x_mid = 0.5
+    left_top, right_bottom = 0.5 - gap / 2, 0.5 + gap / 2
+    left_block = box([lower, left_top - thickness], [x_mid + overlap / 2, left_top])
+    right_block = box([x_mid - overlap / 2, right_bottom], [upper, right_bottom + thickness])
+    solid = _square_frame(lower, upper) | left_block | right_block
+    return indicator(solid, coords)
+
+
+@register('bubble_array')
+def bubble_array(coords, radius=0.2, imperfection=0.02):
+    """Solid (1) with a 2 x 2 array of round bubbles (0) per cell: a buckling metamaterial.
+
+    The bubbles are centred at (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75).
+    Their radii alternate in a checkerboard, ``radius * (1 +- imperfection)``, which
+    selects the buckling pattern of alternating, mutually perpendicular ellipses
+    (the perfectly symmetric cell has no preferred direction to buckle). Under strong
+    compression the bubbles flatten until their walls come into contact.
+    """
+    shape = None
+    for i, cx in enumerate((0.25, 0.75)):
+        for j, cy in enumerate((0.25, 0.75)):
+            sign = 1.0 if (i + j) % 2 == 0 else -1.0
+            bubble = ball((cx, cy), radius * (1.0 + sign * imperfection))
+            shape = bubble if shape is None else shape | bubble
+    return indicator(~shape, coords)
 
 
 @register('contact_fracture_s_gap')
@@ -489,3 +631,40 @@ def sinusoidal_ligaments(coords, amplitude=0.11, thickness=0.14, gap=0.14, verti
             for curve in curves:
                 distance = np.minimum(distance, _distance_to_polyline(x - shift_x, y - shift_y, curve))
     return np.where(distance < thickness / 2.0, 1.0, 0.0)
+
+
+@register('geometry_stefanus')
+def geometry_stefanus(coords, vol_frac=0.75, domain_size=(2.0, np.sqrt(3.0))):
+    """Composite A of Li & Rudykh (2019): 0 = matrix, 1 = void, 2 = stiff inclusion.
+
+    Four circles of equal radius per cell of size ``domain_size = (Lx, Ly)`` (physical units) on a triangular lattice
+    (``Lx / Ly = 2 / sqrt(3)``): voids centred at (0, 0), (1/4, 1/2), (3/4, 1/2) and the stiff inclusion at (1/2, 0),
+    fractional coordinates. ``vol_frac`` is the area fraction of all four circles. The circles are round in physical
+    units (minimum-image distance scaled by Lx, Ly). From the StefanusMichael_Dev branch (microstructure_library).
+    """
+    c = np.asarray(coords)
+    if c.shape[0] != 2:
+        raise NotImplementedError('geometry_stefanus is implemented only in 2D')
+    Lx, Ly = domain_size
+    if not np.isclose(Lx / Ly, 2.0 / np.sqrt(3.0)):
+        warnings.warn(f'geometry_stefanus: Lx/Ly = {Lx / Ly:.4f} != 2/sqrt(3) = 1.1547 '
+                      f'-> lattice is NOT triangular (paper Fig. 1a)')
+    radius = np.sqrt(vol_frac * Lx * Ly / (4 * np.pi))
+    # overlap check against the nearest-neighbour distance (= a on the triangular lattice)
+    d_min = min(0.5 * Lx, np.hypot(0.25 * Lx, 0.5 * Ly))
+    if not (0.0 < vol_frac and 2 * radius < d_min):
+        raise ValueError(f'geometry_stefanus: circles overlap (2r = {2 * radius:.4f} >= {d_min:.4f}); '
+                         f'reduce vol_frac = {vol_frac}')
+
+    def disk(cx, cy):
+        dx = c[0] - cx
+        dy = c[1] - cy
+        dx = (dx - np.round(dx)) * Lx
+        dy = (dy - np.round(dy)) * Ly
+        return dx ** 2 + dy ** 2 <= radius ** 2
+
+    phase = np.zeros(c.shape[1:])
+    for cx, cy in ((0.00, 0.00), (0.25, 0.50), (0.75, 0.50)):
+        phase[disk(cx, cy)] = 1
+    phase[disk(0.50, 0.00)] = 2
+    return phase

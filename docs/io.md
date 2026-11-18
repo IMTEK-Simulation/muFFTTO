@@ -61,28 +61,14 @@ undoes the conversion too, so you never see the helper.
 
 ## Examples
 
-- **Phase-field fracture.**
-  `examples/phase_field_fracture/example_2D_phase_field_fracture_AT2.py` writes
-  `exp_data/phase_field_fracture_AT2.nc`, with one frame per load step or, with
-  `output_every = 'iteration'`, per staggered iteration. A frame holds the damage,
-  the displacement fluctuation and the history field, plus the load, the
-  homogenized stress, the step and iteration numbers and a `converged` flag.
-  `plot_phase_field_fracture_output.py` in the same folder replots it:
-
-  ```
-  python plot_phase_field_fracture_output.py [file.nc] [frame ...]
-  python plot_phase_field_fracture_output.py [file.nc] --animate   # saves file.mp4 (gif without ffmpeg)
-  ```
-
 - **Topology optimization.** The scripts in `examples/topology_optimization/`
   write `data/<script>/<prec>_eta_<eta>_w_<w>_history.nc` (the phase field of
   every L-BFGS iteration, switched by `save_history`) and `..._final.nc` (the
   optimum, with the parameters, the homogenized tensor and the optimization log
-  as attributes). `example_2D_conductivity_TO_discrete.py` reads the smooth
-  optimum back with `load_fields`. See
+  as attributes). See
   [Topology optimization](examples/topology_optimization.md#outputs).
 
-- **Internal contact.** The four scripts in `examples/internal_contact/` write
+- **Internal contact.** The two scripts in `examples/internal_contact/` write
   `exp_data/<script>/Nx=..Ny=../tmc_run.nc`: one frame per load increment, with the
   increment history (load, mean stresses, min det F, energy, solver counters,
   convergence flag) as frame variables. The `_net_cdf` variant also writes the

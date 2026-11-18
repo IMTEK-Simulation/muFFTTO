@@ -190,8 +190,8 @@ def M_fun_Green(x, Px):
 # macroscopic loading
 # ============================================================================
 macro_gradient_inc        = np.zeros((dim, dim))
-macro_gradient_inc[0, 1] += 0.8/ float(ninc)
-macro_gradient_inc[1, 1] += 0.3 / float(ninc)
+macro_gradient_inc[0, 1] += 0.03/ float(ninc)
+macro_gradient_inc[1, 1] += 0.02 / float(ninc)
 
 discretization.get_macro_gradient_field_mugrid(
     macro_gradient_ij=macro_gradient_inc,
@@ -275,7 +275,7 @@ for inc in range(ninc):
 
         displacement_increment_field.s.fill(0)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,
@@ -284,9 +284,7 @@ for inc in range(ninc):
             P=M_fun_Green,
             tol=1e-5,
             maxiter=1000,
-            callback=callback,
-            #rtol=True,
-        )
+            callback=callback)
 
         nb_it_cg    = len(norms['residual_rr'])
         sum_CG_its += nb_it_cg

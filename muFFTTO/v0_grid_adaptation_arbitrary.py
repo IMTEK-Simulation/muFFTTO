@@ -1055,7 +1055,7 @@ def run_grid_adaptation_workflow_2(
     # Fine-grid Otsu detection
     # ------------------------------------------------------------------
     # start_time = time.time()
-    # results = otsu_edgeDetection_and_phaseIndicator(data)
+    results = otsu_edgeDetection_and_phaseIndicator(phase_field_geom)   # the image is passed in directly
     # elapsed_time = time.time() - start_time
 
     phase_mask_binary = phase_field_geom
@@ -1083,7 +1083,7 @@ def run_grid_adaptation_workflow_2(
     #             results["number_of_phase_regions"],
     #         )
 
-    ny, nx = data.shape
+    ny, nx = phase_field_geom.shape
     edge_binary = (edge_mask > 0).astype(np.uint8)
 
     # ------------------------------------------------------------------

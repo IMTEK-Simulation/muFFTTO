@@ -151,6 +151,8 @@ _ELEMENT_FACTORIES = {
     'biquadratic_rectangle': lambda domain: Element.biquadratic_quad(domain.pixel_size),
     'trilinear_hexahedron': lambda domain: Element.trilinear_hex(domain.pixel_size),
     'trilinear_hexahedron_1Q': lambda domain: Element.trilinear_hex_1Q(domain.pixel_size),
+    # the same one-point element; Discretization adds the hourglass control (muFFTTO.hourglass_control)
+    'trilinear_hexahedron_1Q_hg': lambda domain: Element.trilinear_hex_1Q(domain.pixel_size),
     'linear_triangles': lambda domain: Element.linear_triangle(domain.pixel_size),
     'linear_triangles_tilled': lambda domain: Element.linear_triangle_tilled(domain.pixel_size),
 }

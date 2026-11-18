@@ -57,7 +57,6 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 # phase field part is identical to the elasticity part
@@ -166,7 +165,6 @@ def adjoint_potential(discretization,
     # nodal axis n (here 'i' plays the role of n) -> field over (x, y[, z])
     adjoint_potential_field = np.einsum('ui...,ui...->...', adjoint_field_inxyz.s, force_field_inxyz.s)
 
-    # Reductor_numpi = discretization.mpi_reduction(MPI.COMM_WORLD)
     # sum over local pixels and over all MPI ranks
     integral = discretization.mpi_reduction.sum(adjoint_potential_field)  #
 
@@ -230,7 +228,7 @@ def sensitivity_flux_and_adjoint(discretization,
         Homogenized flux of the current design, shape ``(1, d)``.
     preconditioner_fun : callable
         Preconditioner application for CG, signature as expected by
-        :func:`muFFTTO.solvers.conjugate_gradients_mugrid`.
+        :func:`muFFTTO.solvers.conjugate_gradients`.
     system_matrix_fun : callable
         Application of the system matrix ``A = B^T W K(rho) B`` (Hessian-vector
         product) for the current design. Because ``A`` is symmetric the same
@@ -244,9 +242,9 @@ def sensitivity_flux_and_adjoint(discretization,
     disp : bool, optional
         If ``True``, print the number of adjoint CG iterations on rank 0.
     **kwargs
-        ``cg_tol`` (float, default ``1e-7``): CG tolerance;
-        ``r_tol`` (bool, default ``True``): passed as ``rtol`` to the CG
-        solver (whether the tolerance is relative).
+        ``cg_tol`` (float, default ``1e-6``): relative energy error of the adjoint solve
+        (:func:`muFFTTO.solvers.conjugate_gradients`; warm start: relative to ``||lambda_0||_K``);
+        ``cg_delay`` (int, default 10): minimal delay of the energy-error estimate.
 
     Returns
     -------
@@ -268,8 +266,8 @@ def sensitivity_flux_and_adjoint(discretization,
     Phase-field regularization terms are *not* included; add
     :func:`sensitivity_phase_field_term_FE_NEW` separately.
     """
-    cg_tol = kwargs.get('cg_tol', 1e-7)
-    r_tol = kwargs.get('r_tol', True)
+    cg_tol = kwargs.get('cg_tol', 1e-6)
+    cg_delay = kwargs.get('cg_delay', 10)
     # Input:
     #        material_data_field_ijklqxyz [d,d,d,d,q,x,y,z] - elasticity tensors without applied phase field -- C_0
     #        displacement_field_fnxyz [f,n,x,y,z]
@@ -366,20 +364,24 @@ def sensitivity_flux_and_adjoint(discretization,
 
     # solve A lambda = -w df/du (A symmetric -> same operator as the forward problem)
     # adjoint equation K^T lambda = -df/du; K^T = K because A(rho) is symmetric
-    # (checked above), so the state operator is reused
-    solvers.conjugate_gradients_mugrid(
-        comm=discretization.communicator,
-        fc=discretization.field_collection,
-        hessp=system_matrix_fun,  # linear operator
-        b=df_du_field,
-        x=adjoint_field_inxyz,
-        P=preconditioner_fun,
-        tol=cg_tol,
-        rtol=r_tol,
-        maxiter=int(10000),
-        callback=callback_adjoint,
-        # norm_metric=res_norm
-    )
+    # (checked above), so the state operator is reused.
+    # Warm start: the energy test is relative to ||lambda_0||_K (see solvers.conjugate_gradients). |b| = 0 means
+    # lambda = 0.
+    b_norm = np.sqrt(discretization.communicator.sum(np.dot(df_du_field.s.ravel(), df_du_field.s.ravel())))
+    if b_norm == 0:
+        adjoint_field_inxyz.s[...] = 0.0
+    else:
+        solvers.conjugate_gradients(
+            comm=discretization.communicator,
+            fc=discretization.field_collection,
+            hessp=system_matrix_fun,
+            b=df_du_field,
+            x=adjoint_field_inxyz,
+            P=preconditioner_fun,
+            tol=cg_tol,
+            d_min=cg_delay,
+            maxiter=100000,
+            callback=callback_adjoint)
 
     info_adjoint_['residual_rz'] = norms_cg_adjoint['residual_rz']
     if MPI.COMM_WORLD.rank == 0:

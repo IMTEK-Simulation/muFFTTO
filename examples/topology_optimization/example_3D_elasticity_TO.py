@@ -10,6 +10,7 @@ import time
 from NuMPI import Optimization
 from mpi4py import MPI
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import topology_optimization
 from muFFTTO import material_models
@@ -32,7 +33,7 @@ soft_phase_exponent = 3
 preconditioner_type = "Green_Jacobi"  # Options: 'Green', 'Jacobi', 'Green_Jacobi'
 eta = max(1 * pixel_size)  # Filter width
 weight = 5.  # Weight for the stress match term
-cg_setup = {'cg_tol': 1e-6, 'r_tol': False}
+cg_setup = {'cg_tol': 1e-6, 'cg_delay': 10}
 
 # Initialize periodic unit cell and discretization
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
@@ -248,7 +249,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
@@ -256,10 +257,8 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
             x=displacement_field_load_case[load_case],
             P=M_fun,
             tol=cg_setup['cg_tol'],
-            rtol=cg_setup['r_tol'],
             maxiter=10000,
-            callback=callback,
-        )
+            callback=callback)
 
         if MPI.COMM_WORLD.rank == 0:
             nb_it = len(norms_cg_mech['residual_rr'])
@@ -388,10 +387,13 @@ if __name__ == '__main__':
         if history_writer is not None:
             phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
             history_writer.write()
-        if MPI.COMM_WORLD.size == 1:
+        try:
+            import pyvista as pv     # the 3D slices need pyvista; without it the run just does not plot
+        except ImportError:
+            pv = None
+        if MPI.COMM_WORLD.size == 1 and pv is not None:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
-            import pyvista as pv
 
             def plot_cuts_3d(field_xyz, cmap='gray_r', positions=None,
                              interpolate=False, screenshot=None, title=f'rho - {iterat}'):
@@ -448,15 +450,12 @@ if __name__ == '__main__':
     # discretization.fft.communicate_ghosts(a)
     # target = 0.0
     # c = Optimization.LinearConstraint(a.s, target)
-    xopt_FE_MPI = Optimization.l_bfgs_bounded(
+    xopt_FE_MPI = solvers_nonlinear.minimize(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
+        method='l_bfgs',
         #  linear_constraint=c,
-        args=(),
-        jac=True,
-        bounds_lo=0.,
-        bounds_hi=1.,
-        zero_mask=None,
+        bounds=(0., 1.),
         gtol=1e-5,
         xtol=1e-3,
         maxiter=500,
@@ -517,7 +516,7 @@ if __name__ == '__main__':
 
         displacement_field = discretization.get_unknown_size_field(name='displacement_field_postprocess')
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -525,8 +524,7 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
         # compute homogenized stress field corresponding to final displacement
         homogenized_stresses[load_case] = discretization.get_homogenized_stress_mugrid(
@@ -556,7 +554,7 @@ if __name__ == '__main__':
                                           macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                                           rhs_inxyz=rhs_field_final)
 
-            solvers.conjugate_gradients_mugrid(
+            solvers.conjugate_gradients(
                 comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun_final,  # linear operator
@@ -564,8 +562,7 @@ if __name__ == '__main__':
                 x=displacement_field,
                 P=M_fun,
                 tol=1e-5,
-                maxiter=10000,
-            )
+                maxiter=10000)
 
             homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,

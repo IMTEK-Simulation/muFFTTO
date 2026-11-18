@@ -177,3 +177,37 @@ def test_sinusoidal_ligaments_symmetry_and_gaps():
     assert np.all(phase[edge] == 0)
     closed = geometry.get('sinusoidal_ligaments', coords, gap=0.0)
     assert np.all(closed[edge] == 1)
+
+
+def _study_correlated_random_field(points, correlation_length, seed):
+    """The 2D field of the phase-field fracture studies (reference)."""
+    from scipy.special import ndtr
+    rng = np.random.default_rng(seed)
+    k_max = int(np.ceil(3.0 / (2 * np.pi * correlation_length)))
+    wave_vectors = [(i, j) for i in range(-k_max, k_max + 1) for j in range(0, k_max + 1) if j > 0 or i > 0]
+    field = np.zeros(points.shape[1:])
+    variance = 0.0
+    for i, j in wave_vectors:
+        amplitude = np.exp(-(2 * np.pi * np.hypot(i, j) * correlation_length) ** 2 / 4)
+        xi, eta = rng.standard_normal(2)
+        phase = 2 * np.pi * (i * points[0] + j * points[1])
+        field += amplitude * (xi * np.cos(phase) + eta * np.sin(phase))
+        variance += amplitude ** 2
+    return ndtr(field / np.sqrt(variance))
+
+
+def test_correlated_random_field_2d_matches_the_studies_and_is_periodic():
+    from muFFTTO import geometry
+    x = np.stack(np.meshgrid(np.linspace(0, 1, 17), np.linspace(0, 1, 13), indexing='ij'))
+    field = geometry.correlated_random_field(x, 0.1, seed=3)
+    np.testing.assert_allclose(field, _study_correlated_random_field(x, 0.1, 3), rtol=1e-14)
+    assert np.all((field > 0) & (field < 1))
+    np.testing.assert_allclose(geometry.correlated_random_field(x + 1.0, 0.1, seed=3), field, atol=1e-12)
+
+
+def test_correlated_random_field_3d():
+    from muFFTTO import geometry
+    x = np.stack(np.meshgrid(*[np.linspace(0, 1, 6)] * 3, indexing='ij'))
+    field = geometry.correlated_random_field(x, 0.2, seed=1)
+    assert field.shape == (6, 6, 6) and np.all((field > 0) & (field < 1))
+    np.testing.assert_allclose(field[0], field[-1], atol=1e-12)          # periodic in x

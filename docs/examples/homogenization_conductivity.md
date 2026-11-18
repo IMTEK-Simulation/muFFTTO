@@ -59,7 +59,7 @@ $$
 |---|---|---|---|---|---|---|---|
 | `example_2D_homogenization_conductivity.py` | 2D | `linear_triangles` (2 triangles/pixel, 1 node/pixel) | 128×128 | `square_inclusion` | `muGrid.Solvers.conjugate_gradients`, `rtol=1e-6` | Green (FFT), $\mathbf{A}_{\mathrm{ref}}=\mathbf{I}$ | $2\times2$ $\mathbf{A}^{\mathrm{eff}}$, analytical comparison for $A^{\mathrm{eff}}_{11}$, one plot of $\tilde\theta$ per load case |
 | `example_2D_homogenization_conductivity_quadratic_basis.py` | 2D | `biquadratic_rectangle` (Q9, 4 nodes/pixel, 3×3 Gauss) | 64×64 | `square_inclusion` | same as above | Green (FFT) | same as above |
-| `example_2D_homogenization_conductivity_block_CG.py` | 2D | `linear_triangles` | 128×128 | `square_inclusion` (or phase-scaled) | muFFTTO `solvers.conjugate_gradients_mugrid`, then block CG `solvers.dr_pbcg_mugrid` | Green (FFT) | $\mathbf{A}^{\mathrm{eff}}$ from both solvers, timings, block-CG residual history |
+| `example_2D_homogenization_conductivity_block_CG.py` | 2D | `linear_triangles` | 128×128 | `square_inclusion` (or phase-scaled) | muFFTTO `solvers.conjugate_gradients`, then block CG `solvers.dr_pbcg_mugrid` | Green (FFT) | $\mathbf{A}^{\mathrm{eff}}$ from both solvers, timings, block-CG residual history |
 | `example_3D_homogenization_conductivity.py` | 3D | `trilinear_hexahedron` (2×2×2 Gauss) | 128³ | `square_inclusion` (centred cube) | `muGrid.Solvers.conjugate_gradients`, `rtol=1e-6` | Green (FFT) | $3\times3$ $\mathbf{A}^{\mathrm{eff}}$, mid-plane plots |
 | `example_3D_homogenization_conductivity_block_CG.py` | 3D | `trilinear_hexahedron` | 64³ | `random_distribution` | muFFTTO PCG then block CG (absolute `tol=1e-5`) | Green (FFT) | $3\times3$ $\mathbf{A}^{\mathrm{eff}}$ from both solvers, convergence plot (single vs. block CG) |
 
@@ -276,7 +276,7 @@ linear triangles on 128².
 
 The script solves the same problem twice and times both solves:
 
-1. **One load case at a time (`:95-161`).** It uses muFFTTO's own `solvers.conjugate_gradients_mugrid`
+1. **One load case at a time (`:95-161`).** It uses muFFTTO's own `solvers.conjugate_gradients`
    (`:120`) with `tol=1e-5, rtol=True`. Here the criterion is relative: $\|\mathbf{r}\|^2 \le 10^{-10}\|\mathbf{r}_0\|^2$.
    The callback signature is different: `callback(it, x, r, p, z, stop_crit_norm)` (`:112`). It receives
    the raw arrays and computes $\mathbf{r}\cdot\mathbf{r}$ with `communicator.sum`.

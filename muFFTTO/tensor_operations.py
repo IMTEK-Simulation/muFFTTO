@@ -51,6 +51,36 @@ separate fields.
 
 import numpy as np
 
+try:
+    import cupy
+except ImportError:  # CPU-only installation
+    cupy = None
+
+
+# ============================================================================
+# CPU / GPU helpers
+# Field data (.s) is a numpy array for CPU fields and a cupy array for GPU fields.
+# Small constant tensors (identity, weights, macro gradient, ...) are created with
+# numpy and have to be moved to the same device before they are combined with field data.
+# ============================================================================
+
+def get_array_module(array):
+    """Return ``numpy`` or ``cupy``, depending on where ``array`` lives.
+
+    Example: ``xp = get_array_module(field.s)`` and then ``xp.asarray(I)``
+    moves a numpy constant ``I`` to the device of ``field``.
+    """
+    if cupy is None:
+        return np
+    return cupy.get_array_module(array)
+
+
+def to_host(array):
+    """Return ``array`` as a numpy array; GPU data is copied to the host."""
+    if cupy is not None and isinstance(array, cupy.ndarray):
+        return array.get()
+    return np.asarray(array)
+
 
 # ============================================================================
 # Einsum operators — layout [i, j, q, x, y, z]
@@ -319,3 +349,24 @@ def add_scaled_identity(scalar_1qxyz, lam_1qxyz, A2, dim):
     # only diagonal entries (i, i) receive the contribution (delta_ij)
     for i in range(dim):
         A2.s[i, i] += lam_1qxyz.s[0, 0] * scalar_1qxyz.s[0, 0]
+
+
+def point_view(field):
+    """The whole buffer of a muGrid field as a C-contiguous view ``[components..., sub-points, points]``.
+
+    GPU fields only: there muGrid stores a field component by component with the grid points (x fastest) innermost
+    (host fields keep the components of a point together and raise here), so reversing the
+    spatial axes of the ghosted array ``field.sg`` gives a contiguous array, and every component ``[c..., q]`` is one
+    contiguous vector over the points (ghost points included). Elementwise kernels on these vectors run at memory
+    bandwidth, whereas on the ghost-stripped strided view ``field.s`` an array library computes a multi-dimensional
+    index per element (several times slower on a GPU for large grids). Use it for pointwise in-place operations
+    whose result on the ghost points does not matter (they are overwritten by the next ghost exchange).
+    """
+    array = field.sg
+    dim = len(field._cpp.collection.nb_ghosts_left)
+    lead = array.ndim - dim
+    array = array.transpose(*range(lead), *reversed(range(lead, array.ndim)))
+    if not array.flags.c_contiguous:
+        raise ValueError('point_view: unexpected memory layout of the field buffer')
+    return array.reshape(array.shape[:lead] + (-1,))
+

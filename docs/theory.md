@@ -532,30 +532,26 @@ beta_k  = (r_{k+1}, z_{k+1}) / (r_k, z_k)
 p_{k+1} = z_{k+1} + beta_k p_k
 ```
 
-There are two implementations, and the examples use both:
+muFFTTO has **one** CG, and every library solve uses it:
 
-* **`muFFTTO.solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P, tol=1e-6, rtol=False, maxiter=1000, callback=None, norm_metric=None)`**
-  * `hessp(x, Ax)` and `P(r, z)` are in-place callables on muGrid fields.
-  * **Stopping test.** By default it uses the *squared Euclidean* residual,
-    $(r,r) < \texttt{tol}^2$, which is **absolute** unless `rtol=True`. With
-    `rtol=True` the test becomes $(r,r) < \texttt{tol}^2\,(r_0,r_0)$, and
-    the initial guess is accepted only if its residual is exactly zero. It is
-    *not* the preconditioned norm $(r,z)$ that many FFT papers use. You can
-    pass `norm_metric(r, Gr)` to stop on $(r, Gr)$ instead, for example
-    $G=M^{-1}$.
-  * `callback(it, x, r, p, z, stop_crit)` receives `.s` arrays. The examples
-    use it to record $(r,r)$ and $(r,z)$.
-  * It raises `RuntimeError` if $(p,Ap)\le 0$.
-* **`muGrid.Solvers.conjugate_gradients(comm, fc, b, x, hessp, prec, rtol, atol, tol, maxiter, callback)`**
-  (muGrid's own CG). It stops when $\lVert r\rVert \le \max(\texttt{rtol}\,\lVert b\rVert, \texttt{atol})$.
-  `tol` is a deprecated alias for an *absolute* `atol`. The conductivity
-  example passes `rtol=1e-6`; the small-strain elasticity example passes
-  `tol=1e-6`, which is absolute.
-
-`solvers.conjugate_gradients_mugrid_experimental` adds a-posteriori
-energy-norm error estimates: a Hestenes–Stiefel lower bound with adaptive
-delay (`findS`) and a Gauss–Radau upper bound. It is meant for research on
-stopping criteria.
+* **`muFFTTO.solvers.conjugate_gradients(comm, fc, hessp, b, x, P, tol=1e-6, d_min=10, tau=0.25, maxiter=10000, callback=None, stopping_rule=None)`**
+  * `hessp(x, Ax)` and `P(r, z)` are in-place callables on muGrid fields; dot products are muGrid `linalg.vecdot`
+    (interior, ghosts excluded) summed with `comm.sum`.
+  * **Stopping test: the energy error.** With $\Delta_j = \alpha_j (r_j, z_j) = \lVert x_{j+1}-x_j\rVert_K^2$ the
+    Hestenes–Stiefel sum $\sum_{j=l}^{k}\Delta_j$ is a lower estimate of $\lVert x - x_l\rVert_K^2$; its delay
+    $k-l$ is chosen adaptively (Meurant, Papež, Tichý 2021: accepted when $S\,\Delta_k / \sum_{j=l}^{k-1}\Delta_j \le \tau$,
+    `findS`), with the minimum `d_min` (`solvers.EnergyErrorEstimate`). CG stops when the estimate is below
+    $\texttt{tol}^2\,\lVert x_0\rVert_K^2$ (warm start) or $\texttt{tol}^2$ times the estimate of the initial error
+    (cold start). The energy norm does not depend on the preconditioner, so iteration counts are comparable.
+  * It also stops when $(r,z)$ reaches machine precision ($\varepsilon^2 (r_0,z_0)$): small problems get there
+    before the delayed estimate comes in.
+  * Returns `(x, info)`, `info = {'iterations', 'converged', 'estimate', 'estimator'}`.
+  * `callback(it, x, r, p, z, estimate)` receives `.s` arrays, for the start (`it = 0`) and every iteration.
+  * `stopping_rule(iteration, x, alpha, rz)` replaces the energy test, e.g.
+    `muFFTTO.error_bounds.TotalErrorStoppingRule` (algebraic error a fraction of a guaranteed total-error bound).
+  * It raises `RuntimeError` if $(p,Kp)\le 0$. Periodic problems are singular: the preconditioner must map into the
+    mean-free fields (the Green preconditioners do).
+* A residual-based PCG is muGrid's own **`muGrid.Solvers.conjugate_gradients(comm, fc, b, x, hessp, prec, rtol, atol, maxiter, callback)`**.
 
 **Block CG.** `solvers.dr_pbcg_mugrid(comm, fc, hessp, b_list, x_list, P, tol, rtol)`
 solves all $m$ load cases at once with a shared block Krylov space (DR-PBCG,
@@ -591,16 +587,22 @@ eigenvalues of $\mathbb C(x)$ relative to $\mathbb C^{\rm ref}$. The number of
 CG iterations is therefore independent of the grid size and depends only on
 the phase contrast.
 
-The code:
+The code (`muFFTTO.preconditioners`, every preconditioner a callable `P(r, z)`):
 
-* `get_preconditioner_Green_mugrid(reference_material_data_ijkl, formulation=None, operator=None)`
-  builds $\hat K^{\rm ref}$ column by column. It applies $K^{\rm ref}$ to a
-  unit impulse at DOF `(f, n)` of the origin pixel and FFTs the response.
-  It then inverts each block (`np.linalg.inv`, batched) and returns a complex
-  field `'Greens_diagonal_fast'` of shape `[f, n, f, n, ξ...]`. A custom
-  translation-invariant `operator` can replace $K^{\rm ref}$.
-* `apply_preconditioner_mugrid(preconditioner_Fourier_fnfnqks, input_nodal_field_fnxyz, output_nodal_field_fnxyz)`
-  does FFT → `einsum('cdab...,cd...->ab...')` → iFFT → `*= fft.normalisation`.
+* `preconditioners.Green(discretization, reference_material, formulation=None, name='green', invert_zero_mode=False, operator=None)`.
+  One node per pixel: muGrid's `BlockFourierPreconditioner` from
+  `muGrid.Preconditioners.make_reference_stiffness_preconditioner`, assembled from the impulse response of
+  muFFTTO's $K^{\rm ref}$ (any element and formulation). Several nodes per pixel, or a regular reference
+  (`invert_zero_mode`, e.g. the damage operator with its mass term, given as `operator`): muFFTTO's block inverse,
+  `Discretization.get_preconditioner_Green_mugrid` + `apply_preconditioner_mugrid`, which apply $K^{\rm ref}$ to a
+  unit impulse at DOF `(f, n)` of the origin pixel, FFT the response and invert each block.
+* `preconditioners.Jacobi`, `preconditioners.GreenJacobi` ($D^{-1/2} G D^{-1/2}$, muGrid's
+  `GreenJacobiPreconditioner`; reference $2\mu\,\mathbb I_{\rm sym}$, `preconditioners.isotropic_identity`) with
+  `update(material)` for a new material; void entries ($K_{ii}=0$) count as 1.
+* `preconditioners.Dual(discretization, C_ref, material, formulation)`: $G\,K(\mathbb C^{\rm ref}\mathbb C^{-1}\mathbb C^{\rm ref})\,G$
+  with $\mathbb C^{\rm ref}$ the stiff (solid) tangent; for a `ScaledMaterial` $s(x)\,\mathbb C^{\rm ref}$ the dual
+  material $\mathbb C^{\rm ref}/s$ follows the scale field without an update (`preconditioners.dual_material`, Mandel
+  inverse for full fields in 2D and 3D).
 * **Zero frequency.** $\hat K^{\rm ref}(0)$ is singular because constants
   form the kernel. With one node per pixel its block is left un-inverted, and
   it is numerically zero because the stencil sums to zero. The
@@ -633,8 +635,7 @@ The code:
   $10^{-5}$, that a single reference material cannot capture. It is the
   default in the topology-optimization examples
   (`preconditioner_type = "Green_Jacobi"`) and an option in
-  `solve_finite_strain_newton_cg`. `apply_preconditioner_Green_Jacobi_full`
-  is a legacy NumPy variant with per-pixel blocks.
+  `solve_finite_strain_newton_cg`; `muFFTTO.preconditioners.GreenJacobi` builds it from a material.
 
 ### 5.6 Pipeline sketch
 
@@ -684,7 +685,7 @@ for k in range(dim):
         disc.get_rhs_mugrid(material_data_field_ijklqxyz=C,
                             macro_gradient_field_ijqxyz=E_field, rhs_inxyz=rhs)
         u.s.fill(0)
-        solvers.conjugate_gradients_mugrid(comm=disc.communicator, fc=disc.field_collection,
+        solvers.conjugate_gradients(comm=disc.communicator, fc=disc.field_collection,
                                            hessp=K_fun, b=rhs, x=u, P=M_fun,
                                            tol=1e-6, rtol=True, maxiter=1000)
         C_eff[k, l] = disc.get_homogenized_stress_mugrid(
@@ -861,7 +862,7 @@ $$
 
 The `sensitivity_*` functions take `preconditioner_fun` and
 `system_matrix_fun`, the same `M_fun`/`K_fun` used for the state, plus
-`cg_tol` and `r_tol` keyword arguments.
+`cg_tol` (relative energy error, default 1e-6) and `cg_delay` (minimal delay, default 10) keyword arguments.
 
 ### 7.4 Optimizer
 
@@ -888,6 +889,82 @@ example but never passed to the optimizer. A first-order alternative,
 After optimization the examples re-solve the cell problems with the final
 $\rho$ and print the obtained and target $\mathbb C^{\rm eff}$ in Voigt
 notation.
+
+### 7.5 Alternative regularization: density filter and Heaviside projection
+
+`muFFTTO/density_filter.py` provides the classical density-based alternative
+to the phase-field term of §7.2 (Lazarov & Sigmund 2011; Wang, Lazarov &
+Sigmund 2011). The optimizer works on a nodal **design** field $\rho$. The
+material model sees the **physical** density
+
+$$
+\bar\rho = H_\beta(\tilde\rho),\qquad \tilde\rho = F\rho ,
+$$
+
+and no phase-field term is added to the objective.
+
+* **Helmholtz filter** `HelmholtzFilter(discretization, radius)`: $\tilde\rho$
+  solves $-r^2\Delta\tilde\rho + \tilde\rho = \rho$ on the periodic cell, with
+  $r = R/(2\sqrt3)$ for a filter radius $R$. It is discretized with the
+  periodic second-order finite-difference Laplacian $L$ on the nodes (in 2D
+  the 5-point stencil, the same as the linear-triangle stiffness matrix with
+  lumped mass). $L$ is diagonal in Fourier space, so the filter is applied
+  exactly by FFT:
+  $$
+  \hat{\tilde\rho}(k) = \frac{\hat\rho(k)}{1 + r^2\lambda(k)},\qquad
+  \lambda(k) = \sum_d \frac{4\sin^2(\pi k_d)}{h_d^2}
+  $$
+  ($k_d$ in cycles per grid point). The filter preserves the mean and
+  constants, maps $[0,1]$ into $[0,1]$ (the inverse of an M-matrix with unit
+  row sums), and is symmetric, so $F^T = F$. Features thinner than about $R$
+  are smeared out, which makes $R$ the minimum member size.
+* **Heaviside projection** `heaviside_projection(x, beta, threshold)`:
+  $$
+  H_\beta(x) = \frac{\tanh(\beta\eta) + \tanh(\beta(x-\eta))}{\tanh(\beta\eta) + \tanh(\beta(1-\eta))}.
+  $$
+  It fixes 0 and 1, is monotone, is the identity for $\beta\to0$ (exactly at
+  $\beta = 0$) and a step at $\eta$ for $\beta\to\infty$.
+  `heaviside_projection_derivative` gives $H_\beta'$.
+* **Chain rule** `FilterAndProjection(discretization, radius, beta, threshold)`:
+  `forward(rho)` returns $\bar\rho$, and `backward(df/drho_bar)` returns
+  $$
+  \frac{df}{d\rho} = F^T\Big[H_\beta'(F\rho)\odot\frac{df}{d\bar\rho}\Big],
+  $$
+  where $df/d\bar\rho$ is what the sensitivities of §7.3 compute when they are
+  given $\bar\rho$ as `phase_field_1nxyz`.
+* **Continuation:** $\beta$ is raised in stages (e.g. 1, 2, 4, …, 32). The
+  optimizer is restarted from the previous design at every stage, because the
+  objective changes with $\beta$.
+* **Robust formulation** `RobustFilterAndProjection(discretization, radius, beta, thresholds=(0.75, 0.5, 0.25))`
+  (Wang, Lazarov & Sigmund 2011): the same filtered field is projected with
+  three thresholds, giving an eroded, an intermediate and a dilated design
+  ($\bar\rho_e\le\bar\rho_i\le\bar\rho_d$ pointwise). The objective is
+  evaluated on all three, and `backward(gradients, weights)` returns
+  $F^T\sum_j w_j H'_{\beta,\eta_j}(F\rho)\odot g_j$. A solid member thinner
+  than the length scale set by $R$ and the threshold gap vanishes in the
+  eroded design, and a thin void closes in the dilated one. Requiring all
+  three designs to perform therefore enforces a minimum size of both solid
+  and void features in the intermediate (blueprint) design. The plain filter
+  with projection does not guarantee this at large $\beta$, where one-pixel
+  hinges can reappear.
+* **Grey measure:** `measure_of_non_discreteness` computes
+  $M_{nd} = \tfrac4N\sum\bar\rho(1-\bar\rho)$, which is 0 for a 0/1 design
+  (Sigmund 2007).
+
+All functions work on nodal scalar fields with one node per pixel, in 2D and
+3D. They are MPI-parallel through the distributed FFT of the discretization.
+The tests in `test/test_density_filter.py` cover:
+
+* Fourier modes and a direct sparse solve of $(I + r^2L)\tilde\rho = \rho$;
+* constants, mean, symmetry and bounds;
+* the projection and its derivative;
+* the chain rule, by finite differences, also for the robust formulation;
+* the robust ordering, and the removal of a one-pixel bar by the eroded design;
+* `mpirun -n 1` vs `-n 2`.
+
+The example
+[`examples/topology_optimization_bowtie/`](../examples/topology_optimization_bowtie/)
+switches between the two regularizations with `--regularization`.
 
 ---
 
@@ -1070,7 +1147,7 @@ Variable names carry their array layout as a suffix. For example,
 * Y. Saad. *Iterative Methods for Sparse Linear Systems*, 2nd ed. SIAM, 2003.
 * G. Meurant, J. Papež, P. Tichý. *Accurate error estimation in CG.*
   Numerical Algorithms 88 (2021). (Basis of `findS` and
-  `conjugate_gradients_mugrid_experimental`.)
+  `conjugate_gradients`.)
 * G. Meurant, P. Tichý. Block CG / DR-PBCG. This is the Algorithm 5 cited in
   `solvers.dr_pbcg_mugrid`; see that docstring for the reference used.
 * M. P. Bendsøe, O. Sigmund. *Topology Optimization: Theory, Methods and
