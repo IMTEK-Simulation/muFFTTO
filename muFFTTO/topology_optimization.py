@@ -66,7 +66,7 @@ field ``phase_field_1nxyz`` has shape ``[1, n, nx, ny(, nz)]``.
 Fields are mostly muGrid fields: ``.s`` is the view without ghost layers and
 ``.sg`` the view including ghost layers (needed for stencil/roll operations
 in MPI-parallel runs). Global reductions are performed with
-``discretization.mpi_reduction`` (NuMPI) or ``discretization.communicator``.
+``discretization.mpi_reduction`` (muGrid communicator reduction) or ``discretization.communicator``.
 
 Functions suffixed ``_FE``/``_FE_NEW`` are the current, muGrid-based
 implementations. (Older variants built on removed NumPy-array APIs of the
@@ -83,13 +83,12 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 
 def _global_sum(discretization, array):
     """Sum of all entries of a local numpy or cupy array over all MPI ranks: the local sum on the device, the
-    scalar to the host, then the MPI reduction (NuMPI cannot reduce GPU data)."""
+    scalar to the host, then the MPI reduction."""
     from muFFTTO import tensor_operations
     return discretization.mpi_reduction.sum(float(tensor_operations.get_array_module(array).sum(array)))
 

@@ -57,7 +57,6 @@ import time
 from muFFTTO import domain
 from muFFTTO import solvers
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 # phase field part is identical to the elasticity part
@@ -166,7 +165,6 @@ def adjoint_potential(discretization,
     # nodal axis n (here 'i' plays the role of n) -> field over (x, y[, z])
     adjoint_potential_field = np.einsum('ui...,ui...->...', adjoint_field_inxyz.s, force_field_inxyz.s)
 
-    # Reductor_numpi = discretization.mpi_reduction(MPI.COMM_WORLD)
     # sum over local pixels and over all MPI ranks
     integral = discretization.mpi_reduction.sum(adjoint_potential_field)  #
 

@@ -46,7 +46,7 @@ the ghost buffers. Before a stencil (convolution) operator reads a field,
 its ghost layers must be filled by ``self.fft.communicate_ghosts(field)``
 (MPI halo exchange + periodic wrap-around).
 
-The global (MPI-reduced) sums are done with ``NuMPI.Tools.Reduction``.
+The global (MPI-reduced) sums are done with the muGrid communicator (``communicator.reduction``, also for GPU data).
 The quadrature weights ``self.quadrature_weights`` are *physical* weights
 (they already contain the pixel area/volume), so
 ``sum_{q, pixels} w_q f_q`` approximates ``\\int_\\Omega f dx``.
@@ -56,7 +56,6 @@ import warnings
 import numpy as np
 import scipy as sc
 
-from NuMPI.Tools import Reduction
 from mpi4py import MPI
 
 import muGrid
@@ -355,7 +354,7 @@ class Discretization:
         Interpolation, Hessian and Laplacian stencils (same layout idea).
     gradient_op, interpolation_op, hessian_op, laplacian
         muGrid ``GenericLinearOperator`` wrappers of the stencils above.
-    mpi_reduction : NuMPI.Tools.Reduction
+    mpi_reduction : muGrid communicator reduction
         Helper for global (all-rank) sums/min/max.
     """
 
@@ -445,7 +444,7 @@ class Discretization:
         self.device = device
         self.low_memory = low_memory           # see the docstring and quad_point_blocks()
         self.communicator = communicator
-        self.mpi_reduction = Reduction(MPI.COMM_WORLD)
+        self.mpi_reduction = communicator.reduction   # .sum/.min/.max/.mean of a whole array over all ranks
         # Validate the symmetries of material data where it enters a solve
         # (see check_material_symmetry); can be switched off for speed.
         self.check_material_symmetry = True
@@ -1983,11 +1982,8 @@ class Discretization:
         """
         # local sum over q, x, y(, z) on the device of the data (CPU or GPU)
         local_sum = data_qxyz.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
-        # MPI needs host memory -> copy the small result to the host before the global sum
-        local_sum = np.ascontiguousarray(tensor_operations.to_host(local_sum))
-        global_sum = np.empty_like(local_sum)
-        MPI.COMM_WORLD.Allreduce(local_sum, global_sum, op=MPI.SUM)
-        return global_sum
+        # global sum over the ranks of this discretization (muGrid stages device data through the host if needed)
+        return np.asarray(tensor_operations.to_host(self.communicator.sum(local_sum)))
 
     def apply_material_data(self, material_data, gradient_field):
         """Legacy (numpy-returning) constitutive map, dispatched on problem type.
@@ -2989,10 +2985,7 @@ class Discretization:
 
         xp = tensor_operations.get_array_module(stress_field)
         stress_field = xp.einsum('ijq...,q->ijq...', stress_field, xp.asarray(self.quadrature_weights))
-        # TODO change this to muGRID
-        if xp is np:
-            return self.mpi_reduction.sum(stress_field, axis=tuple(range(-self.domain_dimension - 1, 0)))
-        return self.sum_over_quad_points_and_pixels(stress_field)     # GPU data: NuMPI cannot reduce it
+        return self.sum_over_quad_points_and_pixels(stress_field)
 
     def integrate_over_cell_mugrid(self, stress_field):
         """Integrate a gradient-shaped muGrid field over the (global) cell.
