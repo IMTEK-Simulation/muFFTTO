@@ -7,3 +7,5 @@ TO     trilinear_hexahedron_1Q_hg N 64 peak 876 MiB exit 0
 static trilinear_hexahedron N 64 peak 1060 MiB exit 0
 TO     trilinear_hexahedron N 64 peak 1980 MiB exit 0
 static trilinear_hexahedron_1Q_hg N 128 peak 2456 MiB exit 0
+TO     trilinear_hexahedron_1Q_hg N 128 peak 5334 MiB exit 0
+done
