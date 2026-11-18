@@ -2,7 +2,7 @@
 Geometric multigrid preconditioner for periodic small-strain elasticity with a scaled material ``A(x) = s(x) C_0``.
 
 A symmetric V(nu, nu)-cycle with Chebyshev-Jacobi smoothing, to be used as the preconditioner of the conjugate
-gradient solver. It is the field-based, MPI-capable successor of ``experiments/Multigrid_preconditioning/mg_lib.py``
+gradient solver. It is the field-based, MPI-capable successor of ``mg_lib.py`` of the multigrid study (repository muFFTTO-multigrid)
 (same hierarchy, same smoother, same coarse solve -- the same iteration counts), written for large 3D grids:
 
 * **No copies, no temporaries.** Every vector of the cycle is a muGrid field owned by its level; updates are fused

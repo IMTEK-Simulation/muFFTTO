@@ -635,8 +635,7 @@ The code (`muFFTTO.preconditioners`, every preconditioner a callable `P(r, z)`):
   $10^{-5}$, that a single reference material cannot capture. It is the
   default in the topology-optimization examples
   (`preconditioner_type = "Green_Jacobi"`) and an option in
-  `solve_finite_strain_newton_cg`. `apply_preconditioner_Green_Jacobi_full`
-  is a legacy NumPy variant with per-pixel blocks.
+  `solve_finite_strain_newton_cg`; `muFFTTO.preconditioners.GreenJacobi` builds it from a material.
 
 ### 5.6 Pipeline sketch
 

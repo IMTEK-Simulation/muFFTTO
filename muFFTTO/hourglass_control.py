@@ -31,7 +31,7 @@ component i) of one voxel under full 2x2x2 Gauss integration with the local mate
     M_alpha[d, e]      = sum_g w_g  d_d phi_alpha(x_g)  d_e phi_alpha(x_g),   phi_alpha = sum_corners h_alpha N_corner
 
 so eps = 1 reproduces the hourglass energy of the fully integrated element mode by mode (independent of the grid
-size), and eps < 1 is a fraction of it. Default eps = 0.3 (2026-11-14 study, experiments/Multigrid_preconditioning,
+size), and eps < 1 is a fraction of it. Default eps = 0.3 (2026-11-14 study, repository muFFTTO-multigrid, experiments/Multigrid_preconditioning,
 3D Cahn-Hilliard geometry, contrast 1e4, 32^3 and 64^3: multigrid needs the same iterations as with the 8-point
 element (eps 0.1: up to +4, eps 0.03: up to +14), the homogenised stiffness is within 0.2 % of the 8-point one for
 phase-field interfaces of width eta >= h, and one CG iteration is ~3x faster at 64^3. Sharp voxel interfaces are

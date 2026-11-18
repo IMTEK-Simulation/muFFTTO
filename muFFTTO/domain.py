@@ -2652,62 +2652,6 @@ class Discretization:
 
         return diagonal_inxyz
 
-    def apply_preconditioner_NEW(self, preconditioner_Fourier_fnfnqks, nodal_field_fnxyz):
-        """Apply preconditioner to nodal field using FFT.
-
-        Parameters
-        ----------
-        preconditioner_Fourier_fnfnqks : ndarray
-            Preconditioner diagonals in Fourier space [f,n,f,n,q,k,s]
-        nodal_field_fnxyz : ndarray
-            Input nodal field [f,n,x,y,z]
-
-        Returns
-        -------
-        ndarray
-            Preconditioned field [f,n,x,y,z]
-
-        Notes
-        -----
-        ``z = F^{-1}[ G_hat(k) . F[r](k) ]`` with the block product
-        ``z_hat_ab = G_hat_abcd r_hat_cd``. Legacy: uses ``.sg`` (ghosted
-        arrays) throughout and a Fourier field without the ``nodal_points``
-        sub-point; returns a view of the internal scratch field
-        ``'temp_output_field_in_apply_preconditioner_fnxyz'``.
-
-        Currently does not run with the present muGrid (``can't set attribute
-        'sg'``), and its ``'abcd...,cd...->ab...'`` applies the transposed
-        block compared with :meth:`apply_preconditioner_mugrid`
-        (``'cdab...'``), which matters for elements with several nodes per
-        pixel. Kept for experiments with the Green-Jacobi preconditioner.
-        """
-
-        # allocate field
-        temp_nodal_field_fnxyz = self.get_unknown_size_field(name='temp_nodal_field_in_apply_preconditioner_fnxyz')
-        temp_ouput_field_fnxyz = self.get_unknown_size_field(name='temp_output_field_in_apply_preconditioner_fnxyz')
-
-        ffield_fnqks = self.ffield_collection.complex_field(
-            name='temp_F_nodal_field_in_apply_preconditioner_fnxyz',  # name of the field
-            components=(*self.cell.unknown_shape,))  # sub-point type
-
-        if isinstance(nodal_field_fnxyz, np.ndarray):
-            temp_nodal_field_fnxyz.sg[...] = nodal_field_fnxyz
-        else:
-            temp_nodal_field_fnxyz.sg[...] = nodal_field_fnxyz.sg
-
-        # FFTn of input array
-        self.fft.fft(temp_nodal_field_fnxyz, ffield_fnqks)
-
-        # multiplication with a diagonals of preconditioner
-        ffield_fnqks.sg[...] = np.einsum('abcd...,cd...->ab...', preconditioner_Fourier_fnfnqks.sg, ffield_fnqks.sg)
-
-        # normalization
-        ffield_fnqks.sg *= self.fft.normalisation
-        # iFFTn
-        self.fft.ifft(ffield_fnqks, temp_ouput_field_fnxyz)
-
-        return temp_ouput_field_fnxyz.sg
-
     def apply_preconditioner_mugrid(self, preconditioner_Fourier_fnfnqks,
                                     input_nodal_field_fnxyz,
                                     output_nodal_field_fnxyz):
@@ -2757,46 +2701,6 @@ class Discretization:
         self.fft.ifft(ffield_fnqks, output_nodal_field_fnxyz)
         # normalization
         output_nodal_field_fnxyz.s[...] *= self.fft.normalisation
-
-    def apply_preconditioner_Green_Jacobi_full(self, green_fnfnqks,
-                                               jacobi_half_fnfnxyz,
-                                               nodal_field_fnxyz):
-        """Apply combined Green and Jacobi preconditioner.
-
-        Parameters
-        ----------
-        green_fnfnqks : ndarray
-            Green preconditioner in Fourier space [f,n,f,n,q,k,s]
-        jacobi_half_fnfnxyz : ndarray
-            Jacobi preconditioner blocks [f,n,f,n,x,y,z]
-        nodal_field_fnxyz : ndarray
-            Input nodal field [f,n,x,y,z]
-
-        Returns
-        -------
-        ndarray
-            Preconditioned field [f,n,x,y,z]
-
-        Notes
-        -----
-        Computes ``J^{1/2} G J^{1/2} r`` with ``J^{1/2}`` the per-pixel block
-        Jacobi scaling and ``G`` the Green preconditioner applied by
-        :meth:`apply_preconditioner_NEW` (legacy numpy interface). The
-        block-Jacobi input used to come from ``get_preconditioner_Jacoby_fast``
-        (``prec_type='full'``), which was removed because it no longer ran;
-        this method is currently unused.
-        """
-        # apply Jacobi 1/2 --- multiplication with a left diagonal blocks of preconditioner
-        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
-
-        # apply Green preconditioner using FFT
-        nodal_field_fnxyz = self.apply_preconditioner_NEW(
-            preconditioner_Fourier_fnfnqks=green_fnfnqks,
-            nodal_field_fnxyz=nodal_field_fnxyz)
-
-        # apply Jacobi 1/2 --- multiplication with a right diagonal blocks of preconditioner
-        nodal_field_fnxyz = np.einsum('abcd...,cd...->ab...', jacobi_half_fnfnxyz, nodal_field_fnxyz)
-        return nodal_field_fnxyz
 
     def apply_system_matrix_mugrid(self,
                                    material_data_field,

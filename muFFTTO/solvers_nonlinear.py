@@ -453,7 +453,7 @@ def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, con
         ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded),
         'newton_cg', 'bb' and 'l_bfgs' (box bounds only, no linear constraint): there the initial inverse Hessian
         of the two-loop recursion, gamma P M P with P the mask of the free components (e.g. a Helmholtz smoother
-        (I + c eta^2 (-Lap))^-1 of the TO design gradient, see experiments/Multigrid_preconditioning).
+        (I + c eta^2 (-Lap))^-1 of the TO design gradient, see the study repository muFFTTO-multigrid).
     callback : callable, optional
         ``callback(x)`` after every accepted iterate.
     comm : MPI communicator, optional
