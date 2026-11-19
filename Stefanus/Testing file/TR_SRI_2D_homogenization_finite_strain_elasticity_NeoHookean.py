@@ -16,7 +16,6 @@ from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from muFFTTO import visualization_utils
 
-
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
 N_inc = 20                  # number of load steps (nominal; a failed trust-region solve halves the step)
