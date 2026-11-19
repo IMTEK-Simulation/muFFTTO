@@ -18,7 +18,7 @@ from muFFTTO import visualization_utils
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 12                  # number of load steps (nominal; a failed trust-region solve halves the step)
+N_inc = 20                  # number of load steps (nominal; a failed trust-region solve halves the step)
 NEWTON_TOL = 5e-7           # only for the small-strain probe of NU_LAT / E_eff below (|r| / |r0| of its Newton solve)
 E_LOAD = 1                  # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = False     # plot the deformed cell after every load step
@@ -38,18 +38,18 @@ VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside 
 LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown of the energy minimization -> <P_ll> = 0 (as Martin)
                             # 'simple' = F_ll = 1 + NU_LAT eps prescribed (lateral stress up to ~1.6 % of axial)
 # Trust-region Newton-CG (as Martin's stefanus_2D_finite_strain_NeoHookean_TR.py; needs NuMPI branch feat/tr_precond)
-GTOL          = 1e-4        # Martin --gtol: stop when max|gradient| < GTOL mu_m h d_eps (nodal force of one load step)
+GTOL          = 1e-3        # Martin --gtol: stop when max|gradient| < GTOL mu_m h d_eps (nodal force of one load step)
 TR_DELTA0     = 0.05        # Martin --delta0: initial trust-region radius (M-norm)
 TR_DELTA_MAX  = 0.5         # Martin --delta_max
 TR_INNER_TOL  = 1e-6        # Martin --inner_tol: Steihaug CG relative energy-error tolerance
 TR_INNER_TAU  = 0.25        # Martin --inner_tau: adaptive delay of the energy-error estimate (minimum delay 10)
-TR_MAXITER    = 500         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
+TR_MAXITER    = 100         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
 CELLS         = (1, 2)      # (1, 1) = primitive cell; (1, 2) = 1 x 2 supercell
-IMPERFECTION  = 0.0         # Martin --imperfection, in pixel sizes (e.g. 1e-3); 0 = perfect cell
+IMPERFECTION  = 1e-3         # Martin --imperfection, in pixel sizes (e.g. 1e-3); 0 = perfect cell
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.05, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+EPS_MAX = {'X': 0.01, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
@@ -176,6 +176,7 @@ figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
     os.makedirs(figure_folder_path, exist_ok=True)
+MPI.COMM_WORLD.Barrier()  # MPI: the other ranks write into these folders (save_npy)
 
 # ============================================================================
 # material parameters
@@ -573,9 +574,10 @@ def tr_fun(x):
 
 def tr_hessp(x, v):
     """Hessian of the energy in (u, f) applied to v: dF = grad v_u + v_f e_ll -- Martin l. 364-385"""
-    if tr_state['hess_at'] is None or not np.array_equal(tr_state['hess_at'], x):   # as Martin l. 366-368: the
-        tr_evaluate(x)                                                                # state is cached by x, fun()
-        tr_state['hess_at'] = x.copy()                                                # at trial points overwrites it
+    same_x = tr_state['hess_at'] is not None and np.array_equal(tr_state['hess_at'], x)
+    if not MPI.COMM_WORLD.allreduce(same_x, op=MPI.LAND):                    # MPI: all ranks must agree
+        tr_evaluate(x)
+        tr_state['hess_at'] = x.copy()
     tr_state['cg'] += 1
     v_u, v_f = tr_split(v)
     tr_in.s[...] = v_u.reshape(tr_in.s.shape)
@@ -600,14 +602,17 @@ def tr_precond(r):
 max_step, t_load, inc = 1.0 / ninc, 0.0, 0
 min_step = max_step / 64
 d_t      = max_step
-x_cur    = tr_join(IMPERFECTION * h_x * np.random.default_rng(1).standard_normal(u_work.s.shape).ravel(), 0.0)
+loc_x, loc_y = discretization.fft.subdomain_locations                     # MPI: offset of this rank's part of the grid
+n_x, n_y     = u_work.s.shape[-2:]
+u_noise  = np.random.default_rng(1).standard_normal(u_work.s.shape[:2] + tuple(discretization.nb_of_pixels_global))
+x_cur    = tr_join(IMPERFECTION * h_x * u_noise[:, :, loc_x:loc_x + n_x, loc_y:loc_y + n_y].ravel(), 0.0)
 while t_load < 1.0 - 1e-12:
     d_t = min(d_t, 1.0 - t_load)
     tr_F_macro[...] = np.eye(dim) + (t_load + d_t) * E_LOAD * load_pattern
     tr_state['hess_at'], tr_state['cg'] = None, 0
     res = tr_newton_bounded(tr_fun, x_cur, tr_hessp, precond=tr_precond, gtol=GTOL_ABS, maxiter=TR_MAXITER,
                             delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, inner_stop='energy', inner_delay=10,
-                            inner_tol=TR_INNER_TOL, inner_tau=TR_INNER_TAU, comm=MPI.COMM_WORLD)
+                            inner_tol=TR_INNER_TOL, inner_tau=TR_INNER_TAU, comm=MPI.COMM_WORLD, disp=rank0)
     sum_CG_its     += tr_state['cg']
     sum_Newton_its += res.nit
     ok = bool(res.success) and res.fun < 0.5 * INADMISSIBLE_ENERGY
@@ -632,7 +637,7 @@ while t_load < 1.0 - 1e-12:
                             ('energy_field', energy_field.s[0, 0].mean(axis=0)),
                             ('stress_field', stress_field.s.mean(axis=2))):
             save_npy(data_folder_path + f'{name_}_inc{inc}.npy', arr_,
-                     tuple(discretization.subdomain_locations_no_buffers),
+                     tuple(discretization.fft.subdomain_locations),  # MPI: true offsets (..._no_buffers is +1)
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
     total_macro_gradient = tr_state['F_macro'] - np.eye(dim)
     P_avg = average_P()
@@ -679,6 +684,7 @@ if discretization.communicator.rank == 0:
     print(f'element_type     : {element_type} | integration: {INTEGRATION} | tangent: {SRI_TANGENT} | material: {MATERIAL}')
     print(f'number_of_pixels : {number_of_pixels}  (cells {CELLS[0]} x {CELLS[1]}, imperfection {IMPERFECTION:g})')
     print(f'preconditioner   : {preconditioner_type}')
+    print(f'MPI processes    : {MPI.COMM_WORLD.size}')
     print(f'Total CG its     : {sum_CG_its}')
     print(f'Total TR its     : {sum_Newton_its}  (trust-region Newton iterations)')
     print(f'Elapsed time     : {elapsed_time:.2f} s  ({elapsed_time / 60:.2f} min)')
