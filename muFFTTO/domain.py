@@ -485,12 +485,9 @@ class Discretization:
             # adjust the number of points
             # NOTE: currently a no-op (the "- 2" correction is commented out)
             self.nb_of_pixels[-1] = self.nb_of_pixels[-1]  # - 2  # TODO this is for buffer of size 1x1
-            # adjust subdomain location to not take into account buffers
-            sub_dom_locations = np.asarray(self.fft.subdomain_locations)
-            sub_dom_locations += left_ghosts
-            self.subdomain_locations_no_buffers = tuple(sub_dom_locations)
-            # (second shift has no effect on stored attributes: the tuple above is already copied)
-            sub_dom_locations += left_ghosts
+            # offset of this rank's pixels in the global grid: muGrid's fft.subdomain_locations already excludes the
+            # ghost layer (adding left_ghosts here shifted every rank by one pixel, e.g. in save_npy)
+            self.subdomain_locations_no_buffers = tuple(self.fft.subdomain_locations)
             # compute max nb_max_subdomain_grid_pts for save npy TODO: THIS IS QUICK FIX considering pencil decompositon
             max_size_of_subdomain = self.mpi_reduction.max(np.asarray(self.fft.nb_subdomain_grid_pts[-1])) - 2
             self.nb_max_subdomain_grid_pts = np.asarray(self.fft.nb_subdomain_grid_pts)
