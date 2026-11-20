@@ -47,6 +47,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from .domain import Discretization
+from .material_data import ScaledMaterial  # noqa: F401  (material data C(x) = sum_k s_k(x) C_k)
 from .tensor_operations import *
 
 

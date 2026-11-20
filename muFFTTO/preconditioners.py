@@ -16,7 +16,7 @@ discretization) and has the method ``apply(r, z)``:
   of the dual material ``C_ref C(x)^-1 C_ref`` (:func:`dual_material`), with ``C_ref`` the stiff (solid) tangent.
 
 Material updates: :meth:`Jacobi.update`, :meth:`GreenJacobi.update` recompute the diagonal for a new material; the
-dual material of a :class:`muFFTTO.domain.ScaledMaterial` follows its scale field (nothing to update), a full field
+dual material of a :class:`muFFTTO.material_data.ScaledMaterial` follows its scale field (nothing to update), a full field
 is recomputed with :meth:`Dual.update`.
 
 Give every preconditioner that has to coexist on one discretization its own ``name``: the names select the work
@@ -26,6 +26,7 @@ import numpy as np
 from muGrid import Preconditioners as mugrid_preconditioners
 
 from . import domain, tensor_operations
+from .material_data import ScaledMaterial
 
 
 class Green(mugrid_preconditioners.Preconditioner):
@@ -159,7 +160,7 @@ class Dual(mugrid_preconditioners.Preconditioner):
     Dual preconditioner ``z = G K_dual G r`` with ``K_dual = B^T W (C_ref C^-1 C_ref) B``.
 
     ``G`` is the Green preconditioner of ``C_ref``, the stiff (solid) tangent. For ``C = s(x) C_ref`` (a
-    :class:`muFFTTO.domain.ScaledMaterial`) the dual material is ``C_ref / s(x)``; it is evaluated from the scale of
+    :class:`muFFTTO.material_data.ScaledMaterial`) the dual material is ``C_ref / s(x)``; it is evaluated from the scale of
     ``C`` at every application, so it follows the material without an update. ``C`` must be invertible everywhere
     (no true void: use a small residual stiffness).
 
@@ -241,19 +242,19 @@ def dual_material(discretization, reference_material, material, out=None, name='
     """
     The dual material ``C_ref C(x)^-1 C_ref``.
 
-    * ``material`` a :class:`muFFTTO.domain.ScaledMaterial` with one term ``s(x) C_ref``: ``C_ref / s(x)`` as a
+    * ``material`` a :class:`muFFTTO.material_data.ScaledMaterial` with one term ``s(x) C_ref``: ``C_ref / s(x)`` as a
       ScaledMaterial evaluated from ``s`` at every application (nothing stored).
     * conductivity field ``A_ij``: ``A_ref A^-1 A_ref`` pointwise.
     * elasticity field ``C_ijkl``: pointwise on the symmetric strains (Mandel), 2D and 3D.
 
     ``out``: the field to write a full-field result into (default: a new field ``name``).
     """
-    if isinstance(material, domain.ScaledMaterial):
+    if isinstance(material, ScaledMaterial):
         if len(material.terms) != 1 or not np.allclose(tensor_operations.to_host(material.terms[0][1]),
                                                        reference_material):
             raise ValueError('dual_material: a ScaledMaterial must be s(x) C_ref (one term with the reference)')
         scale = material.terms[0][0]
-        return domain.ScaledMaterial([(lambda: 1.0 / domain.ScaledMaterial._scale_array(scale), reference_material)])
+        return ScaledMaterial([(lambda: 1.0 / ScaledMaterial._scale_array(scale), reference_material)])
     xp = tensor_operations.get_array_module(material.s)
     if out is None:
         out = discretization.get_material_data_size_field_mugrid(name=name)

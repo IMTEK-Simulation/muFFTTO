@@ -370,3 +370,18 @@ def point_view(field):
         raise ValueError('point_view: unexpected memory layout of the field buffer')
     return array.reshape(array.shape[:lead] + (-1,))
 
+
+
+def quad_point_blocks(nb_quad_points, low_memory):
+    """The quadrature points in the blocks an operation on a ``[.., q, x, y(, z)]`` field is evaluated in, as slices
+    of the q axis (the axis is kept, so the same expression serves both modes):
+
+    - ``low_memory=False``: one block with all points -- fastest (few large GPU kernels);
+    - ``low_memory=True``: one point per block -- the temporaries of an expression are 1/q of the field instead of
+      the full field. On the GPU this matters: CuPy's memory pool keeps every temporary's memory reserved, so a few
+      full-size [d, d, q, x, y, z] temporaries roughly double the memory of a large elasticity run.
+
+    See :attr:`Discretization.low_memory`."""
+    if not low_memory:
+        return [slice(None)]
+    return [slice(q, q + 1) for q in range(nb_quad_points)]
