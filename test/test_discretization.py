@@ -1168,3 +1168,46 @@ def test_nodal_points_coordinates_gpu_equals_cpu():
         coordinates[device] = discretization.get_nodal_points_coordinates().s
     assert isinstance(coordinates['gpu'], cupy.ndarray)
     np.testing.assert_array_equal(to_host(coordinates['gpu']), coordinates['cpu'])
+
+
+SUBDOMAIN_OFFSET_SCRIPT = '''
+import sys
+sys.path.insert(0, sys.argv[1])
+import numpy as np
+from mpi4py import MPI
+from NuMPI.IO import save_npy
+from muFFTTO import domain
+nb_pixels = (8, 12)
+cell = domain.PeriodicUnitCell(domain_size=[1.0, 1.0], problem_type='elasticity')
+discretization = domain.Discretization(cell=cell, nb_of_pixels_global=nb_pixels, element_type='bilinear_rectangle')
+# global index of every local pixel, from the pixel coordinates
+coords = np.asarray(discretization.fft.coords)
+index = np.round(coords * np.array(nb_pixels)[:, None, None]).astype(int)
+assert tuple(index[:, 0, 0]) == tuple(discretization.subdomain_locations_no_buffers), \\
+    (MPI.COMM_WORLD.rank, tuple(index[:, 0, 0]), tuple(discretization.subdomain_locations_no_buffers))
+# save_npy with this offset writes every rank's block at its place
+save_npy(sys.argv[2], (index[0] * 100 + index[1]).astype(float), tuple(discretization.subdomain_locations_no_buffers),
+         nb_pixels, MPI.COMM_WORLD)
+'''
+
+
+def test_subdomain_locations_under_mpi(tmp_path):
+    """subdomain_locations_no_buffers is the offset of a rank's first pixel (it was +1 per axis under MPI)."""
+    import os
+    import shutil
+    import subprocess
+    mpirun = shutil.which('mpirun') or shutil.which('mpiexec')
+    if mpirun is None:
+        pytest.skip('mpirun not available')
+    import muGrid
+    if not muGrid.has_mpi:
+        pytest.skip('muGrid built without MPI (e.g. the PyPI wheel)')
+    script = tmp_path / 'subdomain_offset.py'
+    script.write_text(SUBDOMAIN_OFFSET_SCRIPT)
+    environment = {key: value for key, value in os.environ.items() if not key.startswith(('OMPI_', 'PMIX_', 'PMI_'))}
+    repository = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = tmp_path / 'index.npy'
+    subprocess.run([mpirun, '-n', '2', sys.executable, str(script), repository, str(out)], check=True, timeout=300,
+                   capture_output=True, env=environment)
+    i, j = np.meshgrid(np.arange(8), np.arange(12), indexing='ij')
+    np.testing.assert_array_equal(np.load(out), i * 100 + j)
