@@ -128,7 +128,7 @@ def callback(it, x, r, p, z, stop_crit_norm):
 
 solution_field = discretization.get_unknown_size_field(name='solution')
 
-solvers.conjugate_gradients_mugrid(
+solvers.conjugate_gradients(
     comm=discretization.communicator,
     fc=discretization.field_collection,
     hessp=K_fun,  # linear operator
@@ -137,8 +137,7 @@ solvers.conjugate_gradients_mugrid(
     P=M_fun,
     tol=1e-8,
     maxiter=2000,
-    callback=callback,
-)
+    callback=callback)
 sol_r = np.sqrt(np.sum(( solution_field.s[:,0] ) ** 2, axis=0))
 
 # print(norms)
@@ -218,7 +217,7 @@ for i in range(dim):
                                       rhs_inxyz=rhs_field)
         # rhs_ij = discretization.get_rhs(material_data_field_C_0_rh, macro_gradient_field)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
@@ -227,11 +226,10 @@ for i in range(dim):
             P=M_fun,
             tol=1e-6,
             maxiter=2000,
-            callback=callback,
-        )
+            callback=callback)
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+        homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,

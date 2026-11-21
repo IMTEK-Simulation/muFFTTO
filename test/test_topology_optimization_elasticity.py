@@ -190,7 +190,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture):
     elastic_C_target_ijkl = material_models.get_elastic_material_tensor(
         dim=dim, K=K_target, mu=G_target, kind='linear'
     )
-    target_stress_ij = np.einsum('ijkl,lk->ij', elastic_C_target_ijkl, macro_gradient)
+    target_stress_ij = np.einsum('ijkl,kl->ij', elastic_C_target_ijkl, macro_gradient)
 
     # Setup macro-gradient field
     macro_gradient_field_ijqxyz = discretization.get_gradient_size_field(name='macro_gradient_field')
@@ -285,7 +285,7 @@ def test_fd_check_of_whole_objective_function(discretization_fixture):
             name='displacement_field_in_objective'
         )
         displacement_field_u.s.fill(0)
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,
@@ -584,7 +584,7 @@ def test_fd_check_of_stress_equivalence_potential_wrt_phase_field_FE(discretizat
 
     displacement_u = discretization.get_displacement_sized_field(name='displacement_u')
     displacement_u.s.fill(0)
-    solvers.conjugate_gradients_mugrid(
+    solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,
@@ -949,7 +949,7 @@ def test_nullity_of_adjoint_potential(discretization_fixture ):
 
     displacement_field = discretization.get_displacement_sized_field(name='displacement_field')
     displacement_field.s.fill(0)
-    solvers.conjugate_gradients_mugrid(
+    solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,

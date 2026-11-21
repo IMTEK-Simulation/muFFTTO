@@ -7,12 +7,13 @@ import numpy as np
 import time
 
 from NuMPI import Optimization
-from NuMPI.IO import save_npy
 from mpi4py import MPI
 from muFFTTO import domain
+from muFFTTO import solvers_nonlinear
 from muFFTTO import solvers
 from muFFTTO import topology_optimization_conductivity as topology_optimization
 from muFFTTO import material_models
+from muFFTTO import io_utils
 
 # Problem Configuration
 problem_type = 'conductivity'
@@ -21,7 +22,7 @@ element_type = 'linear_triangles'
 
 # Domain and Discretization
 domain_size = [1, 1]
-number_of_pixels = (16,16)
+number_of_pixels = (64,64)
 dim = np.size(number_of_pixels)
 pixel_size = np.asarray(domain_size) / np.asarray(number_of_pixels)
 
@@ -230,7 +231,7 @@ def objective_function_multiple_load_cases(phase_field_1nxyz_flat):
                 norms_cg_mech['residual_rr'].append(norm_of_rr)
                 norms_cg_mech['residual_rz'].append(norm_of_rz)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun,  # linear operator
@@ -314,10 +315,19 @@ if __name__ == '__main__':
     figure_folder_path = os.path.join(file_folder_path, 'figures', script_name) + '/'
 
     random_init = True
+    show_plots = False  # plot the phase field at every iteration
+    save_history = True  # store the phase field of every iteration in <output_name>_history.nc
 
     if MPI.COMM_WORLD.rank == 0:
         os.makedirs(data_folder_path, exist_ok=True)
         os.makedirs(figure_folder_path, exist_ok=True)
+    MPI.COMM_WORLD.Barrier()
+
+    # Output files (NetCDF, see docs/io.md): <output_name>_history.nc and <output_name>_final.nc
+    output_name = data_folder_path + f'{preconditioner_type}_eta_{eta}_w_{weights[0]}'
+    parameters = {'nb_of_pixels': number_of_pixels, 'domain_size': domain_size, 'element_type': element_type,
+                  'preconditioner_type': preconditioner_type, 'eta': eta, 'weights': weights, 'p': p,
+                  'soft_phase': soft_phase, 'target_C_ij': conductivity_C_target}
 
 
     def apply_filter(phase):
@@ -363,13 +373,19 @@ if __name__ == '__main__':
         phase_field_0.s[...] += 0.5 * np.random.rand(*phase_field_0.s.shape)
 
     iterat = 0
+    phase_field_iterate = discretization.get_scalar_field(name='phase_field_iterate')
+    history_writer = io_utils.FieldWriter(output_name + '_history.nc', [phase_field_iterate],
+                                          attributes=parameters) if save_history else None
 
 
     def my_callback(x_current):
-        """Callback to visualize progress during optimization."""
+        """Callback to store and visualize progress during optimization."""
         global iterat
         iterat += 1
-        if MPI.COMM_WORLD.size == 1:
+        if history_writer is not None:
+            phase_field_iterate.s[0, 0] = x_current.reshape(discretization.nb_of_pixels)
+            history_writer.write()
+        if show_plots and MPI.COMM_WORLD.size == 1:
             import matplotlib as mpl
             import matplotlib.pyplot as plt
             plt.figure()
@@ -390,15 +406,12 @@ if __name__ == '__main__':
     # discretization.fft.communicate_ghosts(a)
     # target = 0.0
     # c = Optimization.LinearConstraint(a.s, target)
-    xopt_FE_MPI = Optimization.l_bfgs_bounded(
+    xopt_FE_MPI = solvers_nonlinear.minimize(
         fun=objective_function_multiple_load_cases,
         x0=phase_field_0.s.ravel(),
+        method='l_bfgs',
       #  linear_constraint=c,
-        args=(),
-        jac=True,
-        bounds_lo=0.,
-        bounds_hi=1.,
-        zero_mask=None,
+        bounds=(0., 1.),
         gtol=1e-4,
         xtol=1e-4,
         maxiter=500,
@@ -409,32 +422,22 @@ if __name__ == '__main__':
         callback=my_callback,
         disp=True,
     )
-
-
+    if history_writer is not None:
+        history_writer.close()
 
     solution_phase = discretization.get_scalar_field(name='phase_field_solution')
     solution_phase.s[...] = xopt_FE_MPI.x.reshape([1, 1, *discretization.nb_of_pixels])
+    smooth_phase = discretization.get_scalar_field(name='phase_field_smooth')  # before rounding
+    smooth_phase.s[...] = solution_phase.s
 
-    _info = {}
-    if MPI.COMM_WORLD.rank == 0:
-        _info["num_iteration_mech"] = np.array(info_mech["num_iteration_adjoint"], dtype=object)
-        _info["num_iteration_adjoint"] = np.array(info_adjoint["num_iteration_adjoint"], dtype=object)
-
-    _info['nb_of_pixels'] = discretization.nb_of_pixels_global
-    _info['norms_sigma'] = norms_sigma
-    _info['norms_pf'] = norms_pf
-    _info['norms_adjoint_energy'] = norms_adjoint_energy
-    _info['nb_iterations'] = iterat
-
-    # Save optimized phase field
-    file_data_name = f'_eta_{eta}' + f'_w_{weights[0]}' + f'_final'
-    save_npy(data_folder_path + f'{preconditioner_type}' + file_data_name + f'.npy',
-             solution_phase.s[0].mean(axis=0),
-             tuple(discretization.fft.subdomain_locations),
-             tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
-
-    if MPI.COMM_WORLD.rank == 0:
-        print(f"Data saved to: {data_folder_path}{file_data_name}.npy")
+    # Round the optimized phase field to the discrete set {0, 0.1, ..., 1}
+    nb_phase_levels = 10  # None to keep the continuous phase field
+    if nb_phase_levels is not None:
+        solution_phase.s[...] = np.round(solution_phase.s * nb_phase_levels) / nb_phase_levels
+        discretization.fft.communicate_ghosts(solution_phase)
+        if MPI.COMM_WORLD.rank == 0:
+            print(f'Phase field rounded to {nb_phase_levels + 1} levels: '
+                  f'{np.unique(solution_phase.s[0, 0]).tolist()}')
 
     ######## Postprocess for FE linear solver with NuMPI ########
     solution_phase_at_quad_poits_1qxyz = discretization.get_quad_field_scalar(
@@ -473,7 +476,7 @@ if __name__ == '__main__':
 
         displacement_field = discretization.get_unknown_size_field(name='displacement_field_postprocess')
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -481,17 +484,13 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
         # compute homogenized stress field corresponding to final displacement
         homogenized_fluxes[load_case] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
             displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz)
-
-        _info['target_stress' + f'{load_case}'] = target_fluxes[load_case]
-        _info['homogenized_stresses' + f'{load_case}'] = homogenized_fluxes[load_case]
 
         if MPI.COMM_WORLD.rank == 0:
             print(f'target_stresses[load_case {load_case}] = {target_fluxes[load_case]}')
@@ -513,7 +512,7 @@ if __name__ == '__main__':
                                       macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz,
                                       rhs_inxyz=rhs_field_final)
 
-        solvers.conjugate_gradients_mugrid(
+        solvers.conjugate_gradients(
             comm=discretization.communicator,
             fc=discretization.field_collection,
             hessp=K_fun_final,  # linear operator
@@ -521,10 +520,9 @@ if __name__ == '__main__':
             x=displacement_field,
             P=M_fun,
             tol=1e-5,
-            maxiter=10000,
-        )
+            maxiter=10000)
 
-        homogenized_C_ijkl[i ] = discretization.get_homogenized_stress_mugrid(
+        homogenized_C_ijkl[:, i] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0_rho_quad,
             displacement_field_inxyz=displacement_field,
             macro_gradient_field_ijqxyz=macro_gradient_field_ijqxyz )
@@ -536,10 +534,20 @@ if __name__ == '__main__':
               np.array2string(conductivity_C_target,
                               formatter={'float_kind': lambda x: f"{x:0.5f}"}))
 
-    _info['homogenized_C_ij'] =  homogenized_C_ijkl
-    _info['target_C_ij'] = conductivity_C_target
-
-    # np.save(folder_name + file_data_name+f'xopt_log.npz', xopt_FE_MPI)
+    # Save the optimized (rounded) and the smooth phase field with the run parameters and the
+    # optimization log (attributes are stored flattened; the per-evaluation lists have one entry
+    # per objective call)
+    io_utils.save_fields(output_name + '_final.nc', [solution_phase, smooth_phase], attributes={
+        **parameters,
+        'nb_phase_levels': nb_phase_levels if nb_phase_levels is not None else 0,  # 0: not rounded
+        'nb_iterations': iterat,
+        'homogenized_C_ij': homogenized_C_ijkl,
+        'target_fluxes': target_fluxes,
+        'homogenized_fluxes': homogenized_fluxes,
+        'norms_sigma': norms_sigma,
+        'norms_pf': norms_pf,
+        'norms_adjoint_energy': norms_adjoint_energy,
+        'num_iteration_mech': MPI.COMM_WORLD.bcast(info_mech['num_iteration_adjoint']),  # filled on rank 0
+        'num_iteration_adjoint': MPI.COMM_WORLD.bcast(info_adjoint['num_iteration_adjoint'])})
     if MPI.COMM_WORLD.rank == 0:
-        np.savez(data_folder_path + f'{preconditioner_type}' + f'_eta_{eta}' + f'_w_{weights[0]}' + f'_log.npz',
-                 **_info)  # + f'_its_{start}_{start + iterat}'
+        print(f'Data saved to: {output_name}_final.nc' + (' and _history.nc' if save_history else ''))

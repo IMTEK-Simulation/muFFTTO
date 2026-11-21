@@ -21,6 +21,8 @@ import os
 import sys
 import inspect
 
+import time
+
 import numpy as np
 from mpi4py import MPI
 from matplotlib import pyplot as plt
@@ -38,9 +40,11 @@ if 'precond' not in inspect.signature(tr_newton_bounded).parameters:
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from muFFTTO import domain, tensor_operations
+from muFFTTO import solvers_nonlinear
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
 from muFFTTO import visualization_utils
+from muFFTTO import io_utils
 
 # ============================================================================
 # problem setup
@@ -48,9 +52,18 @@ from muFFTTO import visualization_utils
 nnn = 32
 ninc = 100
 
+# where the fields live: 'cpu' or 'gpu' (GPU needs muGrid built with CUDA + cupy)
+device = 'cpu'
+
 # plotting: deformed mesh every `plot_every` increments (0 = only the final
 # response curves).  Serial runs only -- the fields are distributed under MPI.
 plot_every = 10
+
+# saving (muFFTTO.io_utils): one frame per increment with the phase field,
+# the displacement fluctuation and the increment history, in
+# exp_data/<script>/Nx=..Ny=../tmc_run.nc.  Read it with read_tmc.py.
+# None = no output.
+output_name = 'tmc_run.nc'
 
 number_of_pixels = (nnn, nnn)
 domain_size = [1, 1]
@@ -66,7 +79,14 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
 discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
-                                       element_type=element_type)
+                                       element_type=element_type,
+                                       device=device)
+
+# field data (.s) are numpy arrays on the CPU and cupy arrays on the GPU
+if device == 'gpu':
+    import cupy as xp
+else:
+    xp = np
 
 comm = MPI.COMM_WORLD
 rank = discretization.communicator.rank
@@ -112,11 +132,11 @@ ref_mat = lam_matrix * II + 2.0 * mu_matrix * I4s
 geometry_name = 'contact_test_geometry_2'
 
 phase_field = discretization.get_scalar_field(name='phase_field')
-phase_field.s[0, 0] = microstructure_library.get_geometry(
+phase_field.s[0, 0] = xp.asarray(microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
     microstructure_name=geometry_name,
     coordinates=discretization.fft.coords
-)
+))
 
 matrix_mask = phase_field.s[0, 0] > 0
 inc_mask = phase_field.s[0, 0] == 0
@@ -173,8 +193,16 @@ LtL_field = discretization.get_displacement_sized_field(name='LtL')
 displacement_fluctuation_field = discretization.get_unknown_size_field(
     name='u_fluc')
 
-u_shape = np.asarray(displacement_fluctuation_field.s).shape
-_qw = np.asarray(discretization.quadrature_weights).reshape((-1,) + (1,) * dim)
+u_shape = displacement_fluctuation_field.s.shape
+_qw = xp.asarray(discretization.quadrature_weights).reshape((-1,) + (1,) * dim)
+
+
+# NuMPI's optimizer works with numpy vectors (host); the fields can be on the GPU
+def field_to_optimizer(field):
+    """Copy of the field data as a numpy array."""
+    if device == 'gpu':
+        return field.s.get()  # .get() already makes a host copy
+    return np.array(field.s, copy=True)
 
 
 # ============================================================================
@@ -193,7 +221,11 @@ def global_max(a):
 
 
 def dot_global(a, b):
-    return global_sum(np.dot(np.asarray(a).ravel(), np.asarray(b).ravel()))
+    return global_sum(xp.dot(a.ravel(), b.ravel()))
+
+
+def global_mean(a):
+    return global_sum(a.sum()) / max(global_sum(float(a.size)), 1.0)
 
 
 # ============================================================================
@@ -260,13 +292,13 @@ preconditioner = discretization.get_preconditioner_Green_mugrid(
 
 def precond(v):
     """Return M^-1 v."""
-    r_field.s[...] = v
+    r_field.s[...] = xp.asarray(v)
     discretization.fft.communicate_ghosts(r_field)
     discretization.apply_preconditioner_mugrid(
         preconditioner_Fourier_fnfnqks=preconditioner,
         input_nodal_field_fnxyz=r_field,
         output_nodal_field_fnxyz=Pv_field)
-    return np.array(Pv_field.s, copy=True)
+    return field_to_optimizer(Pv_field)
 
 
 # ============================================================================
@@ -284,7 +316,7 @@ INADMISSIBLE_ENERGY = 1e30
 
 
 def _set_F_from(x):
-    x_field.s[...] = x
+    x_field.s[...] = xp.asarray(x)
     set_F(lam_current, x_field, total_strain_field)
     return min_J(total_strain_field)
 
@@ -312,15 +344,33 @@ def fun_grad(x):
         apply_weights=True)
     grad_field.s[...] += Ru_field.s
 
-    return Pi, np.array(grad_field.s, copy=True)
+    return Pi, field_to_optimizer(grad_field)
+
+
+# The tangent C(F(x)) depends on the deformation state x and on the load lam_current,
+# but not on the direction v. NuMPI calls hessp(x, v) for all inner CG iterations of one
+# trust-region step with the same x, so C is computed only when (x, lam) changes.
+tangent_cache = {'x': None, 'load': None}
+
+
+def tangent_is_outdated(x):
+    """True if the cached tangent was not computed for this (x, lam_current)."""
+    outdated = (tangent_cache['x'] is None
+                or tangent_cache['load'] != lam_current
+                or not np.array_equal(tangent_cache['x'], x))
+    # all ranks must take the same decision: recomputing F communicates ghosts (collective)
+    return comm.allreduce(outdated, op=MPI.LOR)
 
 
 def hessp(x, v):
     """B v = (G^T C G + R) v, with C evaluated at x."""
-    _set_F_from(x)
-    material.get_algorithmic_tangent(total_strain_field, tangent_field)
+    if tangent_is_outdated(x):
+        _set_F_from(x)
+        material.get_algorithmic_tangent(total_strain_field, tangent_field)
+        tangent_cache['x'] = np.array(x, copy=True)
+        tangent_cache['load'] = lam_current
 
-    v_field.s[...] = v
+    v_field.s[...] = xp.asarray(v)
     discretization.fft.communicate_ghosts(v_field)
     discretization.apply_system_matrix_mugrid(
         material_data_field=tangent_field,
@@ -330,7 +380,7 @@ def hessp(x, v):
     add_regularization(v_field, Bv_field)
     discretization.fft.communicate_ghosts(Bv_field)
 
-    return np.array(Bv_field.s, copy=True)
+    return field_to_optimizer(Bv_field)
 
 
 # ============================================================================
@@ -358,6 +408,27 @@ hist_energy = []
 
 serial = discretization.communicator.size == 1
 
+# ---- output file -------------------------------------------------------------
+writer = None
+if output_name is not None:
+    data_folder_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exp_data',
+                                    os.path.splitext(os.path.basename(__file__))[0], f'Nx={nnn}Ny={nnn}')
+    if rank == 0:
+        os.makedirs(data_folder_path, exist_ok=True)
+    comm.Barrier()
+    output_path = os.path.join(data_folder_path, output_name)
+    writer = io_utils.FieldWriter(
+        output_path, [phase_field, displacement_fluctuation_field],
+        attributes={'geometry': geometry_name, 'element_type': element_type,
+                    'formulation': formulation, 'nb_grid_pts': number_of_pixels,
+                    'domain_size': np.asarray(domain_size, dtype=float), 'H_macro': H_macro,
+                    'E_matrix': E_matrix, 'nu_matrix': nu_matrix, 'k_v': k_v, 'alpha': alpha,
+                    'k_r': k_r},
+        frame_variables={'increment': (), 'lam': (), 'F10': (), 'P10': (), 'Pxx': (),
+                         'min_det_F': (), 'energy': (), 'nb_outer': (), 'nb_hessp': (),
+                         'grad_inf': (), 'converged': (), 'elapsed_time': ()})
+start_time = time.time()
+
 root_print('=' * 70)
 root_print(f'geometry     : {geometry_name}')
 root_print(f'element_type : {element_type}')
@@ -367,12 +438,12 @@ root_print(f'increments   : {ninc}')
 for inc in range(1, ninc + 1):
     lam_current = inc / float(ninc)
 
-    res = tr_newton_bounded(
+    res = solvers_nonlinear.minimize(
         fun=fun_grad,
         x0=u,
+        method='tr_newton',
         hessp=hessp,
         precond=precond,
-        jac=True,
         gtol=1e-4,
         maxiter=500,
         inner_tol=1e-6,
@@ -392,19 +463,27 @@ for inc in range(1, ninc + 1):
     root_print(f'  outer its {res.nit:4d} | hessp {res.nb_hessp:6d} '
                f'| |grad|_inf {res.max_grad:10.3e} | Pi {res.fun:12.6e}')
     root_print(f'  min(det F) {J_min:10.3e} | '
-               f'P_xx {stress_field.s[0, 0].mean():10.3e} | '
-               f'P_yx {stress_field.s[1, 0].mean():10.3e}')
+               f'P_xx {global_mean(stress_field.s[0, 0]):10.3e} | '
+               f'P_yx {global_mean(stress_field.s[1, 0]):10.3e}')
 
     hist_lam.append(lam_current)
     hist_F10.append(lam_current * H_macro[1, 0])
-    hist_P10.append(float(stress_field.s[1, 0].mean()))
-    hist_Pxx.append(float(stress_field.s[0, 0].mean()))
+    hist_P10.append(float(global_mean(stress_field.s[1, 0])))
+    hist_Pxx.append(float(global_mean(stress_field.s[0, 0])))
     hist_minJ.append(J_min)
     hist_energy.append(float(res.fun))
 
+    if writer is not None:
+        displacement_fluctuation_field.s[...] = xp.asarray(u)
+        writer.write(increment=inc, lam=lam_current, F10=lam_current * H_macro[1, 0],
+                     P10=hist_P10[-1], Pxx=hist_Pxx[-1],
+                     min_det_F=J_min, energy=float(res.fun), nb_outer=int(res.nit),
+                     nb_hessp=int(res.nb_hessp), grad_inf=float(res.max_grad),
+                     converged=int(bool(res.success)), elapsed_time=time.time() - start_time)
+
     # ---- deformed mesh -----------------------------------------------------
     if serial and plot_every and inc % plot_every == 0:
-        displacement_fluctuation_field.s[...] = u
+        displacement_fluctuation_field.s[...] = xp.asarray(u)
         x_plot_ixyz = visualization_utils.get_deformed_grid_coords_two_dim(
             discretization,
             macro_gradient_ij=lam_current * H_macro,
@@ -416,6 +495,10 @@ for inc in range(1, ninc + 1):
 
 root_print('=' * 70)
 root_print(f'final min J : {min_J(total_strain_field):.6e}')
+
+if writer is not None:
+    writer.close()
+    root_print(f'wrote       : {output_path}')
 
 # ============================================================================
 # response curves

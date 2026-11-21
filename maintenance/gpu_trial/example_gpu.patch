@@ -1,0 +1,57 @@
+--- /home/martin/PycharmProjects/muFFTTO/examples/homogenization/small_strain_elasticity/example_3D_homogenization_elasticity.py	2026-10-07 13:53:33.690826232 +0200
++++ ex3d_gpu.py	2026-10-11 15:20:09.394445151 +0200
+@@ -1,6 +1,7 @@
+ import sys
+ import os
+-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
++sys.path.insert(0, '/tmp/claude-1000/-home-martin-PycharmProjects-muFFTTO/gpu-trial/muFFTTO_gpu')
++import cupy as cp
+ 
+ import numpy as np
+ import time
+@@ -47,15 +48,15 @@
+ print(material_models.compute_Voigt_notation_4order(elastic_C_1))
+ material_data_field_C_0 = discretization.get_material_data_size_field_mugrid(name='elastic_tensor')
+ 
+-material_data_field_C_0.s[...] = elastic_C_1[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
++material_data_field_C_0.s[...] = cp.asarray(elastic_C_1)[:, :, :, :, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+ print('elastic tangent = \n {}'.format(material_models.compute_Voigt_notation_4order(elastic_C_1)))
+ 
+ # material distribution
+ phase_field = discretization.get_scalar_field(name='phase_field')
+ 
+-phase_field.s[0,0] = microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
++phase_field.s[0,0] = cp.asarray(microstructure_library.get_geometry(nb_voxels=discretization.nb_of_pixels,
+                                                     microstructure_name=geometry_ID,
+-                                                    coordinates=discretization.fft.coords)
++                                                    coordinates=discretization.fft.coords))
+ # apply material distribution
+ matrix_mask = phase_field.s[0, 0] > 0
+ inc_mask = phase_field.s[0, 0] == 0
+@@ -145,7 +146,7 @@
+ 
+             im0 = ax[0].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                    discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+-                                   solution_field.s[0, 0, ..., number_of_pixels[2] // 2])
++                                   cp.asnumpy(solution_field.s[0, 0, ..., number_of_pixels[2] // 2]))
+             ax[0].set_title(f'Solution field $u_0$ - macro gradient {macro_gradient_ij} ')
+             ax[0].set_xlabel('x  / L')
+             ax[0].set_ylabel('y  / L')
+@@ -153,7 +154,7 @@
+ 
+             im1 = ax[1].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                    discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+-                                   solution_field.s[1, 0, ..., number_of_pixels[2] // 2])
++                                   cp.asnumpy(solution_field.s[1, 0, ..., number_of_pixels[2] // 2]))
+             ax[1].set_title(f'Solution field $u_1$ - macro gradient {macro_gradient_ij} ')
+             ax[1].set_xlabel('x  / L')
+             ax[1].set_ylabel('y  / L')
+@@ -161,7 +162,7 @@
+ 
+             im2 = ax[2].pcolormesh(discretization.fft.coords[0, ..., number_of_pixels[2] // 2],
+                                    discretization.fft.coords[1, ..., number_of_pixels[2] // 2],
+-                                   solution_field.s[2, 0, ..., number_of_pixels[2] // 2])
++                                   cp.asnumpy(solution_field.s[2, 0, ..., number_of_pixels[2] // 2]))
+             ax[2].set_title(f'Solution field $u_2$ - macro gradient {macro_gradient_ij} ')
+             ax[2].set_xlabel('x  / L')
+             ax[2].set_ylabel('y  / L')
