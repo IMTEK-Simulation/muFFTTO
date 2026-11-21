@@ -15,6 +15,7 @@ from muFFTTO import domain
 from muFFTTO import solvers
 from muFFTTO import microstructure_library
 from muFFTTO import visualization_utils
+from muFFTTO import direct_solvers, solvers_nonlinear, sparse_assembly
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
@@ -33,16 +34,15 @@ INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --s
 SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, which
                             #           the trust region handles (Steihaug CG stops at negative curvature)
                             # 'spd'   = without the initial-stress part of the lam term (same solution, other path)
-VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
-                            # 'soft' = stand-in mu = 1e-4 mu_m, lam = 0 (Martin --void_mu 1e-4)
+VOID        = 'soft'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
+                            # 'soft' = stand-in mu = 1e-3 mu_m, lam = 0 (the direct solver needs stiffness everywhere)
 LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown of the energy minimization -> <P_ll> = 0 (as Martin)
                             # 'simple' = F_ll = 1 + NU_LAT eps prescribed (lateral stress up to ~1.6 % of axial)
-# Trust-region Newton-CG (as Martin's stefanus_2D_finite_strain_NeoHookean_TR.py; needs NuMPI branch feat/tr_precond)
+# Trust-region Newton with a sparse direct solver (muFFTTO solvers_nonlinear.trust_region_exact)
 GTOL          = 1e-3        # Martin --gtol: stop when max|gradient| < GTOL mu_m h d_eps (nodal force of one load step)
-TR_DELTA0     = 0.05        # Martin --delta0: initial trust-region radius (M-norm)
+TR_DELTA0     = 0.05        # Martin --delta0: initial trust-region radius (norm scaled by the Hessian diagonal)
 TR_DELTA_MAX  = 0.5         # Martin --delta_max
-TR_INNER_TOL  = 1e-6        # Martin --inner_tol: Steihaug CG relative energy-error tolerance
-TR_INNER_TAU  = 0.25        # Martin --inner_tau: adaptive delay of the energy-error estimate (minimum delay 10)
+DIRECT_SOLVER = 'auto'      # 'auto' (MUMPS if installed, else SciPy), 'scipy', 'mumps', 'cudss' (GPU); serial only
 TR_MAXITER    = 100         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
 CELLS         = (1, 2)      # (1, 1) = primitive cell; (1, 2) = 1 x 2 supercell
 IMPERFECTION  = 1e-3         # Martin --imperfection, in pixel sizes (e.g. 1e-3); 0 = perfect cell
@@ -108,7 +108,7 @@ LAM_OVER_MU  = {'paper': 1e3,   'simplified': 100.0}[MATERIAL]   # Lambda / mu, 
 C_MATRIX     = 0.25             # target matrix volume fraction c^(m) ratio            [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
-MU_V_MPA     = 1e-4 * MU_M_MPA if VOID == 'soft' else 0.0   # void: stand-in [MPa], or 0 for the true hole
+MU_V_MPA     = 1e-3 * MU_M_MPA if VOID == 'soft' else 0.0   # void: stand-in [MPa], or 0 for the true hole
 
 # Reference scales (nondimensionalisation) ====================================================
 L_REF = R_MM        # length scale  [mm]  -> lengths in units of r
@@ -169,9 +169,9 @@ file_folder_path   = os.path.dirname(os.path.realpath(__file__))
 run_tag            = ('' if tuple(CELLS) == (1, 1) else f'_cells{CELLS[0]}x{CELLS[1]}') + \
                      ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}')
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_direct_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{preconditioner_type}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_direct_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
@@ -502,13 +502,12 @@ hist = {'eps_nominal': [0.0], 'P_load': [0.0], 'P_lat': [0.0], 'lateral_stretch'
         'H': [np.zeros((dim, dim))], 'P': [np.zeros((dim, dim))]}   # full macro F - I and average P# ====================================================================================================================================================
 
 # ============================================================================
-# trust-region Newton-CG, as Martin's stefanus_2D_finite_strain_NeoHookean_TR.py (lines 189-623)
+# trust-region Newton with a sparse direct solver (each subproblem solved exactly, More-Sorensen)
 # ============================================================================
 #   unknowns x = (u, f): u = periodic fluctuation (all nodes), f = F_ll - 1 (only if LATERAL = 'exact', stored on
 #   rank 0, scaled by 1 / F_SCALE). The trust region minimizes the total energy; stationarity in f is <P_ll> = 0.
 #   load parameter t in [0, 1]: F_macro = I + t E_LOAD load_pattern (F_ll replaced by 1 + f if it is an unknown);
 #   a failed trust-region solve halves the step, a success lets it grow back (x 2) up to 1 / ninc (Martin l. 586-624)
-from NuMPI.Optimization import tr_newton_bounded      # NuMPI branch feat/tr_precond (precond, inner_stop)
 comm        = discretization.communicator
 rank0       = MPI.COMM_WORLD.rank == 0
 LAT_UNKNOWN = LATERAL == 'exact' and LOAD_MODE == 'fig4'
@@ -591,13 +590,19 @@ def tr_hessp(x, v):
                                                              div_u_fnxyz=tr_out, apply_weights=True)
     return tr_join_dual(tr_out.s.ravel().copy(), sum_ll(dP_field))
 
-def tr_precond(r):
-    """Green on u; the macro unknown scaled by 1 / (V mu_m) -- Martin l. 465-485"""
-    tr_in.s[...] = r[:nb_u].reshape(tr_in.s.shape)
-    M_fun_Green(tr_in, tr_out)
-    if LAT_UNKNOWN and rank0:
-        return np.concatenate([tr_out.s.ravel().copy(), [float(r[nb_u]) / (V_total * F_SCALE ** 2)]])
-    return tr_out.s.ravel().copy()
+assembly = sparse_assembly.SparseAssembly(discretization)   # element-by-element assembly of the Hessian
+direct   = direct_solvers.symmetric_solver(DIRECT_SOLVER)
+fixed    = np.ravel_multi_index(([0, 1], [0, 0], [0, 0], [0, 0]), u_work.s.shape)   # node 0: no rigid translation
+
+def tr_hess(x):
+    """Hessian of the energy in (u, f) as a sparse matrix: the u-u block assembled element by element from sri_dP,
+    the lateral unknown f as one extra (bordered) row and column, H e_f from tr_hessp"""
+    e_f = np.zeros_like(x)
+    if LAT_UNKNOWN:
+        e_f[nb_u] = 1.0
+    column_f = tr_hessp(x, e_f)               # (also brings the SRI state to x)
+    H = assembly.assemble(lambda dF: sri_dP(dF, sri_state))
+    return sparse_assembly.bordered(H, column_f) if LAT_UNKNOWN else H
 
 max_step, t_load, inc = 1.0 / ninc, 0.0, 0
 min_step = max_step / 64
@@ -610,10 +615,10 @@ while t_load < 1.0 - 1e-12:
     d_t = min(d_t, 1.0 - t_load)
     tr_F_macro[...] = np.eye(dim) + (t_load + d_t) * E_LOAD * load_pattern
     tr_state['hess_at'], tr_state['cg'] = None, 0
-    res = tr_newton_bounded(tr_fun, x_cur, tr_hessp, precond=tr_precond, gtol=GTOL_ABS, maxiter=TR_MAXITER,
-                            delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, inner_stop='energy', inner_delay=10,
-                            inner_tol=TR_INNER_TOL, inner_tau=TR_INNER_TAU, comm=MPI.COMM_WORLD, disp=rank0)
-    sum_CG_its     += tr_state['cg']
+    res = solvers_nonlinear.trust_region_exact(tr_fun, x_cur, tr_hess, gtol=GTOL_ABS, maxiter=TR_MAXITER,
+                                               delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, fixed=fixed, solver=direct,
+                                               disp=rank0)
+    sum_CG_its     += res.nfactorisations     # (direct solver: factorisations instead of CG iterations)
     sum_Newton_its += res.nit
     ok = bool(res.success) and res.fun < 0.5 * INADMISSIBLE_ENERGY
     if not ok:                                # keep x_cur (last converged state), halve the step
@@ -651,12 +656,13 @@ while t_load < 1.0 - 1e-12:
         if LOAD_MODE == 'fig4':
             print(f'inc {inc:3d}  eps = {hist["eps_nominal"][-1]:.5f} (step {d_t * E_LOAD * EPS_MAX[LOAD_DIRECTION]:.4f}) | '
                   f'nominal stress = {-P_avg[k, k] * S_REF:.6f} MPa | lateral stress = {P_avg[l, l] * S_REF:+.2e} MPa '
-                  f'({abs(P_avg[l, l] / P_avg[k, k]):.2%} of axial) | TR its {res.nit}, CG its {tr_state["cg"]}',
+                  f'({abs(P_avg[l, l] / P_avg[k, k]):.2%} of axial) | TR its {res.nit}, factorisations {res.nfactorisations}, '
+                  f'negative eigenvalues {res.negative_eigenvalues}',
                   flush=True)
         else:
             print(f'inc {inc:3d}  t = {t_load:.4f} | F - I = {np.array2string(total_macro_gradient.ravel(), precision=5)} | '
                   f'P [MPa] = {np.array2string(P_avg.ravel() * S_REF, precision=6)} | TR its {res.nit}, '
-                  f'CG its {tr_state["cg"]}', flush=True)
+                  f'factorisations {res.nfactorisations}, negative eigenvalues {res.negative_eigenvalues}', flush=True)
     if plot_load_cases and discretization.communicator.size == 1:
         L_cell = np.diag(domain_size)
         u_unit_cell.s[0] = displacement_fluctuation_field.s[0] / domain_size[0]
@@ -685,7 +691,7 @@ if discretization.communicator.rank == 0:
     print(f'number_of_pixels : {number_of_pixels}  (cells {CELLS[0]} x {CELLS[1]}, imperfection {IMPERFECTION:g})')
     print(f'preconditioner   : {preconditioner_type}')
     print(f'MPI processes    : {MPI.COMM_WORLD.size}')
-    print(f'Total CG its     : {sum_CG_its}')
+    print(f'Total factorisations: {sum_CG_its}  (direct solver: {direct.name})')
     print(f'Total TR its     : {sum_Newton_its}  (trust-region Newton iterations)')
     print(f'Elapsed time     : {elapsed_time:.2f} s  ({elapsed_time / 60:.2f} min)')
     np.savez(data_folder_path + 'info_log_final.npz', **_info)
