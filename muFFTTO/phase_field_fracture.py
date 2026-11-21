@@ -19,7 +19,7 @@ With the history field the damage equation (stationarity of Pi in d, psi^+ repla
 
 and SPD, solved by :func:`muFFTTO.solvers.conjugate_gradients`. The elastic problem of the 'hybrid' formulation
 (Ambati, Gerasimov & De Lorenzis 2015) uses the isotropic degradation ``C(d) = g(d) C_0`` and stays linear; with
-``C_0`` a constant tensor it is the :class:`muFFTTO.domain.ScaledMaterial` ``g(d) C_0``, preconditioned by
+``C_0`` a constant tensor it is the :class:`muFFTTO.material_data.ScaledMaterial` ``g(d) C_0``, preconditioned by
 :class:`muFFTTO.preconditioners.Dual`. Fields: the damage lives on a scalar ('conductivity') discretization of the
 same grid as the displacement; quadrature-point arrays are ``[q, x, y(, z)]``.
 

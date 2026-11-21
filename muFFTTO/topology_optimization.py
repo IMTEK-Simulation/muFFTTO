@@ -81,6 +81,8 @@ import scipy as sc
 import time
 
 from muFFTTO import domain
+from muFFTTO.material_data import ScaledMaterial
+from muFFTTO.tensor_operations import quad_point_blocks
 from muFFTTO import solvers
 
 from mpi4py import MPI
@@ -1022,7 +1024,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # dC/drho at quadrature points: p * rho_q^(p-1) * (C_1 - C_0)  -> [d,d,d,d,q,x,y(,z)]
     # (scalar field x constant tensor: no full [d,d,d,d,q,x,y] field is stored)
-    dmaterial_data_drho = domain.ScaledMaterial(
+    dmaterial_data_drho = ScaledMaterial(
         [(p * phase_field_at_quad_poits_1qxyz.s[0, 0] ** (p - 1), material_data_field_ijkl - void_material_data_ijkl)])
     # I consider linear interpolation of material  C_ijkl= p*rho**(p-1) C^0_ijkl
     # so  ∂ C_ijkl/ ∂ rho = 1* C^0_ijkl
@@ -1048,7 +1050,7 @@ def partial_derivative_of_objective_function_stress_equivalence_wrt_phase_field_
 
     # (Sigma_t - Sigma_h) : dsigma/drho at every quadrature point -> [1, 1, q, x, y(, z)]
     double_contraction_stress_qxyz_FE = discretization.get_quad_field_scalar(name='temp_at_quads')
-    for q in domain.quad_point_blocks(strain_ijqxyz.s.shape[2], discretization.low_memory):
+    for q in quad_point_blocks(strain_ijqxyz.s.shape[2], discretization.low_memory):
         double_contraction_stress_qxyz_FE.s[0, 0, q] = np.einsum('ij,ijq...->q...', stress_difference_ij,
                                                                  strain_ijqxyz.s[:, :, q])
     # N^T W [...] : integrate against the nodal shape functions -> nodal field
@@ -1203,7 +1205,7 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
 
     # dC/drho = p rho_q^(p-1) (C_1 - C_0) at every quadrature point
     # (scalar field x constant tensor: no full [d,d,d,d,q,x,y] field is stored)
-    dmaterial_data_field_drho_ijklqxyz = domain.ScaledMaterial(
+    dmaterial_data_field_drho_ijklqxyz = ScaledMaterial(
         [(p * phase_field_at_quad_poits_1qxyz.s[0, 0] ** (p - 1), base_material_data_ijkl - void_material_data_ijkl)])
     # compute strain field from to displacement and macro gradient
     # -> stress_ijqxyz = dC/drho : (E + grad^s u)  ("stress derivative")
@@ -1230,7 +1232,7 @@ def partial_derivative_of_adjoint_potential_wrt_phase_field_FE(discretization,
                                                   grad_u_ijqxyz=adjoint_field_gradient_ijqxyz)
     # ddot22 = lambda A2, B2:  np.einsum('ijqxyz  ,jiqxyz  ->qxyz    ', A2, B2)
     double_contraction_stress_qxyz = discretization.get_quad_field_scalar(name='double_contraction_stress_qxyz')
-    for q in domain.quad_point_blocks(stress_ijqxyz.s.shape[2], discretization.low_memory):
+    for q in quad_point_blocks(stress_ijqxyz.s.shape[2], discretization.low_memory):
         double_contraction_stress_qxyz.s[0, 0, q] = np.einsum('ij...,ij...->...',
                                                               adjoint_field_gradient_ijqxyz.s[:, :, q],
                                                               stress_ijqxyz.s[:, :, q])
@@ -1402,7 +1404,7 @@ def sensitivity_stress_and_adjoint_FE_NEW(discretization,
     # SIMP: C(rho_q) = (C_1 - C_0) rho_q^p + C_0 at every quadrature point
     # (same as material_interpolation_simp)
     # (two terms 'scalar field x constant tensor': no full [d,d,d,d,q,x,y] field is stored)
-    material_data_field_rho_ijklqxyz = domain.ScaledMaterial(
+    material_data_field_rho_ijklqxyz = ScaledMaterial(
         [(phase_field_at_quad_poits_1qxyz.s[0, 0] ** p, base_material_data_ijkl - void_material_data_ijkl),
          (1.0, void_material_data_ijkl)])
 

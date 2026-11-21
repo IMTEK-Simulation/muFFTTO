@@ -20,6 +20,10 @@ Optimization (energy minimization, topology optimization)
 
     :func:`mma_bounded` is the MMA implementation (also usable directly).
 
+    :func:`trust_region_exact` is a trust-region Newton method whose subproblems are solved exactly with a sparse
+    direct solver (:mod:`muFFTTO.direct_solvers`, Hessian assembled by :mod:`muFFTTO.sparse_assembly`); it returns
+    the number of negative eigenvalues of the Hessian at the solution (stability / buckling).
+
 MMA
     Method of Moving Asymptotes (MMA, Svanberg 1987 / 2007) for box-constrained problems with an optional single
     linear (volume) constraint.
@@ -938,4 +942,216 @@ def mma_bounded(fun, x0, args=(), jac=True, bounds_lo=0.0, bounds_hi=1.0, constr
             return finish(True, it, 'CONVERGENCE: NORM_OF_PROJECTED_GRADIENT_<=_GTOL')
         if xtol > 0 and step < xtol:
             return finish(True, it, 'CONVERGENCE: MAX_STEP_<=_XTOL')
+    return finish(False, maxiter, 'NO CONVERGENCE: MAXITERATIONS REACHED')
+
+
+# ======================================================================================================================
+# trust-region Newton with the exact subproblem solution (sparse direct solver)
+# ======================================================================================================================
+def _shifted(H, sigma, d2):
+    """H + sigma diag(d2) with the sparsity pattern of H (H holds its diagonal)."""
+    K = H.copy()
+    K.setdiag(H.diagonal() + sigma * d2)
+    return K
+
+
+def _lowest_eigenpair(H, d2, solver, sigma_guess):
+    """For an indefinite H: lambda_min of H v = lambda D^2 v and its eigenvector (v.D^2 v = 1), or None if Lanczos
+    does not converge (then only the bracket of shifts is known). First a shift sigma_pd with H + sigma_pd D^2
+    positive definite (from the guess and the diagonal bound lambda_min <= min H_ii / d_i^2, x 10 until positive
+    definite), then shift-invert Lanczos with that factorisation (capped: with clustered negative eigenvalues it
+    may not converge). Returns lambda_min (estimate), v or None, sigma_pd, the number of factorisations."""
+    import scipy.sparse as sparse
+    import scipy.sparse.linalg as sparse_linalg
+    sigma_pd = max(sigma_guess, -1.01 * (H.diagonal() / d2).min(), 1e-12)
+    sigma_indefinite, factorisations = 0.0, 1
+    while solver.factorise(_shifted(H, sigma_pd, d2)) != 0:
+        sigma_indefinite, sigma_pd = sigma_pd, 10.0 * sigma_pd
+        factorisations += 1
+    shift_invert = sparse_linalg.LinearOperator(H.shape, matvec=solver.solve_once, dtype=float)
+    try:
+        eigenvalue, eigenvector = sparse_linalg.eigsh(H, k=1, M=sparse.diags(d2), sigma=-sigma_pd, which='LM',
+                                                      OPinv=shift_invert, tol=1e-3, ncv=30, maxiter=300)
+    except sparse_linalg.ArpackNoConvergence:
+        return -sigma_indefinite, None, sigma_pd, factorisations
+    v = eigenvector[:, 0] / np.sqrt(eigenvector[:, 0] @ (d2 * eigenvector[:, 0]))
+    return float(eigenvalue[0]), v, sigma_pd, factorisations
+
+
+def _trust_region_subproblem(H, g, d2, delta, sigma_guess, known, solver):
+    """s minimizing g.s + s.H s / 2 subject to ||D s|| <= delta (More & Sorensen 1983).
+
+    s(sigma) = -(H + sigma D^2)^-1 g with sigma >= max(0, -lambda_min) and ||D s|| = delta (or sigma = 0 and the
+    Newton step inside), found by Newton's method on phi(sigma) = 1/||D s|| - 1/delta (nearly linear in sigma),
+    safeguarded by a bracket; accepted at | ||D s|| - delta | <= 0.1 delta. Hard case (||D s|| < delta for all
+    sigma > -lambda_min): s(sigma) + tau v on the boundary. ``known`` holds what is known about H (inertia, Newton
+    step, lambda_min) and is reused when the step is rejected (same H). Returns s, sigma, #factorisations."""
+    factorisations = 0
+    if known['negative'] == 0:
+        s = known['newton_step']
+        norm = np.sqrt(s @ (d2 * s))
+        if norm <= delta:
+            return s, 0.0, 0
+        sigma_low = 0.0
+        sigma = norm ** 2 / (s @ (d2 * known['newton_q'])) * (norm - delta) / delta     # Newton from sigma = 0
+    else:
+        if 'lambda_min' not in known:
+            known['lambda_min'], known['v'], sigma, factorisations = _lowest_eigenpair(H, d2, solver, sigma_guess)
+        else:
+            sigma = max(sigma_guess, -known['lambda_min'] * (1 + 1e-3), 1e-12)
+        sigma_low = max(0.0, -known['lambda_min'])
+    sigma_high = np.inf
+    for _ in range(40):
+        factorisations += 1
+        if solver.factorise(_shifted(H, sigma, d2)) != 0:      # below -lambda_min (estimate inexact): increase
+            sigma_low = sigma
+            sigma = 2.0 * sigma if np.isinf(sigma_high) else 0.5 * (sigma_low + sigma_high)
+            continue
+        s = solver.solve(-g)
+        norm = np.sqrt(s @ (d2 * s))
+        if abs(norm - delta) <= 0.1 * delta:
+            break
+        if norm > delta:
+            sigma_low = sigma
+        else:
+            sigma_high = sigma
+        q = solver.solve(d2 * s)
+        sigma_newton = sigma + norm ** 2 / (s @ (d2 * q)) * (norm - delta) / delta
+        if sigma_low < sigma_newton < sigma_high:
+            sigma = sigma_newton
+        elif known['negative'] != 0 and known.get('v') is not None and norm < delta \
+                and sigma - sigma_low < 1e-2 * sigma:
+            v = known['v']                                      # hard case: add the eigenvector up to the boundary
+            b, c = s @ (d2 * v), s @ (d2 * s) - delta ** 2
+            candidates = [s + tau * v for tau in (-b + np.sqrt(b * b - c), -b - np.sqrt(b * b - c))]
+            s = min(candidates, key=lambda p: g @ p + 0.5 * p @ (H @ p))
+            break
+        else:
+            sigma = np.sqrt(sigma_low * sigma_high) if sigma_low > 0 and np.isfinite(sigma_high) \
+                else (0.5 * (sigma_low + sigma_high) if np.isfinite(sigma_high) else 10.0 * sigma)
+    return s, sigma, factorisations
+
+
+def trust_region_exact(fun, x0, hess, gtol=1e-5, maxiter=200, delta0=0.05, delta_max=0.5, scaling=None,
+                       fixed=None, solver='auto', report_inertia=True, callback=None, disp=False):
+    """
+    Trust-region Newton method with the exact solution of each subproblem by a sparse direct solver.
+
+    Each iteration factorises H + sigma D^2 (a few times) to solve the trust-region subproblem exactly
+    (More & Sorensen 1983): negative curvature, including the "hard case", is handled exactly. The factorisation
+    also gives the inertia: the number of negative eigenvalues of the Hessian at the solution is returned, which
+    tells whether the converged state is stable (0) -- e.g. whether a structure has buckled.
+
+    Same calling convention as :func:`NuMPI.Optimization.tr_newton_bounded`, but with the Hessian as a sparse
+    matrix (see :class:`muFFTTO.sparse_assembly.SparseAssembly`) instead of a Hessian-vector product. Serial only.
+
+    Parameters
+    ----------
+    fun : callable
+        ``fun(x) -> (f, g)``. Return a huge f (e.g. 1e30 or inf) for an inadmissible x (inverted elements): the
+        step is rejected and the radius shrinks.
+    x0 : ndarray
+        Starting point.
+    hess : callable
+        ``hess(x) -> H``, the Hessian at x as a symmetric scipy.sparse matrix that holds its diagonal; called right
+        after ``fun(x)`` at the same x.
+    gtol : float
+        Convergence: max |g| over the free unknowns <= gtol.
+    maxiter : int
+        Maximum number of trust-region iterations.
+    delta0, delta_max : float
+        Initial and largest radius, in the scaled root-mean-square norm ||D s|| / sqrt(n_free) (as NuMPI).
+    scaling : ndarray or None
+        D^2 (positive, one per unknown): the trust region is ||D s|| <= delta. None: |diag H(x0)|.
+    fixed : array of int or bool, or None
+        Unknowns kept at their x0 values (e.g. one node of a periodic cell against rigid translation).
+    solver : str or direct_solvers.SymmetricSolver
+        'auto' (MUMPS if installed, else SciPy), 'scipy', 'mumps', 'cudss', or a solver object (reuse it between
+        calls with the same sparsity pattern: the symbolic analysis is kept).
+    report_inertia : bool
+        Factorise the Hessian at the solution to count its negative eigenvalues (``result.negative_eigenvalues``).
+    callback : callable or None
+        ``callback(x)`` after every accepted step.
+    disp : bool
+        Print one line per iteration.
+
+    Returns
+    -------
+    OptimizeResult
+        ``x, fun, jac, nit, nfev, nfactorisations, success, message, negative_eigenvalues, delta, sigma``.
+    """
+    from muFFTTO import direct_solvers
+    if isinstance(solver, str):
+        solver = direct_solvers.symmetric_solver(solver)
+    x = np.array(x0, dtype=float)
+    free = np.ones(x.size, dtype=bool)
+    if fixed is not None:
+        free[np.asarray(fixed)] = False
+    nb_free = int(free.sum())
+
+    f, g = fun(x)
+    nfev, nfact, sigma, delta = 1, 0, 0.0, float(delta0)
+    H, known = None, None
+    d2 = None if scaling is None else np.asarray(scaling, dtype=float)[free]
+
+    def finish(success, nit, message):
+        negative = None
+        if report_inertia:
+            fun(x)
+            negative = solver.factorise(hess(x)[free][:, free])
+        if disp:
+            print(f'trust_region_exact: {message} after {nit} iterations, {nfact} factorisations'
+                  + ('' if negative is None else f', {negative} negative eigenvalues of H'), flush=True)
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nfev': nfev, 'nfactorisations': nfact, 'negative_eigenvalues': negative,
+                               'delta': delta, 'sigma': sigma})
+
+    delta_of_sigma = delta
+    for iteration in range(1, maxiter + 1):
+        if np.abs(g[free]).max() <= gtol:
+            return finish(True, iteration - 1, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL')
+        if H is None:                                           # new point: the Hessian and what it alone gives
+            H = hess(x)[free][:, free]
+            if d2 is None:
+                d2 = np.abs(H.diagonal())
+                d2[d2 <= 1e-12 * d2.max()] = 1e-12 * d2.max()
+            known = {'negative': solver.factorise(H)}
+            nfact += 1
+            if known['negative'] == 0:
+                known['newton_step'] = solver.solve(-g[free])
+                known['newton_q'] = solver.solve(d2 * known['newton_step'])
+        # warm start: sigma ~ |g| / delta for large sigma
+        s_free, sigma, n = _trust_region_subproblem(H, g[free], d2, delta * np.sqrt(nb_free),
+                                                    sigma * delta_of_sigma / delta, known, solver)
+        nfact += n
+        delta_of_sigma = delta
+        s = np.zeros_like(x)
+        s[free] = s_free
+        predicted = -(g[free] @ s_free + 0.5 * s_free @ (H @ s_free))
+        f_new, g_new = fun(x + s)
+        nfev += 1
+        if not np.isfinite(f_new) or predicted <= 0:
+            rho = -np.inf
+        elif max(abs(f - f_new), predicted) <= 1e-8 * abs(f):
+            # near convergence the energy change is at its round-off: use the energy difference from the gradients,
+            # f(x + s) - f(x) = int_0^1 g(x + t s).s dt ~ (g(x) + g(x + s)).s / 2 (trapezoid, no cancellation)
+            rho = -0.5 * (g[free] + g_new[free]) @ s_free / predicted
+        else:
+            rho = (f - f_new) / predicted
+        if rho < 0.25:
+            delta *= 0.25
+        elif rho > 0.75 and sigma > 0:
+            delta = min(2.0 * delta, delta_max)
+        if rho > 0.1:
+            x, f, g, H = x + s, f_new, g_new, None
+            if callback is not None:
+                callback(x)
+        else:
+            fun(x)                                              # back to the state of x (H is kept)
+            nfev += 1
+        if disp:
+            print(f'  TR {iteration:4d}: f {f:.10e}  max|g| {np.abs(g[free]).max():.2e}  rho {rho:9.3g}  '
+                  f'sigma {sigma:.2e}  delta {delta:.2e}  negative eigenvalues {known["negative"]}', flush=True)
+        if delta < 1e-12 * delta0:
+            return finish(False, iteration, 'NO CONVERGENCE: TRUST REGION RADIUS BELOW 1e-12 delta0')
     return finish(False, maxiter, 'NO CONVERGENCE: MAXITERATIONS REACHED')

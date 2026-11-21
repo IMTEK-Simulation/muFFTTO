@@ -50,6 +50,7 @@ from mpi4py import MPI
 from muGrid import linalg
 
 from . import domain, tensor_operations
+from .material_data import ScaledMaterial
 
 FULLY_INTEGRATED = {'trilinear_hexahedron_1Q': 'trilinear_hexahedron',
                     'trilinear_hexahedron_1Q_hg': 'trilinear_hexahedron'}
@@ -210,7 +211,7 @@ class Level:
             self.operator = operator([float(h) for h in discretization.pixel_size], muGrid.FEMElement.q1)
         else:
             assert self.dtype == np.float64, 'single precision is implemented for the fused operator'
-            self.material = domain.ScaledMaterial([(self.scale, C_0)])
+            self.material = ScaledMaterial([(self.scale, C_0)])
             assert self.material.minor_symmetric, 'C_0 must be minor symmetric (C_ijkl = C_ijlk)'
             self.stress = discretization.get_gradient_size_field(name='grad_field_temporary')   # the shared scratch
         self.x = self.vector('mg_x') if own_solution_fields else None
@@ -314,7 +315,7 @@ class Multigrid:
     ----------
     scale : muGrid Field [1, 1, q, x, y(, z)]
         The fine-level scale ``s`` at the quadrature points: write it, then call :meth:`setup`.
-    material : domain.ScaledMaterial
+    material : ScaledMaterial
         ``s C_0`` on the fine level (stencil operator; None for the fused one).
     apply_K : callable
         ``apply_K(x, Ax)``: the fine-level operator the cycle preconditions, in double precision.

@@ -3,6 +3,17 @@ This file lists all changes to the code
 Unreleased
 ----------
 
+* Direct solution of (finite-strain) cell problems, serial:
+  - `muFFTTO/direct_solvers.py`: symmetric sparse factorisation with the inertia (number of negative eigenvalues);
+    backends SciPy (default, SuperLU without pivoting, pip-installable), MUMPS and cuDSS (optional).
+  - `muFFTTO/sparse_assembly.py`: the system matrix `B^T W tangent B` assembled element by element from any
+    pixel-local tangent (equals the matrix-free operator), `bordered` for an extra macroscopic unknown.
+  - `solvers_nonlinear.trust_region_exact`: trust-region Newton with the exact subproblem (More-Sorensen, hard
+    case), reports the negative eigenvalues of the Hessian at the solution (buckling).
+* `ScaledMaterial` moved to `muFFTTO/material_data.py` (still `domain.ScaledMaterial`); `quad_point_blocks` to
+  `tensor_operations` (still `domain.quad_point_blocks`).
+* Fixed `Discretization.subdomain_locations_no_buffers` (+1 per axis under MPI).
+
 * Consolidation (2026-11-18, `maintenance/CONSOLIDATION_PLAN.md`): muFFTTO is the readable prototyping library;
   the studies moved to separate repositories (`muFFTTO-dual-preconditioner`, `muFFTTO-multigrid`, `muFFTTO-contact`,
   `muFFTTO-stefanus`, each with a frozen copy of the library at tag `pre-consolidation`).
