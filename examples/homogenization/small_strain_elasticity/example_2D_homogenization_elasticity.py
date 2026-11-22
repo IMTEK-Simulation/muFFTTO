@@ -19,7 +19,7 @@ element_type = 'bilinear_rectangle'# 'biquadratic_rectangle'#'linear_triangles'
 formulation = 'small_strain'
 
 domain_size = [1, 1]
-number_of_pixels = (128,128)
+number_of_pixels = (32,32)
 
 my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
                                   problem_type=problem_type)
@@ -164,7 +164,7 @@ for i in range(dim):
                 print(f"Plotting failed:  ")
         # ----------------------------------------------------------------------
         # compute homogenized stress field corresponding
-        homogenized_C_ijkl[i, j] = discretization.get_homogenized_stress_mugrid(
+        homogenized_C_ijkl[:, :, i, j] = discretization.get_homogenized_stress_mugrid(
             material_data_field_ijklqxyz=material_data_field_C_0,
             displacement_field_inxyz=solution_field,
             macro_gradient_field_ijqxyz=macro_gradient_field,

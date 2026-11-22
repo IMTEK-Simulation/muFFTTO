@@ -117,7 +117,7 @@ for i in range(dim):
             print(f"{it:5} norm of residual = {norm_of_rr:.5}")
 
 
-    solvers.conjugate_gradients_mugrid(
+    solvers.conjugate_gradients(
         comm=discretization.communicator,
         fc=discretization.field_collection,
         hessp=K_fun,  # linear operator
@@ -126,8 +126,7 @@ for i in range(dim):
         P=M_fun,
         tol=1e-5,
         maxiter=2000,
-        callback=callback, rtol=True
-    )
+        callback=callback)
 
     if discretization.communicator.size == 1:
         # Plot the first component of the solution field
@@ -149,7 +148,7 @@ for i in range(dim):
                                                axis=tuple(range(-3, 0)))
     print('rank' f'{MPI.COMM_WORLD.rank:6} sum_sol =' f'{sum_sol}')
 
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
+    homogenized_A_ij[:, i] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field)
@@ -207,7 +206,7 @@ if discretization.communicator.rank == 0:
     print(f"{len(norms):1} norm of residual = {', '.join(f'{v}' for v in norms)}")
 
 for i in range(dim):
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
+    homogenized_A_ij[:, i] = discretization.get_homogenized_stress_mugrid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         displacement_field_inxyz=list_of_solution_field[i],
         macro_gradient_field_ijqxyz=list_of_macro_gradient_field[i])

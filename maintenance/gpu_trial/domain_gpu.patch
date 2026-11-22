@@ -1,0 +1,82 @@
+--- /home/martin/PycharmProjects/muFFTTO/muFFTTO/domain.py	2026-10-07 13:53:33.692398002 +0200
++++ muFFTTO_gpu/muFFTTO/domain.py	2026-10-11 15:20:30.256258001 +0200
+@@ -60,6 +60,16 @@
+ from muGrid import GenericLinearOperator  # ConvolutionOperator
+ from muGrid import Field
+ 
++try:
++    import cupy as _cp
++except ImportError:  # CPU-only installs
++    _cp = None
++
++
++def _xp(a):
++    """numpy or cupy, matching where ``a`` lives."""
++    return _cp.get_array_module(a) if _cp is not None else np
++
+ from muFFTTO import discretization_library, tensor_operations
+ 
+ 
+@@ -1225,6 +1235,7 @@
+         """
+ 
+         # broadcast E_ij to every quadrature point and pixel: append (ndim-2) singleton axes
++        macro_gradient_ij = _xp(macro_gradient_field_ijqxyz.s).asarray(macro_gradient_ij)
+         macro_gradient_field_ijqxyz.s[..., :] = macro_gradient_ij[
+             (...,) + (np.newaxis,) * (macro_gradient_field_ijqxyz.s.ndim - 2)]
+         return macro_gradient_field_ijqxyz
+@@ -1297,8 +1308,12 @@
+         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+ 
+         # sum over the last (d + 1) axes = quadrature points q and pixels x, y(, z); global MPI sum
+-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
+-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
++        # reduce locally on the device, then over MPI on host (MPI is not CUDA-aware)
++        local_sum_ij = gradient_field_ijqxyz.s.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
++        if _cp is not None and isinstance(local_sum_ij, _cp.ndarray):
++            local_sum_ij = local_sum_ij.get()
++        homogenized_stress_ij = np.empty_like(local_sum_ij)
++        MPI.COMM_WORLD.Allreduce(np.ascontiguousarray(local_sum_ij), homogenized_stress_ij, op=MPI.SUM)  #
+         return homogenized_stress_ij / self.cell.domain_volume
+ 
+     def get_homogenized_energy_mugrid(self,
+@@ -1425,8 +1440,12 @@
+ 
+         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+ 
+-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
+-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
++        # reduce locally on the device, then over MPI on host (MPI is not CUDA-aware)
++        local_sum_ij = gradient_field_ijqxyz.s.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
++        if _cp is not None and isinstance(local_sum_ij, _cp.ndarray):
++            local_sum_ij = local_sum_ij.get()
++        homogenized_stress_ij = np.empty_like(local_sum_ij)
++        MPI.COMM_WORLD.Allreduce(np.ascontiguousarray(local_sum_ij), homogenized_stress_ij, op=MPI.SUM)  #
+         return homogenized_stress_ij / self.cell.domain_volume
+ 
+     def get_homogenized_stress_mugrid_deformed_grid(self, material_data_field_ijklqxyz,
+@@ -1495,8 +1514,12 @@
+         self.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=gradient_field_ijqxyz)
+         gradient_field_ijqxyz.s[...] = gradient_field_ijqxyz.s[...] * det_F.s[...][None, None, ...]
+ 
+-        homogenized_stress_ij = self.mpi_reduction.sum(gradient_field_ijqxyz.s,
+-                                                       axis=tuple(range(-self.domain_dimension - 1, 0)))  #
++        # reduce locally on the device, then over MPI on host (MPI is not CUDA-aware)
++        local_sum_ij = gradient_field_ijqxyz.s.sum(axis=tuple(range(-self.domain_dimension - 1, 0)))
++        if _cp is not None and isinstance(local_sum_ij, _cp.ndarray):
++            local_sum_ij = local_sum_ij.get()
++        homogenized_stress_ij = np.empty_like(local_sum_ij)
++        MPI.COMM_WORLD.Allreduce(np.ascontiguousarray(local_sum_ij), homogenized_stress_ij, op=MPI.SUM)  #
+         return homogenized_stress_ij / self.cell.domain_volume
+ 
+     def get_stress_field_mugrid(self,
+@@ -1694,7 +1717,8 @@
+         None
+         """
+         # apply quadrature weights without material data
+-        grad_field.s[...] = np.einsum('ijq...,q->ijq...', grad_field.s, self.quadrature_weights)
++        grad_field.s[...] = _xp(grad_field.s).einsum('ijq...,q->ijq...', grad_field.s,
++                                                     _xp(grad_field.s).asarray(self.quadrature_weights))
+ 
+     def apply_material_data(self, material_data, gradient_field):
+         """Legacy (numpy-returning) constitutive map, dispatched on problem type.

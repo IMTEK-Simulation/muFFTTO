@@ -185,7 +185,7 @@ for i in range(dim):
                                                axis=tuple(range(-3, 0)))
     print('rank' f'{MPI.COMM_WORLD.rank:6} sum_sol =' f'{sum_sol}')
 
-    homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid_deformed_grid(
+    homogenized_A_ij[:, i] = discretization.get_homogenized_stress_mugrid_deformed_grid(
         material_data_field_ijklqxyz=material_data_field_C_0,
         temperature_field_inxyz=solution_field,
         macro_gradient_field_ijqxyz=macro_gradient_field,

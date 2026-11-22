@@ -16,13 +16,23 @@ increment is one plain call to `tr_newton_bounded`.
 
 SAVING (for muEye)
 ------------------
-One NetCDF file, written frame by frame, holding fields muEye can render:
+One NetCDF file, written with muFFTTO.io_utils.FieldWriter, one frame per
+stored increment (`dump_every`).  Fields muEye can render:
 
   u_total      displacement, dim components   -> Dataset panel "Displacement"
+  u_fluc_only  the fluctuation alone, same units
   phase_field  1 = matrix, 0 = third medium
   detF         det F
   F_flat       F, 4 components, c = i*dim + j
   P_flat       P, 4 components, c = i*dim + j
+
+plus the raw fluctuation `u_fluc` (physical units, restart with
+io_utils.load_fields) and, as frame variables, the increment history: lam,
+applied_deformation_gradient, F10, P10, Pxx, min_det_F, energy, nb_outer,
+nb_hessp, nb_precond, grad_inf, converged, elapsed_time.  Run parameters are
+global attributes.  Every frame is synced to disk, so a killed run still
+leaves a complete file up to its last frame.  Read it with read_tmc.py
+(io_utils.read_file).
 
 In muEye: Dataset panel -> Displacement = u_total, then pick a field and a
 component.  Warp scale 1.0 is the physical deformation.
@@ -43,19 +53,12 @@ Three things muEye's format forces, each of which the raw solver fields break:
    scalars operate on sub-point 0 only."  F and P live on quadrature points,
    so muEye would show one quadrature point rather than the average.  The
    copies here are averaged over the quadrature axis.  NOTE this smooths:
-   a single collapsing quadrature point looks milder than hist_min_J says.
+   a single collapsing quadrature point looks milder than min_det_F says.
 
 3. A (i, j, q, x, y) field gives dimensions tensor_dim__F-0 and -1, which a
    collection registering F as one 4-component field cannot map -- the
    'has 2 entries ... expects 4 entries' error.  One component axis avoids
    it.
-
-All fields of a frame go out in ONE write() call.  muGrid opens a new frame
-per append_frame(), so writing them one at a time would scatter them across
-separate frames and leave each frame's other variables at their fill value.
-
-Global attributes are written as placeholders up front and overwritten at the
-end, so a run that is killed still leaves a readable file.
 """
 
 import os
@@ -64,7 +67,6 @@ import time
 import shlex
 import inspect
 
-import muGrid
 import numpy as np
 from mpi4py import MPI
 from matplotlib import pyplot as plt
@@ -82,24 +84,29 @@ if 'precond' not in inspect.signature(tr_newton_bounded).parameters:
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from muFFTTO import domain, tensor_operations
+from muFFTTO import solvers_nonlinear
 from muFFTTO import microstructure_library
 from muFFTTO import material_models
 from muFFTTO import visualization_utils
+from muFFTTO import io_utils
 
 # ============================================================================
 # problem setup
 # ============================================================================
-nnn = 128
+nnn = 32
 ninc = 100
+
+# where the fields live: 'cpu' or 'gpu' (GPU needs muGrid built with CUDA + cupy)
+device = 'cpu'
 
 # plotting: deformed mesh every `plot_every` increments (0 = only the final
 # response curves).  Serial runs only -- the fields are distributed under MPI.
 plot_every = 0
 
 # saving: write a frame every `dump_every` increments.  The final increment
-# is always written.  0 = final frame only.
+# is always written.  0 = final frame only.  The increment history (frame
+# variables) is stored with the frames, so it is complete only for 1.
 dump_every = 1
-no_flush = False           # True = do not sync each frame as it is written
 output_name = 'tmc_run.nc'
 
 # solver settings, named so they are recorded in the output file too
@@ -123,7 +130,14 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
 discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
-                                       element_type=element_type)
+                                       element_type=element_type,
+                                       device=device)
+
+# field data (.s) are numpy arrays on the CPU and cupy arrays on the GPU
+if device == 'gpu':
+    import cupy as xp
+else:
+    xp = np
 
 comm = MPI.COMM_WORLD
 rank = discretization.communicator.rank
@@ -143,6 +157,7 @@ data_folder_path = (file_folder_path + '/exp_data/' + script_name + '/'
                     + f'Nx={nnn}Ny={nnn}/')
 if rank == 0:
     os.makedirs(data_folder_path, exist_ok=True)
+comm.Barrier()
 
 # ============================================================================
 # material parameters
@@ -179,11 +194,11 @@ ref_mat = lam_matrix * II + 2.0 * mu_matrix * I4s
 geometry_name = 'contact_test_geometry_2'
 
 phase_field = discretization.get_scalar_field(name='phase_field')
-phase_field.s[0, 0] = microstructure_library.get_geometry(
+phase_field.s[0, 0] = xp.asarray(microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
     microstructure_name=geometry_name,
     coordinates=discretization.fft.coords
-)
+))
 
 matrix_mask = phase_field.s[0, 0] > 0
 inc_mask = phase_field.s[0, 0] == 0
@@ -240,8 +255,16 @@ LtL_field = discretization.get_displacement_sized_field(name='LtL')
 displacement_fluctuation_field = discretization.get_unknown_size_field(
     name='u_fluc')
 
-u_shape = np.asarray(displacement_fluctuation_field.s).shape
-_qw = np.asarray(discretization.quadrature_weights).reshape((-1,) + (1,) * dim)
+u_shape = displacement_fluctuation_field.s.shape
+_qw = xp.asarray(discretization.quadrature_weights).reshape((-1,) + (1,) * dim)
+
+
+# NuMPI's optimizer works with numpy vectors (host); the fields can be on the GPU
+def field_to_optimizer(field):
+    """Copy of the field data as a numpy array."""
+    if device == 'gpu':
+        return field.s.get()  # .get() already makes a host copy
+    return np.array(field.s, copy=True)
 
 
 # ============================================================================
@@ -260,7 +283,11 @@ def global_max(a):
 
 
 def dot_global(a, b):
-    return global_sum(np.dot(np.asarray(a).ravel(), np.asarray(b).ravel()))
+    return global_sum(xp.dot(a.ravel(), b.ravel()))
+
+
+def global_mean(a):
+    return global_sum(a.sum()) / max(global_sum(float(a.size)), 1.0)
 
 
 # ============================================================================
@@ -327,13 +354,13 @@ preconditioner = discretization.get_preconditioner_Green_mugrid(
 
 def precond(v):
     """Return M^-1 v."""
-    r_field.s[...] = v
+    r_field.s[...] = xp.asarray(v)
     discretization.fft.communicate_ghosts(r_field)
     discretization.apply_preconditioner_mugrid(
         preconditioner_Fourier_fnfnqks=preconditioner,
         input_nodal_field_fnxyz=r_field,
         output_nodal_field_fnxyz=Pv_field)
-    return np.array(Pv_field.s, copy=True)
+    return field_to_optimizer(Pv_field)
 
 
 # ============================================================================
@@ -351,7 +378,7 @@ INADMISSIBLE_ENERGY = 1e30
 
 
 def _set_F_from(x):
-    x_field.s[...] = x
+    x_field.s[...] = xp.asarray(x)
     set_F(lam_current, x_field, total_strain_field)
     return min_J(total_strain_field)
 
@@ -379,15 +406,33 @@ def fun_grad(x):
         apply_weights=True)
     grad_field.s[...] += Ru_field.s
 
-    return Pi, np.array(grad_field.s, copy=True)
+    return Pi, field_to_optimizer(grad_field)
+
+
+# The tangent C(F(x)) depends on the deformation state x and on the load lam_current,
+# but not on the direction v. NuMPI calls hessp(x, v) for all inner CG iterations of one
+# trust-region step with the same x, so C is computed only when (x, lam) changes.
+tangent_cache = {'x': None, 'load': None}
+
+
+def tangent_is_outdated(x):
+    """True if the cached tangent was not computed for this (x, lam_current)."""
+    outdated = (tangent_cache['x'] is None
+                or tangent_cache['load'] != lam_current
+                or not np.array_equal(tangent_cache['x'], x))
+    # all ranks must take the same decision: recomputing F communicates ghosts (collective)
+    return comm.allreduce(outdated, op=MPI.LOR)
 
 
 def hessp(x, v):
     """B v = (G^T C G + R) v, with C evaluated at x."""
-    _set_F_from(x)
-    material.get_algorithmic_tangent(total_strain_field, tangent_field)
+    if tangent_is_outdated(x):
+        _set_F_from(x)
+        material.get_algorithmic_tangent(total_strain_field, tangent_field)
+        tangent_cache['x'] = np.array(x, copy=True)
+        tangent_cache['load'] = lam_current
 
-    v_field.s[...] = v
+    v_field.s[...] = xp.asarray(v)
     discretization.fft.communicate_ghosts(v_field)
     discretization.apply_system_matrix_mugrid(
         material_data_field=tangent_field,
@@ -397,7 +442,7 @@ def hessp(x, v):
     add_regularization(v_field, Bv_field)
     discretization.fft.communicate_ghosts(Bv_field)
 
-    return np.array(Bv_field.s, copy=True)
+    return field_to_optimizer(Bv_field)
 
 
 # ============================================================================
@@ -419,21 +464,9 @@ discretization.get_macro_gradient_field_mugrid(
 # docstring for why the raw F / P / u_fluc cannot be used directly.
 # ============================================================================
 def _pixel_field(name, ncomp):
-    """A pixel-level field with `ncomp` components and no sub-point axis.
-
-    Signature as in muEye's scripts/make_test_volume.py:
-    `fc.real_field(name, [ncomp])`, written through `.p` with shape
-    (ncomp, nx, ny).  Older spellings are kept as fallbacks.
-    """
-    fc = discretization.field_collection
-    errs = []
-    for args in ((name, [ncomp]), (name, (ncomp,)), (name, ncomp)):
-        try:
-            return fc.real_field(*args)
-        except Exception as err:                        # noqa: BLE001
-            errs.append(f'  real_field{args}: {err}')
-    raise RuntimeError(f'could not create view field {name!r}:\n'
-                       + '\n'.join(errs))
+    """A pixel-level field with `ncomp` components and no sub-point axis,
+    written through `.p` with shape (ncomp, nx, ny)."""
+    return discretization.field_collection.real_field(name, [ncomp], 'pixel')
 
 
 # Undeformed node positions X, for the affine part of the displacement.
@@ -478,7 +511,7 @@ def update_view_fields(lam):
     through `.p`, which is (ncomp, nx, ny) -- the layout muEye expects.
     """
     # displacement = affine macro part + stored fluctuation
-    u_f = np.asarray(displacement_fluctuation_field.s)
+    u_f = tensor_operations.to_host(displacement_fluctuation_field.s)
     u_f = u_f.reshape((dim, -1) + u_f.shape[-dim:])[:, 0]
     # trim any ghost/buffer padding: the view fields are exactly nb_pixels
     nx_loc = view_fields['u_total'].p.shape[1:]
@@ -490,177 +523,104 @@ def update_view_fields(lam):
     affine_g = affine * _u_to_grid
     fluct_g = u_f * _u_to_grid
 
-    view_fields['u_total'].p[...] = affine_g + fluct_g
-    view_fields['u_fluc_only'].p[...] = fluct_g
+    view_fields['u_total'].p[...] = xp.asarray(affine_g + fluct_g)
+    view_fields['u_fluc_only'].p[...] = xp.asarray(fluct_g)
 
     warp_magnitudes['affine'] = global_max(np.max(np.abs(affine_g)))
     warp_magnitudes['fluct'] = global_max(np.max(np.abs(fluct_g)))
 
     # tensors: average over the quadrature axis, fold (i, j) -> i*dim + j
-    Fp = np.asarray(total_strain_field.s).mean(axis=2)
-    Pp = np.asarray(stress_field.s).mean(axis=2)
-    view_fields['F_flat'].p[...] = Fp.reshape((dim * dim,) + Fp.shape[2:])
-    view_fields['P_flat'].p[...] = Pp.reshape((dim * dim,) + Pp.shape[2:])
+    Fp = tensor_operations.to_host(total_strain_field.s).mean(axis=2)
+    Pp = tensor_operations.to_host(stress_field.s).mean(axis=2)
+    view_fields['F_flat'].p[...] = xp.asarray(Fp.reshape((dim * dim,) + Fp.shape[2:]))
+    view_fields['P_flat'].p[...] = xp.asarray(Pp.reshape((dim * dim,) + Pp.shape[2:]))
 
     J = Fp[0, 0] * Fp[1, 1] - Fp[0, 1] * Fp[1, 0]
-    view_fields['detF'].p[...] = J.reshape((1,) + J.shape)
+    view_fields['detF'].p[...] = xp.asarray(J.reshape((1,) + J.shape))
 
 
 # ============================================================================
-# output file: fields as frames, scalars as global attributes
-#
-# Placeholders for everything known only at the end are written now, so a
-# killed run still leaves a file that opens and says converged=0.
+# output file (muFFTTO.io_utils): the view fields, the raw fluctuation and the
+# phase field as frames, the increment history as frame variables, the run
+# parameters as global attributes
 # ============================================================================
 hist = {k: [] for k in ('lam', 'F10', 'P10', 'Pxx', 'min_J', 'energy',
                         'nb_outer', 'nb_hessp', 'nb_precond', 'grad_inf',
                         'converged')}
 
 output_path = data_folder_path + output_name
-_MSG_LEN = 256
-
-fio = muGrid.FileIONetCDF(output_path,
-                          muGrid.FileIONetCDF.OpenMode.Overwrite,
-                          discretization.communicator)
-
-# Every field of a frame must go out in ONE write() call (see module
-# docstring), so they are collected into a single list.
-frame_fields = []
-for _name in ['u_total', 'u_fluc_only', 'phase_field', 'detF',
-              'F_flat', 'P_flat']:
-    try:
-        fio.register_field_collection(discretization.field_collection,
-                                      field_names=[_name])
-    except RuntimeError as _err:
-        # A field muGrid cannot lay out should not cost the whole run, which
-        # would otherwise die before computing anything.
-        root_print(f'WARNING: field {_name!r} not written '
-                   f'({str(_err).strip().splitlines()[-1][:60]})')
-    else:
-        frame_fields.append(_name)
-
-if not frame_fields:
-    raise RuntimeError('no field could be registered for output')
-root_print('writing fields: ' + ', '.join(frame_fields))
-
-# muEye reads the cell shape from this attribute, and global attributes are
-# defined at file creation -- so it cannot follow lam.  Identity keeps the
-# cell orthogonal; the macro deformation rides in u_total instead, which is
-# what lets the deformed shape animate frame to frame.
-fio.write_global_attribute('deformation_gradient',
-                           [float(v) for v in np.eye(dim).ravel()])
-fio.write_global_attribute('displacement_field', 'u_total')
-fio.write_global_attribute(
-    'displacement_units',
-    'grid points (physical displacement / grid spacing), so Warp scale 1.0 '
-    'is the physical deformation')
-fio.write_global_attribute(
-    'component_order',
-    'F_flat / P_flat: component c = i*dim + j (row-major), '
-    'quadrature-averaged to pixel values')
-
-# The phase field is static and only says which material each pixel is, so
-# what it MEANS has to travel with it: without the mapping below a reader
-# sees an array of 0s and 1s and cannot tell which is the third medium.
-fio.write_global_attribute('phase_matrix_value', [1.0])   # phase > 0
-fio.write_global_attribute('phase_void_value', [0.0])     # phase == 0
-fio.write_global_attribute('phase_note',
-                           'phase > 0: matrix (E_matrix); '
-                           'phase == 0: third medium (k_v * E_matrix)')
 _vol_matrix = global_sum(float(np.count_nonzero(matrix_mask)))
 _vol_total = global_sum(float(matrix_mask.size))
-fio.write_global_attribute('volume_fraction_matrix',
-                           [_vol_matrix / max(_vol_total, 1.0)])
 
-# Fallback: if the phase field could not be registered as a per-frame field,
-# store it as a global attribute instead -- it is static, so one copy is all
-# that was ever needed.  Gathering only makes sense on one rank.
-if 'phase_field' not in frame_fields:
-    if discretization.communicator.size == 1:
-        fio.write_global_attribute(
-            'phase_field_flat',
-            [float(v) for v in np.asarray(phase_field.s[0, 0]).ravel()])
-        fio.write_global_attribute(
-            'phase_field_shape',
-            [int(n) for n in np.asarray(phase_field.s[0, 0]).shape])
-        root_print('phase field stored as a global attribute '
-                   '(phase_field_flat, C order)')
-    else:
-        root_print('WARNING: phase field not stored (needs a serial run to '
-                   'gather, or a working field registration)')
+writer = io_utils.FieldWriter(
+    output_path,
+    [view_fields['u_total'], view_fields['u_fluc_only'], phase_field,
+     view_fields['detF'], view_fields['F_flat'], view_fields['P_flat'],
+     displacement_fluctuation_field],
+    attributes={
+        # muEye reads the cell shape from this attribute, and global
+        # attributes are defined at file creation -- so it cannot follow lam.
+        # Identity keeps the cell orthogonal; the macro deformation rides in
+        # u_total instead, which is what lets the deformed shape animate.
+        'deformation_gradient': np.eye(dim),
+        'displacement_field': 'u_total',
+        'displacement_units': 'grid points (physical displacement / grid '
+                              'spacing), so Warp scale 1.0 is the physical '
+                              'deformation',
+        'component_order': 'F_flat / P_flat: component c = i*dim + j '
+                           '(row-major), quadrature-averaged to pixel values',
+        # what the 0s and 1s of the phase field mean travels with the file
+        'phase_matrix_value': 1.0,
+        'phase_void_value': 0.0,
+        'phase_note': 'phase > 0: matrix (E_matrix); '
+                      'phase == 0: third medium (k_v * E_matrix)',
+        'volume_fraction_matrix': _vol_matrix / max(_vol_total, 1.0),
+        # run parameters
+        'command_line': shlex.join(sys.argv),
+        'geometry': geometry_name,
+        'element_type': element_type,
+        'formulation': formulation,
+        'nb_grid_pts': number_of_pixels,
+        'domain_size': np.asarray(domain_size, dtype=float),
+        'H_macro': H_macro,
+        'ninc': ninc,
+        'dump_every': dump_every,
+        'E_matrix': E_matrix,
+        'nu_matrix': nu_matrix,
+        'k_v': k_v,
+        'alpha': alpha,
+        'k_r': k_r,
+        'gtol': SOLVER_GTOL,
+        'inner_tol': SOLVER_INNER_TOL,
+        'maxiter': SOLVER_MAXITER},
+    # per-increment, grid-less values; `applied_deformation_gradient` is the
+    # macro F_bar of the frame, which the file-constant
+    # `deformation_gradient` attribute cannot express.  converged: 1 = the
+    # increment reached gtol, 0 = it did not and is not an equilibrium.
+    frame_variables={'increment': (), 'lam': (),
+                     'applied_deformation_gradient': (dim, dim),
+                     'F10': (), 'P10': (), 'Pxx': (), 'min_det_F': (),
+                     'energy': (), 'nb_outer': (), 'nb_hessp': (),
+                     'nb_precond': (), 'grad_inf': (), 'converged': (),
+                     'elapsed_time': ()})
 
-fio.write_global_attribute('command_line', shlex.join(sys.argv))
-fio.write_global_attribute('geometry', geometry_name)
-fio.write_global_attribute('element_type', element_type)
-fio.write_global_attribute('formulation', formulation)
-fio.write_global_attribute('nb_grid_pts', [int(n) for n in number_of_pixels])
-fio.write_global_attribute('domain_size', [float(x) for x in domain_size])
-fio.write_global_attribute('H_macro', [float(x) for x in H_macro.ravel()])
-fio.write_global_attribute('ninc', [int(ninc)])
-fio.write_global_attribute('dump_every', [int(dump_every)])
-fio.write_global_attribute('E_matrix', [float(E_matrix)])
-fio.write_global_attribute('nu_matrix', [float(nu_matrix)])
-fio.write_global_attribute('k_v', [float(k_v)])
-fio.write_global_attribute('alpha', [float(alpha)])
-fio.write_global_attribute('k_r', [float(k_r)])
-fio.write_global_attribute('gtol', [float(SOLVER_GTOL)])
-fio.write_global_attribute('inner_tol', [float(SOLVER_INNER_TOL)])
-fio.write_global_attribute('maxiter', [int(SOLVER_MAXITER)])
-
-_maxlen = ninc
-_max_frames = (_maxlen // dump_every + 3) if dump_every > 0 else 2
-fio.write_global_attribute('converged', [0])
-fio.write_global_attribute('nb_not_converged', [0])
-fio.write_global_attribute('lam_reached', [0.0])
-fio.write_global_attribute('elapsed_time', [0.0])
-fio.write_global_attribute('final_message', ' ' * _MSG_LEN)
-for _name in ('lam', 'F10', 'P10', 'Pxx', 'min_J', 'energy', 'grad_inf'):
-    fio.write_global_attribute(f'hist_{_name}', [0.0] * _maxlen)
-for _name in ('nb_outer', 'nb_hessp', 'nb_precond', 'converged'):
-    fio.write_global_attribute(f'hist_{_name}', [0] * _maxlen)
-fio.write_global_attribute('frame_increments', [-1] * _max_frames)
-
-# Per-frame, grid-less quantities belong in frame variables, not in padded
-# global attributes: `applied_deformation_gradient` is the macro F_bar of
-# that frame, which muEye's (file-constant) `deformation_gradient` attribute
-# cannot express.  register_frame_variable returns a numpy view that is
-# filled before each write.
-frame_vars = {}
-try:
-    frame_vars['applied_deformation_gradient'] = fio.register_frame_variable(
-        'applied_deformation_gradient', [dim, dim], np.float64)
-    frame_vars['lam'] = fio.register_frame_variable('lam', [1], np.float64)
-    frame_vars['min_det_F'] = fio.register_frame_variable(
-        'min_det_F', [1], np.float64)
-    # 1 = this increment reached gtol, 0 = it did not and is not an
-    # equilibrium.  Per frame, so a frame can be judged on its own.
-    frame_vars['converged'] = fio.register_frame_variable(
-        'converged', [1], np.float64)
-except Exception as _err:                                # noqa: BLE001
-    root_print(f'WARNING: frame variables unavailable ({_err}); '
-               'per-frame lam/F_bar not stored')
-    frame_vars = {}
-
-frame_fields += list(frame_vars)
-
-flush_frames = (not no_flush) and hasattr(fio, 'sync')
 frame_increments = []
 
 
 def write_frame(inc, lam):
-    """Refresh the muEye view fields and commit them as one new frame."""
+    """Refresh the muEye view fields and append them as one new frame."""
     update_view_fields(lam)
-    if frame_vars:
-        frame_vars['applied_deformation_gradient'][...] = (
-            np.eye(dim) + lam * H_macro)
-        frame_vars['lam'][...] = lam
-        frame_vars['min_det_F'][...] = (hist['min_J'][-1]
-                                        if hist['min_J'] else np.nan)
-        frame_vars['converged'][...] = (hist['converged'][-1]
-                                        if hist['converged'] else 0)
-    fio.append_frame().write(frame_fields)
-    if flush_frames:
-        fio.sync()
+    last = {k: v[-1] for k, v in hist.items() if v}
+    writer.write(increment=inc, lam=lam,
+                 applied_deformation_gradient=np.eye(dim) + lam * H_macro,
+                 F10=last.get('F10', np.nan), P10=last.get('P10', np.nan),
+                 Pxx=last.get('Pxx', np.nan), min_det_F=last.get('min_J', np.nan),
+                 energy=last.get('energy', np.nan),
+                 nb_outer=last.get('nb_outer', 0), nb_hessp=last.get('nb_hessp', 0),
+                 nb_precond=last.get('nb_precond', 0),
+                 grad_inf=last.get('grad_inf', np.nan),
+                 converged=last.get('converged', 0),
+                 elapsed_time=time.time() - start_time)
     frame_increments.append(int(inc))
 
 
@@ -683,12 +643,12 @@ root_print(f'dump_every   : {dump_every}'
 for inc in range(1, ninc + 1):
     lam_current = inc / float(ninc)
 
-    res = tr_newton_bounded(
+    res = solvers_nonlinear.minimize(
         fun=fun_grad,
         x0=u,
+        method='tr_newton',
         hessp=hessp,
         precond=precond,
-        jac=True,
         gtol=SOLVER_GTOL,
         maxiter=SOLVER_MAXITER,
         inner_tol=SOLVER_INNER_TOL,
@@ -700,7 +660,7 @@ for inc in range(1, ninc + 1):
 
     J_min = _set_F_from(u)
     material.get_stress(total_strain_field, stress_field)
-    displacement_fluctuation_field.s[...] = u
+    displacement_fluctuation_field.s[...] = xp.asarray(u)
 
     root_print('-' * 70)
     root_print(f'increment {inc:4d}   lam = {lam_current:.4f}   '
@@ -709,13 +669,13 @@ for inc in range(1, ninc + 1):
     root_print(f'  outer its {res.nit:4d} | hessp {res.nb_hessp:6d} '
                f'| |grad|_inf {res.max_grad:10.3e} | Pi {res.fun:12.6e}')
     root_print(f'  min(det F) {J_min:10.3e} | '
-               f'P_xx {stress_field.s[0, 0].mean():10.3e} | '
-               f'P_yx {stress_field.s[1, 0].mean():10.3e}')
+               f'P_xx {global_mean(stress_field.s[0, 0]):10.3e} | '
+               f'P_yx {global_mean(stress_field.s[1, 0]):10.3e}')
 
     hist['lam'].append(lam_current)
     hist['F10'].append(lam_current * H_macro[1, 0])
-    hist['P10'].append(float(stress_field.s[1, 0].mean()))
-    hist['Pxx'].append(float(stress_field.s[0, 0].mean()))
+    hist['P10'].append(float(global_mean(stress_field.s[1, 0])))
+    hist['Pxx'].append(float(global_mean(stress_field.s[0, 0])))
     hist['min_J'].append(J_min)
     hist['energy'].append(float(res.fun))
     hist['nb_outer'].append(int(res.nit))
@@ -757,22 +717,7 @@ nb_not_converged = int(sum(1 for c in hist['converged'] if not c))
 if not frame_increments or frame_increments[-1] != ninc:
     write_frame(ninc, lam_current)
 
-
-def _upd(name, value):
-    fio.update_global_attribute(name, name, value)
-
-
-_upd('converged', [int(nb_not_converged == 0)])
-_upd('nb_not_converged', [nb_not_converged])
-_upd('lam_reached', [float(lam_current)])
-_upd('elapsed_time', [float(elapsed)])
-_upd('final_message', str(res.message)[:_MSG_LEN])
-for _name in ('lam', 'F10', 'P10', 'Pxx', 'min_J', 'energy', 'grad_inf',
-              'nb_outer', 'nb_hessp', 'nb_precond', 'converged'):
-    if hist[_name]:
-        _upd(f'hist_{_name}', hist[_name])
-_upd('frame_increments', frame_increments)
-fio.close()
+writer.close()
 
 if rank == 0:
     print(f'elapsed            : {elapsed:.1f} s')

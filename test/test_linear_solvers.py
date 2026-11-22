@@ -37,31 +37,37 @@ def _make_domain(nb_pixels=(4, 5), nb_nodal_pts=1):
     return discretization
 
 
-class TestConjugateGradientsMuGrid(unittest.TestCase):
-    """Tests for solvers.conjugate_gradients_mugrid."""
+class TestConjugateGradients(unittest.TestCase):
+    """Tests for solvers.conjugate_gradients (energy-error stopping test)."""
+
+    @staticmethod
+    def _identity_P(r, z):
+        z.s[...] = r.s
+
+    def _fields(self, fc, nb_components=2):
+        b = fc.real_field(name='b', components=(nb_components,), sub_pt='nodal_points')
+        x = fc.real_field(name='x', components=(nb_components,), sub_pt='nodal_points')
+        return b, x
 
     def test_identity_system_converges(self):
-        """A=I, b=1, x0=0 → solution x=1 (converges in one step)."""
+        """A = I, b = 1, x0 = 0 -> x = 1 (exact after one step)."""
         fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        b, x = self._fields(fc)
         b.s[...] = 1.0
         x.s[...] = 0.0
 
         def hessp(p, Ap):
             Ap.s[...] = p.s
 
-        def P(r, z):
-            z.s[...] = r.s
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P, tol=1e-10)
-        np.testing.assert_allclose(result.s, b.s, atol=1e-8)
+        result, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-10)
+        np.testing.assert_allclose(result.s, b.s, atol=1e-12)
+        self.assertEqual(info['iterations'], 1)
+        self.assertTrue(info['converged'])
 
     def test_scaled_identity_system(self):
-        """A = scale*I, b = scale*ones → solution x = ones."""
+        """A = scale I, b = scale -> x = 1."""
         fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        b, x = self._fields(fc)
         scale = 4.0
         b.s[...] = scale
         x.s[...] = 0.0
@@ -69,210 +75,183 @@ class TestConjugateGradientsMuGrid(unittest.TestCase):
         def hessp(p, Ap):
             Ap.s[...] = scale * p.s
 
-        def P(r, z):
-            z.s[...] = r.s
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P, tol=1e-10)
-        np.testing.assert_allclose(result.s, np.ones(result.s.shape), atol=1e-8)
+        result, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-10)
+        np.testing.assert_allclose(result.s, np.ones(result.s.shape), atol=1e-12)
 
     def test_spatially_varying_diagonal_system(self):
-        """A = diag(a(x)), b = a(x)*ones → solution x = ones."""
-        fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        """A = diag(a(x)): the true energy error is below the tolerance (relative to the initial error)."""
+        fft, fc, comm = _make_fc(nb_pixels=(16, 16))
+        b, x = self._fields(fc)
         diag = fc.real_field(name='diag', components=(2,), sub_pt='nodal_points')
-
         rng = np.random.default_rng(42)
-        diag.s[...] = rng.uniform(1.0, 5.0, diag.s.shape)
-        b.s[...] = diag.s.copy()  # b = A * ones
+        diag.s[...] = rng.uniform(1.0, 1e3, diag.s.shape)
+        b.s[...] = diag.s                           # b = A * ones
         x.s[...] = 0.0
 
         def hessp(p, Ap):
             Ap.s[...] = diag.s * p.s
 
-        def P(r, z):
-            z.s[...] = r.s
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                                    tol=1e-10, maxiter=500)
-        np.testing.assert_allclose(result.s, np.ones(result.s.shape), atol=1e-6)
+        tol = 1e-6
+        result, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=tol, d_min=0,
+                                                   maxiter=2000)
+        error = result.s - 1.0
+        energy_error = comm.sum(float(np.sum(diag.s * error ** 2)))
+        initial_error = comm.sum(float(np.sum(diag.s)))      # ||x* - 0||_K^2
+        self.assertTrue(info['converged'])
+        self.assertLess(np.sqrt(energy_error / initial_error), 10 * tol)
+        self.assertLessEqual(info['estimate'], tol ** 2 * info['estimator'].initial_error)
 
     def test_zero_initial_residual_returns_immediately(self):
-        """x0 already the solution → CG returns without iterating."""
+        """x0 already the solution -> no iteration."""
         fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        b, x = self._fields(fc)
         b.s[...] = 1.0
-        x.s[...] = 1.0  # x0 = solution for A=I, b=1
-
-        iteration_count = [0]
-
-        def hessp(p, Ap):
-            Ap.s[...] = p.s
-
-        def P(r, z):
-            z.s[...] = r.s
-
-        def callback(it, *args):
-            iteration_count[0] += 1
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                                    tol=1e-10, callback=callback)
-        # No CG iterations should have been performed (early return before loop)
-        self.assertEqual(iteration_count[0], 0)
-        np.testing.assert_allclose(result.s, b.s, atol=1e-8)
-
-    def test_exact_preconditioner_converges_immediately(self):
-        """P = A^{-1} (exact inverse) → converges in a single iteration."""
-        fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
-        scale = 7.0
-        b.s[...] = scale * 3.0
-        x.s[...] = 0.0
-
-        iteration_count = [0]
-
-        def hessp(p, Ap):
-            Ap.s[...] = scale * p.s
-
-        def P(r, z):
-            z.s[...] = r.s / scale  # exact inverse preconditioner
-
-        def callback(it, *args):
-            iteration_count[0] = it
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                                    tol=1e-10, callback=callback)
-        np.testing.assert_allclose(result.s, b.s / scale, atol=1e-8)
-        self.assertLessEqual(iteration_count[0], 1)
-
-    def test_callback_receives_correct_arguments(self):
-        """Callback should be called at iteration 0 and subsequent iterations."""
-        fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
-        b.s[...] = 1.0
-        x.s[...] = 0.0
-
+        x.s[...] = 1.0
         calls = []
 
         def hessp(p, Ap):
             Ap.s[...] = p.s
 
-        def P(r, z):
-            z.s[...] = r.s
+        result, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P,
+                                                   callback=lambda *args: calls.append(args))
+        self.assertEqual(calls, [])
+        self.assertEqual(info['iterations'], 0)
+        np.testing.assert_allclose(result.s, b.s)
 
-        def callback(iteration, x_s, r_s, p_s, z_s, stop_crit):
-            calls.append({
-                'iteration': iteration,
-                'stop_crit': stop_crit,
-            })
-
-        solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                           tol=1e-10, callback=callback)
-
-        self.assertGreater(len(calls), 0)
-        self.assertEqual(calls[0]['iteration'], 0)
-        self.assertGreater(calls[0]['stop_crit'], 0.0)
-
-    def test_non_positive_definite_raises_runtime_error(self):
-        """A=-I (negative definite) → RuntimeError on first pAp check."""
+    def test_exact_preconditioner_converges_immediately(self):
+        """P = A^-1 -> one iteration."""
         fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        b, x = self._fields(fc)
+        scale = 7.0
+        b.s[...] = scale * 3.0
+        x.s[...] = 0.0
+
+        def hessp(p, Ap):
+            Ap.s[...] = scale * p.s
+
+        def P(r, z):
+            z.s[...] = r.s / scale
+
+        result, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, P, tol=1e-10)
+        np.testing.assert_allclose(result.s, b.s / scale, atol=1e-12)
+        self.assertEqual(info['iterations'], 1)
+
+    def test_callback_receives_iterations(self):
+        """The callback gets (iteration, x, r, p, z, estimate) for the start and every iteration."""
+        fft, fc, comm = _make_fc(nb_pixels=(8, 8))
+        b, x = self._fields(fc)
+        diag = fc.real_field(name='diag', components=(2,), sub_pt='nodal_points')
+        diag.s[...] = np.random.default_rng(1).uniform(1.0, 10.0, diag.s.shape)
+        b.s[...] = 1.0
+        x.s[...] = 0.0
+        calls = []
+
+        def hessp(p, Ap):
+            Ap.s[...] = diag.s * p.s
+
+        def callback(iteration, x_s, r_s, p_s, z_s, estimate):
+            calls.append((iteration, estimate))
+
+        _, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-8, d_min=0,
+                                              callback=callback)
+        self.assertEqual([c[0] for c in calls], list(range(0, info['iterations'] + 1)))
+        self.assertIsNone(calls[1][1])               # no accepted estimate after one step
+        self.assertIsNotNone(calls[-1][1])
+
+    def test_minimal_delay(self):
+        """With d_min the first estimate (and so the stop) comes at iteration > d_min at the earliest."""
+        fft, fc, comm = _make_fc(nb_pixels=(16, 16))
+        b, x = self._fields(fc)
+        diag = fc.real_field(name='diag', components=(2,), sub_pt='nodal_points')
+        diag.s[...] = np.random.default_rng(3).uniform(1.0, 100.0, diag.s.shape)
         b.s[...] = 1.0
         x.s[...] = 0.0
 
         def hessp(p, Ap):
-            Ap.s[...] = -p.s  # A = -I
+            Ap.s[...] = diag.s * p.s
 
-        def P(r, z):
-            z.s[...] = r.s
+        _, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-2, d_min=10)
+        self.assertGreaterEqual(info['iterations'], 10)
+        self.assertTrue(all(l <= info['iterations'] - 10 for l, _ in info['estimator'].estimates))
+
+    def test_warm_start_is_relative_to_start_energy(self):
+        """Warm start: the stop compares with tol^2 ||x_0||_K^2, so a start close to the solution stops early."""
+        fft, fc, comm = _make_fc(nb_pixels=(16, 16))
+        b, x = self._fields(fc)
+        diag = fc.real_field(name='diag', components=(2,), sub_pt='nodal_points')
+        diag.s[...] = np.random.default_rng(4).uniform(1.0, 100.0, diag.s.shape)
+        b.s[...] = diag.s                            # x* = 1
+
+        def hessp(p, Ap):
+            Ap.s[...] = diag.s * p.s
+
+        x.s[...] = 0.0
+        _, cold = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-6, d_min=0)
+        x.s[...] = 1.0 + 1e-5 * np.random.default_rng(5).standard_normal(x.s.shape)
+        _, warm = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-6, d_min=0)
+        self.assertLess(warm['iterations'], cold['iterations'])
+        energy_error = comm.sum(float(np.sum(diag.s * (x.s - 1.0) ** 2)))
+        energy = comm.sum(float(np.sum(diag.s)))
+        self.assertLess(np.sqrt(energy_error / energy), 10 * 1e-6)
+
+    def test_stopping_rule_replaces_energy_test(self):
+        """A stopping_rule decides when to stop."""
+        fft, fc, comm = _make_fc(nb_pixels=(16, 16))
+        b, x = self._fields(fc)
+        diag = fc.real_field(name='diag', components=(2,), sub_pt='nodal_points')
+        diag.s[...] = np.random.default_rng(6).uniform(1.0, 100.0, diag.s.shape)
+        b.s[...] = 1.0
+        x.s[...] = 0.0
+
+        def hessp(p, Ap):
+            Ap.s[...] = diag.s * p.s
+
+        _, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P,
+                                              stopping_rule=lambda iteration, x, alpha, rz: iteration == 3)
+        self.assertEqual(info['iterations'], 3)
+
+    def test_non_positive_definite_raises_runtime_error(self):
+        """A = -I -> RuntimeError."""
+        fft, fc, comm = _make_fc()
+        b, x = self._fields(fc)
+        b.s[...] = 1.0
+        x.s[...] = 0.0
+
+        def hessp(p, Ap):
+            Ap.s[...] = -p.s
 
         with self.assertRaises(RuntimeError):
-            solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P)
+            solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P)
 
     def test_maxiter_exceeded_issues_warning(self):
-        """maxiter=0 with non-zero residual should trigger RuntimeWarning."""
+        """maxiter = 0 with a nonzero residual -> RuntimeWarning, converged False."""
         fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
+        b, x = self._fields(fc)
         b.s[...] = 1.0
         x.s[...] = 0.0
 
         def hessp(p, Ap):
             Ap.s[...] = p.s
-
-        def P(r, z):
-            z.s[...] = r.s
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                               tol=1e-30, maxiter=0)
-        runtime_warnings = [wi for wi in w if issubclass(wi.category, RuntimeWarning)]
-        self.assertGreater(len(runtime_warnings), 0)
-
-    def test_rtol_mode(self):
-        """rtol=True should scale tolerance by initial residual norm."""
-        fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
-        b.s[...] = 100.0
-        x.s[...] = 0.0
-
-        def hessp(p, Ap):
-            Ap.s[...] = p.s
-
-        def P(r, z):
-            z.s[...] = r.s
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                                    tol=1e-6, rtol=True)
-        np.testing.assert_allclose(result.s, b.s, atol=1e-3)
+            _, info = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, maxiter=0)
+        self.assertFalse(info['converged'])
+        if comm.rank == 0:
+            self.assertTrue(any(issubclass(wi.category, RuntimeWarning) for wi in w))
 
     def test_3d_domain(self):
-        """CG works correctly on a 3D grid."""
+        """CG on a 3D grid."""
         fft, fc, comm = _make_fc(nb_pixels=(3, 3, 3))
-        b = fc.real_field(name='b', components=(3,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(3,), sub_pt='nodal_points')
+        b, x = self._fields(fc, nb_components=3)
         b.s[...] = 2.0
         x.s[...] = 0.0
 
         def hessp(p, Ap):
             Ap.s[...] = p.s
 
-        def P(r, z):
-            z.s[...] = r.s
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P, tol=1e-10)
-        np.testing.assert_allclose(result.s, b.s, atol=1e-8)
-
-    def test_custom_norm_metric(self):
-        """norm_metric parameter should be used as stopping criterion."""
-        fft, fc, comm = _make_fc()
-        b = fc.real_field(name='b', components=(2,), sub_pt='nodal_points')
-        x = fc.real_field(name='x', components=(2,), sub_pt='nodal_points')
-        b.s[...] = 1.0
-        x.s[...] = 0.0
-
-        norm_calls = [0]
-
-        def hessp(p, Ap):
-            Ap.s[...] = p.s
-
-        def P(r, z):
-            z.s[...] = r.s
-
-        def norm_metric(r, Pr):
-            Pr.s[...] = r.s  # identity metric (same as default)
-            norm_calls[0] += 1
-
-        result = solvers.conjugate_gradients_mugrid(comm, fc, hessp, b, x, P,
-                                                    tol=1e-10, norm_metric=norm_metric)
-        np.testing.assert_allclose(result.s, b.s, atol=1e-8)
-        self.assertGreater(norm_calls[0], 0)
+        result, _ = solvers.conjugate_gradients(comm, fc, hessp, b, x, self._identity_P, tol=1e-10)
+        np.testing.assert_allclose(result.s, b.s, atol=1e-12)
 
     def test_homogenization_problem_anal_solution(self):
         """Solver scalar homogenization problem with analytical solution."""
@@ -336,13 +315,13 @@ class TestConjugateGradientsMuGrid(unittest.TestCase):
                                           macro_gradient_field_ijqxyz=macro_gradient_field,
                                           rhs_inxyz=rhs_field)
 
-            solvers.conjugate_gradients_mugrid(comm=discretization.communicator,
-                                               fc=discretization.field_collection,
-                                               hessp=hessp,
-                                               b=rhs_field,
-                                               x=solution_field,
-                                               P=P,
-                                               tol=1e-10, rtol=True)
+            solvers.conjugate_gradients(comm=discretization.communicator,
+                                        fc=discretization.field_collection,
+                                        hessp=hessp,
+                                        b=rhs_field,
+                                        x=solution_field,
+                                        P=P,
+                                        tol=1e-10)
             homogenized_A_ij[i, :] = discretization.get_homogenized_stress_mugrid(
                 material_data_field_ijklqxyz=material_data_field_C_0,
                 displacement_field_inxyz=solution_field,
@@ -432,7 +411,7 @@ class TestDRPBCGMuGrid(unittest.TestCase):
                                        err_msg=f"RHS {j} incorrect")
 
     def test_matches_scalar_cg_for_single_rhs(self):
-        """m=1 DR-PBCG should give the same solution as conjugate_gradients_mugrid."""
+        """m=1 DR-PBCG should give the same solution as conjugate_gradients."""
         # CG solve
         fft_cg, fc_cg, comm_cg = _make_fc()
         b_cg = fc_cg.real_field(name='b', components=(2,), sub_pt='nodal_points')
@@ -445,7 +424,7 @@ class TestDRPBCGMuGrid(unittest.TestCase):
 
         def P(r, z):      z.s[...] = r.s
 
-        x_cg_result = solvers.conjugate_gradients_mugrid(
+        x_cg_result, _ = solvers.conjugate_gradients(
             comm_cg, fc_cg, hessp, b_cg, x_cg, P, tol=1e-12)
 
         # DR-PBCG solve (m=1)

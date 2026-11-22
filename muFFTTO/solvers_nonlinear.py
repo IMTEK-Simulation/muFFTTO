@@ -1,6 +1,67 @@
+"""
+Nonlinear solvers for muFFTTO.
+
+Cell problems
+    :func:`solve_finite_strain_newton_cg`, an incremental Newton--Raphson solver for (finite-strain) hyperelastic
+    cell problems on a periodic muFFTTO discretisation. Each Newton step solves the linearised equilibrium equations
+    with the preconditioned conjugate gradient solver :func:`muFFTTO.solvers.conjugate_gradients`
+    (Newton--Krylov / Newton-CG scheme).
+
+Optimization (energy minimization, topology optimization)
+    :func:`minimize` is one front end for all optimizers, with the same call and the same result fields:
+
+    method         algorithm                           needs                         constraints                source
+    -------------  ----------------------------------  ----------------------------  -------------------------  -------
+    'l_bfgs'       limited-memory BFGS, line search    f, gradient                   box, box + <a,x> = V       NuMPI
+    'mma'          method of moving asymptotes         f, gradient                   box, box + <a,x> <= / = V  muFFTTO
+    'tr_newton'    trust-region Newton, Steihaug CG    f, gradient, Hessian-vector   box                        NuMPI
+    'newton_cg'    plain Newton, full steps, PCG       f, gradient, Hessian-vector   none                       muFFTTO
+    'bb'           Barzilai-Borwein gradient (BB1/2)   f, gradient (+ precond)       none                       muFFTTO
+
+    :func:`mma_bounded` is the MMA implementation (also usable directly).
+
+    :func:`trust_region_exact` is a trust-region Newton method whose subproblems are solved exactly with a sparse
+    direct solver (:mod:`muFFTTO.direct_solvers`, Hessian assembled by :mod:`muFFTTO.sparse_assembly`); it returns
+    the number of negative eigenvalues of the Hessian at the solution (stability / buckling).
+
+MMA
+    Method of Moving Asymptotes (MMA, Svanberg 1987 / 2007) for box-constrained problems with an optional single
+    linear (volume) constraint.
+
+        min f(x)   subject to   lo <= x <= hi,   <a, x> <= V   (or = V)
+
+    Same stopping test as NuMPI.Optimization.l_bfgs_bounded (inf-norm of the projected KKT gradient < gtol, or
+    largest step < xtol). MPI: x, the gradient, the bounds and the constraint weights are local slices, the energy
+    and the constraint target are global scalars (see the MPI contract of NuMPI.Optimization).
+
+    Subproblem. The objective is replaced by the convex separable MMA approximation
+
+        f~(x) = f(x_k) + sum_j  p_j / (U_j - x_j) + q_j / (x_j - L_j) - const,      alpha_j <= x_j <= beta_j
+
+    * box only: closed-form minimizer  x_j = (sqrt(p_j) L_j + sqrt(q_j) U_j) / (sqrt(p_j) + sqrt(q_j)), clipped;
+    * with the linear constraint (kept exact, not approximated): for a multiplier lam, every x_j minimizes
+      f~_j(x_j) + lam a_j x_j, i.e. solves the monotone 1D equation p_j/(U_j-x_j)^2 - q_j/(x_j-L_j)^2 + lam a_j = 0
+      (vectorized bisection). <a, x(lam)> is non-increasing in lam (a >= 0), so lam follows from a bisection on the
+      dual; lam >= 0 for '<=' and free for '='. Every iterate satisfies the constraint (to the bisection tolerance).
+
+    Asymptotes (Svanberg 2007): L, U = x -+ asyinit (hi - lo) in the first two iterations; afterwards they move away
+    from x (factor asyincr) where x_j kept its direction and towards x (asydecr) where it oscillated.
+    Move limit: |x_new - x| <= move (hi - lo).
+
+    Plain MMA is not globally convergent (no line search). As in GCMMA, a step is accepted only when the
+    approximation was conservative, f(x_new) <= f~(x_new) (this implies f(x_new) <= f(x_k)); otherwise it is retried
+    with more curvature (raa x 10) and tighter asymptotes (closer to x).
+"""
 import numpy as np
+from mpi4py import MPI
 
 from muFFTTO import solvers
+
+try:
+    from scipy.optimize import OptimizeResult
+except ModuleNotFoundError:  # NuMPI defines the same dict-like class
+    from NuMPI.Optimization.Result import OptimizeResult
+
 
 def solve_finite_strain_newton_cg(
         discretization,
@@ -8,6 +69,7 @@ def solve_finite_strain_newton_cg(
         macro_gradient_ij,
         ninc=1,
         newton_tol=1e-8,
+        newton_atol=1e-12,
         newton_max_iter=50,
         cg_tol=1e-6,
         cg_max_iter=10000,
@@ -26,26 +88,80 @@ def solve_finite_strain_newton_cg(
     The outer loop is Newton's method.
     The inner loop is a preconditioned conjugate gradient (CG) solver
     that solves the linearized system at each Newton step:
-        K(u) * du = - R(u)
+        K(u) * du = R(u),   R(u) = -B^T W P(F(u))
+    i.e. R is the out-of-balance force (the negative internal force; since
+    B^T W is the discrete -div, R is the discrete +div P).
 
     Parameters
     ----------
-    discretization          : muFFTTO discretization object
-    material                : MaterialModelElasticity instance (e.g. NeoHookean)
-    macro_gradient_ij       : np.ndarray [dim, dim] — prescribed macroscopic gradient
-    ninc                    : number of load increments
-    newton_tol              : Newton convergence tolerance on ||R|| / ||R_0||
-    newton_max_iter         : max Newton iterations per increment
-    cg_tol                  : CG solver tolerance
-    cg_max_iter             : max CG iterations
-    preconditioner_type     : 'Green' or 'Green_Jacobi'
-    reference_material_data_ijkl : reference stiffness for Green preconditioner
-    formulation             : passed to system matrix assembly
-    verbose                 : print convergence info
+    discretization : muFFTTO discretization object
+        Provides field allocation, gradient / transposed-gradient operators,
+        system-matrix application, preconditioners, the field collection and
+        the MPI communicator.
+    material : MaterialModelElasticity instance (e.g. NeoHookean)
+        Must provide ``get_stress(grad_field, stress_field)`` and
+        ``get_algorithmic_tangent(grad_field, tangent_field)``, both writing
+        into the output fields in place. The input is the accumulated
+        ``total_strain_field``, i.e. the deformation gradient
+        ``F = I + H + grad(u_fluc)``, reset to ``I`` at the start.
+    macro_gradient_ij : np.ndarray, shape (dim, dim)
+        Prescribed macroscopic (displacement) gradient applied over all
+        increments.
+    ninc : int, optional
+        Number of equal load increments; ``macro_gradient_ij / ninc`` is
+        added at the start of each. Default 1.
+    newton_tol : float, optional
+        Newton convergence tolerance on ``||R|| / ||R_0||`` (Euclidean norm
+        of the nodal residual, relative to its value at the start of the
+        increment). Default 1e-8.
+    newton_atol : float, optional
+        Absolute floor on ``||R||``: if the residual is already below it,
+        the state is accepted without a linear solve. This handles cells
+        that are (numerically) in equilibrium, e.g. a homogeneous material,
+        where ``R`` is pure round-off and a relative CG solve on it would be
+        meaningless. Default 1e-12.
+    newton_max_iter : int, optional
+        Maximum Newton iterations per increment. Default 50.
+    cg_tol : float, optional
+        Relative energy error of every linear solve (:func:`muFFTTO.solvers.conjugate_gradients`, minimal
+        delay 10). Default 1e-6.
+    cg_max_iter : int, optional
+        Maximum CG iterations per Newton step. Default 10000.
+    preconditioner_type : str, optional
+        ``'Green'`` (Fourier-space Green-operator preconditioner of the
+        reference material), ``'Green_Jacobi'`` (Green preconditioner
+        symmetrically scaled by the Jacobi factors of the current tangent);
+        any other value gives the identity (no preconditioning).
+        Default ``'Green'``.
+    reference_material_data_ijkl : np.ndarray, shape (dim, dim, dim, dim), optional
+        Reference stiffness for the Green preconditioner. Defaults to the
+        symmetric fourth-order identity ``I4s``.
+    formulation : str, optional
+        Passed to the system-matrix application and the Jacobi
+        preconditioner assembly. Default ``'finite_strain'``.
+    verbose : bool, optional
+        Print convergence info on rank 0. Default True.
 
     Returns
     -------
-    results : dict with fields, norms, and iteration counts
+    results : dict
+        ``'newton_residuals_per_increment'`` : list (per increment) of lists
+        of ``||R||`` (initial value followed by one entry per Newton step);
+        ``'cg_iterations_per_newton_step'`` : list of CG iteration counts
+        (all increments concatenated);
+        ``'total_newton_iterations'``, ``'total_cg_iterations'`` : int;
+        ``'displacement_fluctuation_field'``, ``'total_strain_field'``,
+        ``'stress_field'``, ``'tangent_field'`` : the muGrid fields holding
+        the converged state.
+
+    Notes
+    -----
+    Classical (full) Newton--Raphson with the consistent algorithmic tangent
+    and no line search; the linear solves are inexact (relative CG
+    tolerance), i.e. an inexact Newton / Newton--Krylov method. The
+    convergence test requires at least two Newton iterations per increment
+    (``iiter > 0``). If Newton does not converge, a warning is printed and the
+    next increment starts from the unconverged state.
     """
 
     dim = discretization.domain_dimension
@@ -101,6 +217,8 @@ def solve_finite_strain_newton_cg(
     # helper: apply preconditioner
     # ------------------------------------------------------------------
     def apply_green_preconditioner(x, Px):
+        # Px = M_Green^{-1} x, applied in Fourier space; ghosts of the input
+        # are refreshed first so that the nodal stencil sees periodic data
         discretization.fft.communicate_ghosts(x)
         discretization.apply_preconditioner_mugrid(
             preconditioner_Fourier_fnfnqks=preconditioner,
@@ -109,6 +227,9 @@ def solve_finite_strain_newton_cg(
         )
 
     def apply_green_jacobi_preconditioner(x, Px):
+        # Px = D M_Green^{-1} D x with the Jacobi scaling D = K_diag computed
+        # from the current tangent. NOTE: K_diag (and the scratch field) are
+        # recomputed at every application, i.e. in every CG iteration.
         K_diag = discretization.get_preconditioner_Jacobi_mugrid(
             material_data_field_ijklqxyz=tangent_field,
             formulation=formulation
@@ -129,6 +250,7 @@ def solve_finite_strain_newton_cg(
     elif preconditioner_type == 'Green_Jacobi':
         M_fun = apply_green_jacobi_preconditioner
     else:
+        # no preconditioning: identity copy
         def M_fun(x, Px):
             Px.s[...] = x.s
 
@@ -136,6 +258,8 @@ def solve_finite_strain_newton_cg(
     # helper: apply system matrix  K * x -> Ax
     # ------------------------------------------------------------------
     def K_fun(x, Ax):
+        # Ax = B^T C_tangent B x  (linearised equilibrium operator with the
+        # current algorithmic tangent), ghosts refreshed afterwards
         discretization.apply_system_matrix_mugrid(
             material_data_field=tangent_field,
             input_field_inxyz=x,
@@ -145,11 +269,18 @@ def solve_finite_strain_newton_cg(
         discretization.fft.communicate_ghosts(Ax)
 
     # ------------------------------------------------------------------
-    # helper: compute residual R = -div(P)  from current total strain
+    # helper: compute residual R = -B^T W P  (discrete div P) from current total strain
     # ------------------------------------------------------------------
     def compute_residual():
+        # Evaluates stress and algorithmic tangent at the current total
+        # gradient (the tangent is thus updated as a side effect), then
+        # rhs = -B^T W P. B^T W is the discrete -div, so rhs is the discrete
+        # +div P (out-of-balance force); it is the right-hand side of K du = rhs.
         material.get_stress(total_strain_field, stress_field)
         material.get_algorithmic_tangent(total_strain_field, tangent_field)
+        # CG needs a symmetric K, i.e. a tangent with major symmetry A_ijkl = A_klij
+        # (true for hyperelastic materials); one pass over the data per Newton step
+        discretization.assert_material_symmetry(tangent_field, name='algorithmic tangent')
         discretization.fft.communicate_ghosts(stress_field)
         discretization.apply_gradient_transposed_operator_mugrid(
             gradient_field_ijqxyz=stress_field,
@@ -162,6 +293,7 @@ def solve_finite_strain_newton_cg(
     # helper: MPI norm
     # ------------------------------------------------------------------
     def mpi_norm(field):
+        # global Euclidean norm of a field (sum of squares reduced over ranks)
         return np.sqrt(
             discretization.communicator.sum(
                 np.dot(field.s.ravel(), field.s.ravel())
@@ -181,6 +313,16 @@ def solve_finite_strain_newton_cg(
         'stress_field'                   : stress_field,
         'tangent_field'                  : tangent_field,
     }
+
+    # ------------------------------------------------------------------
+    # initial state: undeformed configuration F = I, u_fluc = 0
+    # ------------------------------------------------------------------
+    # The fields are looked up by name in the field collection, so they may
+    # still hold values from an earlier call; reset them explicitly.
+    displacement_fluctuation_field.s[...] = 0.0
+    total_strain_field.s[...] = 0.0
+    for d in range(dim):
+        total_strain_field.s[d, d] = 1.0
 
     # ------------------------------------------------------------------
     # incremental loading loop
@@ -207,15 +349,26 @@ def solve_finite_strain_newton_cg(
         # --------------------------------------------------------------
         for iiter in range(newton_max_iter):
 
-            # solve linearised system:  K * du = R
+            # already in equilibrium (up to round-off): nothing to solve
+            if newton_residuals[-1] <= newton_atol:
+                if verbose and discretization.communicator.rank == 0:
+                    print(f'  Newton converged in {iiter} iterations '
+                          f'(||R|| <= newton_atol).')
+                break
+
+            # solve linearised system:  K * du = R   (R = rhs_field = -B^T W P)
+            # (zero initial guess; CG tolerance relative to ||R||)
             displacement_increment_field.s.fill(0.0)
 
             cg_iter_count = [0]
 
+            # the callback only records the last CG iteration index; it is
+            # stored in a list so the closure can mutate it. If CG returns
+            # before the loop (initial residual below tol) the count stays 0.
             def cg_callback(it, x, r, p, z, stop_crit_norm):
                 cg_iter_count[0] = it
 
-            solvers.conjugate_gradients_mugrid(
+            solvers.conjugate_gradients(
                 comm=discretization.communicator,
                 fc=discretization.field_collection,
                 hessp=K_fun,
@@ -224,14 +377,13 @@ def solve_finite_strain_newton_cg(
                 P=M_fun,
                 tol=cg_tol,
                 maxiter=cg_max_iter,
-                callback=cg_callback,
-                rtol=True,
-            )
+                callback=cg_callback)
 
             results['cg_iterations_per_newton_step'].append(cg_iter_count[0])
             results['total_cg_iterations'] += cg_iter_count[0]
 
-            # update displacement and strain
+            # update displacement and strain:
+            # H <- H + grad(du),  u_fluc <- u_fluc + du  (full Newton step, no line search)
             discretization.apply_gradient_operator_mugrid(
                 u_inxyz=displacement_increment_field,
                 grad_u_ijqxyz=strain_fluc_field
@@ -239,7 +391,7 @@ def solve_finite_strain_newton_cg(
             total_strain_field.s[...]             += strain_fluc_field.s[...]
             displacement_fluctuation_field.s[...] += displacement_increment_field.s[...]
 
-            # recompute residual
+            # recompute residual (also updates the tangent for the next step)
             compute_residual()
             norm_rhs = mpi_norm(rhs_field)
             newton_residuals.append(norm_rhs)
@@ -252,16 +404,754 @@ def solve_finite_strain_newton_cg(
                       f'||R||/||R_0|| = {norm_rhs / (norm_rhs_0 + 1e-30):.4e} | '
                       f'CG its = {cg_iter_count[0]}')
 
-            # Newton convergence check
+            # Newton convergence check: relative residual, at least 2 iterations
+            # (1e-30 avoids division by zero for a vanishing initial residual)
             if norm_rhs / (norm_rhs_0 + 1e-30) < newton_tol and iiter > 0:
                 if verbose and discretization.communicator.rank == 0:
                     print(f'  Newton converged in {iiter + 1} iterations.')
                 break
 
         else:
+            # for-else: reached only if the Newton loop finished without `break`
             if verbose and discretization.communicator.rank == 0:
                 print(f'  WARNING: Newton did not converge in {newton_max_iter} iterations.')
 
         results['newton_residuals_per_increment'].append(newton_residuals)
 
     return results
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Optimization
+# ---------------------------------------------------------------------------------------------------------------------
+
+METHODS = ('l_bfgs', 'mma', 'tr_newton', 'newton_cg', 'bb')
+
+
+def minimize(fun, x0, method='l_bfgs', bounds=None, constraint_weights=None, constraint_target=None,
+             constraint_type='eq', hessp=None, precond=None, callback=None, comm=None, disp=False, **options):
+    """
+    Minimize f(x) subject to box bounds and an optional linear (volume) constraint, with one of several optimizers.
+
+        min f(x)   subject to   lo <= x <= hi,   <a, x> = V   (or <a, x> <= V, method 'mma')
+
+    Parameters
+    ----------
+    fun : callable
+        ``fun(x)`` returns ``(f, gradient)``; f is the global (MPI-reduced) value, x and the gradient are the local
+        slices (flat arrays).
+    x0 : ndarray
+        Initial guess (local slice; any shape, numpy or cupy for 'l_bfgs' / 'tr_newton'; passed on unchanged).
+    method : {'l_bfgs', 'mma', 'tr_newton', 'newton_cg', 'bb'}
+        Optimizer, see the table in the module docstring.
+    bounds : (lo, hi) or None
+        Box bounds, scalars or local arrays; None (default): unbounded (not for 'mma').
+    constraint_weights, constraint_target, constraint_type :
+        Linear constraint <a, x> = V ('eq') or <a, x> <= V ('ineq'): a = constraint_weights (local slice, a >= 0),
+        V = constraint_target (global). None: no constraint. 'l_bfgs' supports 'eq' (projected L-BFGS),
+        'mma' both, 'tr_newton' none.
+    hessp : callable, optional
+        ``hessp(x, v)`` returns the Hessian (or a symmetric approximation) applied to v. Required by 'tr_newton' and
+        'newton_cg'.
+    precond : callable, optional
+        ``precond(r)`` returns M^-1 r for 'tr_newton' (only without bounds, see NuMPI.Optimization.tr_newton_bounded),
+        'newton_cg', 'bb' and 'l_bfgs' (box bounds only, no linear constraint): there the initial inverse Hessian
+        of the two-loop recursion, gamma P M P with P the mask of the free components (e.g. a Helmholtz smoother
+        (I + c eta^2 (-Lap))^-1 of the TO design gradient, see the study repository muFFTTO-multigrid).
+    callback : callable, optional
+        ``callback(x)`` after every accepted iterate.
+    comm : MPI communicator, optional
+        Default MPI.COMM_WORLD.
+    disp : bool
+        Print the iteration table of the optimizer.
+    **options
+        Passed unchanged to the optimizer (its own defaults apply otherwise), e.g. gtol, xtol, maxiter (all);
+        maxcor, c1, max_halvings, zero_mask (l_bfgs); move, asyinit, max_retries (mma); delta0, delta_max,
+        inner_tol, inner_stop, inner_maxiter, fun_error, request_accuracy, zero_mask (tr_newton); gtol, maxiter,
+        inner_tol, inner_delay, inner_maxiter (newton_cg); variant, alpha0, globalize, memory, beta, theta (bb, which
+        ignores hessp and the inner-solver options).
+
+    Returns
+    -------
+    OptimizeResult
+        The optimizer's result (x, fun, jac, nit, success, message, max_grad, ...) plus, for every method, the
+        fields ``method``, ``nfev`` (calls of fun) and ``nhessp`` (calls of hessp).
+    """
+    from NuMPI import Optimization
+    from NuMPI.Tools import Reduction
+
+    if method not in METHODS:
+        raise ValueError(f"unknown method {method!r}; choose one of {METHODS}")
+    comm = MPI.COMM_WORLD if comm is None else comm
+    constrained = constraint_weights is not None
+    if constraint_type not in ('eq', 'ineq'):
+        raise ValueError("constraint_type must be 'eq' or 'ineq'")
+    lo, hi = (None, None) if bounds is None else bounds
+
+    # count the evaluations uniformly (the NuMPI optimizers do not all report them)
+    counts = {'nfev': 0, 'nhessp': 0}
+
+    def counted_fun(x, *args):
+        counts['nfev'] += 1
+        return fun(x)
+
+    def counted_hessp(x, v, *args):
+        counts['nhessp'] += 1
+        return hessp(x, v)
+
+    common = dict(callback=callback, disp=disp)
+    if method == 'l_bfgs':
+        if hessp is not None:
+            raise ValueError("'l_bfgs' takes no hessp")
+        if precond is not None and constrained:
+            raise ValueError("'l_bfgs' takes precond only without the linear constraint (l_bfgs_bounded)")
+        if constrained and constraint_type == 'ineq':
+            raise ValueError("'l_bfgs' supports only an equality constraint; use method='mma' for <a, x> <= V")
+        if constrained:
+            constraint = Optimization.LinearConstraint(constraint_weights, constraint_target, pnp=Reduction(comm))
+            result = Optimization.l_bfgs_projected(counted_fun, x0, constraint, jac=True, bounds_lo=lo, bounds_hi=hi,
+                                                   comm=comm, **common, **options)
+        else:
+            # precond only when given: NuMPI without the preconditioned L-BFGS (muSpectre/NuMPI PR #112) lacks it
+            extra = {} if precond is None else {'precond': precond}
+            result = Optimization.l_bfgs_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi, comm=comm,
+                                                 **extra, **common, **options)
+    elif method == 'mma':
+        if precond is not None or hessp is not None:
+            raise ValueError("'mma' takes neither hessp nor precond")
+        if bounds is None:
+            raise ValueError("'mma' needs finite bounds (the asymptotes are scaled with hi - lo)")
+        result = mma_bounded(counted_fun, x0, jac=True, bounds_lo=lo, bounds_hi=hi,
+                             constraint_weights=constraint_weights, constraint_target=constraint_target,
+                             constraint_type=constraint_type, comm=comm, **common, **options)
+    elif method == 'bb':
+        if constrained or bounds is not None:
+            raise ValueError("'bb' is unconstrained")
+        result = barzilai_borwein(counted_fun, x0, precond=precond, comm=comm, **common, **options)
+    elif method == 'newton_cg':
+        if hessp is None:
+            raise ValueError("'newton_cg' needs hessp(x, v)")
+        if constrained or bounds is not None:
+            raise ValueError("'newton_cg' is unconstrained; use 'tr_newton' with box bounds")
+        result = newton_cg(counted_fun, x0, counted_hessp, precond=precond, comm=comm, **common, **options)
+    else:  # tr_newton
+        if hessp is None:
+            raise ValueError("'tr_newton' needs hessp(x, v)")
+        if constrained:
+            raise ValueError("'tr_newton' supports box bounds only; use 'l_bfgs' or 'mma' with a linear constraint")
+        result = Optimization.tr_newton_bounded(counted_fun, x0, counted_hessp, jac=True, bounds_lo=lo,
+                                                bounds_hi=hi, precond=precond, comm=comm, **common, **options)
+    result['method'] = method
+    result['nfev'] = counts['nfev']
+    result['nhessp'] = counts['nhessp']
+    return result
+
+
+def newton_cg(fun, x0, hessp, precond=None, gtol=1e-5, maxiter=100, inner_tol=1e-6, inner_delay=10,
+              inner_maxiter=None, inner_stop='energy', comm=None, callback=None, disp=False):
+    """
+    Plain Newton-CG: full Newton steps x <- x + p with B(x) p = -g(x) solved by preconditioned CG.
+
+    No globalization (no line search, no trust region): the method converges quickly near a minimum but fails as
+    soon as the Hessian is not positive definite (e.g. at buckling), which the inner CG detects as nonpositive
+    curvature (p, B p) <= 0. It is the reference for :func:`NuMPI.Optimization.tr_newton_bounded` ('tr_newton'),
+    which handles that case.
+
+    The inner CG stops on the Hestenes-Stiefel lower estimate of the energy error with the delay inner_delay, like
+    the trust-region solver: with Delta_j = alpha_j (r_j, z_j), stop at iteration k >= inner_delay once
+    sum_{j=k-d}^{k} Delta_j <= inner_tol^2 sum_{j=0}^{k} Delta_j.
+
+    Parameters
+    ----------
+    fun : callable
+        ``fun(x) -> (f, g)``, global f, local gradient.
+    hessp, precond : callable
+        ``hessp(x, v)`` = B(x) v and ``precond(r)`` = M^-1 r (None: identity).
+    gtol : float
+        Convergence: max |g| <= gtol.
+    maxiter : int
+        Maximum number of Newton steps.
+    inner_tol, inner_delay, inner_maxiter : float, int, int
+        Relative energy-error tolerance, delay and iteration cap (default: number of unknowns) of the inner CG.
+    inner_stop : str
+        Only 'energy' (accepted for interface compatibility with tr_newton).
+
+    Returns
+    -------
+    OptimizeResult
+        x, fun, jac, nit (Newton steps), nb_hessp (inner CG iterations), success, message, max_grad.
+    """
+    if inner_stop != 'energy':
+        raise ValueError("newton_cg supports only inner_stop='energy'")
+    comm = MPI.COMM_WORLD if comm is None else comm
+
+    def dot(a, b):
+        return comm.allreduce(float((a * b).sum()), op=MPI.SUM)
+
+    def max_abs(a):
+        return comm.allreduce(float(abs(a).max()) if a.size else 0.0, op=MPI.MAX)
+
+    apply_precond = (lambda r: r.copy()) if precond is None else precond
+    if inner_maxiter is None:
+        inner_maxiter = comm.allreduce(int(x0.size), op=MPI.SUM)
+    x = x0.copy()
+    nb_hessp = 0
+
+    def finish(success, message, nit, f, g):
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nb_hessp': nb_hessp, 'max_grad': max_abs(g)})
+
+    for newton_step in range(maxiter + 1):
+        f, g = fun(x)
+        if max_abs(g) <= gtol:
+            return finish(True, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL', newton_step, f, g)
+        if newton_step == maxiter:
+            break
+        # --- inner PCG on B p = -g, from p = 0 ---
+        p = 0.0 * g
+        r = -g
+        z = apply_precond(r)
+        d = z.copy()
+        rz = dot(r, z)
+        energy_steps = []                       # Delta_j = alpha_j (r_j, z_j)
+        for _ in range(inner_maxiter):
+            Bd = hessp(x, d)
+            nb_hessp += 1
+            curvature = dot(d, Bd)
+            if curvature <= 0.0:
+                return finish(False, 'Hessian is not positive definite', newton_step, f, g)
+            alpha = rz / curvature
+            p = p + alpha * d
+            r = r - alpha * Bd
+            energy_steps.append(alpha * rz)
+            k = len(energy_steps) - 1
+            if k >= inner_delay and sum(energy_steps[k - inner_delay:]) <= inner_tol ** 2 * sum(energy_steps):
+                break
+            z = apply_precond(r)
+            rz_next = dot(r, z)
+            if rz_next <= 0.0:
+                break
+            d = z + (rz_next / rz) * d
+            rz = rz_next
+        x = x + p
+        if callback is not None:
+            callback(x)
+        if disp and comm.rank == 0:
+            print(f'Newton step {newton_step + 1}: f = {f:.10e}, max|g| = {max_abs(g):.3e}, CG {len(energy_steps)}')
+    return finish(False, 'NO CONVERGENCE: MAXITERATIONS REACHED', maxiter, f, g)
+
+
+def barzilai_borwein(fun, x0, precond=None, gtol=1e-5, maxiter=20000, variant=1, alpha0=1.0, globalize=False,
+                     memory=10, beta=0.5, theta=1e-4, fun_error=1e-12, alpha_min=1e-12, alpha_max=1e12,
+                     max_backtracks=40, inadmissible=1e29, converged=None, comm=None, callback=None, disp=False,
+                     **ignored):
+    """
+    Preconditioned Barzilai-Borwein gradient method (Schneider, IJNME 118 (2019) 482: the "Barzilai-Borwein basic
+    scheme"; with precond = the Green operator of a reference material and alpha = 1 it is the basic scheme of
+    Moulinec-Suquet).
+
+        x_{n+1} = x_n - t_n z_n,      z_n = M^-1 g_n,      t_n = beta^k alpha_n
+
+    with the step sizes (s = x_{n+1} - x_n, y = g_{n+1} - g_n, M-inner product for s, M^-1 for y)
+
+        variant 1 (BB1):  alpha_{n+1} = (s, M s) / (s, y)  = t_n (g_n, z_n) / ((g_n, z_n) - (g_{n+1}, z_n))
+        variant 2 (BB2):  alpha_{n+1} = (s, y) / (y, M^-1 y)
+
+    Globalization (globalize='gradient', Schneider's choice, Fletcher 2005): nonmonotone backtracking on the
+    preconditioned gradient norm, |g(x - t z)|_M^-1 <= (1 - theta t) max of the last `memory` norms (only gradients
+    are needed). globalize='energy' (or True): nonmonotone Armijo backtracking on the energy (Grippo-Lampariello-Lucidi /
+    Raydan), f(x - t z) <= max of the last `memory` energies - theta t (g, z) + fun_error |f|, t = alpha beta^k (the
+    relative energy tolerance fun_error absorbs the round-off of f near the minimum). Schneider uses the
+    gradient-norm variant of Fletcher because his material routines give no energy; ours do. Without globalization
+    only inadmissible trial points (f >= inadmissible, e.g. det F <= 0) are backtracked. (s, y) <= 0 (no positive
+    curvature along s): alpha is kept.
+
+    converged(x, g, z) -> bool replaces the default test max |g| <= gtol (e.g. a norm of the preconditioned residual
+    z = M^-1 g, Schneider's |Gamma sigma| / |<sigma>|).
+
+    No Hessian is used: hessp and the inner-solver options of the Newton methods are accepted and ignored (**ignored)
+    so that one call site can switch methods.
+
+    Returns
+    -------
+    OptimizeResult
+        x, fun, jac, nit (iterations), nfev (fun calls), nb_precond (preconditioner applications), nb_hessp (0),
+        nb_backtracks, alpha (the last BB step size, to warm-start the next solve), success, message, max_grad.
+    """
+    comm = MPI.COMM_WORLD if comm is None else comm
+
+    def dot(a, b):
+        return comm.allreduce(float((a * b).sum()), op=MPI.SUM)
+
+    def max_abs(a):
+        return comm.allreduce(float(abs(a).max()) if a.size else 0.0, op=MPI.MAX)
+
+    apply_precond = (lambda r: r.copy()) if precond is None else precond
+    x = x0.copy()
+    f, g = fun(x)
+    z = apply_precond(g)
+    counts = {'nfev': 1, 'nb_precond': 1, 'nb_backtracks': 0}
+    gz = dot(g, z)
+    history = [f]
+    norm_history = [np.sqrt(max(gz, 0.0))]
+    alpha = alpha0
+
+    def finish(success, message, nit):
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nb_hessp': 0, 'max_grad': max_abs(g), 'alpha': alpha, **counts})
+
+    for it in range(maxiter + 1):
+        if (converged(x, g, z) if converged is not None else max_abs(g) <= gtol):
+            return finish(True, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL' if converged is None else 'CONVERGENCE', it)
+        if it == maxiter:
+            break
+        t = alpha
+        reference = max(history[-memory:])
+        for _ in range(max_backtracks + 1):
+            x_new = x - t * z
+            f_new, g_new = fun(x_new)
+            counts['nfev'] += 1
+            admissible = np.isfinite(f_new) and f_new < inadmissible
+            if admissible and globalize == 'gradient':
+                z_new = apply_precond(g_new)
+                counts['nb_precond'] += 1
+                if np.sqrt(max(dot(g_new, z_new), 0.0)) <= (1.0 - theta * t) * max(norm_history[-memory:]):
+                    break
+            elif admissible and (not globalize or f_new <= reference - theta * t * gz
+                                 + fun_error * max(abs(reference), 1e-300)):
+                z_new = None
+                break
+            t *= beta
+            counts['nb_backtracks'] += 1
+        else:
+            return finish(False, 'LINE SEARCH FAILED', it)
+        if z_new is None:
+            z_new = apply_precond(g_new)
+            counts['nb_precond'] += 1
+        y = g_new - g
+        sy = -t * dot(z, y)                                   # (s, y), s = -t z
+        if sy > 0.0:
+            if variant == 1:
+                alpha = t * t * gz / sy                       # (s, M s) = t^2 (z, g)
+            else:
+                alpha = sy / dot(y, z_new - z)                # (y, M^-1 y)
+            if not np.isfinite(alpha):
+                alpha = t
+            alpha = min(max(alpha, alpha_min), alpha_max)
+        x, f, g, z = x_new, f_new, g_new, z_new
+        gz = dot(g, z)
+        history.append(f)
+        norm_history.append(np.sqrt(max(gz, 0.0)))
+        if callback is not None:
+            callback(x)
+        if disp and comm.rank == 0:
+            print(f'BB{variant} iteration {it + 1}: f = {f:.10e}, max|g| = {max_abs(g):.3e}, t = {t:.3e}')
+    return finish(False, 'NO CONVERGENCE: MAXITERATIONS REACHED', maxiter)
+
+
+def mma_bounded(fun, x0, args=(), jac=True, bounds_lo=0.0, bounds_hi=1.0, constraint_weights=None,
+                constraint_target=None, constraint_type='ineq', gtol=1e-5, xtol=0.0, maxiter=500, move=0.2,
+                asyinit=0.5, asyincr=1.2, asydecr=0.7, raa0=1e-5, accept_increase=False, max_retries=8,
+                comm=None, callback=None, disp=False):
+    """
+    Parameters
+    ----------
+    constraint_weights : array_like, optional
+        Local slice of the non-negative weights a of the linear constraint <a, x> (e.g. pixel volumes / total
+        volume, then <a, x> is the volume fraction). None: no constraint (box only).
+    constraint_target : float, optional
+        Global right-hand side V.
+    constraint_type : {'ineq', 'eq'}
+        '<a, x> <= V' or '<a, x> = V'.
+    Other parameters as NuMPI.Optimization.l_bfgs_bounded; move, asyinit, asyincr, asydecr, raa0 are the
+    MMA parameters of Svanberg (2007).
+    """
+    comm = MPI.COMM_WORLD if comm is None else comm
+    x = np.clip(np.asarray(x0, dtype=float).ravel().copy(), bounds_lo, bounds_hi)
+    lo = np.broadcast_to(np.asarray(bounds_lo, dtype=float), x.shape)
+    hi = np.broadcast_to(np.asarray(bounds_hi, dtype=float), x.shape)
+    span = np.maximum(hi - lo, 1e-12)
+    constrained = constraint_weights is not None
+    if constrained:
+        a = np.asarray(constraint_weights, dtype=float).ravel()
+        if np.any(a < 0):
+            raise ValueError('constraint_weights must be non-negative')
+        if constraint_type not in ('ineq', 'eq'):
+            raise ValueError("constraint_type must be 'ineq' or 'eq'")
+        V = float(constraint_target)
+
+    def sum_global(values):
+        return comm.allreduce(float(np.sum(values)), op=MPI.SUM)
+
+    def max_global(values):
+        return comm.allreduce(float(np.max(values)) if values.size else 0.0, op=MPI.MAX)
+
+    def projected_gradient_norm(x, g):
+        # a variable at a bound with the gradient pushing it out of the box is not free
+        free = ~(((x <= lo) & (g > 0)) | ((x >= hi) & (g < 0)))
+        return max_global(np.abs(np.where(free, g, 0.0)))
+
+    def evaluate(x):
+        if jac is True:
+            f, g = fun(x, *args)
+        else:
+            f, g = fun(x, *args), jac(x, *args)
+        return float(f), np.asarray(g, dtype=float).ravel()
+
+    def minimize_separable(p, q, L, U, alpha, beta, lam):
+        """argmin of p/(U-x) + q/(x-L) + lam a x on [alpha, beta], element by element."""
+        if not constrained or lam == 0.0:
+            sp, sq = np.sqrt(p), np.sqrt(q)
+            return np.clip((sp * L + sq * U) / (sp + sq), alpha, beta)
+
+        def slope(x):  # increasing in x on (L, U)
+            return p / (U - x) ** 2 - q / (x - L) ** 2 + lam * a
+
+        left, right = alpha.copy(), beta.copy()
+        for _ in range(50):
+            mid = 0.5 * (left + right)
+            positive = slope(mid) > 0
+            right = np.where(positive, mid, right)
+            left = np.where(positive, left, mid)
+        # exactly on the bound where the minimum is there (the bisection only approaches it)
+        return np.where(slope(alpha) >= 0, alpha, np.where(slope(beta) <= 0, beta, 0.5 * (left + right)))
+
+    def solve_subproblem(p, q, L, U, alpha, beta):
+        """Minimizer of the subproblem and the multiplier of the linear constraint."""
+        x_free = minimize_separable(p, q, L, U, alpha, beta, 0.0)
+        if not constrained:
+            return x_free, 0.0
+
+        lam = bisect_multiplier(lambda lam: sum_global(a * minimize_separable(p, q, L, U, alpha, beta, lam)),
+                                max_global(np.abs(g)) / max(max_global(a), 1e-300))
+        return minimize_separable(p, q, L, U, alpha, beta, lam), lam
+
+    def bisect_multiplier(volume_of, lam_scale):
+        """Root lam of volume_of(lam) - V (non-increasing in lam); lam >= 0 for 'ineq'."""
+        excess_0 = volume_of(0.0) - V
+        if constraint_type == 'ineq' and excess_0 <= 0:
+            return 0.0
+        # bracket the root: lam > 0 decreases <a, x>, lam < 0 increases it
+        direction = 1.0 if excess_0 > 0 else -1.0
+        lam_inner, lam_outer = 0.0, direction * lam_scale
+        while direction * (volume_of(lam_outer) - V) > 0:
+            lam_inner, lam_outer = lam_outer, 2.0 * lam_outer
+            if abs(lam_outer) > 1e30:  # the box and the move limit do not allow <a, x> = V
+                return lam_outer
+        for _ in range(100):
+            lam = 0.5 * (lam_inner + lam_outer)
+            excess = volume_of(lam) - V
+            if abs(excess) <= 1e-12 * max(abs(V), 1.0):
+                return lam
+            if direction * excess > 0:
+                lam_inner = lam
+            else:
+                lam_outer = lam
+            if abs(lam_outer - lam_inner) <= 1e-14 * abs(lam_outer):
+                break
+        return lam_outer
+
+    if constrained:  # start on the constraint (Euclidean projection): feasibility is kept from here on
+        x0_projected = x.copy()
+        mu = bisect_multiplier(lambda mu: sum_global(a * np.clip(x0_projected - mu * a, lo, hi)),
+                               max_global(span) / max(max_global(a), 1e-300))
+        x = np.clip(x0_projected - mu * a, lo, hi)
+
+    f, g = evaluate(x)
+    nfev = 1
+    x_old1 = x_old2 = None
+    L = U = None
+    raa = raa0
+
+    def kkt_gradient(x, g):
+        """Gradient of the Lagrangian g + lam a, lam estimated from the variables strictly inside the box."""
+        if not constrained:
+            return g, 0.0
+        inside = (x > lo) & (x < hi)
+        lam = -sum_global(np.where(inside, a * g, 0.0)) / max(sum_global(np.where(inside, a * a, 0.0)), 1e-300)
+        if constraint_type == 'ineq':
+            lam = max(lam, 0.0) if sum_global(a * x) >= V - 1e-9 * max(abs(V), 1.0) else 0.0
+        return g + lam * a, lam
+
+    def volume(x):
+        return sum_global(a * x) if constrained else np.nan
+
+    g_kkt, lam = kkt_gradient(x, g)
+    history = {'fun': [f], 'max_grad': [projected_gradient_norm(x, g_kkt)],
+               'constraint': [volume(x)], 'nfev': [nfev]}
+    if disp and comm.rank == 0:
+        print(f"{'it':<5} {'f':<14} {'max|pg|':<12} {'max|dx|':<10} {'<a,x>':<10} retries")
+        print(f"{0:<5d} {f:<14.6e} {history['max_grad'][-1]:<12.4e} {'':<10} {history['constraint'][-1]:<10.5g}")
+
+    def finish(success, nit, message):
+        return OptimizeResult({'success': bool(success), 'x': x, 'fun': f, 'jac': g, 'nit': int(nit),
+                               'nfev': int(nfev), 'message': message, 'max_grad': history['max_grad'][-1],
+                               'multiplier': lam, 'history': history})
+
+    for it in range(1, maxiter + 1):
+        # --- asymptotes ---------------------------------------------------------------------
+        if x_old2 is None:
+            L = x - asyinit * span
+            U = x + asyinit * span
+        else:
+            trend = (x - x_old1) * (x_old1 - x_old2)
+            gamma = np.where(trend > 0, asyincr, np.where(trend < 0, asydecr, 1.0))
+            L = x - gamma * (x_old1 - L)
+            U = x + gamma * (U - x_old1)
+            L = np.clip(L, x - 10.0 * span, x - 0.01 * span)
+            U = np.clip(U, x + 0.01 * span, x + 10.0 * span)
+
+        # --- convex separable approximation and its minimizer ---------------------------------
+        raa = max(0.1 * raa, raa0)
+        tighten = 1.0
+        for retry in range(max_retries + 1):
+            L_k = x - tighten * (x - L)
+            U_k = x + tighten * (U - x)
+            alpha = np.maximum.reduce([lo, L_k + 0.1 * (x - L_k), x - move * span])
+            beta = np.minimum.reduce([hi, U_k - 0.1 * (U_k - x), x + move * span])
+            g_plus, g_minus = np.maximum(g, 0.0), np.maximum(-g, 0.0)
+            p = (U_k - x) ** 2 * (1.001 * g_plus + 0.001 * g_minus + raa / span)
+            q = (x - L_k) ** 2 * (0.001 * g_plus + 1.001 * g_minus + raa / span)
+            x_new, _ = solve_subproblem(p, q, L_k, U_k, alpha, beta)
+            f_new, g_new = evaluate(x_new)
+            nfev += 1
+            # value of the approximation f~ at x_new; f~ <= f, so a conservative step also decreases f
+            f_approx = f + sum_global(p * (1 / (U_k - x_new) - 1 / (U_k - x))
+                                      + q * (1 / (x_new - L_k) - 1 / (x - L_k)))
+            if accept_increase or f_new <= f_approx + 1e-14 * abs(f) or retry == max_retries:
+                break
+            # not conservative: more curvature (GCMMA) and asymptotes closer to x
+            raa *= 10.0
+            tighten *= 0.5
+
+        step = max_global(np.abs(x_new - x))
+        x_old2, x_old1 = x_old1, x.copy()
+        L, U = L_k, U_k
+        x, f, g = x_new, f_new, g_new
+        g_kkt, lam = kkt_gradient(x, g)
+        history['fun'].append(f)
+        history['max_grad'].append(projected_gradient_norm(x, g_kkt))
+        history['constraint'].append(volume(x))
+        history['nfev'].append(nfev)
+        if callback is not None:
+            callback(x)
+        if disp and comm.rank == 0:
+            print(f"{it:<5d} {f:<14.6e} {history['max_grad'][-1]:<12.4e} {step:<10.3e} "
+                  f"{history['constraint'][-1]:<10.5g} {retry}")
+        if history['max_grad'][-1] < gtol:
+            return finish(True, it, 'CONVERGENCE: NORM_OF_PROJECTED_GRADIENT_<=_GTOL')
+        if xtol > 0 and step < xtol:
+            return finish(True, it, 'CONVERGENCE: MAX_STEP_<=_XTOL')
+    return finish(False, maxiter, 'NO CONVERGENCE: MAXITERATIONS REACHED')
+
+
+# ======================================================================================================================
+# trust-region Newton with the exact subproblem solution (sparse direct solver)
+# ======================================================================================================================
+def _shifted(H, sigma, d2):
+    """H + sigma diag(d2) with the sparsity pattern of H (H holds its diagonal)."""
+    K = H.copy()
+    K.setdiag(H.diagonal() + sigma * d2)
+    return K
+
+
+def _lowest_eigenpair(H, d2, solver, sigma_guess):
+    """For an indefinite H: lambda_min of H v = lambda D^2 v and its eigenvector (v.D^2 v = 1), or None if Lanczos
+    does not converge (then only the bracket of shifts is known). First a shift sigma_pd with H + sigma_pd D^2
+    positive definite (from the guess and the diagonal bound lambda_min <= min H_ii / d_i^2, x 10 until positive
+    definite), then shift-invert Lanczos with that factorisation (capped: with clustered negative eigenvalues it
+    may not converge). Returns lambda_min (estimate), v or None, sigma_pd, the number of factorisations."""
+    import scipy.sparse as sparse
+    import scipy.sparse.linalg as sparse_linalg
+    sigma_pd = max(sigma_guess, -1.01 * (H.diagonal() / d2).min(), 1e-12)
+    sigma_indefinite, factorisations = 0.0, 1
+    while solver.factorise(_shifted(H, sigma_pd, d2)) != 0:
+        sigma_indefinite, sigma_pd = sigma_pd, 10.0 * sigma_pd
+        factorisations += 1
+    shift_invert = sparse_linalg.LinearOperator(H.shape, matvec=solver.solve_once, dtype=float)
+    try:
+        eigenvalue, eigenvector = sparse_linalg.eigsh(H, k=1, M=sparse.diags(d2), sigma=-sigma_pd, which='LM',
+                                                      OPinv=shift_invert, tol=1e-3, ncv=30, maxiter=300)
+    except sparse_linalg.ArpackNoConvergence:
+        return -sigma_indefinite, None, sigma_pd, factorisations
+    v = eigenvector[:, 0] / np.sqrt(eigenvector[:, 0] @ (d2 * eigenvector[:, 0]))
+    return float(eigenvalue[0]), v, sigma_pd, factorisations
+
+
+def _trust_region_subproblem(H, g, d2, delta, sigma_guess, known, solver):
+    """s minimizing g.s + s.H s / 2 subject to ||D s|| <= delta (More & Sorensen 1983).
+
+    s(sigma) = -(H + sigma D^2)^-1 g with sigma >= max(0, -lambda_min) and ||D s|| = delta (or sigma = 0 and the
+    Newton step inside), found by Newton's method on phi(sigma) = 1/||D s|| - 1/delta (nearly linear in sigma),
+    safeguarded by a bracket; accepted at | ||D s|| - delta | <= 0.1 delta. Hard case (||D s|| < delta for all
+    sigma > -lambda_min): s(sigma) + tau v on the boundary. ``known`` holds what is known about H (inertia, Newton
+    step, lambda_min) and is reused when the step is rejected (same H). Returns s, sigma, #factorisations."""
+    factorisations = 0
+    if known['negative'] == 0:
+        s = known['newton_step']
+        norm = np.sqrt(s @ (d2 * s))
+        if norm <= delta:
+            return s, 0.0, 0
+        sigma_low = 0.0
+        sigma = norm ** 2 / (s @ (d2 * known['newton_q'])) * (norm - delta) / delta     # Newton from sigma = 0
+    else:
+        if 'lambda_min' not in known:
+            known['lambda_min'], known['v'], sigma, factorisations = _lowest_eigenpair(H, d2, solver, sigma_guess)
+        else:
+            sigma = max(sigma_guess, -known['lambda_min'] * (1 + 1e-3), 1e-12)
+        sigma_low = max(0.0, -known['lambda_min'])
+    sigma_high = np.inf
+    for _ in range(40):
+        factorisations += 1
+        if solver.factorise(_shifted(H, sigma, d2)) != 0:      # below -lambda_min (estimate inexact): increase
+            sigma_low = sigma
+            sigma = 2.0 * sigma if np.isinf(sigma_high) else 0.5 * (sigma_low + sigma_high)
+            continue
+        s = solver.solve(-g)
+        norm = np.sqrt(s @ (d2 * s))
+        if abs(norm - delta) <= 0.1 * delta:
+            break
+        if norm > delta:
+            sigma_low = sigma
+        else:
+            sigma_high = sigma
+        q = solver.solve(d2 * s)
+        sigma_newton = sigma + norm ** 2 / (s @ (d2 * q)) * (norm - delta) / delta
+        if sigma_low < sigma_newton < sigma_high:
+            sigma = sigma_newton
+        elif known['negative'] != 0 and known.get('v') is not None and norm < delta \
+                and sigma - sigma_low < 1e-2 * sigma:
+            v = known['v']                                      # hard case: add the eigenvector up to the boundary
+            b, c = s @ (d2 * v), s @ (d2 * s) - delta ** 2
+            candidates = [s + tau * v for tau in (-b + np.sqrt(b * b - c), -b - np.sqrt(b * b - c))]
+            s = min(candidates, key=lambda p: g @ p + 0.5 * p @ (H @ p))
+            break
+        else:
+            sigma = np.sqrt(sigma_low * sigma_high) if sigma_low > 0 and np.isfinite(sigma_high) \
+                else (0.5 * (sigma_low + sigma_high) if np.isfinite(sigma_high) else 10.0 * sigma)
+    return s, sigma, factorisations
+
+
+def trust_region_exact(fun, x0, hess, gtol=1e-5, maxiter=200, delta0=0.05, delta_max=0.5, scaling=None,
+                       fixed=None, solver='auto', report_inertia=True, callback=None, disp=False):
+    """
+    Trust-region Newton method with the exact solution of each subproblem by a sparse direct solver.
+
+    Each iteration factorises H + sigma D^2 (a few times) to solve the trust-region subproblem exactly
+    (More & Sorensen 1983): negative curvature, including the "hard case", is handled exactly. The factorisation
+    also gives the inertia: the number of negative eigenvalues of the Hessian at the solution is returned, which
+    tells whether the converged state is stable (0) -- e.g. whether a structure has buckled.
+
+    Same calling convention as :func:`NuMPI.Optimization.tr_newton_bounded`, but with the Hessian as a sparse
+    matrix (see :class:`muFFTTO.sparse_assembly.SparseAssembly`) instead of a Hessian-vector product. Serial only.
+
+    Parameters
+    ----------
+    fun : callable
+        ``fun(x) -> (f, g)``. Return a huge f (e.g. 1e30 or inf) for an inadmissible x (inverted elements): the
+        step is rejected and the radius shrinks.
+    x0 : ndarray
+        Starting point.
+    hess : callable
+        ``hess(x) -> H``, the Hessian at x as a symmetric scipy.sparse matrix that holds its diagonal; called right
+        after ``fun(x)`` at the same x.
+    gtol : float
+        Convergence: max |g| over the free unknowns <= gtol.
+    maxiter : int
+        Maximum number of trust-region iterations.
+    delta0, delta_max : float
+        Initial and largest radius, in the scaled root-mean-square norm ||D s|| / sqrt(n_free) (as NuMPI).
+    scaling : ndarray or None
+        D^2 (positive, one per unknown): the trust region is ||D s|| <= delta. None: |diag H(x0)|.
+    fixed : array of int or bool, or None
+        Unknowns kept at their x0 values (e.g. one node of a periodic cell against rigid translation).
+    solver : str or direct_solvers.SymmetricSolver
+        'auto' (MUMPS if installed, else SciPy), 'scipy', 'mumps', 'cudss', or a solver object (reuse it between
+        calls with the same sparsity pattern: the symbolic analysis is kept).
+    report_inertia : bool
+        Factorise the Hessian at the solution to count its negative eigenvalues (``result.negative_eigenvalues``).
+    callback : callable or None
+        ``callback(x)`` after every accepted step.
+    disp : bool
+        Print one line per iteration.
+
+    Returns
+    -------
+    OptimizeResult
+        ``x, fun, jac, nit, nfev, nfactorisations, success, message, negative_eigenvalues, delta, sigma``.
+    """
+    from muFFTTO import direct_solvers
+    if isinstance(solver, str):
+        solver = direct_solvers.symmetric_solver(solver)
+    x = np.array(x0, dtype=float)
+    free = np.ones(x.size, dtype=bool)
+    if fixed is not None:
+        free[np.asarray(fixed)] = False
+    nb_free = int(free.sum())
+
+    f, g = fun(x)
+    nfev, nfact, sigma, delta = 1, 0, 0.0, float(delta0)
+    H, known = None, None
+    d2 = None if scaling is None else np.asarray(scaling, dtype=float)[free]
+
+    def finish(success, nit, message):
+        negative = None
+        if report_inertia:
+            fun(x)
+            negative = solver.factorise(hess(x)[free][:, free])
+        if disp:
+            print(f'trust_region_exact: {message} after {nit} iterations, {nfact} factorisations'
+                  + ('' if negative is None else f', {negative} negative eigenvalues of H'), flush=True)
+        return OptimizeResult({'success': success, 'message': message, 'x': x, 'fun': f, 'jac': g, 'nit': nit,
+                               'nfev': nfev, 'nfactorisations': nfact, 'negative_eigenvalues': negative,
+                               'delta': delta, 'sigma': sigma})
+
+    delta_of_sigma = delta
+    for iteration in range(1, maxiter + 1):
+        if np.abs(g[free]).max() <= gtol:
+            return finish(True, iteration - 1, 'CONVERGENCE: NORM_OF_GRADIENT_<=_GTOL')
+        if H is None:                                           # new point: the Hessian and what it alone gives
+            H = hess(x)[free][:, free]
+            if d2 is None:
+                d2 = np.abs(H.diagonal())
+                d2[d2 <= 1e-12 * d2.max()] = 1e-12 * d2.max()
+            known = {'negative': solver.factorise(H)}
+            nfact += 1
+            if known['negative'] == 0:
+                known['newton_step'] = solver.solve(-g[free])
+                known['newton_q'] = solver.solve(d2 * known['newton_step'])
+        # warm start: sigma ~ |g| / delta for large sigma
+        s_free, sigma, n = _trust_region_subproblem(H, g[free], d2, delta * np.sqrt(nb_free),
+                                                    sigma * delta_of_sigma / delta, known, solver)
+        nfact += n
+        delta_of_sigma = delta
+        s = np.zeros_like(x)
+        s[free] = s_free
+        predicted = -(g[free] @ s_free + 0.5 * s_free @ (H @ s_free))
+        f_new, g_new = fun(x + s)
+        nfev += 1
+        if not np.isfinite(f_new) or predicted <= 0:
+            rho = -np.inf
+        elif max(abs(f - f_new), predicted) <= 1e-8 * abs(f):
+            # near convergence the energy change is at its round-off: use the energy difference from the gradients,
+            # f(x + s) - f(x) = int_0^1 g(x + t s).s dt ~ (g(x) + g(x + s)).s / 2 (trapezoid, no cancellation)
+            rho = -0.5 * (g[free] + g_new[free]) @ s_free / predicted
+        else:
+            rho = (f - f_new) / predicted
+        if rho < 0.25:
+            delta *= 0.25
+        elif rho > 0.75 and sigma > 0:
+            delta = min(2.0 * delta, delta_max)
+        if rho > 0.1:
+            x, f, g, H = x + s, f_new, g_new, None
+            if callback is not None:
+                callback(x)
+        else:
+            fun(x)                                              # back to the state of x (H is kept)
+            nfev += 1
+        if disp:
+            print(f'  TR {iteration:4d}: f {f:.10e}  max|g| {np.abs(g[free]).max():.2e}  rho {rho:9.3g}  '
+                  f'sigma {sigma:.2e}  delta {delta:.2e}  negative eigenvalues {known["negative"]}', flush=True)
+        if delta < 1e-12 * delta0:
+            return finish(False, iteration, 'NO CONVERGENCE: TRUST REGION RADIUS BELOW 1e-12 delta0')
+    return finish(False, maxiter, 'NO CONVERGENCE: MAXITERATIONS REACHED')

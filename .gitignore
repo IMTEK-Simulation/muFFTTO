@@ -36,3 +36,13 @@ experiments/exp_data/
 .output.txt
 
 .idea/
+
+*.log
+
+exp_data/
+
+# example outputs (results, runs, profiles) are not part of the library
+examples/**/data/
+examples/**/exp_data/
+examples/**/figures/
+examples/**/profiling/
