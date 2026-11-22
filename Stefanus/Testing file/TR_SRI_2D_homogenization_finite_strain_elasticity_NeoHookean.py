@@ -26,7 +26,7 @@ plot_load_cases = False     # plot the deformed cell after every load step
 plot_fig4 = True           # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
 MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
-                            #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
+                            #               <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
 INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --sri): mu part at the 4 Gauss points,
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
