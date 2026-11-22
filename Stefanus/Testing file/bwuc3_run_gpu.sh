@@ -27,6 +27,6 @@ cd "$SCRIPT_DIR"
 nvidia-smi -L
 
 # FIRST TEST (dev_gpu_a100_il, 30 min): small grid, two increments. Compare with the CPU run of the same command:
-#   python -u $SCRIPT --device gpu -n 32 -inc 2 --save_per_it
+#   python -u $SCRIPT --solver cg --device gpu -n 32 -inc 2 --save_per_it
 # Production: one GPU, one process (more GPUs need CUDA-aware MPI: not tested)
-python -u "$SCRIPT" --device gpu -n 128 -inc 40 --save_per_it
+python -u "$SCRIPT" --solver cg --device gpu -n 128 -inc 40 --save_per_it
