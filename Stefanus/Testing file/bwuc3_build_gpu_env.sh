@@ -17,7 +17,7 @@ set -eo pipefail   # no -u: the Lmod module scripts use unset variables
 # ---- CHECK THESE THREE NAMES ON THE CLUSTER FIRST (module avail devel/python mpi/openmpi devel/cuda) ----------------
 PY_MODULE=devel/python/3.13.1-gnu-14.2     # a Python 3.11-3.13 module
 MPI_MODULE=mpi/openmpi/5.0-gnu-14.2        # an OpenMPI built with the same GNU compiler as Python
-CUDA_MODULE=CHANGE_ME                      # a CUDA 12.x module, e.g. devel/cuda/12.<x> (CuPy below is for CUDA 12)
+CUDA_MODULE=devel/cuda/12.8
 # ---- paths ----------------------------------------------------------------------------------------------------------
 VENV=$HOME/venv-muffto-gpu
 MUFFTTO_DIR=$HOME/muFFTTO                  # your muFFTTO checkout (tested: branch StefanusMichael_Dev_rebased, b0b7768)

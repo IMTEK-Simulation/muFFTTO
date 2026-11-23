@@ -19,10 +19,10 @@ from muFFTTO import direct_solvers, solvers_nonlinear, sparse_assembly
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 20                  # number of load steps (nominal; a failed trust-region solve halves the step)
+N_inc = 40                  # number of load steps (nominal; a failed trust-region solve halves the step)
 NEWTON_TOL = 5e-7           # only for the small-strain probe of NU_LAT / E_eff below (|r| / |r0| of its Newton solve)
 E_LOAD = 1                  # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
-plot_load_cases = False     # plot the deformed cell after every load step
+plot_load_cases = True     # plot the deformed cell after every load step
 plot_fig4 = True           # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
 MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
@@ -31,10 +31,10 @@ INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --s
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
                             #          LOCKS for Lambda/mu = 1000) (Always use
-SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, which
+SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, whichsbatch -p gpu_a100_short -t 00:30:00 bwuc3_run_gpu.sh
                             #           the trust region handles (Steihaug CG stops at negative curvature)
                             # 'spd'   = without the initial-stress part of the lam term (same solution, other path)
-VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
+VOID        = 'soft'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
                             # 'soft' = stand-in mu = 1e-3 mu_m, lam = 0 (SOLVER = 'direct' needs stiffness everywhere:
                             #          with 'hole' it switches to 'soft' automatically)
 LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown of the energy minimization -> <P_ll> = 0 (as Martin)
@@ -62,7 +62,7 @@ DEVICE        = 'cpu'       # 'cpu' = numpy (as before) | 'gpu' = CuPy, needs mu
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.02, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+EPS_MAX = {'X': 0.05, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
@@ -743,7 +743,9 @@ while t_load < 1.0 - 1e-12:
             print(f'inc {inc:3d}  t = {t_load:.4f} | F - I = {np.array2string(total_macro_gradient.ravel(), precision=5)} | '
                   f'P [MPa] = {np.array2string(P_avg.ravel() * S_REF, precision=6)} | TR its {res.nit}, '
                   f'{solver_info}', flush=True)
+
     if plot_load_cases and discretization.communicator.size == 1 and DEVICE == 'cpu':
+        from matplotlib import pyplot as plt
         L_cell = np.diag(domain_size)
         u_unit_cell.s[0] = displacement_fluctuation_field.s[0] / domain_size[0]
         u_unit_cell.s[1] = displacement_fluctuation_field.s[1] / domain_size[1]
@@ -751,7 +753,10 @@ while t_load < 1.0 - 1e-12:
             discretization, macro_gradient_ij=np.linalg.inv(L_cell) @ total_macro_gradient @ L_cell,
             displacement_fluctuation=u_unit_cell)
         visualization_utils.plot_field_on_grid(coordinates_for_plot=x_plot_ixyz, field_to_plot=phase_field.s[0, 0],
-                                               name=f'TR, increment {inc + 1}, t = {t_load:.3f}')
+                                               name=f'TR, increment {inc + 1}, eps = {hist["eps_nominal"][-1]:.4f}')
+        plt.gcf().savefig(figure_folder_path + f'deformed_inc{inc:03d}.png', dpi=150)   # save the deformed cell
+        plt.close('all')
+
     inc += 1
     d_t = min(2.0 * d_t, max_step)
 # ============================================================================

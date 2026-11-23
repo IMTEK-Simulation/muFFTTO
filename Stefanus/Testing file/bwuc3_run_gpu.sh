@@ -14,7 +14,7 @@ set -eo pipefail
 # ---- same modules and venv as in bwuc3_build_gpu_env.sh -------------------------------------------------------------
 PY_MODULE=devel/python/3.13.1-gnu-14.2
 MPI_MODULE=mpi/openmpi/5.0-gnu-14.2
-CUDA_MODULE=CHANGE_ME
+CUDA_MODULE=devel/cuda/12.8
 VENV=$HOME/venv-muffto-gpu
 SCRIPT_DIR=$HOME/muFFTTO/Stefanus/Testing\ file
 SCRIPT=TR_SRI_2D_homogenization_finite_strain_elasticity_NeoHookean.py
