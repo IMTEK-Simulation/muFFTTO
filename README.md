@@ -25,30 +25,47 @@ FFT-based micro-scale topology optimization on periodic unit cells using the [mu
  
 ## Installation
 
-To install `muFFTTO`, you can use `pip`:
+Everything installs with `pip` into a virtual environment (Python >= 3.10):
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 git clone https://github.com/imtek-simulation/muFFTTO.git
 cd muFFTTO
-pip install .
+pip install -e . openmpi
 ```
 
-For development, you can install it in editable mode:
+`pip install -e .` installs muFFTTO in editable mode (changes to the code take effect without reinstalling) with all
+dependencies: numpy, scipy, muGrid, NuMPI, mpi4py, JAX and matplotlib.
+
+**MPI.** `mpi4py` from pip needs an MPI library at run time; `openmpi` above installs one from PyPI. Without any MPI
+library, `import muFFTTO` fails with `RuntimeError: cannot load MPI library`. On a cluster you can use the cluster's
+MPI instead: leave out `openmpi` and load the MPI module before running, e.g. on NEMO `module load mpi/openmpi`.
+The PyPI `muGrid` is built without MPI, so a pip install runs serially (one process); parallel runs need muGrid built
+from source against the cluster's MPI.
+
+**Direct solvers** (`muFFTTO.direct_solvers`, `solvers_nonlinear.trust_region_exact`) work with SciPy out of the box.
+Faster backends are used automatically when installed: MUMPS (`conda install -c conda-forge python-mumps`, not
+available on pip) or, on an NVIDIA GPU, cuDSS (`pip install "nvmath-python[cu12]" nvidia-cudss-cu12 cupy-cuda12x`).
+
+**GPU.** The PyPI `muGrid` runs on the CPU; for GPU runs install a CUDA build of muGrid
+([muGrid](https://github.com/muSpectre/muGrid)).
+
+### Example: a fresh install on NEMO (bwForCluster)
 
 ```bash
-pip install -e .
+module load lang/python/3.12.3-gcccore-13.3.0     # do not 'module purge' afterwards: venv would get Python 3.9
+cd /work/classic/<your workspace>                  # the home directory is small: install and run in the workspace
+python3 -m venv venv && source venv/bin/activate
+git clone https://github.com/imtek-simulation/muFFTTO.git
+cd muFFTTO && pip install --no-cache-dir -e . openmpi
+python -c "import muFFTTO; from muFFTTO import direct_solvers; print(direct_solvers.symmetric_solver().name)"
 ```
 
-### Installing dependencies
+Run on a compute node (`sbatch`), not on the login node; in the job script load the same Python module and
+`source venv/bin/activate`. The login node prints a harmless `pml_ucx ... Failed to create UCP worker` message from
+the PyPI Open MPI; `export OMPI_MCA_pml=ob1` silences it.
 
-The core dependencies `numpy` and `scipy` will be installed automatically.
-  `muGrid`  must be installed separately. You can install them from source:
-
-```bash 
-pip install git+https://github.com/muSpectre/muGrid.git
-```
- 
- 
 
 ## Package Structure
 
