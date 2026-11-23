@@ -26,7 +26,7 @@ plot_load_cases = False     # plot the deformed cell after every load step
 plot_fig4 = True           # plot nominal stress vs nominal strain at the end (comparison with paper Fig. 4)
 MATERIAL = 'paper'     # 'paper' = Li & Rudykh (2019): contrast 1000, Lambda/mu 1000
                             # 'simplified' = contrast 10, Lambda/mu 100 (Martin's report: -3.5 % before buckling,
-                            #                <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
+                            #               <= 1 % after, at 128 px; much cheaper CG). NOT the paper's material!
 INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --sri): mu part at the 4 Gauss points,
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
@@ -34,22 +34,35 @@ INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --s
 SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, which
                             #           the trust region handles (Steihaug CG stops at negative curvature)
                             # 'spd'   = without the initial-stress part of the lam term (same solution, other path)
-VOID        = 'soft'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
-                            # 'soft' = stand-in mu = 1e-3 mu_m, lam = 0 (the direct solver needs stiffness everywhere)
+VOID        = 'hole'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
+                            # 'soft' = stand-in mu = 1e-3 mu_m, lam = 0 (SOLVER = 'direct' needs stiffness everywhere:
+                            #          with 'hole' it switches to 'soft' automatically)
 LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown of the energy minimization -> <P_ll> = 0 (as Martin)
                             # 'simple' = F_ll = 1 + NU_LAT eps prescribed (lateral stress up to ~1.6 % of axial)
-# Trust-region Newton with a sparse direct solver (muFFTTO solvers_nonlinear.trust_region_exact)
+# Trust-region Newton: which solver for the subproblems ===============================================================
+SOLVER        = 'direct'    # 'direct' = sparse direct solver, each subproblem solved exactly (Martin, commit c41abc7):
+                            #            few iterations, prints the negative eigenvalues (buckling); serial CPU only
+                            # 'cg'     = Newton-CG with the Green preconditioner (NuMPI branch feat/tr_precond):
+                            #            MPI and GPU (--device gpu), for large grids. Command line: --solver cg
 GTOL          = 1e-3        # Martin --gtol: stop when max|gradient| < GTOL mu_m h d_eps (nodal force of one load step)
-TR_DELTA0     = 0.05        # Martin --delta0: initial trust-region radius (norm scaled by the Hessian diagonal)
+TR_DELTA0     = 0.05        # Martin --delta0: initial trust-region radius ('cg': M-norm; 'direct': norm scaled by
+                            #   the Hessian diagonal)
 TR_DELTA_MAX  = 0.5         # Martin --delta_max
-DIRECT_SOLVER = 'auto'      # 'auto' (MUMPS if installed, else SciPy), 'scipy', 'mumps', 'cudss' (GPU); serial only
-TR_MAXITER    = 100         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
+TR_MAXITER    = 300         # Martin --tr_maxiter: trust-region iterations per load step (then: halve the step)
+TR_INNER_TOL  = 1e-6        # 'cg' only. Martin --inner_tol: Steihaug CG relative energy-error tolerance
+TR_INNER_TAU  = 0.25        # 'cg' only. Martin --inner_tau: adaptive delay of the energy-error estimate (min. delay 10)
+DIRECT_SOLVER = 'auto'      # 'direct' only: 'auto' (MUMPS if installed, else SciPy), 'scipy', 'mumps', 'cudss' (GPU
+                            #   factorisation; the fields stay on the CPU)
 CELLS         = (1, 2)      # (1, 1) = primitive cell; (1, 2) = 1 x 2 supercell
 IMPERFECTION  = 1e-3         # Martin --imperfection, in pixel sizes (e.g. 1e-3); 0 = perfect cell
+# Device (as Martin --device) =========================================================================================
+DEVICE        = 'cpu'       # 'cpu' = numpy (as before) | 'gpu' = CuPy, needs muGrid built with CUDA, CuPy and a muFFTTO
+                            #   whose Discretization has the device option; only with SOLVER = 'cg'. Command line:
+                            #   --device gpu
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.01, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+EPS_MAX = {'X': 0.02, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
@@ -87,6 +100,10 @@ parser.add_argument(
     action='store_false',
     help='by default the fields of every converged load step are saved; this flag switches it off'
 )
+parser.add_argument('--device', choices=['cpu', 'gpu'], default=DEVICE,
+                    help="where the fields live: 'cpu' (numpy) or 'gpu' (CuPy, only with --solver cg)")
+parser.add_argument('--solver', choices=['direct', 'cg'], default=SOLVER,
+                    help="'direct' (sparse direct, serial CPU) or 'cg' (Newton-CG with Green, MPI / GPU)")
 
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -94,6 +111,28 @@ args        = parser.parse_args()
 nnn         = int(args.nb_pixel)
 ninc        = int(args.nb_increments)
 save_per_it =  args.save_per_it
+DEVICE      = args.device
+SOLVER      = args.solver
+if SOLVER == 'direct':
+    if DEVICE == 'gpu' or MPI.COMM_WORLD.size > 1:
+        raise RuntimeError("--solver direct: serial on the CPU only (no mpirun, no --device gpu); "
+                           "for MPI or GPU use --solver cg")
+    if VOID == 'hole':                        # a true hole (mu = lam = 0) makes the assembled Hessian singular
+        VOID = 'soft'
+        print("--solver direct: VOID 'hole' -> 'soft' (mu_void = 1e-3 mu_m)")
+if DEVICE == 'gpu':
+    import muGrid
+    if not (muGrid.has_gpu and muGrid.is_gpu_available()):
+        raise RuntimeError('--device gpu: this muGrid has no GPU support (build it with MUGRID_ENABLE_CUDA=ON) '
+                           'or no GPU is visible (request one: sbatch --gres=gpu:1)')
+    import cupy as xp                         # fields live on the GPU (Martin l. 107-110)
+else:
+    xp = np                                   # fields live on the CPU: exactly the numpy code as before
+
+
+def to_host(a_):
+    """numpy array of a CuPy array (copy to the host); numpy arrays pass through unchanged (Martin l. 113-114)"""
+    return a_.get() if hasattr(a_, 'get') else np.asarray(a_)
 # ============================================================================
 # problem setup
 # ============================================================================
@@ -118,7 +157,7 @@ S_REF = MU_M_MPA    # stress scale  [MPa] -> stresses / moduli in units of mu^(m
 c_matrix = C_MATRIX
 r = R_MM / L_REF                        # = 1
 CONTRAST = MU_I_MPA / S_REF             # = 1000
-MU_VOID = MU_V_MPA / S_REF              # 'soft': 1e-4; 'hole': 0 (allowed: F = I is set inside the hole)
+MU_VOID = MU_V_MPA / S_REF              # 'soft': 1e-3; 'hole': 0 (allowed: F = I is set inside the hole)
 incl_vol_frac = 1.0 - c_matrix          # total circle fraction (voids + stiff)
 
 # Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
@@ -160,18 +199,20 @@ my_cell = domain.PeriodicUnitCell(domain_size=domain_size,
 discretization = domain.Discretization(cell=my_cell,
                                        nb_of_pixels_global=number_of_pixels,
                                        discretization_type=discretization_type,
-                                       element_type=element_type)
+                                       element_type=element_type,
+                                       **({'device': 'gpu'} if DEVICE == 'gpu' else {}))   # cpu: as before
 
 # ============================================================================
 # output folders
 # ============================================================================
 file_folder_path   = os.path.dirname(os.path.realpath(__file__))
 run_tag            = ('' if tuple(CELLS) == (1, 1) else f'_cells{CELLS[0]}x{CELLS[1]}') + \
-                     ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}')
+                     ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}') + ('_gpu' if DEVICE == 'gpu' else '')
+solver_tag         = preconditioner_type if SOLVER == 'cg' else 'direct'     # folder: ..._Green_... or ..._direct_...
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_direct_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{solver_tag}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 figure_folder_path = (file_folder_path + '/figures/' + script_name + '/'
-                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_direct_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
+                      + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{solver_tag}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
 
 if discretization.communicator.rank == 0:
     os.makedirs(data_folder_path,   exist_ok=True)
@@ -216,20 +257,21 @@ _info['E_LOAD']     = E_LOAD
 geometry_ID = 'geometry_stefanus'
 
 phase_field = discretization.get_scalar_field(name='phase_field')
-coords_all  = np.asarray(discretization.fft.coords)
+coords_all  = to_host(discretization.fft.coords)                          # geometry is built on the host
 coords_prim = np.stack([np.mod(coords_all[0] * CELLS[0], 1.0),
                         np.mod(coords_all[1] * CELLS[1], 1.0)])
-phase_field.s[0, 0] = microstructure_library.get_geometry(
+phase_host = microstructure_library.get_geometry(
     nb_voxels=discretization.nb_of_pixels,
     microstructure_name=geometry_ID,
     coordinates=coords_prim,
     vol_frac=incl_vol_frac,
     domain_size=cell_size
 )
+phase_field.s[0, 0] = xp.asarray(phase_host)                             # then copied to the device
 
-matrix_mask = phase_field.s[0, 0] == 0
-void_mask   = phase_field.s[0, 0] == 1
-inc_mask    = phase_field.s[0, 0] == 2
+matrix_mask = xp.asarray(phase_host == 0)
+void_mask   = xp.asarray(phase_host == 1)
+inc_mask    = xp.asarray(phase_host == 2)
 
 # ============================================================================
 # material fields
@@ -237,16 +279,16 @@ inc_mask    = phase_field.s[0, 0] == 2
 lam_field = discretization.get_quad_field_scalar(name='lam_field')
 mu_field  = discretization.get_quad_field_scalar(name='mu_field')
 
-lam_field.s[0, 0, :, matrix_mask] = lam_matrix
-lam_field.s[0, 0, :, void_mask]   = lam_void
-lam_field.s[0, 0, :, inc_mask]    = lam_inc
-mu_field.s[0, 0,  :, matrix_mask] = mu_matrix
-mu_field.s[0, 0,  :, void_mask]   = mu_void
-mu_field.s[0, 0,  :, inc_mask]    = mu_inc
+lam_field.s[0, 0][:, matrix_mask] = lam_matrix                         # [0, 0][:, mask] as Martin l. 160-161
+lam_field.s[0, 0][:, void_mask]   = lam_void
+lam_field.s[0, 0][:, inc_mask]    = lam_inc
+mu_field.s[0, 0][:,  matrix_mask] = mu_matrix
+mu_field.s[0, 0][:,  void_mask]   = mu_void
+mu_field.s[0, 0][:,  inc_mask]    = mu_inc
 
 if discretization.communicator.rank == 0:
-    print(f'lam min/max : {lam_field.s.min():.4f} / {lam_field.s.max():.4f}')
-    print(f'mu  min/max : {mu_field.s.min():.4f}  / {mu_field.s.max():.4f}')
+    print(f'lam min/max : {float(lam_field.s.min()):.4f} / {float(lam_field.s.max()):.4f}')
+    print(f'mu  min/max : {float(mu_field.s.min()):.4f}  / {float(mu_field.s.max()):.4f}')
     print(f'material: {MATERIAL} | contrast mu_i/mu_m = {CONTRAST:g} | Lambda/mu = {LAM_OVER_MU:g} | '
           f'integration: {INTEGRATION} | element: {element_type}')
 
@@ -290,37 +332,37 @@ def det2(M):
 
 def inv_T(M):
     """M^-T of 2x2 tensors stored as (2, 2, ...)"""
-    return np.stack([np.stack([M[1, 1], -M[1, 0]]), np.stack([-M[0, 1], M[0, 0]])]) / det2(M)
+    return xp.stack([xp.stack([M[1, 1], -M[1, 0]]), xp.stack([-M[0, 1], M[0, 0]])]) / det2(M)
 
 
 def ddot(A, B):
     """A : B for 2x2 tensors (2, 2, ...)"""
-    return np.einsum('ij...,ij...->...', A, B)
+    return xp.einsum('ij...,ij...->...', A, B)
 
 
 def A_dBT_C(A, dB, C):
     """A dB^T C for 2x2 tensors (2, 2, ...)"""
-    return np.einsum('ik...,lk...,lj...->ij...', A, dB, C)
+    return xp.einsum('ik...,lk...,lj...->ij...', A, dB, C)
 
 
 def sri_update(F_field, P_field, W_field):
     """SRI stress P and energy W at the deformation gradient F_field; keeps what K_fun needs in sri_state"""
     F   = F_field.s                                   # (2, 2, q, x, y)
-    F0  = np.broadcast_to(F.mean(axis=2, keepdims=True), F.shape) if INTEGRATION == 'sri' else F   # 'sri': pixel mean of F
+    F0  = xp.broadcast_to(F.mean(axis=2, keepdims=True), F.shape) if INTEGRATION == 'sri' else F   # 'sri': pixel mean of F
     J, J0 = det2(F), det2(F0)
-    J_min = MPI.COMM_WORLD.allreduce(float(min(J.min(), J0.min())), op=MPI.MIN)
+    J_min = MPI.COMM_WORLD.allreduce(min(float(J.min()), float(J0.min())), op=MPI.MIN)
     if J_min <= 0.0:
         raise RuntimeError(f'SRI: inverted element (min det F = {J_min:.3e}): use smaller load increments')
     lam, mu = lam_field.s[0, 0], mu_field.s[0, 0]     # (q, x, y), constant within a pixel
-    FiT, F0iT, lnJ0 = inv_T(F), inv_T(F0), np.log(J0)
+    FiT, F0iT, lnJ0 = inv_T(F), inv_T(F0), xp.log(J0)
     P_field.s[...]   = mu * (F - FiT) + lam * lnJ0 * F0iT
-    W_field.s[0, 0]  = 0.5 * mu * (ddot(F, F) - dim) - mu * np.log(J) + 0.5 * lam * lnJ0 ** 2
+    W_field.s[0, 0]  = 0.5 * mu * (ddot(F, F) - dim) - mu * xp.log(J) + 0.5 * lam * lnJ0 ** 2
     sri_state.update(FiT=FiT, F0iT=F0iT, lnJ0=lnJ0, lam=lam, mu=mu)
 
 
 def sri_dP(dF, st):
     """linearised SRI stress dP for the gradient increment dF (2, 2, q, x, y) at the state st"""
-    dF0 = np.broadcast_to(dF.mean(axis=2, keepdims=True), dF.shape) if INTEGRATION == 'sri' else dF
+    dF0 = xp.broadcast_to(dF.mean(axis=2, keepdims=True), dF.shape) if INTEGRATION == 'sri' else dF
     return (st['mu'] * (dF + A_dBT_C(st['FiT'], dF, st['FiT']))
             + st['lam'] * (ddot(st['F0iT'], dF0) * st['F0iT']
                            - (st['lnJ0'] * A_dBT_C(st['F0iT'], dF0, st['F0iT']) if SRI_TANGENT == 'exact' else 0.0)))
@@ -332,8 +374,8 @@ def sri_reference_operator(input_field_inxyz, output_field_inxyz):
     discretization.apply_gradient_operator_mugrid(u_inxyz=input_field_inxyz, grad_u_ijqxyz=dF_field)
     dF  = dF_field.s
     dF0 = dF.mean(axis=2, keepdims=True) if INTEGRATION == 'sri' else dF
-    dP_field.s[...] = (mu_matrix * (dF + np.swapaxes(dF, 0, 1))
-                       + lam_matrix * np.einsum('ii...->...', dF0) * np.eye(dim)[:, :, None, None, None])
+    dP_field.s[...] = (mu_matrix * (dF + xp.swapaxes(dF, 0, 1))
+                       + lam_matrix * xp.einsum('ii...->...', dF0) * xp.eye(dim)[:, :, None, None, None])
     discretization.fft.communicate_ghosts(dP_field)
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=dP_field,
                                                              div_u_fnxyz=output_field_inxyz, apply_weights=True)
@@ -342,7 +384,7 @@ def sri_reference_operator(input_field_inxyz, output_field_inxyz):
 def constitutive_update():
     """stress, energy and the state for the Hessian at the current total_strain_field"""
     if VOID == 'hole':                              # true hole: F = I inside keeps ln J finite; mu = lam = 0 there,
-        total_strain_field.s[..., void_mask] = np.eye(dim)[:, :, None, None]   # so P = 0, W = 0, tangent = 0
+        total_strain_field.s[..., void_mask] = xp.eye(dim)[:, :, None, None]   # so P = 0, W = 0, tangent = 0
     sri_update(total_strain_field, stress_field, energy_field)
 
 
@@ -379,8 +421,8 @@ def average_P():
     """volume average of the 1st Piola-Kirchhoff stress P (same averaging as get_homogenized_stress_mugrid)"""
     P_weighted.s[...] = stress_field.s[...]
     discretization.apply_quadrature_weights_on_gradient_field_mugrid(grad_field=P_weighted)
-    return discretization.mpi_reduction.sum(P_weighted.s, axis=tuple(range(-dim - 1, 0))) / \
-        discretization.cell.domain_volume
+    local_sum = to_host(P_weighted.s.sum(axis=tuple(range(-dim - 1, 0))))   # summed on the device, 2 x 2 to host
+    return MPI.COMM_WORLD.allreduce(local_sum, op=MPI.SUM) / discretization.cell.domain_volume
 
 
 def set_F_identity():
@@ -393,7 +435,7 @@ def linear_response(E_macro, h=1e-6):
     """d<P>/dE for the macro strain direction E_macro at F = I: the small-strain response of THIS discretization
     (element, integration, material), units of mu_m. Newton-converged solve at h E; leaves the fields at F = I."""
     set_F_identity()
-    total_strain_field.s[...] += h * E_macro[:, :, np.newaxis, np.newaxis, np.newaxis]
+    total_strain_field.s[...] += xp.asarray(h * E_macro)[:, :, None, None, None]
     constitutive_update()
     its = []
     for newton_it in range(10):                     # Newton to convergence: ONE step is not enough, because the
@@ -401,7 +443,7 @@ def linear_response(E_macro, h=1e-6):
         discretization.apply_gradient_transposed_operator_mugrid(   # inclusion (<P> was 23 % off after 1 step)
             gradient_field_ijqxyz=stress_field, div_u_fnxyz=rhs_field, apply_weights=True)
         rhs_field.s[...] *= -1
-        norm_r = np.sqrt(discretization.communicator.sum(np.dot(rhs_field.s.ravel(), rhs_field.s.ravel())))
+        norm_r = np.sqrt(discretization.communicator.sum(float(xp.dot(rhs_field.s.ravel(), rhs_field.s.ravel()))))
         if newton_it == 0:
             norm_r0 = norm_r
         elif norm_r / norm_r0 < NEWTON_TOL:
@@ -502,19 +544,21 @@ hist = {'eps_nominal': [0.0], 'P_load': [0.0], 'P_lat': [0.0], 'lateral_stretch'
         'H': [np.zeros((dim, dim))], 'P': [np.zeros((dim, dim))]}   # full macro F - I and average P# ====================================================================================================================================================
 
 # ============================================================================
-# trust-region Newton with a sparse direct solver (each subproblem solved exactly, More-Sorensen)
+# trust-region Newton: SOLVER = 'cg' as Martin's stefanus_2D_finite_strain_NeoHookean_TR.py (lines 189-623),
+#                      SOLVER = 'direct' with a sparse direct solver (Martin, commit c41abc7)
 # ============================================================================
 #   unknowns x = (u, f): u = periodic fluctuation (all nodes), f = F_ll - 1 (only if LATERAL = 'exact', stored on
 #   rank 0, scaled by 1 / F_SCALE). The trust region minimizes the total energy; stationarity in f is <P_ll> = 0.
 #   load parameter t in [0, 1]: F_macro = I + t E_LOAD load_pattern (F_ll replaced by 1 + f if it is an unknown);
 #   a failed trust-region solve halves the step, a success lets it grow back (x 2) up to 1 / ninc (Martin l. 586-624)
+from NuMPI.Optimization import tr_newton_bounded      # NuMPI branch feat/tr_precond (precond, inner_stop)
 comm        = discretization.communicator
 rank0       = MPI.COMM_WORLD.rank == 0
 LAT_UNKNOWN = LATERAL == 'exact' and LOAD_MODE == 'fig4'
 u_work      = discretization.get_unknown_size_field(name='tr_u_work')
 tr_in       = discretization.get_unknown_size_field(name='tr_in')
 tr_out      = discretization.get_unknown_size_field(name='tr_out')
-w_q         = np.asarray(discretization.quadrature_weights)
+w_q         = xp.asarray(to_host(discretization.quadrature_weights))
 nb_u        = u_work.s.size
 V_total     = float(np.prod(discretization.nb_of_pixels_global) * float(w_q.sum()))
 F_SCALE     = 1.0 / np.prod(discretization.nb_of_pixels_global)   # f = F_SCALE x_f (Martin l. 185)
@@ -530,17 +574,17 @@ def tr_split(x):
 
 def tr_join(u_part, f_part):                  # x, v: f in physical units (stretch)
     if LAT_UNKNOWN and rank0:
-        return np.concatenate([u_part, [f_part / F_SCALE]])
+        return xp.concatenate([u_part, xp.asarray([f_part / F_SCALE])])
     return u_part.copy()
 
 def tr_join_dual(u_part, g_f):                # gradient, H v: f component in dual units
     if LAT_UNKNOWN and rank0:
-        return np.concatenate([u_part, [g_f * F_SCALE]])
+        return xp.concatenate([u_part, xp.asarray([g_f * F_SCALE])])
     return u_part.copy()
 
 def sum_ll(field):
     """sum over the cell of w_q field_ll (global) = V <field_ll>"""
-    return comm.sum(float(np.einsum('q...,q->...', field.s[l, l], w_q).sum()))
+    return comm.sum(float(xp.einsum('q...,q->...', field.s[l, l], w_q).sum()))
 
 def tr_evaluate(x):
     """F = F_macro + grad u at every quadrature point, then stress, energy and the SRI state"""
@@ -552,7 +596,7 @@ def tr_evaluate(x):
     u_work.s[...] = u_part.reshape(u_work.s.shape)
     discretization.fft.communicate_ghosts(u_work)
     discretization.apply_gradient_operator_mugrid(u_inxyz=u_work, grad_u_ijqxyz=strain_fluc_field)
-    total_strain_field.s[...] = strain_fluc_field.s + F_mac[:, :, np.newaxis, np.newaxis, np.newaxis]
+    total_strain_field.s[...] = strain_fluc_field.s + xp.asarray(F_mac)[:, :, None, None, None]
     constitutive_update()                     # raises RuntimeError for an inverted element
 
 def tr_fun(x):
@@ -562,10 +606,10 @@ def tr_fun(x):
     except RuntimeError:                      # inverted element: inadmissible, the trust region shrinks
         set_F_identity()                      # Martin l. 294-297: the state of an inadmissible point is F = I
         constitutive_update()
-        return INADMISSIBLE_ENERGY, np.zeros_like(x)
-    energy = comm.sum(float(np.einsum('q...,q->...', energy_field.s[0, 0], w_q).sum()))
+        return INADMISSIBLE_ENERGY, xp.zeros_like(x)
+    energy = comm.sum(float(xp.einsum('q...,q->...', energy_field.s[0, 0], w_q).sum()))
     if not np.isfinite(energy):
-        return INADMISSIBLE_ENERGY, np.zeros_like(x)
+        return INADMISSIBLE_ENERGY, xp.zeros_like(x)
     discretization.fft.communicate_ghosts(stress_field)
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                              div_u_fnxyz=tr_out, apply_weights=True)
@@ -573,7 +617,7 @@ def tr_fun(x):
 
 def tr_hessp(x, v):
     """Hessian of the energy in (u, f) applied to v: dF = grad v_u + v_f e_ll -- Martin l. 364-385"""
-    same_x = tr_state['hess_at'] is not None and np.array_equal(tr_state['hess_at'], x)
+    same_x = tr_state['hess_at'] is not None and bool(xp.array_equal(tr_state['hess_at'], x))
     if not MPI.COMM_WORLD.allreduce(same_x, op=MPI.LAND):                    # MPI: all ranks must agree
         tr_evaluate(x)
         tr_state['hess_at'] = x.copy()
@@ -590,9 +634,35 @@ def tr_hessp(x, v):
                                                              div_u_fnxyz=tr_out, apply_weights=True)
     return tr_join_dual(tr_out.s.ravel().copy(), sum_ll(dP_field))
 
-assembly = sparse_assembly.SparseAssembly(discretization)   # element-by-element assembly of the Hessian
-direct   = direct_solvers.symmetric_solver(DIRECT_SOLVER)
-fixed    = np.ravel_multi_index(([0, 1], [0, 0], [0, 0], [0, 0]), u_work.s.shape)   # node 0: no rigid translation
+def tr_precond(r):
+    """Green on u; the macro unknown scaled by 1 / (V mu_m) -- Martin l. 465-485"""
+    tr_in.s[...] = r[:nb_u].reshape(tr_in.s.shape)
+    M_fun_Green(tr_in, tr_out)
+    if LAT_UNKNOWN and rank0:
+        return xp.concatenate([tr_out.s.ravel().copy(), xp.asarray([float(r[nb_u]) / (V_total * F_SCALE ** 2)])])
+    return tr_out.s.ravel().copy()
+
+
+# NuMPI's trust region works on host (numpy) vectors: the fields are filled on the device inside tr_fun / tr_hessp /
+# tr_precond, only the vectors cross (Martin l. 518-531). On the CPU xp.asarray and to_host do not copy.
+def tr_fun_host(x_h):
+    e_, g_ = tr_fun(xp.asarray(x_h))
+    return e_, to_host(g_)
+
+
+def tr_hessp_host(x_h, v_h):
+    return to_host(tr_hessp(xp.asarray(x_h), xp.asarray(v_h)))
+
+
+def tr_precond_host(r_h):
+    return to_host(tr_precond(xp.asarray(r_h)))
+
+
+# SOLVER = 'direct': the Hessian as a sparse matrix instead of tr_hessp + Green (Martin, commit c41abc7)
+if SOLVER == 'direct':
+    assembly = sparse_assembly.SparseAssembly(discretization)   # element-by-element assembly of the Hessian
+    direct   = direct_solvers.symmetric_solver(DIRECT_SOLVER)
+    fixed    = np.ravel_multi_index(([0, 1], [0, 0], [0, 0], [0, 0]), u_work.s.shape)   # node 0: no rigid translation
 
 def tr_hess(x):
     """Hessian of the energy in (u, f) as a sparse matrix: the u-u block assembled element by element from sri_dP,
@@ -610,15 +680,25 @@ d_t      = max_step
 loc_x, loc_y = discretization.fft.subdomain_locations                     # MPI: offset of this rank's part of the grid
 n_x, n_y     = u_work.s.shape[-2:]
 u_noise  = np.random.default_rng(1).standard_normal(u_work.s.shape[:2] + tuple(discretization.nb_of_pixels_global))
-x_cur    = tr_join(IMPERFECTION * h_x * u_noise[:, :, loc_x:loc_x + n_x, loc_y:loc_y + n_y].ravel(), 0.0)
+x_cur    = to_host(tr_join(xp.asarray(IMPERFECTION * h_x * u_noise[:, :, loc_x:loc_x + n_x, loc_y:loc_y + n_y].ravel()),
+                           0.0))                                            # host vector (NuMPI)
 while t_load < 1.0 - 1e-12:
     d_t = min(d_t, 1.0 - t_load)
     tr_F_macro[...] = np.eye(dim) + (t_load + d_t) * E_LOAD * load_pattern
     tr_state['hess_at'], tr_state['cg'] = None, 0
-    res = solvers_nonlinear.trust_region_exact(tr_fun, x_cur, tr_hess, gtol=GTOL_ABS, maxiter=TR_MAXITER,
-                                               delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, fixed=fixed, solver=direct,
-                                               disp=rank0)
-    sum_CG_its     += res.nfactorisations     # (direct solver: factorisations instead of CG iterations)
+    if SOLVER == 'cg':
+        res = tr_newton_bounded(tr_fun_host, x_cur, tr_hessp_host, precond=tr_precond_host, gtol=GTOL_ABS,
+                                maxiter=TR_MAXITER, delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, inner_stop='energy',
+                                inner_delay=10, inner_tol=TR_INNER_TOL, inner_tau=TR_INNER_TAU, comm=MPI.COMM_WORLD,
+                                disp=rank0)
+        sum_CG_its += tr_state['cg']
+        solver_info = f'CG its {tr_state["cg"]}'
+    else:
+        res = solvers_nonlinear.trust_region_exact(tr_fun, x_cur, tr_hess, gtol=GTOL_ABS, maxiter=TR_MAXITER,
+                                                   delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, fixed=fixed,
+                                                   solver=direct, disp=rank0)
+        sum_CG_its += res.nfactorisations    # (direct solver: factorisations instead of CG iterations)
+        solver_info = f'factorisations {res.nfactorisations}, negative eigenvalues {res.negative_eigenvalues}'
     sum_Newton_its += res.nit
     ok = bool(res.success) and res.fun < 0.5 * INADMISSIBLE_ENERGY
     if not ok:                                # keep x_cur (last converged state), halve the step
@@ -633,14 +713,15 @@ while t_load < 1.0 - 1e-12:
         continue
     t_load += d_t
     x_cur   = np.asarray(res.x).copy()
-    tr_fun(x_cur)                             # fields (stress, F) at the converged state
-    u_part, _ = tr_split(x_cur)
+    x_dev   = xp.asarray(x_cur)
+    tr_fun(x_dev)                             # fields (stress, F) at the converged state
+    u_part, _ = tr_split(x_dev)
     displacement_fluctuation_field.s[...] = u_part.reshape(displacement_fluctuation_field.s.shape)
     iteration_total += 1
     if save_per_it:                            # fields of every converged load step
-        for name_, arr_ in (('displacement_fluctuation_field', displacement_fluctuation_field.s.mean(axis=1)),
-                            ('energy_field', energy_field.s[0, 0].mean(axis=0)),
-                            ('stress_field', stress_field.s.mean(axis=2))):
+        for name_, arr_ in (('displacement_fluctuation_field', to_host(displacement_fluctuation_field.s.mean(axis=1))),
+                            ('energy_field', to_host(energy_field.s[0, 0].mean(axis=0))),
+                            ('stress_field', to_host(stress_field.s.mean(axis=2)))):       # saved from the host
             save_npy(data_folder_path + f'{name_}_inc{inc}.npy', arr_,
                      tuple(discretization.fft.subdomain_locations),  # MPI: true offsets (..._no_buffers is +1)
                      tuple(discretization.nb_of_pixels_global), MPI.COMM_WORLD)
@@ -656,14 +737,13 @@ while t_load < 1.0 - 1e-12:
         if LOAD_MODE == 'fig4':
             print(f'inc {inc:3d}  eps = {hist["eps_nominal"][-1]:.5f} (step {d_t * E_LOAD * EPS_MAX[LOAD_DIRECTION]:.4f}) | '
                   f'nominal stress = {-P_avg[k, k] * S_REF:.6f} MPa | lateral stress = {P_avg[l, l] * S_REF:+.2e} MPa '
-                  f'({abs(P_avg[l, l] / P_avg[k, k]):.2%} of axial) | TR its {res.nit}, factorisations {res.nfactorisations}, '
-                  f'negative eigenvalues {res.negative_eigenvalues}',
+                  f'({abs(P_avg[l, l] / P_avg[k, k]):.2%} of axial) | TR its {res.nit}, {solver_info}',
                   flush=True)
         else:
             print(f'inc {inc:3d}  t = {t_load:.4f} | F - I = {np.array2string(total_macro_gradient.ravel(), precision=5)} | '
                   f'P [MPa] = {np.array2string(P_avg.ravel() * S_REF, precision=6)} | TR its {res.nit}, '
-                  f'factorisations {res.nfactorisations}, negative eigenvalues {res.negative_eigenvalues}', flush=True)
-    if plot_load_cases and discretization.communicator.size == 1:
+                  f'{solver_info}', flush=True)
+    if plot_load_cases and discretization.communicator.size == 1 and DEVICE == 'cpu':
         L_cell = np.diag(domain_size)
         u_unit_cell.s[0] = displacement_fluctuation_field.s[0] / domain_size[0]
         u_unit_cell.s[1] = displacement_fluctuation_field.s[1] / domain_size[1]
@@ -689,9 +769,11 @@ if discretization.communicator.rank == 0:
     print('=' * 70)
     print(f'element_type     : {element_type} | integration: {INTEGRATION} | tangent: {SRI_TANGENT} | material: {MATERIAL}')
     print(f'number_of_pixels : {number_of_pixels}  (cells {CELLS[0]} x {CELLS[1]}, imperfection {IMPERFECTION:g})')
-    print(f'preconditioner   : {preconditioner_type}')
+    print(f'solver           : {SOLVER}' + (f' (direct solver: {direct.name}, void: {VOID})' if SOLVER == 'direct'
+                                             else f' (preconditioner: {preconditioner_type}, void: {VOID})'))
     print(f'MPI processes    : {MPI.COMM_WORLD.size}')
-    print(f'Total factorisations: {sum_CG_its}  (direct solver: {direct.name})')
+    print(f'device           : {DEVICE}')
+    print(f'Total CG its     : {sum_CG_its}' if SOLVER == 'cg' else f'Total factorisations: {sum_CG_its}')
     print(f'Total TR its     : {sum_Newton_its}  (trust-region Newton iterations)')
     print(f'Elapsed time     : {elapsed_time:.2f} s  ({elapsed_time / 60:.2f} min)')
     np.savez(data_folder_path + 'info_log_final.npz', **_info)
