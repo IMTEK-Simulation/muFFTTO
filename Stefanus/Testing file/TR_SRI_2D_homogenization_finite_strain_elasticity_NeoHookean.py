@@ -19,7 +19,7 @@ from muFFTTO import direct_solvers, solvers_nonlinear, sparse_assembly
 
 # Numerical settings ============================
 NX = 64                     # Arbitrary number of pixels (default of -n; NY follows from the cell)
-N_inc = 40                  # number of load steps (nominal; a failed trust-region solve halves the step)
+N_inc = 100                  # number of load steps (nominal; a failed trust-region solve halves the step)
 NEWTON_TOL = 5e-7           # only for the small-strain probe of NU_LAT / E_eff below (|r| / |r0| of its Newton solve)
 E_LOAD = 1                  # scales the total macro load below (finite strain: response is NOT linear in E_LOAD)
 plot_load_cases = True     # plot the deformed cell after every load step
@@ -31,12 +31,18 @@ INTEGRATION = 'full'        # 'sri'  = selective reduced integration (Martin --s
                             #          lambda part once per pixel (J0 = det of the pixel-mean F) -> no volumetric locking
                             # 'full' = the same code with J0 -> J at every Gauss point = standard NeoHookean (bilinear
                             #          LOCKS for Lambda/mu = 1000) (Always use
-SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, whichsbatch -p gpu_a100_short -t 00:30:00 bwuc3_run_gpu.sh
+SRI_TANGENT = 'exact'       # 'exact' = consistent tangent (Martin, lines 258-263); indefinite under compression, which
                             #           the trust region handles (Steihaug CG stops at negative curvature)
                             # 'spd'   = without the initial-stress part of the lam term (same solution, other path)
-VOID        = 'soft'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
+VOID        = 'tmc'        # 'hole' = true hole: mu = lam = 0 and F = I inside (as Martin and the paper)
                             # 'soft' = stand-in mu = 1e-3 mu_m, lam = 0 (SOLVER = 'direct' needs stiffness everywhere:
                             #          with 'hole' it switches to 'soft' automatically)
+                            # 'tmc'  = third-medium contact: the voids are a soft compressible neo-Hookean (TM_* below)
+                            #          with the HuHu-LuLu regularization inside the voids (Frederiksen et al. 2025,
+                            #          Martin --third_medium): void faces can come into contact. Command line: --void tmc
+TM_MU         = 1e-6        # 'tmc': shear modulus of the third medium / mu_m (Frederiksen: gamma_0 = 1e-7 ... 1e-6)
+TM_LAM_OVER_MU = 1.5        # 'tmc': lambda / mu of the third medium (1.5: nu = 0.3, Martin --tm_lam_over_mu)
+REG_ALPHA     = 1e-6        # 'tmc': regularization k_r = alpha L^2 mu_m (Frederiksen Table 3: alpha = 1e-6)
 LATERAL     = 'exact'       # 'exact'  = F_ll is an unknown of the energy minimization -> <P_ll> = 0 (as Martin)
                             # 'simple' = F_ll = 1 + NU_LAT eps prescribed (lateral stress up to ~1.6 % of axial)
 # Trust-region Newton: which solver for the subproblems ===============================================================
@@ -62,7 +68,7 @@ DEVICE        = 'cpu'       # 'cpu' = numpy (as before) | 'gpu' = CuPy, needs mu
 # Load case: Li & Rudykh (2019) Fig. 4 = uniaxial COMPRESSION, lateral side free =============
 LOAD_MODE = 'fig4'                              # 'fig4' = uniaxial compression below, 'manual' = your own load_pattern
 LOAD_DIRECTION = 'X'                            # 'X' = Fig. 4(a), 'Y' = Fig. 4(b)
-EPS_MAX = {'X': 0.05, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
+EPS_MAX = {'X': 0.35, 'Y': 0.030}              # final nominal strain = critical strains eps_cr (paper Sec. 3; Martin's
                                                 # docstring) = Martin's --eps_max (also sets gtol via d_eps)
 Y_MAX_MPA = {'X': 0.015, 'Y': 0.020}            # y-axis top of the Fig. 4 plot [MPa] (same in the small-strain script)
 # Small-strain probe: nu = small-strain Poisson ratio of the cell (used by LATERAL = 'simple') and E_eff (printed).
@@ -104,6 +110,8 @@ parser.add_argument('--device', choices=['cpu', 'gpu'], default=DEVICE,
                     help="where the fields live: 'cpu' (numpy) or 'gpu' (CuPy, only with --solver cg)")
 parser.add_argument('--solver', choices=['direct', 'cg'], default=SOLVER,
                     help="'direct' (sparse direct, serial CPU) or 'cg' (Newton-CG with Green, MPI / GPU)")
+parser.add_argument('--void', choices=['hole', 'soft', 'tmc'], default=VOID,
+                    help="'hole' (true hole), 'soft' (mu = 1e-3 mu_m) or 'tmc' (third-medium contact, HuHu-LuLu)")
 
 
 script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -113,6 +121,7 @@ ninc        = int(args.nb_increments)
 save_per_it =  args.save_per_it
 DEVICE      = args.device
 SOLVER      = args.solver
+VOID        = args.void
 if SOLVER == 'direct':
     if DEVICE == 'gpu' or MPI.COMM_WORLD.size > 1:
         raise RuntimeError("--solver direct: serial on the CPU only (no mpirun, no --device gpu); "
@@ -147,7 +156,7 @@ LAM_OVER_MU  = {'paper': 1e3,   'simplified': 100.0}[MATERIAL]   # Lambda / mu, 
 C_MATRIX     = 0.25             # target matrix volume fraction c^(m) ratio            [-]
 SPECIMEN_MM  = (92.37, 91.42)   # specimen width x height (finite sample, check only) [mm]
 THICKNESS_MM = 10.0             # out-of-plane thickness -> plane strain, not used in 2D [mm]
-MU_V_MPA     = 1e-3 * MU_M_MPA if VOID == 'soft' else 0.0   # void: stand-in [MPa], or 0 for the true hole
+MU_V_MPA     = {'soft': 1e-3, 'tmc': TM_MU}.get(VOID, 0.0) * MU_M_MPA   # void: stand-in / third medium [MPa], 0: hole
 
 # Reference scales (nondimensionalisation) ====================================================
 L_REF = R_MM        # length scale  [mm]  -> lengths in units of r
@@ -157,7 +166,7 @@ S_REF = MU_M_MPA    # stress scale  [MPa] -> stresses / moduli in units of mu^(m
 c_matrix = C_MATRIX
 r = R_MM / L_REF                        # = 1
 CONTRAST = MU_I_MPA / S_REF             # = 1000
-MU_VOID = MU_V_MPA / S_REF              # 'soft': 1e-3; 'hole': 0 (allowed: F = I is set inside the hole)
+MU_VOID = MU_V_MPA / S_REF              # 'soft': 1e-3; 'tmc': TM_MU; 'hole': 0 (F = I is set inside the hole)
 incl_vol_frac = 1.0 - c_matrix          # total circle fraction (voids + stiff)
 
 # Domain: TRIANGULAR lattice (paper Fig. 1a), centre spacing a, periodic cell 2a x sqrt(3)a
@@ -207,7 +216,8 @@ discretization = domain.Discretization(cell=my_cell,
 # ============================================================================
 file_folder_path   = os.path.dirname(os.path.realpath(__file__))
 run_tag            = ('' if tuple(CELLS) == (1, 1) else f'_cells{CELLS[0]}x{CELLS[1]}') + \
-                     ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}') + ('_gpu' if DEVICE == 'gpu' else '')
+                     ('' if IMPERFECTION == 0 else f'_imp{IMPERFECTION:g}') + ('_gpu' if DEVICE == 'gpu' else '') + \
+                     (f'_TM{TM_MU:g}_a{REG_ALPHA:g}' if VOID == 'tmc' else '')
 solver_tag         = preconditioner_type if SOLVER == 'cg' else 'direct'     # folder: ..._Green_... or ..._direct_...
 data_folder_path   = (file_folder_path + '/exp_data/' + script_name + '/'
                       + f'Nx={number_of_pixels[0]}Ny={number_of_pixels[1]}_{solver_tag}_{LOAD_DIRECTION}_{MATERIAL}_{INTEGRATION}{run_tag}/')
@@ -234,7 +244,7 @@ lam_inc = LAM_OVER_MU * mu_inc
 
 # void stand-in (compressible)
 mu_void  = MU_VOID
-lam_void = 0.0
+lam_void = TM_LAM_OVER_MU * mu_void if VOID == 'tmc' else 0.0   # 'tmc': compressible third medium
 
 # reference material for Green preconditioner
 i    = np.eye(dim)
@@ -352,7 +362,11 @@ def sri_update(F_field, P_field, W_field):
     J, J0 = det2(F), det2(F0)
     J_min = MPI.COMM_WORLD.allreduce(min(float(J.min()), float(J0.min())), op=MPI.MIN)
     if J_min <= 0.0:
-        raise RuntimeError(f'SRI: inverted element (min det F = {J_min:.3e}): use smaller load increments')
+        J_pix = to_host(xp.minimum(J, J0).min(axis=0))  # smallest det F per pixel (this rank)
+        where = np.unravel_index(int(np.argmin(J_pix)), J_pix.shape)
+        where_phase = {0: 'matrix', 1: 'void', 2: 'inclusion'}[int(phase_host[where])]
+        raise RuntimeError(f'SRI: inverted element (min det F = {J_min:.3e}, in the {where_phase} at pixel '
+                           f'{tuple(int(i) for i in where)}): use smaller load increments')
     lam, mu = lam_field.s[0, 0], mu_field.s[0, 0]     # (q, x, y), constant within a pixel
     FiT, F0iT, lnJ0 = inv_T(F), inv_T(F0), xp.log(J0)
     P_field.s[...]   = mu * (F - FiT) + lam * lnJ0 * F0iT
@@ -566,6 +580,34 @@ INADMISSIBLE_ENERGY = 1e30                                       # finite: inf w
 tr_F_macro  = np.eye(dim)                                         # prescribed macro F of the current load step
 tr_state    = {'hess_at': None, 'F_macro': np.eye(dim), 'cg': 0}   # hess_at: x of the last Hessian state (Martin's hess_at)
 
+# third-medium regularization R = k_r (H^T W H - L^T W L / dim) in the voids only (HuHu-LuLu, Frederiksen et al. 2025)
+USE_REG = VOID == 'tmc'
+if USE_REG:
+    k_r     = REG_ALPHA * cell_size[0] ** 2 * mu_matrix
+    hess_u  = discretization.get_displacement_hessian_size_field(name='reg_hess_u')
+    HtH     = discretization.get_unknown_size_field(name='reg_HtH')
+    lap_u   = discretization.get_displacement_laplacian_at_quad_field(name='reg_lap_u')
+    LtL     = discretization.get_displacement_sized_field(name='reg_LtL')
+    reg_x   = discretization.get_unknown_size_field(name='reg_x')
+    not_gap = ~void_mask                                              # regularize only the third medium
+
+
+def regularization(u_part):
+    """R u for the flat fluctuation u_part (matrix-free, Martin l. 226-239)"""
+    reg_x.s[...] = u_part.reshape(reg_x.s.shape)
+    discretization.fft.communicate_ghosts(reg_x)
+    discretization.apply_hessian_operator_to_vector_field_mugrid(u_inxyz=reg_x, hess_u_ijkqxyz=hess_u)
+    hess_u.s[..., not_gap] = 0.0
+    discretization.fft.communicate_ghosts(hess_u)
+    discretization.apply_hessian_operator_transposed_to_vector_field_mugrid(hess_u_ijkqxyz=hess_u,
+                                                                         nodal_field_inxyz=HtH, apply_weights=True)
+    discretization.laplacian.apply(nodal_field=reg_x, quadrature_point_field=lap_u)
+    lap_u.s[..., not_gap] = 0.0
+    discretization.fft.communicate_ghosts(lap_u)
+    discretization.laplacian.transpose(quadrature_point_field=lap_u, nodal_field=LtL,
+                                       weights=discretization.quadrature_weights)
+    return (k_r * (HtH.s - LtL.s.reshape(HtH.s.shape) / dim)).ravel()
+
 def tr_split(x):
     if not LAT_UNKNOWN:
         return x, 0.0
@@ -613,7 +655,13 @@ def tr_fun(x):
     discretization.fft.communicate_ghosts(stress_field)
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=stress_field,
                                                              div_u_fnxyz=tr_out, apply_weights=True)
-    return energy, tr_join_dual(tr_out.s.ravel().copy(), sum_ll(stress_field))
+    g_u = tr_out.s.ravel().copy()
+    if USE_REG:  # + 1/2 u.R u in the energy, R u in the gradient
+        u_part, _ = tr_split(x)
+        Ru = regularization(u_part)
+        energy += 0.5 * comm.sum(float(xp.dot(u_part, Ru)))
+        g_u += Ru
+    return energy, tr_join_dual(g_u, sum_ll(stress_field))
 
 def tr_hessp(x, v):
     """Hessian of the energy in (u, f) applied to v: dF = grad v_u + v_f e_ll -- Martin l. 364-385"""
@@ -632,7 +680,10 @@ def tr_hessp(x, v):
     discretization.fft.communicate_ghosts(dP_field)
     discretization.apply_gradient_transposed_operator_mugrid(gradient_field_ijqxyz=dP_field,
                                                              div_u_fnxyz=tr_out, apply_weights=True)
-    return tr_join_dual(tr_out.s.ravel().copy(), sum_ll(dP_field))
+    Hv = tr_out.s.ravel().copy()
+    if USE_REG:
+        Hv += regularization(v_u)
+    return tr_join_dual(Hv, sum_ll(dP_field))
 
 def tr_precond(r):
     """Green on u; the macro unknown scaled by 1 / (V mu_m) -- Martin l. 465-485"""
@@ -664,6 +715,28 @@ if SOLVER == 'direct':
     direct   = direct_solvers.symmetric_solver(DIRECT_SOLVER)
     fixed    = np.ravel_multi_index(([0, 1], [0, 0], [0, 0], [0, 0]), u_work.s.shape)   # node 0: no rigid translation
 
+
+def assemble_regularization():
+    """R as a sparse matrix for the direct solver, element by element with the sparsity pattern of `assembly`"""
+    H_a, L_a = [], []
+    for c_, node_, offset_ in assembly.element_unknowns:
+        reg_x.s[...] = 0.0
+        reg_x.s[(c_, node_) + offset_] = 1.0
+        discretization.fft.communicate_ghosts(reg_x)
+        discretization.apply_hessian_operator_to_vector_field_mugrid(u_inxyz=reg_x, hess_u_ijkqxyz=hess_u)
+        H_a.append(np.array(hess_u.s[(Ellipsis,) + (0,) * dim]))      # [i, j, k, q] in pixel 0
+        discretization.laplacian.apply(nodal_field=reg_x, quadrature_point_field=lap_u)
+        L_a.append(np.array(lap_u.s[(Ellipsis,) + (0,) * dim]))       # [i, 1, q]
+    H_a, L_a = np.array(H_a), np.array(L_a)
+    w_ = np.asarray(discretization.quadrature_weights)
+    R_e = k_r * (np.einsum('bijkq,aijkq,q->ba', H_a, H_a, w_) - np.einsum('bilq,ailq,q->ba', L_a, L_a, w_) / dim)
+    K_e = R_e[(slice(None), slice(None)) + (None,) * dim] * (phase_host == 1)   # [b, a, x, y]: voids only
+    R = assembly.pattern.copy()
+    R.data = np.bincount(assembly.position, weights=K_e.ravel(), minlength=assembly.pattern.nnz)
+    return R
+
+R_sparse = assemble_regularization() if (SOLVER == 'direct' and USE_REG) else None   # constant: assembled once
+
 def tr_hess(x):
     """Hessian of the energy in (u, f) as a sparse matrix: the u-u block assembled element by element from sri_dP,
     the lateral unknown f as one extra (bordered) row and column, H e_f from tr_hessp"""
@@ -672,6 +745,8 @@ def tr_hess(x):
         e_f[nb_u] = 1.0
     column_f = tr_hessp(x, e_f)               # (also brings the SRI state to x)
     H = assembly.assemble(lambda dF: sri_dP(dF, sri_state))
+    if R_sparse is not None:
+        H = H + R_sparse  # third-medium regularization (u-u block) TMC
     return sparse_assembly.bordered(H, column_f) if LAT_UNKNOWN else H
 
 max_step, t_load, inc = 1.0 / ninc, 0.0, 0
@@ -686,6 +761,18 @@ while t_load < 1.0 - 1e-12:
     d_t = min(d_t, 1.0 - t_load)
     tr_F_macro[...] = np.eye(dim) + (t_load + d_t) * E_LOAD * load_pattern
     tr_state['hess_at'], tr_state['cg'] = None, 0
+    try:                                      # start point = last converged u with the new macro F: inverted?
+        tr_evaluate(xp.asarray(x_cur))        # (then the solvers would see gradient 0 and report 'converged')
+    except RuntimeError as err:
+        d_t *= 0.5
+        if rank0:
+            print(f'  t = {t_load + 2 * d_t:.4f}: start point inadmissible ({err}) -> halve the step to '
+                  f'{d_t * E_LOAD * EPS_MAX.get(LOAD_DIRECTION, 1.0):.2e}', flush=True)
+        if d_t < min_step:
+            if rank0:
+                print('  step below min_step: stopping', flush=True)
+            break
+        continue
     if SOLVER == 'cg':
         res = tr_newton_bounded(tr_fun_host, x_cur, tr_hessp_host, precond=tr_precond_host, gtol=GTOL_ABS,
                                 maxiter=TR_MAXITER, delta0=TR_DELTA0, delta_max=TR_DELTA_MAX, inner_stop='energy',
